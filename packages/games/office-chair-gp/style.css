@@ -1,0 +1,598 @@
+/* ==========================================================================
+   爆走！グラウンド事務椅子GP - 1990s ARCADE STYLESHEET
+   AI風UI完全排除: 角丸禁止 / すりガラス禁止 / 絵文字禁止 / WebカードUI禁止
+   ========================================================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 0 !important; /* 角丸完全排除 */
+  backdrop-filter: none !important; /* すりガラス完全排除 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+  color: #fff;
+  font-family: Impact, "Arial Black", "Hiragino Kaku Gothic StdN", "Noto Sans JP", sans-serif;
+  letter-spacing: 0.05em;
+}
+
+/* 3D WebGL Canvas Container */
+#canvas-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Speedlines Canvas */
+#speedlines-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Whiteout (Lime Powder) Effect */
+#whiteout-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 0.08s ease-out;
+}
+
+/* Mud Splatter Overlay */
+#mud-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #3d1c06;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+/* Checkered Flag Finish Overlay */
+#checker-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 25;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
+}
+
+#checker-overlay.hidden {
+  display: none;
+}
+
+.checker-strip {
+  width: 100%;
+  height: 60px;
+  background-image:
+    linear-gradient(45deg, #000 25%, transparent 25%),
+    linear-gradient(-45deg, #000 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #000 75%),
+    linear-gradient(-45deg, transparent 75%, #000 75%);
+  background-size: 40px 40px;
+  background-position: 0 0, 0 20px, 20px -20px, -20px 0px;
+  background-color: #ffffff;
+  border-top: 4px solid #ffff00;
+  border-bottom: 4px solid #ffff00;
+  animation: checker-scroll 0.8s linear infinite;
+}
+
+@keyframes checker-scroll {
+  from { background-position: 0 0, 0 20px, 20px -20px, -20px 0px; }
+  to { background-position: 40px 0, 40px 20px, 60px -20px, 20px 0px; }
+}
+
+.checker-text {
+  font-size: 96px;
+  color: #ffff00;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  transform: skew(-6deg);
+  text-shadow:
+    4px 4px 0 #ff0000,
+    -4px -4px 0 #000,
+    4px -4px 0 #000,
+    -4px 4px 0 #000,
+    6px 6px 0 #000;
+  animation: goal-pulse 0.3s infinite alternate;
+}
+
+@keyframes goal-pulse {
+  from { transform: skew(-6deg) scale(0.95); }
+  to { transform: skew(-6deg) scale(1.08); }
+}
+
+/* --------------------------------------------------------------------------
+   HUD: 画面四隅直結オーバーレイ（90年代アーケードレイアウト）
+   -------------------------------------------------------------------------- */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.arcade-hud-box {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  text-transform: uppercase;
+}
+
+/* 極太文字 ＋ 強烈な黒フチ取り */
+.stroke-black,
+.hud-label,
+.hud-value,
+.hud-value-large,
+.hud-unit,
+.arcade-title-main,
+.crash-title,
+.goal-title,
+.arcade-announce {
+  text-shadow:
+    3px 0 0 #000,
+    -3px 0 0 #000,
+    0 3px 0 #000,
+    0 -3px 0 #000,
+    2px 2px 0 #000,
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    4px 4px 0 #000;
+}
+
+/* 左上: POS 1/4 & LAP 1/1 (縦積みスタック配置で重複ゼロ) */
+.arcade-hud-col {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.top-left {
+  top: 24px;
+  left: 28px;
+}
+
+.arcade-hud-col .arcade-hud-box {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.top-left .hud-label {
+  font-size: 32px;
+  color: #ffff00;
+  font-weight: 900;
+  min-width: 64px;
+}
+
+.top-left .hud-value {
+  font-size: 46px;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.pos-val {
+  color: #00ffcc !important;
+}
+
+.pos-total {
+  font-size: 26px;
+  color: #ffffff;
+  margin-left: 4px;
+}
+
+/* 右上: TIME 00:00.00 */
+.top-right {
+  top: 24px;
+  right: 28px;
+  gap: 14px;
+}
+
+.top-right .hud-label {
+  font-size: 32px;
+  color: #ffff00;
+  font-weight: 900;
+}
+
+.top-right .hud-value {
+  font-size: 46px;
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+/* 左下: JET 消火器ゲージ */
+.bottom-left {
+  bottom: 24px;
+  left: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-label-inline {
+  font-size: 28px;
+  color: #ff3333;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-shadow:
+    3px 0 0 #000,
+    -3px 0 0 #000,
+    0 3px 0 #000,
+    0 -3px 0 #000,
+    3px 3px 0 #000;
+}
+
+.bomb-label {
+  font-size: 22px;
+  color: #ff9900 !important;
+  margin-right: 12px;
+}
+
+.bomb-ready {
+  font-size: 20px;
+  color: #00ffcc;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  background-color: #003322;
+  padding: 2px 8px;
+  border: 2px solid #00ffcc;
+  animation: bomb-flash 0.6s infinite alternate;
+}
+
+.bomb-cooldown {
+  font-size: 20px;
+  color: #888888;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  background-color: #222222;
+  padding: 2px 8px;
+  border: 2px solid #555555;
+}
+
+@keyframes bomb-flash {
+  from { opacity: 0.8; }
+  to { opacity: 1.0; }
+}
+
+.jet-blocks {
+  display: flex;
+  gap: 6px;
+  background-color: #000;
+  padding: 4px;
+  border: 3px solid #ff3333;
+}
+
+.jet-block {
+  width: 20px;
+  height: 28px;
+  background-color: #220000;
+  border: 2px solid #550000;
+  box-sizing: border-box;
+}
+
+.jet-block.active {
+  background-color: #ff2222;
+  border-color: #ffffff;
+  box-shadow: 0 0 6px #ff0000;
+}
+
+.jet-block.danger {
+  background-color: #ffff00;
+  border-color: #ffffff;
+  animation: blink 0.15s infinite alternate;
+}
+
+@keyframes blink {
+  from { opacity: 1; }
+  to { opacity: 0.2; }
+}
+
+/* 右下: SPEED */
+.bottom-right {
+  bottom: 24px;
+  right: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.bottom-right .hud-label {
+  font-size: 26px;
+  color: #00ffcc;
+  font-weight: 900;
+}
+
+.speed-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hud-value-large {
+  font-size: 74px;
+  color: #ffffff;
+  font-weight: 900;
+  line-height: 0.9;
+}
+
+.hud-unit {
+  font-size: 26px;
+  color: #ffff00;
+  font-weight: 900;
+}
+
+/* 中央アナウンス (READY, GO, 逆走警告等) */
+.arcade-announce {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 80px;
+  color: #ffff00;
+  font-weight: 900;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.1s ease;
+}
+
+.arcade-announce.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+/* --------------------------------------------------------------------------
+   モーダル／タイトル・結果画面（90年代無骨アーケードUI）
+   -------------------------------------------------------------------------- */
+.arcade-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.82);
+}
+
+.arcade-modal.hidden {
+  display: none;
+}
+
+/* タイトル画面 */
+.arcade-title-box {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.arcade-title-main {
+  font-size: 64px;
+  color: #ffff00;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  transform: skew(-6deg);
+}
+
+.arcade-title-sub {
+  font-size: 26px;
+  color: #ff3333;
+  letter-spacing: 0.3em;
+  font-weight: 900;
+  margin-top: 6px;
+  text-shadow: 2px 2px 0 #000;
+  transform: skew(-6deg);
+}
+
+/* 操作説明ガイド（無骨なブロック一覧） */
+.arcade-control-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #111111;
+  border: 4px solid #ffff00;
+  padding: 20px 32px;
+  margin-bottom: 36px;
+}
+
+.guide-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+  font-size: 20px;
+}
+
+.guide-key {
+  color: #00ffff;
+  font-weight: 900;
+  background-color: #000;
+  border: 2px solid #00ffff;
+  padding: 4px 12px;
+}
+
+.guide-action {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+/* 90年代アーケードボタン（直角、極太ボーダー、ベベル調） */
+.arcade-btn {
+  font-family: inherit;
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #000000;
+  background-color: #ffff00;
+  border: 6px solid #ffffff;
+  outline: 4px solid #000000;
+  padding: 14px 64px;
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 6px 6px 0 #ff0000;
+  transform: skew(-4deg);
+  transition: transform 0.05s ease, background-color 0.05s ease;
+}
+
+.arcade-btn:hover {
+  background-color: #ffffff;
+  color: #ff0000;
+  box-shadow: 6px 6px 0 #ffff00;
+}
+
+.arcade-btn:active {
+  transform: skew(-4deg) translate(4px, 4px);
+  box-shadow: 2px 2px 0 #000000;
+}
+
+/* 大破画面 */
+.crash-title {
+  font-size: 130px;
+  color: #ff1100;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  animation: crash-pulse 0.2s infinite alternate;
+  margin-bottom: 8px;
+}
+
+@keyframes crash-pulse {
+  from { transform: scale(1) skew(-6deg); }
+  to { transform: scale(1.05) skew(-6deg); }
+}
+
+.crash-subtitle {
+  font-size: 28px;
+  color: #ffffff;
+  font-weight: 900;
+  background-color: #ff0000;
+  padding: 6px 20px;
+  border: 3px solid #000;
+  margin-bottom: 40px;
+  letter-spacing: 0.1em;
+}
+
+/* 完走＆ゴール一体型リザルト画面 */
+#goal-screen {
+  justify-content: space-between;
+  padding: 0;
+}
+
+.goal-banner {
+  text-align: center;
+  background-color: #000000;
+  border: 6px solid #00ffcc;
+  padding: 24px 50px;
+  margin: 16px 0;
+  box-shadow: 8px 8px 0 #ffff00;
+  max-width: 90%;
+}
+
+.goal-title {
+  font-size: 78px;
+  color: #ffff00;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  transform: skew(-4deg);
+  text-shadow:
+    4px 4px 0 #ff0000,
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000;
+}
+
+.goal-rank {
+  font-size: 52px;
+  color: #ffcc00;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-shadow: 4px 4px 0 #ff0055, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+  margin: 8px 0;
+  transform: skew(-5deg);
+}
+
+.goal-time-label {
+  font-size: 22px;
+  color: #00ffcc;
+  font-weight: 900;
+  margin-top: 8px;
+  letter-spacing: 0.2em;
+}
+
+.goal-time {
+  font-size: 60px;
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-shadow: 3px 3px 0 #ff0055;
+  margin-top: 2px;
+}
+
+#goal-screen .arcade-btn {
+  margin-bottom: 24px;
+}
+
+/* ホーム誘導ガイド(画面下中央、常時表示・控えめ・クリックでも戻れる) */
+#home-guide {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-decoration: none;
+  font-family: system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 70;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+#home-guide:hover {
+  color: rgba(255, 255, 255, 0.75);
+}

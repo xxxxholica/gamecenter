@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>学園脱出ラン</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #08060e;
+      font-family: 'Impact', 'Arial Black', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* 全画面フラッシュエフェクト */
+    #flash-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #flash-overlay.active {
+      animation: flash-anim 0.45s ease-out forwards;
+    }
+
+    #flash-overlay.red-flash {
+      background: #ff1744;
+      animation: red-flash-anim 0.6s ease-out forwards;
+    }
+
+    @keyframes flash-anim {
+      0% { opacity: 0.95; }
+      20% { opacity: 0.8; }
+      100% { opacity: 0; }
+    }
+
+    @keyframes red-flash-anim {
+      0% { opacity: 0.92; }
+      100% { opacity: 0; }
+    }
+
+    /* カウントダウン前「追われる」導入演出: 赤い点滅ビネット */
+    #chase-vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 15;
+      box-shadow:
+        inset 0 0 70px 14px rgba(255, 23, 68, 0.6),
+        inset 0 0 160px 50px rgba(183, 28, 28, 0.4);
+      opacity: 0;
+    }
+
+    #chase-vignette.active {
+      animation: chase-vignette-pulse 0.32s ease-in-out infinite alternate;
+    }
+
+    @keyframes chase-vignette-pulse {
+      0% { opacity: 0.35; }
+      100% { opacity: 0.9; }
+    }
+
+    /* 無敵パワーアップ: 画面外周を青く縁取るビネット発光 */
+    #invincible-vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 15;
+      box-shadow:
+        inset 0 0 60px 10px rgba(41, 121, 255, 0.55),
+        inset 0 0 140px 40px rgba(24, 255, 255, 0.35);
+      opacity: 0;
+    }
+
+    #invincible-vignette.active {
+      animation: invincible-pulse 0.9s ease-in-out infinite alternate;
+    }
+
+    #invincible-vignette.active.ending {
+      animation: invincible-pulse-fast 0.28s ease-in-out infinite alternate;
+    }
+
+    @keyframes invincible-pulse {
+      0% { opacity: 0.55; }
+      100% { opacity: 0.95; }
+    }
+
+    @keyframes invincible-pulse-fast {
+      0% {
+        opacity: 0.4;
+        box-shadow:
+          inset 0 0 60px 10px rgba(41, 121, 255, 0.5),
+          inset 0 0 140px 40px rgba(24, 255, 255, 0.3);
+      }
+      100% {
+        opacity: 1.0;
+        box-shadow:
+          inset 0 0 90px 20px rgba(255, 82, 82, 0.65),
+          inset 0 0 180px 60px rgba(64, 196, 255, 0.5);
+      }
+    }
+
+    /* 無敵パワーアップ: 状態バナー ＆ カウントダウン */
+    #invincible-banner {
+      position: absolute;
+      top: clamp(96px, 13vh, 148px);
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+      width: fit-content;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(41, 121, 255, 0.25) 0%, rgba(5, 3, 10, 0.85) 100%);
+      border: 2px solid #40c4ff;
+      border-radius: 6px;
+      padding: 8px 22px;
+      box-shadow: 3px 3px 0 #000, 0 0 22px rgba(64, 196, 255, 0.7);
+      z-index: 25;
+      pointer-events: none;
+      animation: invincible-banner-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    #invincible-banner.ending {
+      border-color: #ff5252;
+      animation: invincible-banner-shake 0.2s infinite alternate;
+    }
+
+    @keyframes invincible-banner-in {
+      0% { transform: scale(0.7) translateY(-10px); opacity: 0; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    @keyframes invincible-banner-shake {
+      0% { transform: translateX(-2px); }
+      100% { transform: translateX(2px); }
+    }
+
+    .invincible-label {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #e1f5ff;
+      text-shadow: 2px 2px 0 #0d47a1, 0 0 14px rgba(64, 196, 255, 0.9);
+    }
+
+    #invincible-timer {
+      font-size: 30px;
+      font-weight: 900;
+      color: #ffffff;
+      text-shadow: 2px 2px 0 #0d47a1, 0 0 16px rgba(24, 255, 255, 0.95);
+      min-width: 2.4em;
+      text-align: left;
+    }
+
+    /* HUD（画面中央セーフエリア・相対配置） */
+    #hud {
+      position: absolute;
+      top: clamp(10px, 2.5vh, 28px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(92vw, 1120px);
+      padding: clamp(8px, 1.4vh, 16px) clamp(14px, 2.4vw, 32px);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      z-index: 20;
+      pointer-events: none;
+      background: transparent;
+    }
+
+    .hud-block {
+      display: flex;
+      flex-direction: column;
+      min-width: clamp(100px, 18vw, 180px);
+    }
+
+    .hud-label {
+      font-size: clamp(11px, 1.2vw, 14px);
+      font-weight: 900;
+      letter-spacing: clamp(1.5px, 0.25vw, 3px);
+      color: #ffca28;
+      text-shadow: 2px 2px 0 #000, 0 0 6px rgba(255, 202, 40, 0.4);
+      margin-bottom: 2px;
+    }
+
+    .hud-value-large {
+      font-size: clamp(32px, 3.8vw, 48px);
+      font-weight: 900;
+      letter-spacing: clamp(1.5px, 0.25vw, 3px);
+      color: #ffffff;
+      text-shadow: 3px 3px 0 #b71c1c, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 12px rgba(255, 87, 34, 0.6);
+      line-height: 1;
+    }
+
+    #hud-time {
+      font-size: clamp(36px, 4.4vw, 54px);
+      color: #00e5ff;
+      text-shadow: 3px 3px 0 #006064, -1px -1px 0 #000, 0 0 14px rgba(0, 229, 255, 0.6);
+    }
+
+    #hud-time.danger {
+      color: #ff1744;
+      animation: danger-pulse 0.35s infinite alternate;
+      text-shadow: 3px 3px 0 #b71c1c, 0 0 20px rgba(255, 23, 68, 0.9);
+    }
+
+    @keyframes danger-pulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.12); }
+    }
+
+    #hud-speed {
+      font-size: clamp(32px, 3.8vw, 48px);
+      font-weight: 900;
+      letter-spacing: clamp(1px, 0.2vw, 2px);
+      color: #ff9100;
+      text-shadow: 3px 3px 0 #bf360c, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 12px rgba(255, 145, 0, 0.6);
+      line-height: 1;
+      text-transform: lowercase;
+    }
+
+    /* スコアポップ演出（撃破・加算時の弾み） */
+    #hud-score.pop {
+      animation: score-pop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes score-pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.16); color: #ffea00; text-shadow: 3px 3px 0 #d50000, 0 0 18px #ffea00; }
+      100% { transform: scale(1); }
+    }
+
+    .score-multiplier {
+      font-size: 15px;
+      font-weight: 900;
+      color: #ffea00;
+      background: linear-gradient(180deg, #d50000 0%, #b71c1c 100%);
+      border: 1px solid #ffd54f;
+      padding: 2px 8px;
+      border-radius: 3px;
+      letter-spacing: 1px;
+      text-shadow: 1px 1px 0 #000;
+      box-shadow: 0 0 8px rgba(255, 213, 79, 0.4);
+      margin-left: 8px;
+      animation: combo-badge-pulse 0.25s ease-out;
+    }
+
+    @keyframes combo-badge-pulse {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.25); }
+      100% { transform: scale(1); }
+    }
+
+    /* 辞書残弾パネル（四角形ブロックUI） */
+    .bomb-panel {
+      background: rgba(10, 8, 16, 0.92);
+      border: 2px solid #ffca28;
+      border-radius: 4px;
+      padding: 6px 14px;
+      box-shadow: 2px 2px 0 #000, 0 0 10px rgba(255, 202, 40, 0.25);
+      margin-top: 6px;
+      text-align: left;
+    }
+
+    .bomb-slots {
+      display: flex;
+      gap: 8px;
+      margin: 4px 0 6px 0;
+    }
+
+    .bomb-slot {
+      width: 26px;
+      height: 34px;
+      border-radius: 2px;
+      border: 2px solid #546e7a;
+      background: #263238;
+      box-shadow: inset 0 0 4px rgba(0,0,0,0.8);
+      transition: all 0.15s ease-out;
+    }
+
+    .bomb-slot.active {
+      background: linear-gradient(180deg, #d50000 0%, #b71c1c 100%);
+      border-color: #ffd54f;
+      box-shadow: 0 0 8px rgba(255, 213, 79, 0.6), inset 0 0 3px rgba(255, 255, 255, 0.4);
+    }
+
+    .reload-bar-bg {
+      width: 100%;
+      height: 5px;
+      background: #212121;
+      border: 1px solid #424242;
+      overflow: hidden;
+    }
+
+    .reload-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff9100, #ffea00);
+      transition: width 0.08s linear;
+    }
+
+    /* 全画面ボタン（画面右下に配置してHUDエリアとの被りを完全排除） */
+    #btn-fullscreen {
+      position: absolute;
+      bottom: 24px;
+      right: 28px;
+      background: rgba(12, 10, 18, 0.88);
+      border: 2px solid #ffca28;
+      color: #ffca28;
+      padding: 8px 18px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      cursor: pointer;
+      z-index: 60;
+      transition: all 0.15s;
+      box-shadow: 3px 3px 0 #000, 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    #btn-fullscreen:hover {
+      background: #ffca28;
+      color: #000;
+    }
+
+    /* ホーム誘導ガイド（画面下中央、常時表示・控えめ・クリックでも戻れる） */
+    #home-guide {
+      position: absolute;
+      bottom: 6px;
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+      width: fit-content;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 1px;
+      text-transform: none;
+      text-decoration: none;
+      font-family: system-ui, sans-serif;
+      color: rgba(255, 255, 255, 0.3);
+      z-index: 70;
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    #home-guide:hover {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    /* タイトルオーバーレイ（実際のステージの上に浮かぶポップアップウィンドウ） */
+    #title-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 3, 10, 0.4);
+      backdrop-filter: blur(3px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 40;
+      padding: 20px;
+    }
+
+    .title-popup-card {
+      background: rgba(16, 12, 24, 0.92);
+      border: 3px solid #ffca28;
+      border-radius: 6px;
+      box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 8px 8px 0 #000, inset 0 0 16px rgba(255, 202, 40, 0.12);
+      padding: 32px 40px;
+      max-width: 780px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: modal-appear 0.22s ease-out;
+    }
+
+    @keyframes modal-appear {
+      0% { transform: scale(0.92); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .title-badge {
+      background: #d50000;
+      color: #ffffff;
+      padding: 4px 18px;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 5px;
+      border-radius: 2px;
+      margin-bottom: 14px;
+      box-shadow: 3px 3px 0 #000;
+    }
+
+    .game-main-title {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 84px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, #fffde7 0%, #ffd54f 24%, #ff8f00 52%, #795548 80%, #3e2723 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(4px 4px 0 #000) drop-shadow(-2px -2px 0 #000) drop-shadow(2px -2px 0 #000) drop-shadow(-2px 2px 0 #000) drop-shadow(0 10px 16px rgba(0,0,0,0.85));
+      line-height: 1.0;
+      margin-bottom: 8px;
+      transform: perspective(500px) rotateX(8deg);
+      animation: title-float 3s ease-in-out infinite alternate;
+    }
+
+    @keyframes title-float {
+      0% { transform: perspective(500px) rotateX(8deg) translateY(0px); }
+      100% { transform: perspective(500px) rotateX(6deg) translateY(-4px); }
+    }
+
+    .game-sub-title {
+      font-size: 21px;
+      font-weight: 900;
+      letter-spacing: 5px;
+      color: #ffffff;
+      text-shadow: 2px 2px 0 #d50000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 14px rgba(255, 23, 68, 0.7);
+      margin-bottom: 24px;
+    }
+
+    .instruction-cards {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 26px;
+      max-width: 860px;
+      width: 100%;
+    }
+
+    .inst-card {
+      flex: 1;
+      background: rgba(20, 14, 28, 0.85);
+      border: 2px solid #546e7a;
+      border-radius: 4px;
+      padding: 14px 20px;
+      text-align: left;
+      box-shadow: 4px 4px 0 #000;
+    }
+
+    .inst-card h3 {
+      font-size: 15px;
+      color: #ffca28;
+      border-bottom: 2px solid #ffca28;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      letter-spacing: 2px;
+    }
+
+    .inst-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .key-badge {
+      background: #111111;
+      border: 1px solid #78909c;
+      padding: 3px 10px;
+      border-radius: 2px;
+      font-weight: 900;
+      color: #00e5ff;
+      letter-spacing: 1px;
+    }
+
+    .inst-sub {
+      font-size: 11px;
+      color: #ffb74d;
+      text-align: right;
+      margin-top: -4px;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+
+    .title-popup-card.shattering {
+      animation: card-shatter 0.45s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+      pointer-events: none;
+    }
+
+    @keyframes card-shatter {
+      0% { transform: scale(1); opacity: 1; filter: blur(0px); }
+      50% { transform: scale(1.15) rotate(-1.5deg); opacity: 0.8; filter: blur(2px); }
+      100% { transform: scale(1.4) rotate(3deg); opacity: 0; filter: blur(10px); }
+    }
+
+    .press-start-btn {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 5px;
+      color: #00e676;
+      text-shadow: 2px 2px 0 #004d40, 0 0 14px rgba(0, 230, 118, 0.8);
+      animation: blink-anim 1.0s infinite alternate;
+      cursor: pointer;
+      background: #000000;
+      padding: 13px 48px;
+      border: 3px solid #00e676;
+      border-radius: 4px;
+      box-shadow: 4px 4px 0 #000, 0 0 16px rgba(0, 230, 118, 0.4);
+      transition: transform 0.1s;
+    }
+
+    .press-start-btn:hover {
+      transform: scale(1.04);
+      background: #00e676;
+      color: #000000;
+      text-shadow: none;
+    }
+
+    @keyframes blink-anim {
+      0% { opacity: 0.25; transform: scale(0.98); }
+      100% { opacity: 1.0; transform: scale(1.02); }
+    }
+
+    .arcade-credit {
+      position: absolute;
+      bottom: 14px;
+      left: 20px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #78909c;
+      text-shadow: 1px 1px 0 #000;
+      user-select: none;
+    }
+
+    /* カウントダウン演出オーバーレイ */
+    #countdown-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 55;
+      pointer-events: none;
+    }
+
+    .countdown-num {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 140px;
+      font-weight: 900;
+      color: #ffea00;
+      text-shadow: 6px 6px 0 #b71c1c, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 0 0 40px rgba(255, 234, 0, 0.8);
+      letter-spacing: 4px;
+      animation: count-zoom 0.5s ease-out;
+      transform-origin: center;
+    }
+
+    .countdown-num.go {
+      font-size: 150px;
+      color: #ff1744;
+      text-shadow: 6px 6px 0 #ffea00, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 0 0 50px rgba(255, 23, 68, 0.9);
+      letter-spacing: 8px;
+      animation: count-zoom-go 0.6s ease-out;
+    }
+
+    @keyframes count-zoom {
+      0% { transform: scale(1.8); opacity: 0; }
+      40% { transform: scale(0.95); opacity: 1; }
+      100% { transform: scale(1.0); opacity: 1; }
+    }
+
+    @keyframes count-zoom-go {
+      0% { transform: scale(0.5); opacity: 0; }
+      35% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(1.0); opacity: 1; }
+    }
+
+    .attract-notice {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #78909c;
+      letter-spacing: 2px;
+      font-weight: 900;
+    }
+
+    /* デモ走行中バナー（画面下寄り・完全中央配置） */
+    #demo-indicator {
+      position: absolute;
+      bottom: 48px;
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+      width: fit-content;
+      max-width: 90vw;
+      background: #d50000;
+      color: #ffffff;
+      padding: 10px 48px;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      text-align: center;
+      border-radius: 4px;
+      border: 2px solid #ffea00;
+      box-shadow: 4px 4px 0 #000, 0 0 18px rgba(255, 234, 0, 0.5);
+      z-index: 35;
+      transform-origin: center center;
+      animation: demo-pulse 0.75s infinite alternate;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    @keyframes demo-pulse {
+      0% {
+        opacity: 0.35;
+        transform: scale(0.96);
+      }
+      100% {
+        opacity: 1.0;
+        transform: scale(1.04);
+      }
+    }
+
+    /* リザルトオーバーレイ（実際のステージの上に浮かぶポップアップウィンドウ） */
+    #result-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 3, 10, 0.4);
+      backdrop-filter: blur(3px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+      padding: 20px;
+    }
+
+    .result-popup-card {
+      background: rgba(16, 12, 24, 0.92);
+      border: 3px solid #ffca28;
+      border-radius: 6px;
+      box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 8px 8px 0 #000, inset 0 0 16px rgba(255, 202, 40, 0.12);
+      padding: 28px 40px;
+      max-width: 600px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: modal-appear 0.22s ease-out;
+    }
+
+    .result-header {
+      font-size: 54px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      margin-bottom: 24px;
+      text-shadow: 4px 4px 0 #000;
+    }
+
+    .result-header.cleared {
+      color: #ffea00;
+      text-shadow: 4px 4px 0 #b71c1c, 0 0 20px rgba(255, 234, 0, 0.7);
+    }
+
+    .result-header.gameover {
+      color: #ff1744;
+      text-shadow: 4px 4px 0 #b71c1c, 0 0 20px rgba(255, 23, 68, 0.7);
+    }
+
+    .result-board {
+      background: rgba(22, 16, 32, 0.9);
+      border: 3px solid #ffca28;
+      border-radius: 4px;
+      padding: 28px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-width: 520px;
+      width: 100%;
+      margin-bottom: 28px;
+      box-shadow: 6px 6px 0 #000;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 202, 40, 0.25);
+      padding-bottom: 8px;
+    }
+
+    .result-label {
+      font-size: 16px;
+      color: #ffca28;
+      font-weight: 900;
+      letter-spacing: 2px;
+    }
+
+    .result-val {
+      font-size: 36px;
+      font-weight: 900;
+      color: #ffffff;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .grade-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+    }
+
+    .grade-badge {
+      font-size: 68px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 0 16px;
+      text-shadow: 4px 4px 0 #000;
+    }
+
+    .grade-SSS { color: #ffea00; text-shadow: 4px 4px 0 #b71c1c, 0 0 24px #ffea00; }
+    .grade-SS  { color: #ff9100; text-shadow: 4px 4px 0 #b71c1c, 0 0 20px #ff9100; }
+    .grade-S   { color: #00e676; text-shadow: 4px 4px 0 #004d40, 0 0 16px #00e676; }
+    .grade-A   { color: #00e5ff; text-shadow: 4px 4px 0 #006064; }
+    .grade-B   { color: #d500f9; text-shadow: 4px 4px 0 #4a148c; }
+    .grade-C   { color: #b0bec5; text-shadow: 4px 4px 0 #263238; }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="flash-overlay"></div>
+  <div id="chase-vignette" class="hidden"></div>
+  <div id="invincible-vignette" class="hidden"></div>
+
+  <!-- 無敵パワーアップ状態バナー -->
+  <div id="invincible-banner" class="hidden">
+    <span class="invincible-label">無敵</span>
+    <span id="invincible-timer">10.0</span>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-block">
+      <div style="display: flex; align-items: center;">
+        <span class="hud-label">スコア</span>
+        <span id="hud-score-multiplier" class="score-multiplier hidden">×1.0</span>
+      </div>
+      <span id="hud-score" class="hud-value-large">0000000</span>
+    </div>
+
+    <div class="hud-block" style="text-align: center;">
+      <span class="hud-label">時間</span>
+      <span id="hud-time" class="hud-value-large">90.0</span>
+    </div>
+
+    <div class="hud-block" style="text-align: right;">
+      <span class="hud-label">速度</span>
+      <span id="hud-speed" class="hud-value-large">108.0km/h</span>
+      <div class="bomb-panel" style="display: none;">
+        <span class="hud-label" style="font-size: 12px;">辞書</span>
+        <div id="hud-bomb-slots" class="bomb-slots">
+          <div class="bomb-slot active"></div>
+          <div class="bomb-slot active"></div>
+          <div class="bomb-slot active"></div>
+        </div>
+        <div class="reload-bar-bg">
+          <div id="hud-reload-fill" class="reload-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全画面切り替えボタン -->
+  <button id="btn-fullscreen" title="全画面">全画面</button>
+
+  <!-- ホーム誘導ガイド（クリックでも遷移可能） -->
+  <a id="home-guide" href="../../">ESC : ホームへ戻る</a>
+
+  <!-- デモ中バナー -->
+  <div id="demo-indicator" class="hidden">デモプレイ</div>
+
+  <!-- カウントダウン演出 -->
+  <div id="countdown-overlay" class="hidden">
+    <div id="countdown-text" class="countdown-num">3</div>
+  </div>
+
+  <!-- タイトル画面 -->
+  <div id="title-overlay">
+    <div class="title-popup-card">
+      <div class="title-badge">アーケード版</div>
+      <h1 class="game-main-title">Tempale Run</h1>
+      <h2 class="game-sub-title">テンパるラン - 廊下は走るな -</h2>
+
+      <div class="instruction-cards">
+        <div class="inst-card">
+          <h3>アケコン</h3>
+          <div class="inst-row"><span>移動</span><span class="key-badge">レバー左右</span></div>
+          <div class="inst-row"><span>跳躍</span><span class="key-badge">レバー上</span></div>
+          <div class="inst-row"><span>しゃがみ</span><span class="key-badge">レバー下</span></div>
+          <div class="inst-row"><span>攻撃</span><span class="key-badge">ボタン1</span></div>
+          <div class="inst-sub">手裏剣・辞書投擲</div>
+        </div>
+
+        <div class="inst-card">
+          <h3>キーボード</h3>
+          <div class="inst-row"><span>移動</span><span class="key-badge">A / D</span></div>
+          <div class="inst-row"><span>跳躍</span><span class="key-badge">W</span></div>
+          <div class="inst-row"><span>しゃがみ</span><span class="key-badge">S</span></div>
+          <div class="inst-row"><span>攻撃</span><span class="key-badge">Enter</span></div>
+          <div class="inst-sub">手裏剣・辞書投擲</div>
+        </div>
+      </div>
+
+      <button id="btn-start" class="press-start-btn">学校から脱出する</button>
+      <div class="attract-notice">10秒無入力でデモ走行開始</div>
+    </div>
+    <div class="arcade-credit">FREE PLAY</div>
+  </div>
+
+  <!-- リザルト画面 -->
+  <div id="result-overlay" class="hidden">
+    <div class="result-popup-card">
+      <h2 id="result-title" class="result-header cleared">校門突破</h2>
+      <div class="result-board">
+        <div class="result-item">
+          <span class="result-label">走行距離</span>
+          <span id="result-distance" class="result-val">0 m</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">獲得スコア</span>
+          <span id="result-score" class="result-val">0</span>
+        </div>
+        <div class="grade-container">
+          <span class="result-label" style="font-size: 18px;">評価</span>
+          <div id="result-grade" class="grade-badge grade-S">S</div>
+        </div>
+      </div>
+      <button id="btn-retry" class="press-start-btn">再挑戦</button>
+      <div class="attract-notice">10秒無入力でタイトルへ復帰</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

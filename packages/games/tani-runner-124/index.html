@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>単位増殖ラン</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <!-- 3D Canvas -->
+  <div id="game-container">
+    <canvas id="webgl-canvas"></canvas>
+  </div>
+
+  <!-- CRT Scanline Overlay -->
+  <div class="crt-overlay"></div>
+
+  <!-- In-Game Minimal HUD -->
+  <div id="hud" class="hud-container">
+    <!-- Top HUD Bar -->
+    <div class="hud-top-bar">
+      <!-- 画面隅: 「要件 124」 -->
+      <div class="hud-corner-box">
+        <span class="hud-corner-text">要件 124</span>
+      </div>
+
+      <!-- 画面中央上: 「単位」 ＋ 数字 -->
+      <div class="hud-center-box" id="hud-credits-box">
+        <span class="hud-center-label">単位</span>
+        <span id="tani-counter" class="hud-center-num">4</span>
+      </div>
+
+      <!-- 右隅の空スペーサー（中央揃え用） -->
+      <div class="hud-corner-spacer"></div>
+    </div>
+
+    <!-- ボーナス測定中倍率HUD (画面中央上部) -->
+    <div id="bonus-multiplier-hud" class="bonus-multiplier-hud hidden">
+      <div id="bonus-current-mult" class="bonus-mult-text">×1.0</div>
+    </div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="start-screen" class="overlay-screen">
+    <div class="arcade-card">
+      <h1 class="game-title">単位増殖ラン</h1>
+      <button id="start-btn" class="arcade-btn start-btn">開始</button>
+    </div>
+  </div>
+
+  <!-- Fail Screen (留年) -->
+  <div id="fail-screen" class="overlay-screen hidden">
+    <div class="arcade-card fail-card">
+      <div class="fail-text">留年</div>
+      <button id="retry-fail-btn" class="arcade-btn retry-btn">再挑戦</button>
+    </div>
+  </div>
+
+  <!-- Clear Screen (卒業) -->
+  <div id="success-screen" class="overlay-screen hidden">
+    <div class="arcade-card success-card">
+      <div class="success-text">卒業</div>
+      <div id="final-multiplier-display" class="final-multiplier-text">倍率 ×1.0</div>
+      <button id="retry-success-btn" class="arcade-btn success-btn">再挑戦</button>
+    </div>
+  </div>
+
+  <!-- ホーム誘導ガイド（クリックでも遷移可能） -->
+  <a id="home-guide" href="../../">ESC : ホームへ戻る</a>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

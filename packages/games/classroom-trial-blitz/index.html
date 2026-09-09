@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>超速学級裁判</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="game-container"></div>
+  <div class="crt-overlay"></div>
+
+  <div id="hud" class="hud hidden">
+    <div class="hud-corner hud-corner-left">
+      <div id="case-name" class="hud-case"></div>
+      <div class="hud-evidence-row">
+        <span class="hud-label">証拠</span>
+        <span id="evidence-name" class="hud-value"></span>
+      </div>
+    </div>
+    <div class="hud-corner hud-corner-right">
+      <span class="hud-label">時間</span>
+      <span id="timer-value" class="hud-value">20</span>
+    </div>
+    <div id="crosshair"></div>
+  </div>
+
+  <div id="flash-text" class="flash-text hidden"></div>
+  <div id="screen-flash" class="screen-flash"></div>
+
+  <div id="title-screen" class="overlay-screen">
+    <h1 class="logo-title">超速学級裁判</h1>
+    <div id="start-prompt" class="start-prompt">開始</div>
+  </div>
+
+  <div id="ranking-screen" class="overlay-screen hidden">
+    <h2 class="ranking-title">TOP 5</h2>
+    <div id="ranking-list" class="ranking-list"></div>
+    <div id="retry-prompt" class="start-prompt hidden">再挑戦</div>
+  </div>
+
+  <!-- ホーム誘導ガイド(クリックでも遷移可能) -->
+  <a id="home-guide" href="../../">ESC : ホームへ戻る</a>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

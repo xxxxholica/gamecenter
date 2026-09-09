@@ -1,0 +1,341 @@
+/* ============================================================
+   ARCADE MINIMAL UI: NO GLASS, NO PASTEL, NO ROUNDED CORNERS,
+   NO LONG TEXT. ULTRA HEAVY STROKE FONTS DIRECTLY ON SCREEN.
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
+  border-radius: 0 !important;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #040508;
+  color: #ffffff;
+}
+
+#game-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+#webgl-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* CRT Scanline Overlay */
+.crt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.35) 50%
+  );
+  background-size: 100% 3px;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
+}
+
+/* HUD Container */
+.hud-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 28px;
+  width: 100%;
+}
+
+/* 画面隅: 「要件 124」 */
+.hud-corner-box {
+  background: #000000;
+  border: 4px solid #ff1744;
+  padding: 8px 16px;
+  box-shadow: 0 0 16px rgba(255, 23, 68, 0.5);
+}
+
+.hud-corner-text {
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+}
+
+.hud-corner-spacer {
+  width: 140px;
+}
+
+/* 画面中央上: 「単位」 ＋ 数字 */
+.hud-center-box {
+  background: #000000;
+  border: 6px solid #00f0ff;
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.7);
+  padding: 8px 36px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  transform: scale(1);
+  transition: transform 0.08s ease, border-color 0.08s ease;
+}
+
+.hud-center-box.pulse {
+  transform: scale(1.3);
+  border-color: #ffe600;
+  box-shadow: 0 0 45px #ffe600;
+}
+
+.hud-center-box.shrink {
+  transform: scale(0.9);
+  border-color: #ff0033;
+  box-shadow: 0 0 45px #ff0033;
+}
+
+.hud-center-label {
+  font-size: 38px;
+  font-weight: 900;
+  color: #ffea00;
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+}
+
+.hud-center-num {
+  font-size: 72px;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
+}
+
+/* ボーナス測定中倍率HUD */
+.bonus-multiplier-hud {
+  position: absolute;
+  top: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  text-align: center;
+}
+
+.bonus-multiplier-hud.hidden {
+  display: none !important;
+}
+
+.bonus-mult-text {
+  font-size: 96px;
+  font-weight: 900;
+  color: #ffea00;
+  letter-spacing: 4px;
+  text-shadow: 6px 6px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000;
+  -webkit-text-stroke: 4px #000;
+  animation: pulse-bonus 0.15s ease-out;
+}
+
+@keyframes pulse-bonus {
+  0% { transform: scale(1.25); }
+  100% { transform: scale(1.0); }
+}
+
+/* OVERLAYS (START, FAIL, SUCCESS) */
+.overlay-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.overlay-screen.hidden {
+  display: none !important;
+}
+
+.arcade-card {
+  text-align: center;
+  width: 90%;
+  max-width: 520px;
+}
+
+/* タイトル画面 */
+.game-title {
+  font-size: 80px;
+  font-weight: 900;
+  color: #ffea00;
+  letter-spacing: 6px;
+  margin-bottom: 40px;
+  text-shadow: 6px 6px 0 #ff0055, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000;
+  -webkit-text-stroke: 3px #000;
+}
+
+/* 失敗判定: 「留年」（赤の特大文字） */
+.fail-text {
+  font-size: 140px;
+  font-weight: 900;
+  color: #ff0022;
+  letter-spacing: 16px;
+  margin-bottom: 40px;
+  text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
+  -webkit-text-stroke: 4px #000;
+  animation: red-rumble 0.6s infinite alternate;
+}
+
+@keyframes red-rumble {
+  0% { filter: drop-shadow(0 0 20px #ff0000); transform: scale(1); }
+  100% { filter: drop-shadow(0 0 60px #ff0000); transform: scale(1.04); }
+}
+
+/* クリア判定: 「卒業」（黄の特大文字） */
+.success-text {
+  font-size: 140px;
+  font-weight: 900;
+  color: #ffe600;
+  letter-spacing: 16px;
+  margin-bottom: 16px;
+  text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
+  -webkit-text-stroke: 4px #000;
+  animation: gold-shine 0.8s infinite alternate;
+}
+
+@keyframes gold-shine {
+  0% { filter: drop-shadow(0 0 25px #ffe600); transform: scale(1); }
+  100% { filter: drop-shadow(0 0 70px #ffe600); transform: scale(1.04); }
+}
+
+.final-multiplier-text {
+  font-size: 58px;
+  font-weight: 900;
+  color: #00ff66;
+  letter-spacing: 4px;
+  margin-bottom: 40px;
+  text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
+  -webkit-text-stroke: 2px #000;
+}
+
+/* ボタン: 「開始」 / 「再挑戦」 */
+.arcade-btn {
+  display: block;
+  width: 100%;
+  padding: 22px 0;
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  cursor: pointer;
+  border: 5px solid #ffffff;
+  outline: none;
+  box-shadow: 0 10px 0 #000, 0 0 30px rgba(0, 0, 0, 0.9);
+  transition: transform 0.05s, box-shadow 0.05s;
+}
+
+.arcade-btn:active {
+  transform: translateY(8px);
+  box-shadow: 0 2px 0 #000;
+}
+
+.start-btn {
+  background: #ffea00;
+  color: #000000;
+}
+
+.start-btn:hover {
+  background: #fff033;
+}
+
+.retry-btn {
+  background: #ff0022;
+  color: #ffffff;
+}
+
+.retry-btn:hover {
+  background: #ff2b44;
+}
+
+.success-btn {
+  background: #00e676;
+  color: #000000;
+}
+
+.success-btn:hover {
+  background: #33ff99;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .game-title {
+    font-size: 52px;
+  }
+  .fail-text, .success-text {
+    font-size: 96px;
+    letter-spacing: 8px;
+  }
+  .final-multiplier-text {
+    font-size: 40px;
+  }
+  .hud-center-num {
+    font-size: 50px;
+  }
+  .hud-center-label {
+    font-size: 26px;
+  }
+  .hud-corner-text {
+    font-size: 20px;
+  }
+  .hud-corner-spacer {
+    width: 80px;
+  }
+  .bonus-mult-text {
+    font-size: 64px;
+  }
+}
+
+/* ホーム誘導ガイド（画面下中央、常時表示・控えめ・クリックでも戻れる） */
+#home-guide {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  text-decoration: none;
+  font-family: system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 70;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+#home-guide:hover {
+  color: rgba(255, 255, 255, 0.75);
+}

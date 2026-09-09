@@ -1,0 +1,19 @@
+{
+  "name": "gamecenter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/hub",
+    "packages/games/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev-all.mjs",
+    "dev:hub": "npm run dev -w packages/hub",
+    "build": "npm run build --workspaces --if-present && node scripts/assemble.mjs",
+    "preview": "npx serve dist"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
