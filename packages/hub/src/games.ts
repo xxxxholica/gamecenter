@@ -59,4 +59,13 @@ export const games: GameEntry[] = [
     demo: 'demos/office-chair-gp.gif',
     accent: '#00ffcc',
   },
+  {
+    slug: 'phaser-fighter',
+    title: 'サイバー2Dファイター',
+    englishTitle: 'PHASER 2D FIGHTER',
+    description:
+      'SF6スタイルの本格2D対戦格闘ゲーム。ドライブインパクト、パリィ、OD技、スーパーアーツを搭載。個性豊かな6人のファイターによる白熱の攻防！',
+    demo: 'demos/phaser-fighter.gif',
+    accent: '#00f0ff',
+  },
 ];
