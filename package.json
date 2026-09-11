@@ -14,6 +14,7 @@
     "preview": "npx serve dist"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "connect": "^3.7.0",
+    "vite": "^8.2.2"
   }
 }

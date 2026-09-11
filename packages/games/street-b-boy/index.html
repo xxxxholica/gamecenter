@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>STREET B-BOY</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000000;
+      font-family: Impact, 'Arial Black', 'Trebuchet MS', sans-serif;
+      color: #ffffff;
+    }
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+    #ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+    }
+    /* CONTAINERLESS ARCADE HUD */
+    .hud-text {
+      position: absolute;
+      font-size: clamp(20px, 3.2vw, 36px);
+      letter-spacing: 2px;
+      line-height: 1;
+      text-transform: uppercase;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+        -3px  0px 0 #000000,
+         3px  0px 0 #000000,
+         0px -3px 0 #000000,
+         0px  3px 0 #000000,
+         4px  4px 0 #000000;
+    }
+    #hud-score {
+      top: 24px;
+      left: 32px;
+      color: #ffe600;
+    }
+    #hud-score .val {
+      color: #ffffff;
+      margin-left: 8px;
+    }
+    #hud-time {
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #00f0ff;
+    }
+    #hud-time .val {
+      color: #ffffff;
+      margin-left: 8px;
+    }
+    #hud-time.warning .val {
+      color: #ff1a1a;
+      animation: blink-urgent 0.25s infinite alternate;
+    }
+    #hud-lives {
+      top: 24px;
+      right: 32px;
+      color: #ff1a1a;
+    }
+    #hud-lives .val {
+      color: #ffffff;
+      margin-left: 8px;
+    }
+
+    /* CENTER FLASH TEXT */
+    #center-banner {
+      position: absolute;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: clamp(56px, 10vw, 110px);
+      letter-spacing: 6px;
+      text-align: center;
+      line-height: 1.1;
+      white-space: nowrap;
+      text-shadow:
+        -4px -4px 0 #000000,
+         4px -4px 0 #000000,
+        -4px  4px 0 #000000,
+         4px  4px 0 #000000,
+         6px  6px 0 #000000,
+         0 0 30px rgba(255, 230, 0, 0.8);
+      display: none;
+    }
+    .flash-ready {
+      color: #ffe600;
+      animation: pop-bounce 0.3s ease-out;
+    }
+    .flash-clear {
+      color: #00f0ff;
+      animation: flash-neon 0.2s infinite alternate;
+    }
+    .flash-dead {
+      color: #ff1a1a;
+      animation: shake-heavy 0.4s ease-in-out;
+    }
+    .flash-timeup {
+      color: #ff1a1a;
+      animation: pop-bounce 0.3s ease-out;
+    }
+
+    /* TITLE SCREEN OVERLAY */
+    #title-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 48px 24px;
+      pointer-events: auto;
+    }
+    .title-logo-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .title-logo-main {
+      font-size: clamp(48px, 9vw, 96px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #ffe600;
+      text-shadow:
+        -4px -4px 0 #000000,
+         4px -4px 0 #000000,
+        -4px  4px 0 #000000,
+         4px  4px 0 #000000,
+         8px  8px 0 #000000,
+         0 0 40px #ffe600;
+      transform: skew(-8deg);
+    }
+    .title-logo-sub {
+      font-size: clamp(16px, 2.8vw, 28px);
+      letter-spacing: 8px;
+      color: #00f0ff;
+      margin-top: -6px;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+         4px  4px 0 #000000;
+    }
+    .title-btn {
+      background: #ffe600;
+      color: #000000;
+      border: 4px solid #000000;
+      outline: 3px solid #ffe600;
+      font-family: inherit;
+      font-size: clamp(28px, 4.5vw, 44px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      padding: 12px 48px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 6px 6px 0 #000000;
+      animation: btn-flash 0.8s infinite alternate;
+      border-radius: 0;
+      transition: transform 0.05s;
+    }
+    .title-btn:hover {
+      background: #ffffff;
+      outline-color: #ffffff;
+      transform: translate(-2px, -2px);
+      box-shadow: 8px 8px 0 #000000;
+    }
+    .title-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0 #000000;
+    }
+    .arcade-insert-coin {
+      font-size: clamp(16px, 2.5vw, 24px);
+      letter-spacing: 4px;
+      color: #ffffff;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+         3px  3px 0 #000000;
+      margin-top: 14px;
+      animation: blink-insert 0.9s infinite;
+    }
+
+    /* CONTROLS GUIDE (ARCADE STYLE, NO PARENTHESES, NO EMOJIS) */
+    .arcade-controls-bar {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .ctrl-item {
+      font-size: clamp(14px, 1.8vw, 20px);
+      letter-spacing: 1px;
+      color: #ffffff;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+         3px  3px 0 #000000;
+    }
+    .ctrl-badge {
+      background: #000000;
+      color: #ffe600;
+      border: 2px solid #ffe600;
+      padding: 2px 8px;
+      font-weight: 900;
+      margin-right: 6px;
+      display: inline-block;
+    }
+    .ctrl-badge-cyan {
+      color: #00f0ff;
+      border-color: #00f0ff;
+    }
+    .ctrl-badge-red {
+      color: #ff1a1a;
+      border-color: #ff1a1a;
+    }
+
+    /* ATTRACT DEMO BANNER */
+    #demo-banner {
+      position: absolute;
+      top: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(36px, 6vw, 64px);
+      letter-spacing: 6px;
+      color: #ffe600;
+      text-shadow:
+        -3px -3px 0 #000000,
+         3px -3px 0 #000000,
+        -3px  3px 0 #000000,
+         3px  3px 0 #000000,
+         5px  5px 0 #000000;
+      animation: blink-demo 0.5s infinite alternate;
+      display: none;
+    }
+
+    /* RANKING SCREEN OVERLAY */
+    #ranking-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 20;
+      display: none;
+      pointer-events: auto;
+    }
+    .ranking-title {
+      font-size: clamp(38px, 6vw, 60px);
+      color: #00f0ff;
+      letter-spacing: 4px;
+      text-shadow:
+        -3px -3px 0 #000000,
+         3px -3px 0 #000000,
+        -3px  3px 0 #000000,
+         3px  3px 0 #000000,
+         5px  5px 0 #000000;
+      margin-bottom: 24px;
+    }
+    .ranking-table {
+      width: 90%;
+      max-width: 600px;
+      border-collapse: collapse;
+    }
+    .ranking-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      font-size: clamp(20px, 3.2vw, 32px);
+      letter-spacing: 3px;
+      border-bottom: 2px solid #333333;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+         3px  3px 0 #000000;
+    }
+    .rank-num {
+      color: #ffe600;
+    }
+    .rank-name {
+      color: #ffffff;
+    }
+    .rank-score {
+      color: #00f0ff;
+    }
+    .ranking-prompt {
+      margin-top: 32px;
+      font-size: clamp(16px, 2.5vw, 24px);
+      color: #ffffff;
+      letter-spacing: 3px;
+      animation: blink-insert 0.9s infinite;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000,
+         3px  3px 0 #000000;
+    }
+
+    /* RESULT OVERLAY */
+    #result-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 25;
+      display: none;
+      pointer-events: auto;
+    }
+    .result-score-block {
+      margin: 20px 0 32px 0;
+      text-align: center;
+    }
+    .result-score-title {
+      font-size: clamp(20px, 3vw, 28px);
+      color: #ffe600;
+      letter-spacing: 2px;
+      text-shadow:
+        -2px -2px 0 #000000,
+         2px -2px 0 #000000,
+        -2px  2px 0 #000000,
+         2px  2px 0 #000000;
+    }
+    .result-score-val {
+      font-size: clamp(48px, 8vw, 76px);
+      color: #ffffff;
+      letter-spacing: 4px;
+      text-shadow:
+        -3px -3px 0 #000000,
+         3px -3px 0 #000000,
+        -3px  3px 0 #000000,
+         3px  3px 0 #000000,
+         6px  6px 0 #000000;
+    }
+
+    /* INVINCIBILITY VIGNETTE */
+    #invincible-border {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      box-shadow: inset 0 0 50px 10px #ffe600;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 8;
+    }
+
+    /* RETRO CRT SCANLINE OVERLAY */
+    #crt-scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%);
+      background-size: 100% 4px;
+      z-index: 7;
+      opacity: 0.55;
+    }
+
+    /* COMBO COUNTER */
+    #hud-combo {
+      top: 72px;
+      left: 32px;
+      color: #ffe600;
+      font-size: clamp(24px, 3.8vw, 42px);
+      letter-spacing: 3px;
+      display: none;
+      animation: pop-bounce 0.2s ease-out;
+    }
+    #val-combo-text {
+      font-size: clamp(12px, 1.8vw, 18px);
+      color: #00f0ff;
+      letter-spacing: 4px;
+      margin-top: 2px;
+    }
+
+    /* ANIMATIONS */
+    @keyframes btn-flash {
+      from { transform: scale(1); filter: brightness(1); }
+      to { transform: scale(1.05); filter: brightness(1.25); }
+    }
+    @keyframes blink-insert {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+    @keyframes blink-demo {
+      from { opacity: 1; transform: translateX(-50%) scale(1); }
+      to { opacity: 0.2; transform: translateX(-50%) scale(1.06); }
+    }
+    @keyframes blink-urgent {
+      from { opacity: 1; }
+      to { opacity: 0.1; }
+    }
+    @keyframes pop-bounce {
+      0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+      70% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+    @keyframes flash-neon {
+      from { filter: drop-shadow(0 0 10px #00f0ff); }
+      to { filter: drop-shadow(0 0 40px #ffe600); }
+    }
+    @keyframes shake-heavy {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      20% { transform: translate(-54%, -46%) rotate(-3deg); }
+      40% { transform: translate(-46%, -54%) rotate(3deg); }
+      60% { transform: translate(-52%, -48%) rotate(-2deg); }
+      80% { transform: translate(-48%, -52%) rotate(2deg); }
+      100% { transform: translate(-50%, -50%) rotate(0deg); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="invincible-border"></div>
+  <div id="crt-scanlines"></div>
+
+  <div id="ui-layer">
+    <!-- CONTAINERLESS HUD -->
+    <div id="hud-score" class="hud-text">得点<span class="val" id="val-score">000000</span></div>
+    <div id="hud-stage" class="hud-text" style="top: 24px; left: 260px; color: #ffe600;">STAGE<span class="val" id="val-stage" style="margin-left:8px; color:#ffffff;">1</span></div>
+    <div id="hud-time" class="hud-text">時間<span class="val" id="val-time">099</span></div>
+    <div id="hud-lives" class="hud-text">残機<span class="val" id="val-lives">03</span></div>
+
+    <!-- COMBO POPUP -->
+    <div id="hud-combo" class="hud-text">
+      <span id="val-combo-hits" style="color: #00f0ff;">2</span> HITS!
+      <div id="val-combo-text">CYPHER COMBO!</div>
+    </div>
+
+    <!-- FLASH TEXT -->
+    <div id="center-banner">READY</div>
+    <div id="demo-banner">DEMO PLAY</div>
+
+    <!-- TITLE OVERLAY -->
+    <div id="title-overlay">
+      <div class="title-logo-wrap">
+        <h1 class="title-logo-main">STREET B-BOY</h1>
+        <div class="title-logo-sub">ARCADE 2.5D PLATFORMER</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <button id="btn-start" class="title-btn">開始</button>
+        <div class="arcade-insert-coin">PRESS BUTTON OR SPACE / W TO START</div>
+      </div>
+
+      <div class="arcade-controls-bar">
+        <div class="ctrl-item"><span class="ctrl-badge">LEVER / A D</span>左右移動</div>
+        <div class="ctrl-item"><span class="ctrl-badge ctrl-badge-cyan">BTN 0 / W / SPACE / Z</span>ジャンプ</div>
+        <div class="ctrl-item"><span class="ctrl-badge ctrl-badge-red">BTN 1 / SHIFT / X</span>スピン攻撃</div>
+        <div class="ctrl-item"><span class="ctrl-badge">LEVER 下 / S</span>スライディング</div>
+      </div>
+    </div>
+
+    <!-- RANKING OVERLAY -->
+    <div id="ranking-overlay">
+      <h2 class="ranking-title">TOP 5 B-BOY KINGS</h2>
+      <div class="ranking-table" id="ranking-list">
+        <!-- populated dynamically -->
+      </div>
+      <div class="ranking-prompt">PRESS ANY BUTTON TO PLAY</div>
+    </div>
+
+    <!-- RESULT OVERLAY -->
+    <div id="result-overlay">
+      <div id="result-status-title" class="hud-text" style="position:static; font-size: 54px; margin-bottom: 12px; color: #ffe600;">CLEAR</div>
+      <div class="result-score-block">
+        <div class="result-score-title">TOTAL SCORE</div>
+        <div class="result-score-val" id="result-total-score">000000</div>
+      </div>
+      <button id="btn-restart" class="title-btn">再挑戦</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
