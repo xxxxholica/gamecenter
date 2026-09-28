@@ -283,9 +283,17 @@ export class FestivalStall {
       lanternGroup.position.set(lp.x, lp.y, lp.z);
       this.group.add(lanternGroup);
       this.lanterns.push(lanternGroup);
+    });
 
-      const lanternLight = new THREE.PointLight(0xff7722, 1.4, 3.8);
-      lanternLight.position.set(lp.x, lp.y - 0.05, lp.z);
+    // 提灯の明かり。提灯ごとに点光源を置くと全画素で光源計算が6個分増えるため、前列・後列に1個ずつまとめる
+    const lanternRows = [
+      { x: 0, y: 2.13, z: 1.35, intensity: 3.2, distance: 6.0 },
+      { x: 0, y: 2.2, z: -0.4, intensity: 1.8, distance: 5.0 },
+    ];
+    lanternRows.forEach((row) => {
+      const lanternLight = new THREE.PointLight(0xff7722, row.intensity, row.distance);
+      lanternLight.position.set(row.x, row.y, row.z);
+      lanternLight.userData.baseIntensity = row.intensity;
       this.group.add(lanternLight);
       this.lanternLights.push(lanternLight);
     });
@@ -380,7 +388,7 @@ export class FestivalStall {
     });
 
     this.lanternLights.forEach((light, idx) => {
-      light.intensity = 1.3 + Math.sin(elapsed * 8.0 + idx * 3.7) * 0.25;
+      light.intensity = light.userData.baseIntensity * (0.93 + Math.sin(elapsed * 8.0 + idx * 3.7) * 0.18);
     });
 
     // Spin pinwheels

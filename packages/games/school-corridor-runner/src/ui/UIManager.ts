@@ -36,8 +36,6 @@ export class UIManager {
   private resultGradeEl: HTMLElement;
   private resultTitleEl: HTMLElement;
 
-  // フルスクリーンボタン
-  private fsButton: HTMLElement;
 
   constructor() {
     this.hudContainer = document.getElementById('hud')!;
@@ -69,10 +67,7 @@ export class UIManager {
     this.resultGradeEl = document.getElementById('result-grade')!;
     this.resultTitleEl = document.getElementById('result-title')!;
 
-    this.fsButton = document.getElementById('btn-fullscreen')!;
-    this.fsButton.addEventListener('click', () => {
-      this.toggleFullscreen();
-    });
+
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyF') {
@@ -128,6 +123,15 @@ export class UIManager {
     this.scoreEl.classList.add('pop');
   }
 
+  // HUDは毎フレーム呼ばれるため、値が変わったときだけDOMを書き換える(同じ値でも代入すると再レイアウト・再描画の対象になる)
+  private setText(el: HTMLElement, text: string): void {
+    if (el.textContent !== text) el.textContent = text;
+  }
+
+  private setClass(el: HTMLElement, className: string, on: boolean): void {
+    if (el.classList.contains(className) !== on) el.classList.toggle(className, on);
+  }
+
   public updateHUD(
     score: number,
     combo: number,
@@ -136,50 +140,40 @@ export class UIManager {
     bombCount: number,
     bombReloadProgress: number
   ): void {
-    this.scoreEl.textContent = Math.floor(score).toString().padStart(7, '0');
+    this.setText(this.scoreEl, Math.floor(score).toString().padStart(7, '0'));
 
     // スコア枠へのコンボ倍率統合表示
     if (combo > 1) {
       const mult = (1.0 + Math.min(5.0, combo * 0.1)).toFixed(1);
-      this.scoreMultiplierEl.textContent = `×${mult}`;
-      this.scoreMultiplierEl.classList.remove('hidden');
+      this.setText(this.scoreMultiplierEl, `×${mult}`);
+      this.setClass(this.scoreMultiplierEl, 'hidden', false);
     } else {
-      this.scoreMultiplierEl.classList.add('hidden');
+      this.setClass(this.scoreMultiplierEl, 'hidden', true);
     }
 
     // 時間
     const totalSeconds = Math.max(0, timeRemaining);
     const secs = Math.floor(totalSeconds);
     const millis = Math.floor((totalSeconds - secs) * 10);
-    this.timeEl.textContent = `${secs.toString().padStart(2, '0')}.${millis}`;
+    this.setText(this.timeEl, `${secs.toString().padStart(2, '0')}.${millis}`);
 
-    if (timeRemaining <= 15) {
-      this.timeEl.classList.add('danger');
-    } else {
-      this.timeEl.classList.remove('danger');
-    }
+    this.setClass(this.timeEl, 'danger', timeRemaining <= 15);
 
     // 速度
-    this.speedEl.textContent = `${speedKmh.toFixed(1)}km/h`;
+    this.setText(this.speedEl, `${speedKmh.toFixed(1)}km/h`);
 
     // 辞書残弾スロット（四角形ブロック3枠）
     const slots = this.bombSlotsContainer.children;
     for (let i = 0; i < 3; i++) {
       if (slots[i]) {
-        if (i < bombCount) {
-          slots[i].className = 'bomb-slot active';
-        } else {
-          slots[i].className = 'bomb-slot';
-        }
+        const className = i < bombCount ? 'bomb-slot active' : 'bomb-slot';
+        if (slots[i].className !== className) slots[i].className = className;
       }
     }
 
     // リロードプログレスバー
-    if (bombCount < 3) {
-      this.bombReloadBar.style.width = `${Math.min(100, Math.floor(bombReloadProgress * 100))}%`;
-    } else {
-      this.bombReloadBar.style.width = '100%';
-    }
+    const reloadWidth = bombCount < 3 ? `${Math.min(100, Math.floor(bombReloadProgress * 100))}%` : '100%';
+    if (this.bombReloadBar.style.width !== reloadWidth) this.bombReloadBar.style.width = reloadWidth;
   }
 
   /**
@@ -195,7 +189,7 @@ export class UIManager {
    * 無敵タイマー表示の毎フレーム更新（残り時間が少ないほど点滅を速く）
    */
   public updateInvincibleTimer(remaining: number): void {
-    this.invincibleTimerEl.textContent = Math.max(0, remaining).toFixed(1);
+    this.setText(this.invincibleTimerEl, Math.max(0, remaining).toFixed(1));
     if (remaining <= 3.0) {
       this.invincibleVignette.classList.add('ending');
       this.invincibleBanner.classList.add('ending');

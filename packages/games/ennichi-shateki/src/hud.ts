@@ -1,5 +1,6 @@
 import { getPrizeSvg, getPrizeShortName } from './prize_icons';
 import { PrizeBreakdownEntry } from './results_pile';
+import { buttonIconHtml } from '../../../shared/arcadeGuide';
 
 export interface HighScoreEntry {
   rank: number;
@@ -71,9 +72,9 @@ export class ArcadeHUD {
     this.timerEl.className = 'hud-text hud-tr';
     this.timerEl.innerHTML = '時間 <span class="num" id="hud-time-val">30.0</span>';
 
-    // Bottom-Left: 爆発弾（単一ゲージにスリム化）
+    // Bottom-Right: 爆発弾
     this.ammoEl = document.createElement('div');
-    this.ammoEl.className = 'hud-text hud-bl';
+    this.ammoEl.className = 'hud-text hud-br';
     this.ammoEl.innerHTML = `
       <div class="bomb-gauge-wrap" id="hud-bomb-wrap">
         <span class="bomb-gauge-label">爆発弾</span>
@@ -131,30 +132,11 @@ export class ArcadeHUD {
 
     this.startBtnEl = document.createElement('div');
     this.startBtnEl.className = 'start-prompt blink';
-    this.startBtnEl.textContent = 'スタート';
+    this.startBtnEl.innerHTML = `${buttonIconHtml([0])} スタート`;
 
-    const titleGuidance = document.createElement('div');
-    titleGuidance.className = 'title-controls-guide';
-    titleGuidance.innerHTML = `
-      <div class="guide-item">
-        <span class="guide-label">通常弾</span>
-        <span class="guide-key">左クリック / 決定 / ボタン0</span>
-      </div>
-      <div class="guide-sep"></div>
-      <div class="guide-item">
-        <span class="guide-label">バクダン弾</span>
-        <span class="guide-key">右クリック / Xキー / ボタン1</span>
-      </div>
-      <div class="guide-sep"></div>
-      <div class="guide-item">
-        <span class="guide-label">ねらい</span>
-        <span class="guide-key">マウス / レバー / 矢印キー</span>
-      </div>
-    `;
-
+    // 操作案内は全ゲーム共通のボタンガイドカード(main.tsのmountArcadeGuide)に一本化。
     this.titleOverlay.appendChild(this.titleLogoEl);
     this.titleOverlay.appendChild(this.startBtnEl);
-    this.titleOverlay.appendChild(titleGuidance);
     this.container.appendChild(this.titleOverlay);
 
     // 5. Attract / Demo Mode Banner

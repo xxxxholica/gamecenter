@@ -70,8 +70,9 @@ export class WorldManager {
     const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
     dirLight.position.set(15, 30, 20);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
+    // 影の範囲は横30m程度なので1024pxで十分(2048pxは影の描き込み・参照ともにGPU負荷が4倍)
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
     dirLight.shadow.camera.near = 1;
     dirLight.shadow.camera.far = 120;
     dirLight.shadow.camera.left = -15;

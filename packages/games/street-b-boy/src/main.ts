@@ -8,9 +8,19 @@ import { HudManager } from './ui/hud';
 import { CassetteTape } from './entities/objects';
 import { TextureGenerator } from './world/textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+
+mountArcadeGuide({
+  moveLabel: '移動',
+  buttons: [
+    { indices: [0], label: 'ジャンプ' },
+    { indices: [1, 2], label: 'スピン攻撃' },
+  ],
+  showHomeHint: true,
+});
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'game_over' | 'clear';
 
@@ -52,15 +62,17 @@ class StreetBBoyGame {
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+    // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
+    // 2倍解像度でのMSAAはGPU負荷が大きい割に見た目の差がほとんど無い
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: window.devicePixelRatio < 1.5,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // 影を落とす光源(castShadow)が無いので shadowMap は使わない(有効にしていても影は出ず、処理だけが残る)
+    this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x05070c);
@@ -84,6 +96,7 @@ class StreetBBoyGame {
   private setupEventListeners(): void {
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
+      btnStart.innerHTML = `${buttonIconHtml([0])} ${btnStart.textContent}`;
       btnStart.addEventListener('click', () => {
         this.sound.init();
         this.startGame();
@@ -487,7 +500,7 @@ class StreetBBoyGame {
     if (this.player.isDead) {
       this.player.update(dt, input);
       this.player.mesh.position.set(this.player.x, this.player.y, 0);
-      this.stage.update(dt, time * 0.001);
+      this.stage.update(dt, time * 0.001, this.camera.position.x);
       this.updateCamera(dt);
       return;
     }
@@ -998,7 +1011,7 @@ class StreetBBoyGame {
     this.player.mesh.position.set(this.player.x, this.player.y, 0);
 
     // Update Stage World
-    this.stage.update(dt, time * 0.001);
+    this.stage.update(dt, time * 0.001, this.camera.position.x);
 
     // 2.5D Camera Tracking
     this.updateCamera(dt);
@@ -1065,7 +1078,7 @@ class StreetBBoyGame {
     this.stateTimer += dt;
 
     if (this.stage) {
-      this.stage.update(dt, time * 0.001);
+      this.stage.update(dt, time * 0.001, this.camera.position.x);
       // Continuous celebratory fireworks!
       if (Math.random() < 0.25) {
         this.stage.particleSystem.spawnFireworks(

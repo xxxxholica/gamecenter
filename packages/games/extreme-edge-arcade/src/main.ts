@@ -3,9 +3,19 @@ import { InputManager } from './input';
 import { EffectsManager } from './effects';
 import { GameManager } from './game';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+
+mountArcadeGuide({
+  moveLabel: '操作',
+  buttons: [
+    { indices: [0, 2], label: 'アクション0' },
+    { indices: [1, 3], label: 'アクション1' },
+  ],
+  showHomeHint: true,
+});
 
 function initApp() {
   const container = document.getElementById('canvas-container')!;
@@ -24,7 +34,9 @@ function initApp() {
   camera.position.set(0, 2, 4);
 
   // Renderer
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
+  // 2倍解像度でのMSAAはGPU負荷が大きい割に見た目の差がほとんど無い
+  const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

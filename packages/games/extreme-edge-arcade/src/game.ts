@@ -3,6 +3,7 @@ import { Stage, StageResult } from './types';
 import { InputManager } from './input';
 import { EffectsManager } from './effects';
 import { sound } from './audio';
+import { buttonIconHtml } from '../../../shared/arcadeGuide';
 import { Stage1Drink } from './stages/stage1_drink';
 import { Stage3Phone } from './stages/stage3_phone';
 import { Stage4Clock } from './stages/stage4_clock';
@@ -132,6 +133,7 @@ export class GameManager {
 
     // Start button on title
     const startBtn = document.getElementById('btn-start')!;
+    startBtn.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${startBtn.textContent}`;
     startBtn.addEventListener('click', () => {
       if (this.state === 'TITLE' || this.state === 'ATTRACT_DEMO' || this.state === 'ATTRACT_RANKING') {
         this.startGame();

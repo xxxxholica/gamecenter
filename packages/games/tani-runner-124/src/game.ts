@@ -4,6 +4,7 @@
 // ============================================================
 
 import * as THREE from 'three';
+import { buttonIconHtml } from '../../../shared/arcadeGuide.ts';
 import { inputManager } from './input.ts';
 import { sound } from './audio.ts';
 import { StudentCrowd } from './studentMesh.ts';
@@ -68,15 +69,17 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 1200);
     this.camera.position.set(0, 6.0, 10.0);
 
+    // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
+    // 2倍解像度でのMSAAはGPU負荷が大きい割に見た目の差がほとんど無い
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: window.devicePixelRatio < 1.5,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.crowd = new StudentCrowd(this.scene);
     this.world = new WorldManager(this.scene);
@@ -108,6 +111,7 @@ export class Game {
 
   private setupEventListeners(): void {
     const startBtn = document.getElementById('start-btn');
+    if (startBtn) startBtn.innerHTML = `${buttonIconHtml([0, 1, 7])} ${startBtn.textContent}`;
     startBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.startGame();

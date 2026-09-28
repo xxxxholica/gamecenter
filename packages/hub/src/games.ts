@@ -86,28 +86,6 @@ const allGames: GameEntry[] = [
     developer: XXXXHOLICA,
   },
   {
-    slug: 'classroom-trial-blitz',
-    title: '超速学級裁判',
-    englishTitle: 'OBJECTION BLITZ',
-    description:
-      '飛来する証言の中から矛盾を撃ち抜け。「異議あり！」で正解を撃てば「論破」、木槌連打でボーナス加算。全3事件を撃破して被告を「有罪」に追い込む一人称法廷シューティング。',
-    thumbnail: 'thumbnails/classroom-trial-blitz.webp',
-    accent: '#ff1a1a',
-    developer: XXXXHOLICA,
-    hidden: true,
-  },
-  {
-    slug: 'office-chair-gp',
-    title: '爆走！グラウンド事務椅子GP',
-    englishTitle: 'GROUND DRIFT RACER',
-    description:
-      '事務椅子でグラウンドを爆走するドリフトレース。消火器ジェットで急加速、足ブレーキでターン、ボンベ投擲で前方のライバルを妨害。土煙を巻き上げて1位でゴールを目指せ。',
-    thumbnail: 'thumbnails/office-chair-gp.webp',
-    accent: '#00ffcc',
-    developer: XXXXHOLICA,
-    hidden: true,
-  },
-  {
     slug: 'street-b-boy',
     title: 'ストリートビーボーイ',
     englishTitle: 'STREET B-BOY',
@@ -120,3 +98,6 @@ const allGames: GameEntry[] = [
 ];
 
 export const games: GameEntry[] = allGames.filter((game) => !game.hidden);
+
+// 非表示のゲームはビルド・配置の対象からも外す(scripts/build.mjs・scripts/assemble.mjs が参照する)
+export const hiddenSlugs: string[] = allGames.filter((game) => game.hidden).map((game) => game.slug);

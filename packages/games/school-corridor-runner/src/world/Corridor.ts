@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   createFloorTexture,
   createWallTexture,
@@ -184,7 +185,44 @@ export class Corridor {
       group.add(fixtureGroup);
     }
 
+    this.mergeStaticFixtures(group);
     return group;
+  }
+
+  /**
+   * 蛍光灯器具(ロッド・ベース・蛍光管)は1区画に4台×5部品あり、そのままだと部品ごとに描画命令が発生する。
+   * 動かない部品なので、区画ごとに同じ見た目(マテリアルの種類と色)の部品を1メッシュに結合する。
+   * 点滅させる蛍光管(flickeringLightMesh)は色を個別に変えるため結合しない。
+   */
+  private mergeStaticFixtures(group: THREE.Group): void {
+    group.updateMatrixWorld(true);
+    const toGroupSpace = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    const buckets = new Map<string, { material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
+    const merged: THREE.Mesh[] = [];
+
+    for (const fixture of group.children) {
+      if (!(fixture instanceof THREE.Group)) continue;
+      fixture.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || mesh === this.flickeringLightMesh) return;
+        const material = mesh.material as THREE.MeshBasicMaterial | THREE.MeshLambertMaterial;
+        const key = `${material.type}:${material.color.getHexString()}`;
+        const geometry = mesh.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(toGroupSpace, mesh.matrixWorld));
+        const bucket = buckets.get(key) ?? { material, geometries: [] };
+        bucket.geometries.push(geometry);
+        buckets.set(key, bucket);
+        merged.push(mesh);
+      });
+    }
+
+    for (const mesh of merged) {
+      mesh.removeFromParent();
+    }
+    for (const { material, geometries } of buckets.values()) {
+      const geometry = mergeGeometries(geometries, false);
+      geometries.forEach((g) => g.dispose());
+      if (geometry) group.add(new THREE.Mesh(geometry, material));
+    }
   }
 
   /**

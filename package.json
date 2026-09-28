@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node scripts/dev-all.mjs",
     "dev:hub": "npm run dev -w packages/hub",
-    "build": "npm run build --workspaces --if-present && node scripts/assemble.mjs",
+    "build": "node scripts/build.mjs",
     "preview": "npx serve dist",
     "deploy": "npm run build && node scripts/deploy.mjs"
   },

@@ -12,8 +12,6 @@ gamecenter/
       school-corridor-runner/  # 学園脱出ラン (Three.js)
       extreme-edge-arcade/     # 極限ギリギリ選手権 (Three.js)
       tani-runner-124/         # 単位増殖ラン (Three.js)
-      classroom-trial-blitz/   # 超速学級裁判 (Three.js)
-      office-chair-gp/         # 爆走！グラウンド事務椅子GP (Three.js)
       phaser-fighter/          # サイバー2Dファイター (Phaser 3)
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
@@ -49,7 +47,8 @@ npm run dev:hub
 
 ## ビルド・確認
 
-hub + 全ゲームをビルドし、`dist/`以下に1つのサイトとして組み立てる。
+hub + 全ゲームをビルドし、`dist/`以下に1つのサイトとして組み立てる(`scripts/build.mjs`)。
+`packages/hub/src/games.ts` で `hidden: true` にしたゲームはビルド・配置の対象外になり、公開サイトからも読み込めなくなる(`npm run dev` では引き続き遊べる)。
 
 ```bash
 npm run build
@@ -65,8 +64,6 @@ dist/
     school-corridor-runner/
     extreme-edge-arcade/
     tani-runner-124/
-    classroom-trial-blitz/
-    office-chair-gp/
     phaser-fighter/
     ennichi-shateki/
     street-b-boy/

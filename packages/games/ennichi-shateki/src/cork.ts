@@ -14,7 +14,6 @@ export interface CorkBullet {
   hasHit: boolean;
   age: number;
   type: BulletType;
-  trailLight?: THREE.PointLight;
 }
 
 export interface ExplosionEffect {
@@ -83,12 +82,8 @@ export class CorkSystem {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
     this.scene.add(mesh);
 
-    let trailLight: THREE.PointLight | undefined;
-    if (isExplosive) {
-      trailLight = new THREE.PointLight(0xff4500, 2.5, 2.0);
-      trailLight.position.copy(origin);
-      this.scene.add(trailLight);
-    }
+    // 爆弾コルクは発光マテリアルで光って見えるため、飛行中の点光源は付けない。
+    // 光源の数が変わるたびに全マテリアルのシェーダー再コンパイルが走り、発射のたびに引っかかるため
 
     const bullet: CorkBullet = {
       mesh,
@@ -99,7 +94,6 @@ export class CorkSystem {
       hasHit: false,
       age: 0,
       type,
-      trailLight,
     };
 
     this.bullets.push(bullet);
@@ -232,9 +226,8 @@ export class CorkSystem {
       b.age += dt;
 
       if (!b.isAlive || b.age > 2.5) {
+        // 形状は全コルクで共有しているので dispose しない(破棄すると次の発射でGPUへ再転送になる)
         this.scene.remove(b.mesh);
-        if (b.trailLight) this.scene.remove(b.trailLight);
-        b.mesh.geometry.dispose();
         this.bullets.splice(i, 1);
         continue;
       }
@@ -243,9 +236,6 @@ export class CorkSystem {
       b.velocity.y -= 7.0 * dt;
       b.pos.addScaledVector(b.velocity, dt);
       b.mesh.position.copy(b.pos);
-      if (b.trailLight) {
-        b.trailLight.position.copy(b.pos);
-      }
 
       if (b.hasHit) {
         b.mesh.rotation.x += 12 * dt;
@@ -333,10 +323,6 @@ export class CorkSystem {
         b.hasHit = true;
         b.pos.copy(closestHitPoint);
         b.mesh.position.copy(b.pos);
-        if (b.trailLight) {
-          this.scene.remove(b.trailLight);
-          b.trailLight = undefined;
-        }
 
         if (b.type === 'explosive') {
           // Explode!
@@ -379,10 +365,6 @@ export class CorkSystem {
         // Wall hit
         b.hasHit = true;
         b.pos.z = -1.38;
-        if (b.trailLight) {
-          this.scene.remove(b.trailLight);
-          b.trailLight = undefined;
-        }
 
         if (b.type === 'explosive') {
           this.triggerExplosion(b.pos, prizes, dynamicTargets, (name, pts, pos) => {
@@ -405,10 +387,10 @@ export class CorkSystem {
 
       if (exp.life >= exp.maxLife) {
         this.scene.remove(exp.shockwaveMesh);
-        exp.shockwaveMesh.geometry.dispose();
+        (exp.shockwaveMesh.material as THREE.Material).dispose();
         for (const s of exp.sparks) {
           this.scene.remove(s.mesh);
-          s.mesh.geometry.dispose();
+          (s.mesh.material as THREE.Material).dispose();
         }
         this.explosions.splice(i, 1);
       } else {
@@ -435,7 +417,6 @@ export class CorkSystem {
       chip.life += dt;
       if (chip.life >= chip.maxLife) {
         this.scene.remove(chip.mesh);
-        chip.mesh.geometry.dispose();
         this.chips.splice(i, 1);
       } else {
         chip.vel.y -= 9.8 * dt;
@@ -449,24 +430,21 @@ export class CorkSystem {
   public reset() {
     for (const b of this.bullets) {
       this.scene.remove(b.mesh);
-      if (b.trailLight) this.scene.remove(b.trailLight);
-      b.mesh.geometry.dispose();
     }
     this.bullets = [];
 
     for (const e of this.explosions) {
       this.scene.remove(e.shockwaveMesh);
-      e.shockwaveMesh.geometry.dispose();
+      (e.shockwaveMesh.material as THREE.Material).dispose();
       for (const s of e.sparks) {
         this.scene.remove(s.mesh);
-        s.mesh.geometry.dispose();
+        (s.mesh.material as THREE.Material).dispose();
       }
     }
     this.explosions = [];
 
     for (const c of this.chips) {
       this.scene.remove(c.mesh);
-      c.mesh.geometry.dispose();
     }
     this.chips = [];
   }

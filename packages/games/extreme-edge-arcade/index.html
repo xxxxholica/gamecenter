@@ -398,28 +398,7 @@
       display: none;
     }
 
-    /* ホーム誘導ガイド（画面下中央、常時表示・控えめ・クリックでも戻れる） */
-    #home-guide {
-      position: absolute;
-      bottom: 6px;
-      left: 0;
-      right: 0;
-      margin: 0 auto;
-      width: fit-content;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 1px;
-      text-decoration: none;
-      font-family: system-ui, sans-serif;
-      color: rgba(255, 255, 255, 0.3);
-      z-index: 70;
-      user-select: none;
-      transition: color 0.15s;
-    }
 
-    #home-guide:hover {
-      color: rgba(255, 255, 255, 0.75);
-    }
 
     #demo-prompt {
       position: absolute;
@@ -594,8 +573,6 @@
     </div>
   </div>
 
-  <!-- ホーム誘導ガイド（HUD状態に関わらず常時表示・クリックでも遷移可能） -->
-  <a id="home-guide" href="../../">ESC / SELECT長押し : ホームへ戻る</a>
 
   <!-- Center Flashing Staging Messages -->
   <div id="center-banner"></div>

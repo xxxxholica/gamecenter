@@ -14,9 +14,16 @@ import { PowerUp } from './entities/PowerUp';
 import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+
+mountArcadeGuide({
+  moveLabel: '移動',
+  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃(手裏剣/辞書ボム)' }],
+  showHomeHint: true,
+});
 
 class Game {
   // Three.js
@@ -148,7 +155,9 @@ class Game {
     this.fpArms.group.visible = false;
     this.camera.add(this.fpArms.group);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
+    // 2倍解像度でのMSAAはGPU負荷が大きい割に見た目の差がほとんど無い
+    this.renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: 'high-performance' });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -195,6 +204,8 @@ class Game {
 
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
+      // 今押すボタンをアイコンで示す(いずれの攻撃ボタンでもスタートする)
+      btnStart.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${btnStart.textContent}`;
       btnStart.addEventListener('click', () => {
         this.startWithCountdown();
       });
@@ -202,6 +213,7 @@ class Game {
 
     const btnRetry = document.getElementById('btn-retry');
     if (btnRetry) {
+      btnRetry.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${btnRetry.textContent}`;
       btnRetry.addEventListener('click', () => {
         this.startWithCountdown();
       });

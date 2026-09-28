@@ -332,53 +332,7 @@
       transition: width 0.08s linear;
     }
 
-    /* 全画面ボタン（画面右下に配置してHUDエリアとの被りを完全排除） */
-    #btn-fullscreen {
-      position: absolute;
-      bottom: 24px;
-      right: 28px;
-      background: rgba(12, 10, 18, 0.88);
-      border: 2px solid #ffca28;
-      color: #ffca28;
-      padding: 8px 18px;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      cursor: pointer;
-      z-index: 60;
-      transition: all 0.15s;
-      box-shadow: 3px 3px 0 #000, 0 0 10px rgba(0,0,0,0.5);
-    }
 
-    #btn-fullscreen:hover {
-      background: #ffca28;
-      color: #000;
-    }
-
-    /* ホーム誘導ガイド（画面下中央、常時表示・控えめ・クリックでも戻れる） */
-    #home-guide {
-      position: absolute;
-      bottom: 6px;
-      left: 0;
-      right: 0;
-      margin: 0 auto;
-      width: fit-content;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 1px;
-      text-transform: none;
-      text-decoration: none;
-      font-family: system-ui, sans-serif;
-      color: rgba(255, 255, 255, 0.3);
-      z-index: 70;
-      user-select: none;
-      transition: color 0.15s;
-    }
-
-    #home-guide:hover {
-      color: rgba(255, 255, 255, 0.75);
-    }
 
     /* タイトルオーバーレイ（実際のステージの上に浮かぶポップアップウィンドウ） */
     #title-overlay {
@@ -552,17 +506,6 @@
       100% { opacity: 1.0; transform: scale(1.02); }
     }
 
-    .arcade-credit {
-      position: absolute;
-      bottom: 14px;
-      left: 20px;
-      font-size: 13px;
-      font-weight: 900;
-      letter-spacing: 3px;
-      color: #78909c;
-      text-shadow: 1px 1px 0 #000;
-      user-select: none;
-    }
 
     /* カウントダウン演出オーバーレイ */
     #countdown-overlay {
@@ -810,11 +753,6 @@
     </div>
   </div>
 
-  <!-- 全画面切り替えボタン -->
-  <button id="btn-fullscreen" title="全画面">全画面</button>
-
-  <!-- ホーム誘導ガイド（クリックでも遷移可能） -->
-  <a id="home-guide" href="../../">ESC / SELECT長押し : ホームへ戻る</a>
 
   <!-- デモ中バナー -->
   <div id="demo-indicator" class="hidden">デモプレイ</div>
@@ -837,7 +775,7 @@
           <div class="inst-row"><span>移動</span><span class="key-badge">レバー左右</span></div>
           <div class="inst-row"><span>跳躍</span><span class="key-badge">レバー上</span></div>
           <div class="inst-row"><span>しゃがみ</span><span class="key-badge">レバー下</span></div>
-          <div class="inst-row"><span>攻撃</span><span class="key-badge">ボタン1</span></div>
+          <div class="inst-row"><span>攻撃</span><span class="key-badge">A / B / X / Y</span></div>
           <div class="inst-sub">手裏剣・辞書投擲</div>
         </div>
 
@@ -854,7 +792,7 @@
       <button id="btn-start" class="press-start-btn">学校から脱出する</button>
       <div class="attract-notice">10秒無入力でデモ走行開始</div>
     </div>
-    <div class="arcade-credit">FREE PLAY</div>
+
   </div>
 
   <!-- リザルト画面 -->

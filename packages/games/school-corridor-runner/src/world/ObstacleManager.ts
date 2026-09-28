@@ -953,6 +953,7 @@ export class ObstacleManager {
       const obs = this.obstacles[i];
       if (obs.z > playerZ + 15 || obs.isDestroyed) {
         this.scene.remove(obs.group);
+        this.disposeObstacleGeometries(obs.group);
         this.obstacles.splice(i, 1);
       }
     }
@@ -1307,6 +1308,21 @@ export class ObstacleManager {
     return this.obstacles;
   }
 
+  /**
+   * 障害物は出現のたびに形状を新規生成しているため、片付けるときに形状も破棄する。
+   * scene から外すだけだとGPU上の頂点バッファが解放されず、遊び続けるほどGPUメモリが増え続ける。
+   * マテリアルは破壊演出(ParticleSystem.spawnObstacleCrumble)の破片がそのまま使い続けるので破棄しない。
+   * テクスチャはコンストラクタで作った共有物なので対象外。
+   */
+  private disposeObstacleGeometries(group: THREE.Object3D): void {
+    const geometries = new Set<THREE.BufferGeometry>();
+    group.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh && mesh.geometry) geometries.add(mesh.geometry);
+    });
+    for (const geometry of geometries) geometry.dispose();
+  }
+
   public removeObstacle(obs: Obstacle): void {
     obs.isDestroyed = true;
     this.scene.remove(obs.group);
@@ -1315,6 +1331,7 @@ export class ObstacleManager {
   public reset(): void {
     for (const obs of this.obstacles) {
       this.scene.remove(obs.group);
+      this.disposeObstacleGeometries(obs.group);
     }
     this.obstacles = [];
 

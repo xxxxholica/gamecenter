@@ -75,8 +75,7 @@ interface ExplosionScorchMark {
   maxLife: number;
 }
 
-interface ExplosionLight {
-  light: THREE.PointLight;
+interface ExplosionFlash {
   life: number;
   maxLife: number;
   startIntensity: number;
@@ -121,7 +120,10 @@ export class ParticleSystem {
   private explosionShockwaves: ExplosionShockwave[] = [];
   private explosionSmokePuffs: ExplosionSmokePuff[] = [];
   private explosionScorchMarks: ExplosionScorchMark[] = [];
-  private explosionLights: ExplosionLight[] = [];
+  // 爆発の閃光ライト。爆発のたびに PointLight を足し引きすると、シーンの光源数が変わるたびに
+  // 全マテリアルのシェーダーが再コンパイルされて一瞬固まるため、常駐の1灯を使い回す(待機中は強度0)
+  private flashLight: THREE.PointLight;
+  private flash: ExplosionFlash | null = null;
 
   private fireballGeometry: THREE.SphereGeometry;
   private fireballCoreMaterial: THREE.MeshBasicMaterial;
@@ -135,6 +137,8 @@ export class ParticleSystem {
 
   constructor(scene: THREE.Scene, camera?: THREE.Camera) {
     this.scene = scene;
+    this.flashLight = new THREE.PointLight(0xffffff, 0, 24);
+    this.scene.add(this.flashLight);
     this.camera = camera;
 
     // 紙片用ジオメトリ＆マテリアル（白、クリーム、金箔の紙）
@@ -307,15 +311,7 @@ export class ParticleSystem {
    */
   public spawnBombExplosion(pos: THREE.Vector3, cameraPos: THREE.Vector3): void {
     // 1. 着弾地点の動的ポイントライト（周囲の廊下壁・床・障害物を強烈に照らし出す局所閃光）
-    const light = new THREE.PointLight(0xff9e1b, 16, 24);
-    light.position.set(pos.x, Math.max(0.6, pos.y), pos.z);
-    this.scene.add(light);
-    this.explosionLights.push({
-      light,
-      life: 0,
-      maxLife: 0.36,
-      startIntensity: 16,
-    });
+    this.triggerFlash(0xff9e1b, 24, pos.x, Math.max(0.6, pos.y), pos.z, 16, 0.36);
 
     // 2. 着弾地点の3Dファイアボール（プラズマ爆炎球体）
     // (A) 白熱コア球体
@@ -1031,15 +1027,7 @@ export class ParticleSystem {
     }
 
     // 2. 閃光ポイントライト
-    const light = new THREE.PointLight(0x2979ff, 12, 20);
-    light.position.copy(pos);
-    this.scene.add(light);
-    this.explosionLights.push({
-      light,
-      life: 0,
-      maxLife: 0.45,
-      startIntensity: 12,
-    });
+    this.triggerFlash(0x2979ff, 20, pos.x, pos.y, pos.z, 12, 0.45);
 
     // 3. 猛烈な青白スパーク大爆発（約140個）
     for (let i = 0; i < 140; i++) {
@@ -1343,16 +1331,13 @@ export class ParticleSystem {
     }
 
     // 6. 動的爆発ポイントライトの減衰
-    for (let i = this.explosionLights.length - 1; i >= 0; i--) {
-      const el = this.explosionLights[i];
-      el.life += dt;
-      const fade = Math.max(0, 1 - el.life / el.maxLife);
-      el.light.intensity = el.startIntensity * fade * fade;
-
-      if (el.life >= el.maxLife) {
-        this.scene.remove(el.light);
-        el.light.dispose();
-        this.explosionLights.splice(i, 1);
+    if (this.flash) {
+      this.flash.life += dt;
+      const fade = Math.max(0, 1 - this.flash.life / this.flash.maxLife);
+      this.flashLight.intensity = this.flash.startIntensity * fade * fade;
+      if (this.flash.life >= this.flash.maxLife) {
+        this.flashLight.intensity = 0;
+        this.flash = null;
       }
     }
 
@@ -1440,6 +1425,14 @@ export class ParticleSystem {
     }
   }
 
+  private triggerFlash(color: number, distance: number, x: number, y: number, z: number, intensity: number, maxLife: number): void {
+    this.flashLight.color.setHex(color);
+    this.flashLight.distance = distance;
+    this.flashLight.position.set(x, y, z);
+    this.flashLight.intensity = intensity;
+    this.flash = { life: 0, maxLife, startIntensity: intensity };
+  }
+
   public clearAll(): void {
     for (const debris of this.paperDebrisList) {
       this.scene.remove(debris.mesh);
@@ -1460,11 +1453,8 @@ export class ParticleSystem {
     }
     this.blurRings = [];
 
-    for (const el of this.explosionLights) {
-      this.scene.remove(el.light);
-      el.light.dispose();
-    }
-    this.explosionLights = [];
+    this.flashLight.intensity = 0;
+    this.flash = null;
 
     for (const fb of this.explosionFireballs) {
       this.scene.remove(fb.mesh);

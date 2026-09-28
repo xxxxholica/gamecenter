@@ -117,10 +117,10 @@ html, body {
   color: #ffffff;
 }
 
-/* Bottom-Left: Bomb Gauge */
-.hud-bl {
+/* Bottom-Right: Bomb Gauge */
+.hud-br {
   bottom: 22px;
-  left: 28px;
+  right: 28px;
   display: flex;
   align-items: center;
 }

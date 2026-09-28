@@ -1,9 +1,13 @@
 import { games } from './games';
 import { createArcadeInput } from './arcadeInput';
+import { mountArcadeGuide } from '../../shared/arcadeGuide';
 
-const AUTO_ADVANCE_MS = 5000;
-// レバー/キー操作のあと、この時間だけ操作が無ければピックアップの自動巡回を再開する
-const RESUME_AUTO_ADVANCE_AFTER_MS = 30000;
+mountArcadeGuide({
+  moveLabel: '選ぶ',
+  // 決定は攻撃ボタン(0〜7)とSTART(9)のどれでもよいが、アイコンにはSTARTを代表として出す
+  buttons: [{ indices: [9], label: '決定' }],
+});
+
 // ゲームから戻ったときに直前に遊んだゲームを選択状態で復元するためのキー
 const LAST_GAME_KEY = 'gamecenter:lastGame';
 
@@ -22,42 +26,6 @@ function rememberLastGame(slug: string) {
     // 保存できなくても選択位置が復元されないだけなので無視する
   }
 }
-
-// ===== ピックアップ(全ゲームを順番に巡回するカルーセル) =====
-const track = document.querySelector<HTMLDivElement>('#hero-track')!;
-const dotsContainer = document.querySelector<HTMLDivElement>('#hero-dots')!;
-
-games.forEach((game) => {
-  const slide = document.createElement('div');
-  slide.className = 'hero-slide';
-  slide.style.setProperty('--accent', game.accent);
-  slide.innerHTML = `
-    <a class="hero-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
-    <div class="hero-screen">
-      <img class="hero-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
-    </div>
-    <div class="hero-info">
-      <div class="hero-title-en">${game.englishTitle}</div>
-      <h2 class="hero-title-ja">${game.title}</h2>
-      <a class="hero-dev" href="${game.developer.url}" target="_blank" rel="noopener noreferrer">
-        <img class="hero-dev-avatar" src="${game.developer.avatar}" alt="" loading="lazy" />
-        <span class="hero-dev-name">@${game.developer.name}</span>
-      </a>
-      <p class="hero-desc">${game.description}</p>
-    </div>
-  `;
-  slide.querySelector('.hero-link')!.addEventListener('click', () => rememberLastGame(game.slug));
-  track.appendChild(slide);
-
-  const dot = document.createElement('button');
-  dot.className = 'hero-dot';
-  dot.type = 'button';
-  dot.setAttribute('aria-label', game.title);
-  dotsContainer.appendChild(dot);
-});
-
-const slides = Array.from(track.querySelectorAll<HTMLDivElement>('.hero-slide'));
-const dots = Array.from(dotsContainer.querySelectorAll<HTMLButtonElement>('.hero-dot'));
 
 // ===== 全ゲーム一覧 =====
 const list = document.querySelector<HTMLDivElement>('#game-list')!;
@@ -85,47 +53,27 @@ games.forEach((game) => {
 
 const cards = Array.from(list.querySelectorAll<HTMLDivElement>('.card'));
 
-// ===== 選択状態(ピックアップとカード一覧で共通) =====
-// ピックアップに表示中のゲーム = アケコンで選択中のゲーム。カード側の選択枠はアケコン/キー操作中だけ表示する。
+// ===== 選択状態 =====
 let current = 0;
-let timer: number;
-let lastInputAt = -Infinity;
 
 function setPressed(pressed: boolean) {
-  slides[current]?.classList.toggle('pressed', pressed);
   cards[current]?.classList.toggle('pressed', pressed);
 }
 
 function goTo(index: number) {
   // 決定ボタンを押したままレバーを動かしたときは、押下演出も新しい選択先へ移す
-  const pressed = slides[current]?.classList.contains('pressed') ?? false;
+  const pressed = cards[current]?.classList.contains('pressed') ?? false;
   setPressed(false);
   current = (index + games.length) % games.length;
   setPressed(pressed);
-  track.style.transform = `translateX(-${current * 100}%)`;
-  dots.forEach((dot, i) => dot.classList.toggle('active', i === current));
   cards.forEach((card, i) => card.classList.toggle('selected', i === current));
 }
 
-function restartAutoAdvance() {
-  window.clearInterval(timer);
-  timer = window.setInterval(() => {
-    if (performance.now() - lastInputAt < RESUME_AUTO_ADVANCE_AFTER_MS) return;
-    goTo(current + 1);
-  }, AUTO_ADVANCE_MS);
-}
-
-dots.forEach((dot, i) => {
-  dot.addEventListener('click', (e) => {
-    e.preventDefault();
-    goTo(i);
-    restartAutoAdvance();
-  });
-});
-
 const lastIndex = games.findIndex((game) => game.slug === readLastGame());
 goTo(lastIndex >= 0 ? lastIndex : 0);
-restartAutoAdvance();
+if (lastIndex > 0) {
+  cards[current]?.scrollIntoView({ block: 'nearest' });
+}
 
 // ===== アケコン / キーボード操作 =====
 // マウスを動かすと通常表示に戻す。アケコン/キー操作中はカーソルとhover表現を消して選択枠を出す。
@@ -146,7 +94,6 @@ function gridColumns(): number {
 }
 
 function moveSelection(dx: number, dy: number) {
-  lastInputAt = performance.now();
   setPadMode(true);
   if (dx !== 0) {
     goTo(current + dx);
@@ -171,12 +118,10 @@ function launchSelected() {
 
 createArcadeInput({
   onActivate() {
-    lastInputAt = performance.now();
     setPadMode(true);
   },
   onMove: moveSelection,
   onConfirmDown() {
-    lastInputAt = performance.now();
     setPadMode(true);
     setPressed(true);
   },

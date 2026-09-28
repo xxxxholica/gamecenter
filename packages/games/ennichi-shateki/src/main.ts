@@ -9,9 +9,19 @@ import { ArcadeHUD } from './hud';
 import { sounds } from './audio';
 import { ResultsPrizePileManager } from './results_pile';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+
+mountArcadeGuide({
+  moveLabel: 'ねらう',
+  buttons: [
+    { indices: [0], label: '通常弾' },
+    { indices: [1, 2, 7], label: 'バクダン弾' },
+  ],
+  showHomeHint: true,
+});
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'results';
 
@@ -88,11 +98,13 @@ class ArcadeCorkShooter {
     this.camera.position.set(0, 1.48, 2.15);
 
     // 3. Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
+    // 2倍解像度でのMSAAはGPU負荷が大きい割に見た目の差がほとんど無い
+    this.renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: 'high-performance' });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.25;
     container.appendChild(this.renderer.domElement);

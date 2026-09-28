@@ -4,8 +4,6 @@
 // 決定に使うボタン: 攻撃ボタン(0〜7)と START(9)。SELECT(8) はゲーム中の「長押しでホームへ戻る」専用なので含めない。
 const CONFIRM_BUTTONS = [0, 1, 2, 3, 4, 5, 6, 7, 9];
 const AXIS_THRESHOLD = 0.5;
-const REPEAT_DELAY_MS = 400;
-const REPEAT_INTERVAL_MS = 150;
 
 export interface ArcadeInputHandlers {
   // アケコンが初めて認識された(ブラウザはボタン/レバー操作があるまでゲームパッドを公開しない)
@@ -46,7 +44,6 @@ export function createArcadeInput(handlers: ArcadeInputHandlers): void {
   // パッドを初めて認識したフレームの状態は「押されたまま」として扱い、一度離すまで無視する。
   const seenPads = new Set<number>();
   let prevDir: Direction = { dx: 0, dy: 0 };
-  let nextRepeatAt = 0;
   let confirmHeld = false;
   let confirmArmed = false;
   let keyConfirmArmed = false;
@@ -57,9 +54,10 @@ export function createArcadeInput(handlers: ArcadeInputHandlers): void {
     seenPads.clear();
     confirmArmed = false;
     keyConfirmArmed = false;
+    prevDir = { dx: 0, dy: 0 };
   });
 
-  const poll = (now: number) => {
+  const poll = () => {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let dir: Direction = { dx: 0, dy: 0 };
     let held = false;
@@ -78,21 +76,20 @@ export function createArcadeInput(handlers: ArcadeInputHandlers): void {
 
     if (newlySeen) {
       handlers.onActivate();
-      prevDir = dir;
+      // 接続を検知した瞬間にすでに倒れている/押されているのは前ページからの残留入力の
+      // 可能性があるため、この1フレームだけは反応せず捨てる(prevDirはニュートラルのままにする)。
+      // 実際に倒し続けていれば、次のフレームで「ニュートラル→方向」の変化として拾える。
       confirmHeld = held;
-      nextRepeatAt = Infinity;
       requestAnimationFrame(poll);
       return;
     }
 
+    // レバーは「倒した瞬間」に1回だけ反応させる。倒し続けている間ずっと連続で送ると、
+    // 少し長めに倒しただけで何コマも選択が進んでしまうため、次に動かすには
+    // 一度ニュートラルへ戻す必要がある(押しっぱなしでの連続送りはしない)。
     const neutral = dir.dx === 0 && dir.dy === 0;
-    const changed = dir.dx !== prevDir.dx || dir.dy !== prevDir.dy;
-    if (!neutral && changed) {
+    if (!neutral && (dir.dx !== prevDir.dx || dir.dy !== prevDir.dy)) {
       handlers.onMove(dir.dx, dir.dy);
-      nextRepeatAt = now + REPEAT_DELAY_MS;
-    } else if (!neutral && now >= nextRepeatAt) {
-      handlers.onMove(dir.dx, dir.dy);
-      nextRepeatAt = now + REPEAT_INTERVAL_MS;
     }
     prevDir = dir;
 

@@ -237,7 +237,7 @@ export class CorkRifle {
       p.life += dt;
       if (p.life >= p.maxLife) {
         p.mesh.parent?.remove(p.mesh);
-        p.mesh.geometry.dispose();
+        (p.mesh.material as THREE.Material).dispose();
         this.smokeParticles.splice(i, 1);
       } else {
         p.mesh.position.addScaledVector(p.vel, dt);
@@ -255,7 +255,7 @@ export class CorkRifle {
     this.recoilAngle = 0;
     for (const p of this.smokeParticles) {
       p.mesh.parent?.remove(p.mesh);
-      p.mesh.geometry.dispose();
+      (p.mesh.material as THREE.Material).dispose();
     }
     this.smokeParticles = [];
   }

@@ -10,7 +10,7 @@
   user-select: none;
   -webkit-user-select: none;
   font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
-  border-radius: 0 !important;
+  border-radius: 0;
 }
 
 html, body {
@@ -317,25 +317,12 @@ html, body {
   }
 }
 
-/* ホーム誘導ガイド（画面下中央、常時表示・控えめ・クリックでも戻れる） */
-#home-guide {
-  position: absolute;
-  bottom: 6px;
-  left: 0;
-  right: 0;
-  margin: 0 auto;
-  width: fit-content;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 1px;
-  text-decoration: none;
-  font-family: system-ui, sans-serif;
-  color: rgba(255, 255, 255, 0.3);
-  z-index: 70;
-  user-select: none;
-  transition: color 0.15s;
+/* 共通アケコンガイドのスタイル保護 */
+.agc-root, .agc-root *, .agc-inline, .agc-inline * {
+  font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+  letter-spacing: normal !important;
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 
-#home-guide:hover {
-  color: rgba(255, 255, 255, 0.75);
-}
+

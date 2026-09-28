@@ -206,7 +206,8 @@ export class FlyingUFO {
   public isHit: boolean = false;
   public fallVelocity: THREE.Vector3 = new THREE.Vector3();
   public respawnTimer: number = 0;
-  private lights: THREE.PointLight[] = [];
+  // 縁の電飾。点光源にすると画面全体の全画素で光源計算が増えるため、光る小球(ライティング不要のMeshBasicMaterial)で表現する
+  private lights: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 
   constructor() {
     this.pos = new THREE.Vector3(0, 2.35, -0.6);
@@ -243,12 +244,15 @@ export class FlyingUFO {
 
     // Blinking lights around rim
     const lightColors = [0xd91414, 0xffcc00, 0x00ff00, 0x00ffff];
+    const bulbGeo = new THREE.SphereGeometry(0.018, 8, 6);
     for (let i = 0; i < 4; i++) {
       const angle = (i * Math.PI * 2) / 4;
-      const light = new THREE.PointLight(lightColors[i], 0.8, 0.8);
-      light.position.set(Math.cos(angle) * 0.19, 0, Math.sin(angle) * 0.19);
-      group.add(light);
-      this.lights.push(light);
+      const base = new THREE.Color(lightColors[i]);
+      const mat = new THREE.MeshBasicMaterial({ color: base.clone() });
+      const bulb = new THREE.Mesh(bulbGeo, mat);
+      bulb.position.set(Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.2);
+      group.add(bulb);
+      this.lights.push({ mat, base });
     }
 
     return group;
@@ -292,7 +296,8 @@ export class FlyingUFO {
 
     // Pulse rim lights
     this.lights.forEach((l, idx) => {
-      l.intensity = 0.5 + Math.sin(elapsed * 10.0 + idx * 1.5) * 0.4;
+      const level = 0.55 + Math.sin(elapsed * 10.0 + idx * 1.5) * 0.45;
+      l.mat.color.copy(l.base).multiplyScalar(level);
     });
   }
 
@@ -398,7 +403,7 @@ export class DynamicTargetsManager {
       c.life += dt;
       if (c.life >= c.maxLife) {
         this.group.remove(c.mesh);
-        c.mesh.geometry.dispose();
+        (c.mesh.material as THREE.Material).dispose();
         this.confetti.splice(i, 1);
       } else {
         c.vel.y -= 7.0 * dt;
@@ -427,7 +432,7 @@ export class DynamicTargetsManager {
 
     for (const c of this.confetti) {
       this.group.remove(c.mesh);
-      c.mesh.geometry.dispose();
+      (c.mesh.material as THREE.Material).dispose();
     }
     this.confetti = [];
   }

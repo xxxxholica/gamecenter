@@ -46,7 +46,11 @@ export class Stage {
   // Background meshes for parallax
   private bgGroup: THREE.Group;
   private dustPoints: THREE.Points;
+  // 街灯ごとにスポットライトを置くと、画面外の街灯の分まで全画素で光源計算が増える。
+  // 同時に画面に映る街灯は多くても2本なので、2灯だけ用意してカメラに近い街灯へ付け替える
   private spotlights: THREE.SpotLight[] = [];
+  private lampXs: number[] = [];
+  private static readonly ACTIVE_LAMP_LIGHTS = 2;
   private hvacFans: THREE.Mesh[] = [];
 
   constructor(scene: THREE.Scene, stageNumber: number = 1) {
@@ -149,6 +153,38 @@ export class Stage {
     lampPositions.forEach((lx) => {
       this.createStreetlamp(lx);
     });
+
+    const glowColor = (this.stageNumber === 2) ? 0x00ffaa : (this.stageNumber === 4) ? 0xff0066 : 0xffea00;
+    for (let i = 0; i < Stage.ACTIVE_LAMP_LIGHTS; i++) {
+      const spot = new THREE.SpotLight(glowColor, 4.5, 16, Math.PI / 4.5, 0.5, 1.2);
+      this.scene.add(spot);
+      this.scene.add(spot.target);
+      this.spotlights.push(spot);
+    }
+    this.updateLampLights(0);
+  }
+
+  /** カメラに近い街灯から順にスポットライトを割り当てる */
+  private updateLampLights(focusX: number): void {
+    // 毎フレーム呼ばれるので配列を作らずに近い2本を選ぶ
+    let first = -1;
+    let second = -1;
+    for (let i = 0; i < this.lampXs.length; i++) {
+      const d = Math.abs(this.lampXs[i] - focusX);
+      if (first < 0 || d < Math.abs(this.lampXs[first] - focusX)) {
+        second = first;
+        first = i;
+      } else if (second < 0 || d < Math.abs(this.lampXs[second] - focusX)) {
+        second = i;
+      }
+    }
+    const picks = [first, second < 0 ? first : second];
+    this.spotlights.forEach((spot, i) => {
+      const lx = this.lampXs[picks[i]];
+      if (lx === undefined) return;
+      spot.position.set(lx + 1.2, 6.1, -1.2);
+      spot.target.position.set(lx + 1.2, 0, 0);
+    });
   }
 
   private createStreetlamp(x: number): void {
@@ -192,12 +228,7 @@ export class Stage {
     cone.position.set(1.2, 3.1, 0.6);
     lampGroup.add(cone);
 
-    const spot = new THREE.SpotLight(glowColor, 4.5, 16, Math.PI / 4.5, 0.5, 1.2);
-    spot.position.set(x + 1.2, 6.1, -1.2);
-    spot.target.position.set(x + 1.2, 0, 0);
-    this.scene.add(spot);
-    this.scene.add(spot.target);
-    this.spotlights.push(spot);
+    this.lampXs.push(x);
 
     this.scene.add(lampGroup);
   }
@@ -742,7 +773,9 @@ export class Stage {
     this.addPlatform(154, 4.0, 14, 4.0);
   }
 
-  public update(dt: number, time: number): void {
+  public update(dt: number, time: number, focusX?: number): void {
+    if (focusX !== undefined) this.updateLampLights(focusX);
+
     // Rotate goal vinyl turntable
     this.goalTurntable.rotation.y += 1.8 * dt;
 
