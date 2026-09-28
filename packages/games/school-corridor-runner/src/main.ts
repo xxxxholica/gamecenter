@@ -13,6 +13,10 @@ import { TeacherProjectile } from './entities/TeacherProjectile';
 import { PowerUp } from './entities/PowerUp';
 import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
+import { installHomeReturn } from '../../../shared/homeReturn';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 class Game {
   // Three.js

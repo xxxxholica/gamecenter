@@ -150,7 +150,7 @@
       transition: filter 0.18s ease;
     }
 
-    .hero-slide:hover .hero-thumb {
+    body:not(.pad-mode) .hero-slide:hover .hero-thumb {
       filter: saturate(1.08) brightness(1.03);
     }
 
@@ -269,7 +269,9 @@
       z-index: 1;
     }
 
-    .card:hover {
+    /* マウスではhover、アケコン/キー操作中(pad-mode)は選択中のカードを同じ見た目で光らせる */
+    body:not(.pad-mode) .card:hover,
+    body.pad-mode .card.selected {
       transform: translateY(-6px);
       border-color: var(--accent);
       box-shadow:
@@ -287,7 +289,8 @@
       transition: filter 0.18s ease;
     }
 
-    .card:hover .card-thumb {
+    body:not(.pad-mode) .card:hover .card-thumb,
+    body.pad-mode .card.selected .card-thumb {
       filter: saturate(1.05) brightness(1.02);
     }
 
@@ -347,6 +350,21 @@
       color: #9a9ab0;
       font-size: 0.85rem;
       line-height: 1.7;
+    }
+
+    /* ===== アケコン操作 ===== */
+    body.pad-mode,
+    body.pad-mode * {
+      cursor: none;
+    }
+
+    /* 決定ボタンを押している間の押し込み演出(離した瞬間にゲームへ遷移する) */
+    body.pad-mode .card.pressed {
+      transform: translateY(-2px) scale(0.98);
+    }
+
+    .hero-slide.pressed .hero-thumb {
+      filter: saturate(1.15) brightness(1.25);
     }
   </style>
 </head>

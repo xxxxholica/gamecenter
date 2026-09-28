@@ -5,6 +5,10 @@ import { EffectsManager } from './effects';
 import { CourtroomWorld } from './world';
 import { TestimonyManager } from './testimony';
 import { GameManager } from './game';
+import { installHomeReturn } from '../../../shared/homeReturn';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 function initApp(): void {
   const container = document.getElementById('game-container')!;

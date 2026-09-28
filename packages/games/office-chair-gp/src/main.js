@@ -12,6 +12,10 @@ import { PhysicsEngine } from './physics.js';
 import { SpeedLines } from './speedlines.js';
 import { NPCManager } from './npc.js';
 import { WeaponManager } from './weapons.js';
+import { installHomeReturn } from '../../../shared/homeReturn.ts';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 // Game States
 const STATE = {

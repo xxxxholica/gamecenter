@@ -17,6 +17,7 @@ gamecenter/
       phaser-fighter/          # サイバー2Dファイター (Phaser 3)
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
+    shared/homeReturn.ts      # 全ゲーム共通: SELECT長押しでハブへ戻る
   scripts/assemble.mjs        # 各パッケージのbuildをdist/に集約
   scripts/dev-all.mjs         # hub + 全ゲームのdevサーバーを単一プロセス・単一ポートで起動
 ```
@@ -71,11 +72,35 @@ dist/
     street-b-boy/
 ```
 
+## デプロイ
+
+https://game.hinata.works/ で公開している。
+
+```bash
+```
+
+
+## アケコン操作
+
+ホーム画面からゲームの開始・終了までアケコン(Gamepad API標準マッピング)だけで完結する。レバーを矢印キー、ボタンをEnter/Spaceに割り当てるキーボードエンコーダ式の筐体でも操作できる。
+
+| 場所 | 操作 |
+| --- | --- |
+| ホーム | レバー: ゲームを選ぶ / ボタン(0〜7, START): 離した瞬間にゲーム開始 |
+| ゲーム中 | SELECT(button 8)を1秒長押し: ホームへ戻る(キーボードはEsc) |
+
+- ゲームから戻ると、直前に遊んだゲームが選択された状態で表示される。
+- ブラウザはゲームパッド操作をユーザー操作とみなさないため、アケコンだけで遊ぶと音が鳴らず全画面にもならない。筐体では自動再生を許可したキオスクモードで起動すること:
+  ```bash
+  google-chrome --kiosk --autoplay-policy=no-user-gesture-required https://game.hinata.works/
+  ```
+
 ## 新しいゲームの追加
 
 1. `packages/games/<slug>/` に新しいVite+TypeScriptプロジェクトを作成する(既存ゲームの`package.json`/`vite.config.ts`を雛形にする)。
    - `vite.config.ts` に `base: './'` を設定すること(`dist/games/<slug>/` にネストして配置されるため)。
-2. `packages/hub/src/games.ts` にエントリを追加する(タイトル・説明文・デモGIF・アクセントカラー)。
-3. `npm install`(workspaceが自動検出される)→ `npm run build` で確認。
+2. エントリ(`src/main.ts`)で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼び、SELECT長押しでホームへ戻れるようにする。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにすること。
+3. `packages/hub/src/games.ts` にエントリを追加する(タイトル・説明文・サムネイル画像・アクセントカラー)。サムネイルは `packages/hub/public/thumbnails/<slug>.webp` に置く。
+4. `npm install`(workspaceが自動検出される)→ `npm run build` で確認。
 
 `packages/games/`配下のディレクトリは`npm run dev`実行時に自動検出されるため、devサーバー一括起動側の設定変更は不要。

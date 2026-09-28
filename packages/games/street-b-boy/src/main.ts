@@ -7,6 +7,10 @@ import { BoomboxModel } from './world/boombox';
 import { HudManager } from './ui/hud';
 import { CassetteTape } from './entities/objects';
 import { TextureGenerator } from './world/textures';
+import { installHomeReturn } from '../../../shared/homeReturn';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'game_over' | 'clear';
 

@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { InputManager } from './input';
 import { EffectsManager } from './effects';
 import { GameManager } from './game';
+import { installHomeReturn } from '../../../shared/homeReturn';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 function initApp() {
   const container = document.getElementById('canvas-container')!;

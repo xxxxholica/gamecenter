@@ -11,7 +11,8 @@
     "dev": "node scripts/dev-all.mjs",
     "dev:hub": "npm run dev -w packages/hub",
     "build": "npm run build --workspaces --if-present && node scripts/assemble.mjs",
-    "preview": "npx serve dist"
+    "preview": "npx serve dist",
+    "deploy": "npm run build && node scripts/deploy.mjs"
   },
   "devDependencies": {
     "connect": "^3.7.0",

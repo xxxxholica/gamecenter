@@ -8,6 +8,10 @@ import { ArcadeInput } from './input';
 import { ArcadeHUD } from './hud';
 import { sounds } from './audio';
 import { ResultsPrizePileManager } from './results_pile';
+import { installHomeReturn } from '../../../shared/homeReturn';
+
+// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+installHomeReturn();
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'results';
 
