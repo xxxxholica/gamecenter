@@ -1,3 +1,4 @@
+import { audio } from '../audio';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -587,6 +588,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
         p.x += col.pushX;
         p.z += col.pushZ;
         car.speed *= Math.max(0.15, 1.0 - col.impact * 0.75);
+        audio.sfx.crash(col.impact);
       }
     }
 
@@ -597,6 +599,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
         p.x += tCol.pushX;
         p.z += tCol.pushZ;
         car.speed *= tCol.speedFactor;
+        audio.sfx.crash(tCol.impact);
         if (tCol.isRearEnd) {
           car.bodyPitch += 0.08;
         }

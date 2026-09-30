@@ -11,14 +11,9 @@ export class Stage5Yakisoba implements Stage {
   mission = 'フタ崩壊寸前を攻めて湯を切り切れ！';
   instruction = '[↑ / W] カップを傾ける';
   briefing: StageBriefing = {
-    goal: 'フタを剥がさずに、カップのお湯を全部切れ',
-    controls: [{ key: '↑ / W(レバー前)', text: '押した分だけカップが傾く' }],
-    rules: [
-      { kind: 'info', text: '傾けるほどお湯が出るが、フタが浮いて震える' },
-      { kind: 'ok', text: 'フタが限界に近いまま切り切るほど高得点' },
-      { kind: 'ng', text: 'フタが剥がれる(傾けすぎ)と大惨事(0点)' },
-      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
-    ],
+    key: '↑ / W(レバー前)',
+    ok: 'フタが剥がれる寸前まで傾けて湯を切る',
+    ng: 'フタが剥がれる',
   };
   limitLabel = 'フタ剥がれ度';
 

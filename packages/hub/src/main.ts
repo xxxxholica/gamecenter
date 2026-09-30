@@ -38,8 +38,12 @@ games.forEach((game) => {
     <a class="card-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
     <img class="card-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
     <div class="card-body">
-      <div class="card-title-en">${game.englishTitle}</div>
-      <h2>${game.title}</h2>
+      ${
+        game.logo
+          ? `<div class="card-logo-wrap"><img class="card-logo" src="${game.logo}" alt="${game.title}" loading="lazy" /></div>`
+          : `<div class="card-title-en">${game.englishTitle}</div>
+             <h2>${game.title}</h2>`
+      }
       <a class="card-dev" href="${game.developer.url}" target="_blank" rel="noopener noreferrer">
         <img class="card-dev-avatar" src="${game.developer.avatar}" alt="" loading="lazy" />
         <span class="card-dev-name">@${game.developer.name}</span>

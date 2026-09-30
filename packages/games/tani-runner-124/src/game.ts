@@ -4,20 +4,24 @@
 // ============================================================
 
 import * as THREE from 'three';
-import { buttonIconHtml } from '../../../shared/arcadeGuide.ts';
 import { inputManager } from './input.ts';
 import { sound } from './audio.ts';
 import { StudentCrowd } from './studentMesh.ts';
 import { WorldManager, GatePair, RING_HALF_WIDTH } from './world.ts';
 import { pickRequirement } from './courseGenerator.ts';
-import { LEVELS, LEVEL_ORDER, LevelId, loadLevel, saveLevel } from './levels.ts';
+import { LEVELS, LevelId, loadLevel, saveLevel } from './levels.ts';
 import { EffectsManager } from './effects.ts';
 import { GateInfo, MathOpType } from './textures.ts';
 import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
+import { LevelSelectScreen } from './levelSelectScreen.ts';
+import { ResultMenu } from './resultMenu.ts';
+import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
+import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 
 export type GameState =
   | 'TITLE'
+  | 'LEVEL_SELECT'
   | 'RUNNING'
   | 'WALL_CRASH'
   | 'BONUS_LAUNCH'
@@ -54,8 +58,8 @@ export class Game {
 
   /** 選んでいるレベル(小学生・中学生・高専生)。前回の選択を覚えている */
   public level: LevelId = loadLevel();
-  private levelBtns: HTMLElement[] = [];
-  private prevMoveX: number = 0;
+  private levelSelect!: LevelSelectScreen;
+  private resultMenu = new ResultMenu();
   private flightBoostsLeft: number = 0;
   public ringsHit: number = 0;
   private reqTextElem: HTMLElement | null = null;
@@ -67,13 +71,15 @@ export class Game {
   private camLookAt: THREE.Vector3 = new THREE.Vector3(0, 1.5, -6.0);
 
   // HUD Elements
+  private hudElem: HTMLElement | null = null;
   private taniCounterElem: HTMLElement | null = null;
   private creditsBoxElem: HTMLElement | null = null;
   private bonusHudElem: HTMLElement | null = null;
   private bonusMultTextElem: HTMLElement | null = null;
 
   // Overlay Screens
-  private startScreen: HTMLElement | null = null;
+  private arcadeTitleScreen: ArcadeTitleScreen | null = null;
+  private levelSelectScreen: HTMLElement | null = null;
   private failScreen: HTMLElement | null = null;
   private successScreen: HTMLElement | null = null;
   private finalMultElem: HTMLElement | null = null;
@@ -107,7 +113,8 @@ export class Game {
 
     this.cacheDOMElements();
     this.setupEventListeners();
-    this.applyLevelSelection(this.level);
+    this.initArcadeTitleScreen();
+    this.showTitleGuide();
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -119,12 +126,14 @@ export class Game {
   }
 
   private cacheDOMElements(): void {
+    this.hudElem = document.getElementById('hud');
+    if (this.hudElem) this.hudElem.style.display = 'none';
     this.taniCounterElem = document.getElementById('tani-counter');
     this.creditsBoxElem = document.getElementById('hud-credits-box');
     this.bonusHudElem = document.getElementById('bonus-multiplier-hud');
     this.bonusMultTextElem = document.getElementById('bonus-current-mult');
 
-    this.startScreen = document.getElementById('start-screen');
+    this.levelSelectScreen = document.getElementById('level-select-screen');
     this.failScreen = document.getElementById('fail-screen');
     this.successScreen = document.getElementById('success-screen');
     this.finalMultElem = document.getElementById('final-multiplier-display');
@@ -135,26 +144,21 @@ export class Game {
   }
 
   private setupEventListeners(): void {
-    const startBtn = document.getElementById('start-btn');
-    if (startBtn) startBtn.innerHTML = `${buttonIconHtml([0, 1, 7])} ${startBtn.textContent}`;
-    startBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.startGame();
+    // 難易度選択(カード描画・アケコン/キーボード操作は LevelSelectScreen が持つ)
+    this.levelSelect = new LevelSelectScreen(this.levelSelectScreen!, {
+      onSelect: (level) => {
+        this.level = level;
+        saveLevel(level);
+      },
+      onConfirm: () => this.startGame(),
+      onBack: () => this.showTitleScreen(),
     });
 
-    // レベル選択(タップ/クリックで選ぶ。アケコンは左右で選ぶ)
-    this.levelBtns = Array.from(document.querySelectorAll<HTMLElement>('.level-btn'));
-    for (const btn of this.levelBtns) {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.applyLevelSelection(btn.dataset.level as LevelId);
-      });
-    }
-    // 結果画面から、レベル選択(開始画面)へ戻る
+    // 結果画面から、難易度選択へ戻る
     for (const id of ['level-change-fail-btn', 'level-change-success-btn']) {
       document.getElementById(id)?.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.showStartScreen();
+        this.openLevelSelect();
       });
     }
 
@@ -170,9 +174,6 @@ export class Game {
       this.startGame();
     });
 
-    this.startScreen?.addEventListener('click', () => {
-      if (this.state === 'TITLE') this.startGame();
-    });
     this.failScreen?.addEventListener('click', () => {
       if (this.state === 'GAME_OVER') this.startGame();
     });
@@ -181,40 +182,85 @@ export class Game {
     });
   }
 
-  /** レベルを選ぶ。ボタンの強調、説明、そのレベルのランキング表示を更新する */
-  private applyLevelSelection(level: LevelId): void {
-    this.level = level;
-    saveLevel(level);
-    for (const btn of this.levelBtns) {
-      btn.classList.toggle('selected', btn.dataset.level === level);
-    }
-    const desc = document.getElementById('level-desc');
-    if (desc) desc.textContent = LEVELS[level].description;
-    RankingStore.render(document.getElementById('start-ranking'), level);
+  private initArcadeTitleScreen(): void {
+    this.arcadeTitleScreen = new ArcadeTitleScreen({
+      slug: 'tani-runner-124',
+      accentColor: '#00e676',
+      tagline: '124単位集めて 留年の壁を打ち破れ！',
+      startButtonLabel: '開始',
+      promptLabel: 'PRESS START / SPACE / 画面クリック',
+      onStart: () => {
+        this.openLevelSelect();
+      },
+    });
+
+    this.arcadeTitleScreen.show();
   }
 
-  /** 左右でレベルを切り替える(アケコン/キーボード)。押しっぱなしで連続して動かないよう、倒した瞬間だけ反応する */
-  private handleLevelInput(moveX: number): void {
-    const dir = moveX > 0.5 && this.prevMoveX <= 0.5 ? 1 : moveX < -0.5 && this.prevMoveX >= -0.5 ? -1 : 0;
-    this.prevMoveX = moveX;
-    if (dir === 0) return;
-    const idx = LEVEL_ORDER.indexOf(this.level);
-    const next = Math.max(0, Math.min(LEVEL_ORDER.length - 1, idx + dir));
-    if (next !== idx) this.applyLevelSelection(LEVEL_ORDER[next]);
-  }
-
-  /** 開始画面(レベル選択)に戻る */
-  private showStartScreen(): void {
-    this.state = 'TITLE';
-    sound.stopBgm();
+  /** 難易度選択画面を開く（深夜首都高のように「開始」の後に遷移） */
+  public openLevelSelect(): void {
+    this.state = 'LEVEL_SELECT';
+    this.resultMenu.close();
+    this.arcadeTitleScreen?.hide();
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');
-    this.bonusHudElem?.classList.add('hidden');
-    this.startScreen?.classList.remove('hidden');
-    this.applyLevelSelection(this.level);
+    if (this.hudElem) this.hudElem.style.display = 'none';
+    this.levelSelect.show(this.level);
+    mountArcadeGuide({
+      moveLabel: 'レベル選択',
+      buttons: [
+        { indices: [0, 9], label: '決定' },
+        { indices: [1], label: 'タイトルへ' },
+      ],
+      showHomeHint: true,
+    });
+  }
+
+  /** タイトル画面に戻る */
+  public showTitleScreen(): void {
+    this.state = 'TITLE';
+    this.resultMenu.close();
+    this.levelSelect.hide();
+    this.failScreen?.classList.add('hidden');
+    this.successScreen?.classList.add('hidden');
+    if (this.hudElem) this.hudElem.style.display = 'none';
+    this.arcadeTitleScreen?.show();
+    this.showTitleGuide();
+  }
+
+  private showTitleGuide(): void {
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+  }
+
+  private showRunGuide(): void {
+    mountArcadeGuide({
+      moveLabel: '←→ 隊列操作 / ↓ 隊列を絞る',
+      buttons: [{ indices: [0, 1, 7], label: 'カタパルト連打・加速' }],
+      showHomeHint: true,
+    });
+  }
+
+  private showResultGuide(): void {
+    mountArcadeGuide({
+      moveLabel: '選択',
+      buttons: [
+        { indices: [0, 9], label: '決定' },
+        { indices: [1], label: 'レベル選択' },
+      ],
+      showHomeHint: true,
+    });
   }
 
   public startGame(): void {
+    this.arcadeTitleScreen?.hide();
+    this.levelSelect.hide();
+    this.resultMenu.close();
+    this.failScreen?.classList.add('hidden');
+    this.successScreen?.classList.add('hidden');
+    this.bonusHudElem?.classList.add('hidden');
+    this.showRunGuide();
+    if (this.hudElem) this.hudElem.style.display = 'block';
+
     sound.init();
     sound.playCoin();
     sound.playStartJingle();
@@ -242,11 +288,6 @@ export class Game {
     this.ringsHit = 0;
     this.effects.clearAll();
     if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
-
-    this.startScreen?.classList.add('hidden');
-    this.failScreen?.classList.add('hidden');
-    this.successScreen?.classList.add('hidden');
-    this.bonusHudElem?.classList.add('hidden');
 
     this.updateHUD();
   }
@@ -292,14 +333,6 @@ export class Game {
     this.lastTime = time;
 
     const input = inputManager.poll();
-
-    // 開始画面では、左右でレベルを選ぶ
-    if (this.state === 'TITLE') this.handleLevelInput(input.moveX);
-
-    // Handle Start on Title/Results
-    if ((this.state === 'TITLE' || this.state === 'GAME_OVER' || this.state === 'GAME_CLEAR') && input.actionJustPressed) {
-      this.startGame();
-    }
 
     // State machine
     switch (this.state) {
@@ -677,6 +710,7 @@ export class Game {
     sound.playGameOverJingle();
 
     this.failScreen?.classList.remove('hidden');
+    this.openResultMenu('retry-fail-btn', 'level-change-fail-btn');
   }
 
   // Game Clear: 「卒業」 (Yellow bold text) + Final Multiplier
@@ -699,9 +733,15 @@ export class Game {
       this.finalScoreElem.textContent = `${score} 単位`;
     }
     RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
-    RankingStore.render(document.getElementById('start-ranking'), this.level);
 
     this.bonusHudElem?.classList.add('hidden');
     this.successScreen?.classList.remove('hidden');
+    this.openResultMenu('retry-success-btn', 'level-change-success-btn');
+  }
+
+  private openResultMenu(retryId: string, levelId: string): void {
+    const buttons = [retryId, levelId].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => b !== null);
+    this.resultMenu.open(buttons);
+    this.showResultGuide();
   }
 }

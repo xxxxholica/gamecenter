@@ -4,6 +4,7 @@ import { InputManager } from './input';
 import { EffectsManager } from './effects';
 import { sound } from './audio';
 import { buttonIconHtml } from '../../../shared/arcadeGuide';
+import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { Stage1Drink } from './stages/stage1_drink';
 import { Stage3Phone } from './stages/stage3_phone';
 import { Stage4Clock } from './stages/stage4_clock';
@@ -19,9 +20,7 @@ export type GameState =
   | 'STAGE_PLAY'
   | 'STAGE_JUDGMENT'
   | 'STAGE_FADEOUT'
-  | 'RESULT'
-  | 'ATTRACT_DEMO'
-  | 'ATTRACT_RANKING';
+  | 'RESULT';
 
 export interface StageRecord {
   stageNumber: string;
@@ -40,17 +39,16 @@ export class GameManager {
 
   // 3D Background Showcase for Title
   private titleScene: TitleScene | null = null;
+  private titleDemoInput = new DemoInputManager();
+  private titleLoopTimer = 0.0;
 
-  // Attract Demo & Ranking Mode
-  private demoInput = new DemoInputManager();
-  private idleTimer = 0.0;
-  private attractTimer = 0.0;
-  private attractStageIndex = 0;
+
 
   // Stages
   private stageFactories: ((effects: EffectsManager) => Stage)[] = [];
   private currentStageIndex = 0;
   private currentStage: Stage | null = null;
+  private arcadeTitleScreen!: ArcadeTitleScreen;
   private stageRecords: StageRecord[] = [];
 
   // Timers
@@ -75,7 +73,6 @@ export class GameManager {
   private demoBanner!: HTMLElement;
   private demoPrompt!: HTMLElement;
   private rankingOverlay!: HTMLElement;
-  private rankingTbody!: HTMLElement;
 
   private hudRoundText!: HTMLElement;
   private hudStageText!: HTMLElement;
@@ -127,7 +124,6 @@ export class GameManager {
     this.demoBanner = document.getElementById('demo-banner')!;
     this.demoPrompt = document.getElementById('demo-prompt')!;
     this.rankingOverlay = document.getElementById('ranking-overlay')!;
-    this.rankingTbody = document.getElementById('ranking-tbody')!;
 
     this.hudRoundText = document.getElementById('hud-round')!;
     this.hudStageText = document.getElementById('hud-stage')!;
@@ -145,7 +141,7 @@ export class GameManager {
     const startBtn = document.getElementById('btn-start')!;
     startBtn.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${startBtn.textContent}`;
     startBtn.addEventListener('click', () => {
-      if (this.state === 'TITLE' || this.state === 'ATTRACT_DEMO' || this.state === 'ATTRACT_RANKING') {
+      if (this.state === 'TITLE') {
         this.startGame();
       }
     });
@@ -168,7 +164,7 @@ export class GameManager {
     this.state = 'TITLE';
     this.cleanupAttract();
 
-    this.titleOverlay.style.display = 'flex';
+    this.titleOverlay.style.display = 'none';
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';
     this.briefOverlay.style.display = 'none';
@@ -178,14 +174,41 @@ export class GameManager {
     this.demoBanner.style.display = 'none';
     this.demoPrompt.style.display = 'none';
     if (this.hudSubInfo) this.hudSubInfo.style.display = 'none';
+    if (this.dangerVignette) this.dangerVignette.style.opacity = '0';
+    if (this.dangerFlash) this.dangerFlash.style.opacity = '0';
 
-    this.idleTimer = 0.0;
+    // 実際のゲーム画面(目覚まし時計 Stage4Clock)をHUDなしで背景表示
+    this.cleanupTitleScene();
+    this.loadTitleStage();
 
-    // Initialize 3D dynamic showcase background if not present
-    if (!this.titleScene) {
-      this.titleScene = new TitleScene();
-      this.titleScene.init(this.scene);
+    if (!this.arcadeTitleScreen) {
+      this.arcadeTitleScreen = new ArcadeTitleScreen({
+        slug: 'extreme-edge-arcade',
+        accentColor: '#ff2b4d',
+        tagline: '日常の「ギリギリ」連続チャレンジ',
+        startButtonLabel: '開始',
+        promptLabel: 'PRESS START / SPACE / 画面クリック',
+        onStart: () => {
+          this.startGame();
+        },
+      });
     }
+    this.arcadeTitleScreen.show();
+  }
+
+  private loadTitleStage() {
+    if (this.currentStage) {
+      this.currentStage.cleanup(this.scene);
+      this.currentStage = null;
+    }
+    this.effects.clear();
+
+    // 看板ステージ Stage4Clock (目覚まし時計) をHUDなしの実ゲーム画面としてロード
+    this.currentStage = new Stage4Clock(this.effects);
+    this.currentStage.init(this.scene, this.camera);
+    this.currentStage.start();
+    this.titleDemoInput.setScenario(3);
+    this.titleLoopTimer = 0.0;
   }
 
   private cleanupTitleScene() {
@@ -222,89 +245,16 @@ export class GameManager {
     this.resultOverlay.style.display = 'none';
     this.rankingOverlay.style.display = 'none';
     this.demoBanner.style.display = 'none';
+    this.arcadeTitleScreen?.hide();
     this.demoPrompt.style.display = 'none';
     this.hudOverlay.style.display = 'block';
 
     this.loadStage(0);
   }
 
-  private startAttractDemo() {
-    this.cleanupTitleScene();
-    this.cleanupAttract();
 
-    this.state = 'ATTRACT_DEMO';
-    this.attractTimer = 10.0; // 10 seconds demo
 
-    // Cycle through every stage in turn so attract mode shows variety, not just Stage 1
-    const pickIndex = this.attractStageIndex % this.stageFactories.length;
-    this.attractStageIndex++;
-    const factory = this.stageFactories[pickIndex];
-    this.currentStage = factory(this.effects);
-    this.currentStage.init(this.scene, this.camera);
-    this.currentStage.start();
 
-    this.demoInput.setScenario(this.currentStage.id);
-
-    // Setup HUD for Demo
-    this.hudRoundText.textContent = `${pickIndex + 1}/${this.stageFactories.length}`;
-    this.hudStageText.textContent = this.currentStage.title;
-    this.hudActionGuide.textContent = this.currentStage.instruction;
-
-    this.titleOverlay.style.display = 'none';
-    this.resultOverlay.style.display = 'none';
-    this.rankingOverlay.style.display = 'none';
-    this.centerBanner.style.display = 'none';
-    this.fadeOverlay.style.opacity = '0';
-
-    this.hudOverlay.style.display = 'block';
-    this.demoBanner.style.display = 'block';
-    this.demoPrompt.style.display = 'block';
-  }
-
-  private startAttractRanking() {
-    this.cleanupTitleScene();
-    this.cleanupAttract();
-
-    this.state = 'ATTRACT_RANKING';
-    this.attractTimer = 6.0; // 6 seconds ranking
-
-    this.titleOverlay.style.display = 'none';
-    this.hudOverlay.style.display = 'none';
-    this.resultOverlay.style.display = 'none';
-    this.centerBanner.style.display = 'none';
-    this.fadeOverlay.style.opacity = '0';
-
-    this.renderRankingTable();
-    this.rankingOverlay.style.display = 'flex';
-  }
-
-  private renderRankingTable() {
-    const list = RankingManager.getRankings();
-    this.rankingTbody.innerHTML = '';
-    list.forEach((item) => {
-      const tr = document.createElement('tr');
-      let rankClass = 'rank-normal';
-      let rankStr = `${item.rank}位`;
-      if (item.rank === 1) {
-        rankClass = 'rank-gold';
-        rankStr = '1位 🥇';
-      } else if (item.rank === 2) {
-        rankClass = 'rank-silver';
-        rankStr = '2位 🥈';
-      } else if (item.rank === 3) {
-        rankClass = 'rank-bronze';
-        rankStr = '3位 🥉';
-      }
-
-      tr.className = rankClass;
-      tr.innerHTML = `
-        <td>${rankStr}</td>
-        <td style="font-weight: 900; letter-spacing: 2px;">${item.score.toFixed(1)}</td>
-        <td>${item.title}</td>
-      `;
-      this.rankingTbody.appendChild(tr);
-    });
-  }
 
   private loadStage(index: number, isRetry: boolean = false) {
     if (this.currentStage) {
@@ -365,19 +315,12 @@ export class GameManager {
   private showBriefing(stage: Stage) {
     const b = stage.briefing;
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    const marks = { ok: '◎', ng: '×', info: '・' };
     this.briefOverlay.innerHTML = `
       <div class="brief-card">
         <div class="brief-stage">${esc(stage.numberText)}　${esc(stage.title)}</div>
-        <div class="brief-goal">${esc(b.goal)}</div>
-        <div class="brief-head">操作</div>
-        <ul class="brief-controls">
-          ${b.controls.map((c) => `<li><span class="brief-key">${esc(c.key)}</span>${esc(c.text)}</li>`).join('')}
-        </ul>
-        <div class="brief-head">ルール</div>
-        <ul class="brief-rules">
-          ${b.rules.map((r) => `<li class="${r.kind}"><span class="brief-mark">${marks[r.kind]}</span>${esc(r.text)}</li>`).join('')}
-        </ul>
+        <div class="brief-row"><span class="brief-key">${esc(b.key)}</span></div>
+        <div class="brief-row ok"><span class="brief-mark">◎</span>${esc(b.ok)}</div>
+        <div class="brief-row ng"><span class="brief-mark">×</span>${esc(b.ng)}</div>
         <div class="brief-start blink-1s">ボタンで開始</div>
       </div>
     `;
@@ -397,69 +340,25 @@ export class GameManager {
   update(dt: number) {
     this.updateInputIndicators();
 
-    // Any input interrupts Attract Mode immediately!
-    if (this.state === 'ATTRACT_DEMO' || this.state === 'ATTRACT_RANKING') {
-      if (this.input.anyPressed()) {
-        if (this.input.wasButton0Pressed() || this.input.isButton0()) {
-          this.startGame();
-        } else {
-          this.showTitle();
-        }
-        return;
-      }
-    }
-
     switch (this.state) {
       case 'TITLE': {
-        // Dynamic 3D background update (orbiting camera & spinning turntable)
-        this.titleScene?.update(dt, this.camera);
+        this.titleLoopTimer += dt;
+        this.titleDemoInput.updateDemo(dt);
+        const result = this.currentStage?.update(dt, this.titleDemoInput);
+
+        // 針が7時直前に迫る緊張感ある実ゲーム画面を継続ループ(HUDは一切非表示)
+        if (this.titleLoopTimer >= 5.6 || (result && this.titleLoopTimer >= 4.6)) {
+          this.loadTitleStage();
+        }
 
         if (this.input.anyPressed()) {
           this.startGame();
           return;
         }
-
-        // Idle timer: enter attract mode after 12 seconds
-        this.idleTimer += dt;
-        if (this.idleTimer >= 12.0) {
-          this.startAttractDemo();
-        }
         break;
       }
 
-      case 'ATTRACT_DEMO': {
-        this.attractTimer -= dt;
 
-        // Auto-simulation script controls the stage
-        this.demoInput.updateDemo(dt);
-        const result = this.currentStage?.update(dt, this.demoInput);
-
-        // Update HUD
-        if (this.currentStage) {
-          const timeVal = this.currentStage.getRemainingTime().toFixed(1);
-          this.hudTimeText.textContent = timeVal;
-          const subInfo = this.currentStage.getSubInfo?.();
-          if (subInfo) {
-            this.hudSubInfo.style.display = 'block';
-            this.hudSubInfo.textContent = subInfo;
-          }
-        }
-
-        // Advance straight to the next stage's demo after ~10 seconds or demo completion —
-        // no ranking screen in the idle attract loop, just cycle through the stages
-        if (this.attractTimer <= 0 || (result && this.attractTimer <= 5.0)) {
-          this.startAttractDemo();
-        }
-        break;
-      }
-
-      case 'ATTRACT_RANKING': {
-        this.attractTimer -= dt;
-        if (this.attractTimer <= 0) {
-          this.showTitle();
-        }
-        break;
-      }
 
       case 'STAGE_BRIEF': {
         this.briefTimer += dt;
@@ -573,12 +472,6 @@ export class GameManager {
         if (this.input.anyPressed()) {
           this.startGame();
           return;
-        }
-
-        // Idle timer on result screen -> enter ranking attract mode after 12s
-        this.idleTimer += dt;
-        if (this.idleTimer >= 12.0) {
-          this.startAttractRanking();
         }
         break;
       }

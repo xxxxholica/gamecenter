@@ -1344,4 +1344,13 @@ export class ObstacleManager {
     this.normalSpawnCounter = 0;
     this.lastSlalomOpenLane = 1;
   }
+
+  /** タイトル画面用の初期障害物配置（目の前から障害物が見えるようにする） */
+  public initTitleObstacles(): void {
+    this.reset();
+    this.spawnObstaclePattern(-10, 10);
+    this.spawnObstaclePattern(-22, 10);
+    this.spawnObstaclePattern(-35, 10);
+    this.nextSpawnZ = -48;
+  }
 }

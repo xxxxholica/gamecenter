@@ -4,12 +4,11 @@ import { SoundManager } from './engine/audio';
 import { Player, BoundingBox2D } from './entities/player';
 import { Stage, STAGE_CONFIGS } from './world/stage';
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
-import { BoomboxModel } from './world/boombox';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock } from './entities/objects';
-import { TextureGenerator } from './world/textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
+import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -26,6 +25,9 @@ mountArcadeGuide({
 /** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
 const RESPAWN_MIN_TIME = 30;
 
+/** タイトルのダンサーを足場の手前の縁(奥行き±1.4)近くに立たせ、縁のラインが足元の床に見えるようにする */
+const TITLE_DANCER_Z = 1.1;
+
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'game_over' | 'clear';
 
 class StreetBBoyGame {
@@ -37,13 +39,13 @@ class StreetBBoyGame {
   private input: InputManager;
   private sound: SoundManager;
   private hud: HudManager;
+  private arcadeTitleScreen!: ArcadeTitleScreen;
 
   private stage: Stage | null = null;
   private player: Player | null = null;
 
   // Title Scene specific entities
   private titleGroup: THREE.Group | null = null;
-  private titleBoombox: BoomboxModel | null = null;
   private titleDancer: Player | null = null;
 
   private state: GameState = 'title';
@@ -159,60 +161,52 @@ class StreetBBoyGame {
 
     this.state = 'title';
     this.stateTimer = 0;
-    this.hud.showTitle(true);
+    this.hud.showTitle(false);
     this.hud.showRanking(false);
     this.hud.showDemoBanner(false);
     this.hud.hideCenterBanner();
     this.hud.hideResult();
     this.hud.setInvincibleBorder(false);
+    this.hud.setGameplayHUDVisible(false);
 
+    if (!this.arcadeTitleScreen) {
+      this.arcadeTitleScreen = new ArcadeTitleScreen({
+        slug: 'street-b-boy',
+        accentColor: '#ffea00',
+        tagline: 'ブレイクダンス横スクロールアクション',
+        startButtonLabel: '開始',
+        promptLabel: 'PRESS START / SPACE / 画面クリック',
+        onStart: () => {
+          this.sound.init();
+          this.startGame();
+        },
+      });
+    }
+    this.arcadeTitleScreen.show();
+
+    // 最初のステージ(Stage 1: BRONX STREET)を背景として生成
+    this.stage = new Stage(this.scene, 1);
+
+    // 主人公ダンサーをステージ1のスタート地点に配置
+    this.titleDancer = new Player();
+    this.titleDancer.reset(2.2, 0);
+    this.titleDancer.isGrounded = true;
+    this.titleDancer.mesh.position.z = TITLE_DANCER_Z;
+    this.scene.add(this.titleDancer.mesh);
+
+    // 主人公を照らすドラマチックなフロントスポットライト
     this.titleGroup = new THREE.Group();
+    const titleKeyLight = new THREE.SpotLight(0xffea00, 4.5, 12, Math.PI / 3, 0.4);
+    titleKeyLight.position.set(2.2, 3.5, 3.5);
+    titleKeyLight.target = this.titleDancer.mesh;
+    const titleRimLight = new THREE.DirectionalLight(0x00f0ff, 1.8);
+    titleRimLight.position.set(0, 3, -2);
+    this.titleGroup.add(titleKeyLight, titleRimLight);
     this.scene.add(this.titleGroup);
 
-    // Title lighting
-    const titleAmbient = new THREE.AmbientLight(0x223355, 2.0);
-    const titleSpot = new THREE.SpotLight(0xffea00, 8.0, 30, Math.PI / 3, 0.4);
-    titleSpot.position.set(0, 10, 8);
-    titleSpot.target.position.set(0, 1, 0);
-    this.titleGroup.add(titleAmbient, titleSpot, titleSpot.target);
-
-    // Brick Wall with Graffiti behind
-    const wallGeo = new THREE.BoxGeometry(24, 12, 0.6);
-    const wallMat = new THREE.MeshStandardMaterial({
-      map: TextureGenerator.getBrickWallWithGraffiti('STREET B-BOY'),
-      roughness: 0.7
-    });
-    const wall = new THREE.Mesh(wallGeo, wallMat);
-    wall.position.set(0, 5, -3);
-    this.titleGroup.add(wall);
-
-    // Asphalt Ground
-    const groundGeo = new THREE.BoxGeometry(28, 2, 14);
-    const groundMat = new THREE.MeshStandardMaterial({
-      map: TextureGenerator.getAsphaltRoadTexture(),
-      roughness: 0.8
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.position.set(0, -1, 0);
-    ground.receiveShadow = true;
-    this.titleGroup.add(ground);
-
-    // Giant Rotating Boombox in Center
-    this.titleBoombox = new BoomboxModel(1.4);
-    this.titleBoombox.mesh.position.set(0, 1.8, -0.6);
-    this.titleGroup.add(this.titleBoombox.mesh);
-
-    // Red-Hat B-Boy Stepping to the Beat in front
-    this.titleDancer = new Player();
-    this.titleDancer.x = 0;
-    this.titleDancer.y = 0;
-    this.titleDancer.mesh.position.set(0, 0, 1.8);
-    this.titleDancer.isGrounded = true;
-    this.titleGroup.add(this.titleDancer.mesh);
-
-    // Title Camera position
-    this.camera.position.set(0, 2.5, 7.5);
-    this.camera.lookAt(0, 1.5, 0);
+    // 主人公をズームインしつつロゴの下に全身が美しく収まるカメラアングル
+    this.camera.position.set(2.2, 1.1, 4.5 + TITLE_DANCER_Z);
+    this.camera.lookAt(2.2, 0.8, TITLE_DANCER_Z);
 
     this.input.resetIdleTimer();
   }
@@ -221,11 +215,13 @@ class StreetBBoyGame {
   // GAMEPLAY INITIALIZATION
   // -------------------------------------------------------------
   private startGame(isDemo: boolean = false): void {
+    if (this.titleDancer) {
+      this.scene.remove(this.titleDancer.mesh);
+      this.titleDancer = null;
+    }
     if (this.titleGroup) {
       this.scene.remove(this.titleGroup);
       this.titleGroup = null;
-      this.titleBoombox = null;
-      this.titleDancer = null;
     }
 
     this.cleanupGameplay();
@@ -249,6 +245,8 @@ class StreetBBoyGame {
     this.hud.showTitle(false);
     this.hud.showRanking(false);
     this.hud.hideResult();
+    this.hud.setGameplayHUDVisible(true);
+    this.arcadeTitleScreen?.hide();
 
     if (isDemo) {
       this.state = 'attract_demo';
@@ -338,11 +336,7 @@ class StreetBBoyGame {
 
     const inputState = this.input.update();
 
-    // 1. Check Attract Mode Trigger (12s idle on Title or Result)
-    if (this.state === 'title' && this.input.getIdleDurationSeconds() >= 12) {
-      this.startGame(true); // Enter Attract Demo!
-      return;
-    }
+    // 1. 無操作デモは撤廃。タイトル画面を常時維持する。
 
     // 2. State Machine Update
     switch (this.state) {
@@ -396,24 +390,20 @@ class StreetBBoyGame {
   private updateTitle(dt: number, time: number, input: InputState): void {
     this.stateTimer += dt;
 
-    if (this.titleBoombox) {
-      this.titleBoombox.update(time * 0.001);
-      this.titleBoombox.mesh.rotation.y = Math.sin(this.stateTimer * 0.4) * 0.25;
+    if (this.stage) {
+      this.stage.update(dt, time * 0.001, this.camera.position.x);
     }
 
     if (this.titleDancer) {
-      const dummyInput: InputState = {
-        left: false, right: false, down: false, jump: false,
-        jumpPressed: false, jumpReleased: false, spinPressed: false,
-        startPressed: false, anyActionPressed: false, lastInputTime: 0
-      };
-      this.titleDancer.update(dt, dummyInput);
+      this.titleDancer.animateBreakdanceDemo(dt, this.stateTimer);
+      this.titleDancer.mesh.position.set(this.titleDancer.x, this.titleDancer.y, TITLE_DANCER_Z);
     }
 
-    // Camera gentle dynamic pan
-    this.camera.position.x = Math.sin(this.stateTimer * 0.3) * 1.5;
-    this.camera.position.y = 2.4 + Math.cos(this.stateTimer * 0.25) * 0.3;
-    this.camera.lookAt(0, 1.4, 0);
+    // 主人公を中心にしたズームインカメラ（臨場感ある微細スウィング）
+    const camSwayX = Math.sin(this.stateTimer * 0.6) * 0.15;
+    const camSwayY = Math.cos(this.stateTimer * 0.8) * 0.04;
+    this.camera.position.set(2.2 + camSwayX, 1.1 + camSwayY, 4.5 + TITLE_DANCER_Z);
+    this.camera.lookAt(2.2, 0.8, TITLE_DANCER_Z);
 
     // Start on action
     if (input.startPressed || input.jumpPressed) {

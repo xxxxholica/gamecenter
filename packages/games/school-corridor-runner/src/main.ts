@@ -15,6 +15,7 @@ import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
+import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -63,6 +64,7 @@ class Game {
 
   // ゲームステート
   private state: GameState = GameState.TITLE;
+  private arcadeTitleScreen!: ArcadeTitleScreen;
   private scoreData: GameScore = {
     score: 0,
     combo: 0,
@@ -136,7 +138,19 @@ class Game {
   constructor() {
     this.initEngine();
     this.setupEvents();
+    this.obstacleManager.initTitleObstacles();
+    this.arcadeTitleScreen = new ArcadeTitleScreen({
+      slug: 'school-corridor-runner',
+      accentColor: '#ffb100',
+      tagline: '放課後エンドレスランナー',
+      startButtonLabel: '学校から脱出する',
+      promptLabel: 'PRESS START / SPACE / 画面クリック',
+      onStart: () => {
+        this.startWithCountdown();
+      },
+    });
     this.uiManager.setGameState(GameState.TITLE);
+    this.arcadeTitleScreen.show();
     this.loop();
   }
 
@@ -235,6 +249,7 @@ class Game {
    */
   private startWithCountdown(): void {
     if (this.isCountingDown || this.isPreChase) return;
+    this.arcadeTitleScreen?.hide();
     this.soundSystem.unlock();
 
     // 1. ゲームステートを即時PLAYINGに設定
@@ -678,17 +693,7 @@ class Game {
   };
 
   private checkAttractMode(_input: GameInputState): void {
-    const idleSeconds = this.inputManager.getIdleTimeSeconds();
-
-    if (this.state === GameState.TITLE && idleSeconds >= 10.0) {
-      this.startGame(true);
-    }
-
-    if ((this.state === GameState.GAMEOVER || this.state === GameState.CLEARED) && idleSeconds >= 10.0) {
-      this.state = GameState.TITLE;
-      this.uiManager.setGameState(GameState.TITLE);
-      this.inputManager.resetIdleTimer();
-    }
+    // ユーザー指定により無操作デモ遷移は撤廃。タイトル画面を常時維持する。
   }
 
   private titleScrollZ: number = 0;
@@ -698,6 +703,7 @@ class Game {
     // タイトル画面中も背後の廊下がゆったり奥へとスクロール（夕暮れの廊下ステージを背景に美しく見せる）
     this.titleScrollZ -= 8 * _dt;
     this.corridor.update(this.titleScrollZ, _dt);
+    this.obstacleManager.update(this.titleScrollZ, 8, _dt);
     this.camera.position.set(0, 1.8, this.titleScrollZ + 4.0);
     this.camera.rotation.set(0, 0, 0);
     this.camera.lookAt(0, 1.4, this.titleScrollZ - 20);

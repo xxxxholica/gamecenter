@@ -134,16 +134,20 @@ export class WorldManager {
     this.scene.add(redLight);
   }
 
-  // 1. Running Track (0 to -450)
+  // 1. Running Track (-450 to +50: 手前に延長してタイトル画面で見切れないようにする)
   private buildCourseTrack(): void {
-    const trackLen = Math.abs(this.bossWallZ);
+    const backExt = 50.0;
+    const trackLen = Math.abs(this.bossWallZ) + backExt;
+    const centerZ = (this.bossWallZ + backExt) / 2;
+
     const floorGeo = new THREE.PlaneGeometry(this.trackWidth, trackLen);
     floorGeo.rotateX(-Math.PI / 2);
     const floorTex = TextureGenerator.createFloorTexture();
+    floorTex.repeat.set(1, Math.round(trackLen / 11.25));
     const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
 
     this.trackMesh = new THREE.Mesh(floorGeo, floorMat);
-    this.trackMesh.position.set(0, 0, this.bossWallZ / 2);
+    this.trackMesh.position.set(0, 0, centerZ);
     this.trackMesh.receiveShadow = true;
     this.scene.add(this.trackMesh);
 
@@ -152,11 +156,11 @@ export class WorldManager {
     const railMat = new THREE.MeshLambertMaterial({ color: 0x1f232e });
 
     const leftRail = new THREE.Mesh(railGeo, railMat);
-    leftRail.position.set(-this.trackWidth / 2 - 0.3, 0.9, this.bossWallZ / 2);
+    leftRail.position.set(-this.trackWidth / 2 - 0.3, 0.9, centerZ);
     this.scene.add(leftRail);
 
     const rightRail = new THREE.Mesh(railGeo, railMat);
-    rightRail.position.set(this.trackWidth / 2 + 0.3, 0.9, this.bossWallZ / 2);
+    rightRail.position.set(this.trackWidth / 2 + 0.3, 0.9, centerZ);
     this.scene.add(rightRail);
   }
 

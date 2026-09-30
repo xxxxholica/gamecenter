@@ -1,3 +1,4 @@
+import { audio } from '../audio';
 import * as THREE from 'three';
 import type { MapBase } from '../maps/MapBase';
 import type { CarBase } from '../models/CarBase';
@@ -45,7 +46,10 @@ export class RaceDirector {
     const cc = this.scene.carController;
     if (cc) {
       cc.driftBoostEnabled = this.active;
-      cc.onDriftBanked = this.active ? (pts, sec) => this.hud.showDriftBanked(pts, sec) : null;
+      cc.onDriftBanked = this.active ? (pts, sec) => {
+        this.hud.showDriftBanked(pts, sec);
+        audio.sfx.driftBanked();
+      } : null;
     }
     this.ta.driftScoreProvider = this.active ? () => cc?.driftScore ?? 0 : null;
     if (!this.active) {

@@ -1,6 +1,5 @@
 import { getPrizeSvg, getPrizeShortName } from './prize_icons';
 import { PrizeBreakdownEntry } from './results_pile';
-import { buttonIconHtml } from '../../../shared/arcadeGuide';
 
 export interface HighScoreEntry {
   rank: number;
@@ -21,15 +20,6 @@ export class ArcadeHUD {
 
   private crosshairEl!: HTMLDivElement;
   private flashMsgEl!: HTMLDivElement;
-
-  // Title elements
-  private titleOverlay!: HTMLDivElement;
-  private titleLogoEl!: HTMLDivElement;
-  private startBtnEl!: HTMLDivElement;
-
-  // Attract / Demo elements
-  private demoBannerEl!: HTMLDivElement;
-  private rankingOverlay!: HTMLDivElement;
 
   // Results elements
   private resultsOverlay!: HTMLDivElement;
@@ -120,48 +110,12 @@ export class ArcadeHUD {
     `;
     this.container.appendChild(this.crosshairEl);
 
-    // 4. Dynamic 3D Title Screen Overlay
-    this.titleOverlay = document.createElement('div');
-    this.titleOverlay.className = 'title-overlay';
-
-    this.titleLogoEl = document.createElement('div');
-    this.titleLogoEl.className = 'title-logo';
-    this.titleLogoEl.innerHTML = `
-      <div class="title-sub">むげん連射の お祭りアクション</div>
-      <div class="title-main">えんにち射的</div>
-      <div class="title-tech">ARCADE CORK SHOOTER</div>
-    `;
-
-    this.startBtnEl = document.createElement('div');
-    this.startBtnEl.className = 'start-prompt blink';
-    this.startBtnEl.innerHTML = `${buttonIconHtml([0])} スタート`;
-
-    // 操作案内は全ゲーム共通のボタンガイドカード(main.tsのmountArcadeGuide)に一本化。
-    this.titleOverlay.appendChild(this.titleLogoEl);
-    this.titleOverlay.appendChild(this.startBtnEl);
-    this.container.appendChild(this.titleOverlay);
-
-    // 5. Attract / Demo Mode Banner
-    this.demoBannerEl = document.createElement('div');
-    this.demoBannerEl.className = 'demo-banner';
-    this.demoBannerEl.innerHTML = `
-      <div class="demo-badge">デモプレイ</div>
-      <div class="demo-sub">画面タップまたは操作でトップへ</div>
-    `;
-    this.demoBannerEl.style.display = 'none';
-    this.container.appendChild(this.demoBannerEl);
-
-    // 6. High Score Ranking Overlay
-    this.rankingOverlay = document.createElement('div');
-    this.rankingOverlay.className = 'ranking-overlay';
-    this.rankingOverlay.style.display = 'none';
-    this.container.appendChild(this.rankingOverlay);
-
-    // 7. Results Screen Overlay
+    // 4. Results Screen Overlay
     this.resultsOverlay = document.createElement('div');
     this.resultsOverlay.className = 'results-overlay';
     this.resultsOverlay.style.display = 'none';
     this.container.appendChild(this.resultsOverlay);
+
   }
 
   // Update Crosshair on Screen
@@ -287,15 +241,12 @@ export class ArcadeHUD {
   }
 
   // Show / Hide HUD elements based on game state
-  public setMode(mode: 'title' | 'playing' | 'demo' | 'ranking' | 'results') {
-    this.titleOverlay.style.display = mode === 'title' ? 'flex' : 'none';
-    this.demoBannerEl.style.display = mode === 'demo' ? 'flex' : 'none';
-    this.rankingOverlay.style.display = mode === 'ranking' ? 'flex' : 'none';
+  public setMode(mode: 'title' | 'playing' | 'results') {
     this.resultsOverlay.style.display = mode === 'results' ? 'flex' : 'none';
 
     document.body.classList.toggle('in-game', mode === 'playing');
 
-    const showHud = mode === 'playing' || mode === 'demo';
+    const showHud = mode === 'playing';
     this.scoreEl.style.display = showHud ? 'flex' : 'none';
     this.timerEl.style.display = showHud ? 'flex' : 'none';
     this.ammoEl.style.display = showHud ? 'flex' : 'none';
@@ -306,26 +257,6 @@ export class ArcadeHUD {
     }
   }
 
-  // Render High Score Ranking Screen
-  public renderRanking() {
-    let listHtml = '';
-    this.highScores.forEach((entry) => {
-      const isTop = entry.rank === 1;
-      listHtml += `
-        <div class="rank-row ${isTop ? 'gold' : ''}">
-          <span class="rank-pos">${entry.rank}位</span>
-          <span class="rank-score"><span class="score-num">${String(entry.score).padStart(5, '0')}</span>g</span>
-          <span class="rank-name">${entry.name}</span>
-        </div>
-      `;
-    });
-
-    this.rankingOverlay.innerHTML = `
-      <div class="ranking-title">ハイスコアランキング</div>
-      <div class="ranking-list">${listHtml}</div>
-      <div class="ranking-prompt blink">画面タッチまたはボタンでスタート</div>
-    `;
-  }
 
   // Render Game Results Screen
   public renderResults(

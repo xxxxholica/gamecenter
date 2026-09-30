@@ -14,6 +14,8 @@ export interface GameEntry {
   description: string;
   // packages/hub/public/thumbnails/<slug>.webp に配置したサムネイル画像
   thumbnail: string;
+  // packages/hub/public/logos/<slug>.webp に配置したタイトルロゴ画像(オプショナル)
+  logo?: string;
   // 筐体の縁・ホバー時に光るネオンカラー(そのゲーム自身のキーカラーに合わせる)
   accent: string;
   developer: Developer;
@@ -42,6 +44,7 @@ const allGames: GameEntry[] = [
     description:
       'SF6スタイルの本格2D対戦格闘ゲーム。ドライブインパクト、パリィ、OD技、スーパーアーツを搭載。個性豊かな6人のファイターによる白熱の攻防！',
     thumbnail: 'thumbnails/phaser-fighter.webp',
+    logo: 'logos/phaser-fighter.webp',
     accent: '#00f0ff',
     developer: KURENAI_BEAT,
   },
@@ -52,7 +55,19 @@ const allGames: GameEntry[] = [
     description:
       '放課後の校舎を全力疾走。追いかけてくる先生の目を盗み、手裏剣と辞書ボムで妨害物を破壁しながら校門突破を目指すエンドレスランナー。',
     thumbnail: 'thumbnails/school-corridor-runner.webp',
+    logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
+    developer: XXXXHOLICA,
+  },
+  {
+    slug: 'midnight-skyway',
+    title: 'ミッドナイト・スカイウェイ',
+    englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
+    description:
+      '夜の都市に浮かぶ架空の高架高速を駆け抜けるタイムアタック。PLATEAUの3D都市モデルで再現したヘルシンキと東京丸の内の2ステージを、3台のマシンから選んで走り、自己ベストを更新しろ。',
+    thumbnail: 'thumbnails/midnight-skyway.webp',
+    logo: 'logos/midnight-skyway.webp',
+    accent: '#00e5ff',
     developer: XXXXHOLICA,
   },
   {
@@ -62,6 +77,7 @@ const allGames: GameEntry[] = [
     description:
       'むげん連射のお祭りアクション。コルク銃を撃ちまくって縁日の屋台に並ぶ景品を狙い撃ち、爆弾で一掃コンボも決めろ。制限時間内に獲得した景品の総重量でハイスコアを競う射的シューティング。',
     thumbnail: 'thumbnails/ennichi-shateki.webp',
+    logo: 'logos/ennichi-shateki.webp',
     accent: '#ff8c00',
     developer: XXXXHOLICA,
   },
@@ -72,6 +88,7 @@ const allGames: GameEntry[] = [
     description:
       'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜む「ギリギリ」を攻略する連続チャレンジ。絶妙なタイミングでハイスコアを狙え。',
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
+    logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',
     developer: XXXXHOLICA,
   },
@@ -82,6 +99,7 @@ const allGames: GameEntry[] = [
     description:
       '微積分・線形代数のゲートを潜り抜けて単位を増殖させ、卒業要件124単位を目指す群衆ランナー。青ゲートで爆増、赤ゲートで激減。最後は余剰単位を射出してボーナス倍率を稼げ。',
     thumbnail: 'thumbnails/tani-runner-124.webp',
+    logo: 'logos/tani-runner-124.webp',
     accent: '#ffe600',
     developer: XXXXHOLICA,
   },
@@ -92,17 +110,8 @@ const allGames: GameEntry[] = [
     description:
       'ブレイクダンス少年が街を駆け抜けるアーケード2.5Dプラットフォーマー。スピン攻撃で段ボールやレーザーを蹴散らし、レールグラインドやサブウーファーのバウンドを駆使してゴールドカセットを狙え。',
     thumbnail: 'thumbnails/street-b-boy.webp',
+    logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
-    developer: XXXXHOLICA,
-  },
-  {
-    slug: 'midnight-skyway',
-    title: 'ミッドナイト・スカイウェイ',
-    englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
-    description:
-      '夜の都市に浮かぶ架空の高架高速を駆け抜けるタイムアタック。PLATEAUの3D都市モデルで再現したヘルシンキと東京丸の内の2ステージを、3台のマシンから選んで走り、自己ベストを更新しろ。',
-    thumbnail: 'thumbnails/midnight-skyway.webp',
-    accent: '#00e5ff',
     developer: XXXXHOLICA,
   },
 ];

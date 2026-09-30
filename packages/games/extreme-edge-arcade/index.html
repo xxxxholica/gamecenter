@@ -259,39 +259,18 @@
       letter-spacing: 3px;
     }
 
-    .brief-goal {
-      margin: 6px 0 clamp(10px, 2vw, 18px);
-      font-size: clamp(22px, 4.6vw, 40px);
-      color: #ffffff;
-      line-height: 1.25;
-      text-shadow: 3px 3px 0 #000;
-    }
-
-    .brief-head {
-      margin-top: clamp(8px, 1.6vw, 14px);
-      font-size: clamp(13px, 2.2vw, 18px);
-      color: #9aa7a0;
-      border-bottom: 2px solid #2b3a33;
-      letter-spacing: 4px;
-    }
-
-    .brief-controls, .brief-rules {
-      list-style: none;
-      margin: 8px 0 0;
-      padding: 0;
-    }
-
-    .brief-controls li, .brief-rules li {
-      font-size: clamp(15px, 2.8vw, 24px);
+    .brief-row {
+      margin-top: clamp(10px, 2vw, 18px);
+      font-size: clamp(20px, 4vw, 34px);
       color: #f1f1f1;
-      line-height: 1.5;
+      line-height: 1.35;
+      text-shadow: 3px 3px 0 #000;
     }
 
     .brief-key {
       display: inline-block;
-      margin-right: 12px;
-      padding: 0 12px;
-      border: 2px solid #ffe600;
+      padding: 0 14px;
+      border: 3px solid #ffe600;
       color: #ffe600;
       font-weight: bold;
       white-space: nowrap;
@@ -303,10 +282,9 @@
       font-weight: bold;
     }
 
-    .brief-rules li.ok .brief-mark { color: #00ff66; }
-    .brief-rules li.ng { color: #ff9a9a; }
-    .brief-rules li.ng .brief-mark { color: #ff1a1a; }
-    .brief-rules li.info .brief-mark { color: #8ecbff; }
+    .brief-row.ok .brief-mark { color: #00ff66; }
+    .brief-row.ng { color: #ff9a9a; }
+    .brief-row.ng .brief-mark { color: #ff1a1a; }
 
     .brief-start {
       margin-top: clamp(12px, 2.4vw, 22px);
@@ -392,8 +370,9 @@
       100% { transform: scale(1.0); opacity: 1.0; }
     }
 
-    /* Title Screen Overlay (Transparent over 3D showcase) */
+    /* Title Screen Overlay (旧オーバーレイは非表示にして共通ArcadeTitleScreenを使用) */
     #title-overlay {
+      display: none !important;
       position: absolute;
       top: 0;
       left: 0;
@@ -500,6 +479,7 @@
 
     /* Attract Mode: Ranking Screen Overlay */
     #ranking-overlay {
+      display: none !important;
       position: absolute;
       top: 0;
       left: 0;

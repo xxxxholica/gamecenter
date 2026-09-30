@@ -1,4 +1,4 @@
-import { PadEdge, startPadLoop } from '../input/arcadePad';
+import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import type { TimeOfDay } from '../core/TimeOfDay';
 
 export interface TimeSelectEvents {

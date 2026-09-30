@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MapBase } from '../maps/MapBase';
 import { CameraMode } from '../core/CarController';
-import { PadEdge, startPadLoop, type PadPress } from '../input/arcadePad';
+import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
 import type { TimeAttackResult, SectorInfo } from '../core/TimeAttackManager';
 
 export interface DriveHUDEvents {

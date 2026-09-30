@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CarBase } from '../models/CarBase';
-import { readPad } from '../input/arcadePad';
+import { readPad } from '../../../../shared/arcadePad';
 
 export interface DriveInputState {
   forward: boolean;
@@ -23,7 +23,7 @@ export class CarController {
   public maxSpeed: number = 38.0;       // ~137 km/h (Kei-car top speed)
   public maxReverseSpeed: number = 10.0;// ~36 km/h
   public acceleration: number = 14.0;   // m/s^2
-  public braking: number = 13.0;        // m/s^2 (a gentler brake: it used to stop the car too hard)
+  public braking: number = 8.0;         // m/s^2 (a gentler brake: it used to stop the car too hard)
   public dragCoeff: number = 0.985;     // Natural deceleration / air resistance
   public currentSteerAngle: number = 0; // Front wheels steer angle (radians)
   public maxSteerAngle: number = 0.55;  // Max wheel turn angle
@@ -190,11 +190,11 @@ export class CarController {
     }
 
     // Check drift trigger:
-    // When speed > 9.5 m/s (~34 km/h), the wheel is actually turned, and brake is pressed (S key/Down/Handbrake)
+    // When speed > 7.5 m/s (~27 km/h), the wheel is actually turned, and brake is pressed (S key/Down/Handbrake)
     const isBraking = inp.backward || inp.handbrake;
     const steerIntent = inp.left ? 1 : (inp.right ? -1 : 0);
 
-    if (!this.isDrifting && this.speed > 9.5 && steerIntent !== 0 && isBraking && Math.abs(this.currentSteerAngle) > 0.1) {
+    if (!this.isDrifting && this.speed > 7.5 && steerIntent !== 0 && isBraking && Math.abs(this.currentSteerAngle) > 0.05) {
       this.isDrifting = true;
       this.driftDirection = steerIntent;
       this.velocityHeading = this.rotationY;
@@ -255,7 +255,7 @@ export class CarController {
       if (this.speed > 0.1) {
         // Braking while going forward:
         // In drift, keep high speed momentum (only very light scrub: ~1.5 m/s^2 instead of 24 m/s^2)
-        const currentBraking = this.isDrifting ? 3.5 : this.braking;
+        const currentBraking = this.isDrifting ? 1.5 : this.braking;
         this.speed -= currentBraking * dt;
       } else {
         // Reversing
@@ -264,19 +264,19 @@ export class CarController {
       }
     } else {
       // Coasting deceleration: in drift, slide friction is low so car keeps high forward speed
-      const currentDrag = this.isDrifting ? 0.992 : this.dragCoeff;
+      const currentDrag = this.isDrifting ? 0.998 : this.dragCoeff;
       this.speed *= Math.pow(currentDrag, dt * 60);
       if (Math.abs(this.speed) < 0.05) this.speed = 0;
     }
 
     // Handbrake: minimal speed scrub in drift to allow sustained slide
     if (inp.handbrake) {
-      const handbrakeDecel = this.isDrifting ? 0.992 : 0.97;
+      const handbrakeDecel = this.isDrifting ? 0.9995 : 0.97;
       this.speed *= Math.pow(handbrakeDecel, dt * 60);
     }
 
     // Sliding sideways costs speed: the more the car is turned against its direction of travel, the more it scrubs
-    if (this.isDrifting && this.speed > 0) this.speed -= 3.0 * Math.min(1, Math.abs(this.slipAngle) / 0.35) * dt;
+    if (this.isDrifting && this.speed > 0) this.speed -= 1.2 * Math.min(1, Math.abs(this.slipAngle) / 0.35) * dt;
 
     if (!this.canDrive) {
       this.speed = 0;

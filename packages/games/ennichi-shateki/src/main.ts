@@ -10,6 +10,7 @@ import { sounds } from './audio';
 import { ResultsPrizePileManager } from './results_pile';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
+import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -23,7 +24,7 @@ mountArcadeGuide({
   showHomeHint: true,
 });
 
-type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'results';
+type GameState = 'title' | 'playing' | 'results';
 
 interface RestockSlot {
   slotId: number;
@@ -76,12 +77,10 @@ class ArcadeCorkShooter {
   // Automatic replenishment queue
   private restockQueue: RestockSlot[] = [];
 
-  // State timers
+  // Title & state timers
+  private arcadeTitleScreen: ArcadeTitleScreen | null = null;
   private stateTimer: number = 0;
   private titleOrbitAngle: number = 0;
-  private demoFireTimer: number = 0;
-  private demoTargetIndex: number = 0;
-  private demoExplosiveCycle: boolean = false;
   private lastTickInt: number = 30;
   private screenShake: number = 0;
 
@@ -190,19 +189,8 @@ class ArcadeCorkShooter {
       }
     });
 
-    const handleScreenTouchOrClick = (e?: Event) => {
-      if (this.state === 'attract_demo') {
-        this.enterTitle();
-        if (e && e.cancelable) e.preventDefault();
-        return;
-      }
+    const handleScreenTouchOrClick = () => {
       if (this.state === 'title') {
-        if (this.stateTimer > 0.35) {
-          this.startGame();
-        }
-        return;
-      }
-      if (this.state === 'attract_ranking') {
         if (this.stateTimer > 0.35) {
           this.startGame();
         }
@@ -217,11 +205,6 @@ class ArcadeCorkShooter {
     };
 
     window.addEventListener('click', handleScreenTouchOrClick);
-    window.addEventListener('pointerdown', (e) => {
-      if (this.state === 'attract_demo') {
-        handleScreenTouchOrClick(e);
-      }
-    });
 
     // Handle returning from another screen/tab/window cleanly
     document.addEventListener('visibilitychange', () => {
@@ -263,39 +246,26 @@ class ArcadeCorkShooter {
 
     this.hud.setMode('title');
     this.hud.updateCrosshair(0, 0, false);
-  }
 
-  private enterAttractDemo() {
-    this.prizePileManager.cleanup(this.scene);
-    this.state = 'attract_demo';
-    this.stateTimer = 0;
-    this.demoFireTimer = 0.8;
-    this.demoTargetIndex = 2;
-    this.demoExplosiveCycle = false;
-    this.stall.titleRifleGroup.visible = false;
-    this.gun.group.visible = true;
-    this.resetAllPrizes();
-    this.dynamicTargets.reset();
-
-    this.hud.setMode('demo');
-    this.hud.updateInGame(0, 30.0, this.highScore, 1.0, 0);
-    this.hud.showFlash('デモプレイ', '画面タップまたは操作でトップへ', 1.4);
-  }
-
-  private enterAttractRanking() {
-    this.state = 'attract_ranking';
-    this.stateTimer = 0;
-    this.stall.titleRifleGroup.visible = true;
-    this.gun.group.visible = false;
-
-    this.hud.setMode('ranking');
-    this.hud.renderRanking();
-    this.hud.updateCrosshair(0, 0, false);
+    if (!this.arcadeTitleScreen) {
+      this.arcadeTitleScreen = new ArcadeTitleScreen({
+        slug: 'ennichi-shateki',
+        accentColor: '#ff4d4f',
+        tagline: 'むげん連射のお祭りアクション',
+        startButtonLabel: 'スタート',
+        promptLabel: 'PRESS START / SPACE / 画面クリック',
+        onStart: () => {
+          this.startGame();
+        },
+      });
+    }
+    this.arcadeTitleScreen.show();
   }
 
   private startGame() {
     if (this.state === 'playing') return;
 
+    this.arcadeTitleScreen?.hide();
     sounds.init();
     sounds.playTaiko();
 
@@ -489,12 +459,6 @@ class ArcadeCorkShooter {
       case 'title':
         this.updateTitle(dt, elapsed, inputState);
         break;
-      case 'attract_demo':
-        this.updateAttractDemo(dt, elapsed, inputState);
-        break;
-      case 'attract_ranking':
-        this.updateAttractRanking(dt, elapsed, inputState);
-        break;
       case 'playing':
         this.updatePlaying(dt, elapsed, inputState);
         break;
@@ -503,7 +467,7 @@ class ArcadeCorkShooter {
         break;
     }
 
-    if (this.state === 'playing' || this.state === 'attract_demo') {
+    if (this.state === 'playing') {
       if (this.screenShake > 0) {
         this.screenShake = Math.max(0, this.screenShake - dt * 2.8);
         const shakeMag = this.screenShake * 0.055;
@@ -643,85 +607,6 @@ class ArcadeCorkShooter {
     if (this.stateTimer > 0.35 && (inputState.startJustPressed || inputState.shootNormalJustPressed)) {
       this.startGame();
       return;
-    }
-
-    const idleSeconds = (performance.now() - this.input.lastInputTime) / 1000;
-    if (idleSeconds >= 12.0) {
-      this.enterAttractDemo();
-    }
-  }
-
-  private updateAttractDemo(dt: number, elapsed: number, inputState: ReturnType<ArcadeInput['update']>) {
-    this.stateTimer += dt;
-
-    if (inputState.hasAnyInput) {
-      this.enterTitle();
-      return;
-    }
-
-    this.camera.position.set(0, 1.48, 2.15);
-    this.camera.lookAt(0, 1.25, -0.6);
-
-    // Alternate demo targets between shelf prizes, moving ducks, and balloons
-    const target3D = new THREE.Vector3();
-    if (this.demoTargetIndex % 3 === 0 && this.dynamicTargets.balloons.length > 0) {
-      target3D.copy(this.dynamicTargets.balloons[this.demoTargetIndex % this.dynamicTargets.balloons.length].pos);
-    } else if (this.demoTargetIndex % 3 === 1 && this.dynamicTargets.ducks.length > 0) {
-      target3D.copy(this.dynamicTargets.ducks[this.demoTargetIndex % this.dynamicTargets.ducks.length].pos);
-    } else {
-      const active = this.prizes.filter((p) => !p.isDefeated);
-      if (active.length > 0) {
-        const p = active[this.demoTargetIndex % active.length];
-        target3D.copy(p.currentPos);
-        target3D.y += p.config.comY * 1.1;
-      }
-    }
-
-    const screenTarget = target3D.project(this.camera);
-    const curX = this.input.aimX;
-    const curY = this.input.aimY;
-    this.input.setAim(
-      curX + (screenTarget.x - curX) * 4.8 * dt,
-      curY + (screenTarget.y - curY) * 4.8 * dt
-    );
-
-    this.updateAimPlane();
-    this.hud.updateCrosshair(this.input.aimX, this.input.aimY, true, true);
-    this.gun.update(dt, elapsed, this.camera, this.aimTargetWorld, true);
-
-    this.demoFireTimer -= dt;
-    if (this.demoFireTimer <= 0) {
-      this.demoExplosiveCycle = !this.demoExplosiveCycle;
-      if (this.demoExplosiveCycle && this.bombCooldown <= 0) {
-        this.tryShootExplosive();
-        this.demoFireTimer = 2.4;
-      } else {
-        this.tryShootNormal();
-        this.demoFireTimer = 1.3;
-      }
-      this.demoTargetIndex++;
-    }
-
-    if (this.stateTimer >= 10.0) {
-      this.enterAttractRanking();
-    }
-  }
-
-  private updateAttractRanking(dt: number, _elapsed: number, inputState: ReturnType<ArcadeInput['update']>) {
-    this.stateTimer += dt;
-
-    if (inputState.hasAnyInput) {
-      this.startGame();
-      return;
-    }
-
-    this.titleOrbitAngle += dt * 0.2;
-    const camX = Math.sin(this.titleOrbitAngle) * 0.8;
-    this.camera.position.set(camX, 1.48, 2.4);
-    this.camera.lookAt(0, 1.25, -0.4);
-
-    if (this.stateTimer >= 6.0) {
-      this.enterTitle();
     }
   }
 

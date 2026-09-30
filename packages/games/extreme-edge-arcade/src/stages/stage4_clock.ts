@@ -11,14 +11,9 @@ export class Stage4Clock implements Stage {
   mission = '07:00ジャスト鳴動直前に止めろ！';
   instruction = '[ENTER] 止める(1回)';
   briefing: StageBriefing = {
-    goal: 'アラームが鳴る 07:00:00 の直前で、時計を止めろ',
-    controls: [{ key: 'ENTER', text: '止める(1回だけ)' }],
-    rules: [
-      { kind: 'ok', text: '07:00:00 に近いほど高得点' },
-      { kind: 'ng', text: '鳴ってしまったら大惨事(0点)' },
-      { kind: 'ng', text: '早すぎ(40%未満)も失敗' },
-      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
-    ],
+    key: 'ENTER',
+    ok: '07:00:00の直前で止める',
+    ng: '鳴ってしまう・早すぎ',
   };
   limitLabel = '07:00接近度';
 

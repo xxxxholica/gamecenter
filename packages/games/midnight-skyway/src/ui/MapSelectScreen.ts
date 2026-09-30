@@ -1,4 +1,4 @@
-import { PadEdge, startPadLoop } from '../input/arcadePad';
+import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import { StoredRecord } from '../core/TimeAttackManager';
 import { courseOutlineSvg } from './courseOutline';
 import { STAGES } from './stages';

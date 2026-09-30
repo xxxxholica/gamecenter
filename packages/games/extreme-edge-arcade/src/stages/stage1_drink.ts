@@ -11,17 +11,9 @@ export class Stage1Drink implements Stage {
   mission = '泡を溢れさせずにフチ極限まで注げ！';
   instruction = '[ENTER長押し] 注ぐ / [↓] 確定';
   briefing: StageBriefing = {
-    goal: 'グラスのフチぎりぎりまで、あふれさせずに注げ',
-    controls: [
-      { key: 'ENTER 長押し', text: '注ぐ(離すと止まる)' },
-      { key: '↓', text: '注ぎ終わり(確定)' },
-    ],
-    rules: [
-      { kind: 'ok', text: '液面と泡がフチに近いほど高得点' },
-      { kind: 'info', text: '泡は注ぐと増え、止めると落ち着く(あふれそうなら一度離す)' },
-      { kind: 'ng', text: 'フチを超えると大惨事(0点)。足りなすぎ(35%未満)も失敗' },
-      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
-    ],
+    key: 'ENTER 長押し',
+    ok: 'フチぎりぎりまで注ぐ',
+    ng: 'あふれる・足りなすぎ',
   };
   limitLabel = '液面・泡限界';
 

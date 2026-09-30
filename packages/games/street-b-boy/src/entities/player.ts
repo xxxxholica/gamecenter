@@ -542,6 +542,136 @@ export class Player {
     this.torso.rotation.z = groove * 0.04;
   }
 
+  /**
+   * タイトル画面用: ブレイクダンスのルーティン
+   * Toprock -> 6-Step (Downrock) -> Windmill -> Freeze
+   *
+   * - 回転の軸は足元ではなく骨盤(DEMO_PIVOT)。体が床にめり込んだり浮いたりしない
+   * - 毎フレーム全身のバウンディングボックスから床に接地させる
+   * - ポーズは指数スムージングで補間し、フェーズ切替でも瞬間移動しない
+   */
+  private demoPose: Record<string, number> = {};
+  private demoYaw: number = 0;
+  private demoSpinRate: number = 0;
+  private static readonly DEMO_PIVOT = new THREE.Vector3(0, 0.6, 0);
+  private static readonly DEMO_FLOOR = 0; // 靴底が地面(mesh原点)に接する高さ
+  private static readonly DEMO_CYCLE = 8.4;
+
+  public animateBreakdanceDemo(dt: number, totalTime: number): void {
+    const t = totalTime % Player.DEMO_CYCLE;
+    const osc: Record<string, number> = {};
+    let target: Record<string, number>;
+    let spinTarget = 0;
+    let yawTarget = 0;
+    let spinning = false;
+
+    if (t < 2.2) {
+      // Toprock: 立ち姿でリズムステップ
+      const c = t * 7.0;
+      const s = Math.sin(c);
+      target = {
+        rx: 0.05, rz: 0, tx: 0.1, tz: 0,
+        lax: 0.2, laz: 0.5, rax: 0.2, raz: -0.5,
+        llx: 0, llz: 0.12, rlx: 0, rlz: -0.12,
+        hx: 0, hz: 0, dy: 0,
+      };
+      osc.rz = s * 0.08;
+      osc.tz = -s * 0.12;
+      osc.lax = s * 0.9;
+      osc.rax = -s * 0.9;
+      osc.laz = Math.cos(c) * 0.3;
+      osc.raz = -Math.cos(c) * 0.3;
+      osc.llx = s * 0.6;
+      osc.rlx = -s * 0.6;
+      osc.hx = Math.sin(c * 2) * 0.12;
+      osc.dy = -0.05 + Math.abs(s) * 0.05;
+      yawTarget = s * 0.25;
+    } else if (t < 4.3) {
+      // 6-Step: 両手を床につき足を回す
+      const c = (t - 2.2) * 6.0;
+      const s = Math.sin(c);
+      target = {
+        rx: 0.9, rz: 0, tx: 0.2, tz: 0,
+        lax: -0.9, laz: 0.3, rax: -0.9, raz: -0.3,
+        llx: -0.9, llz: 0.5, rlx: -0.9, rlz: -0.5,
+        hx: -0.7, hz: 0, dy: 0,
+      };
+      osc.llx = s * 0.6;
+      osc.rlx = -s * 0.6;
+      osc.llz = Math.cos(c) * 0.2;
+      osc.rlz = Math.cos(c) * 0.2;
+      osc.rz = s * 0.1;
+      yawTarget = Math.sin(c * 0.5) * 0.5;
+    } else if (t < 6.1) {
+      // Windmill: 背中で回る高速スピン
+      spinning = true;
+      spinTarget = 10;
+      target = {
+        rx: -1.45, rz: 0, tx: 0.1, tz: 0,
+        lax: 0.3, laz: 0.9, rax: 0.3, raz: -0.9,
+        llx: -0.1, llz: 1.0, rlx: -0.1, rlz: -1.0,
+        hx: 0.5, hz: 0, dy: 0,
+      };
+      osc.rx = Math.sin(this.demoYaw * 2) * 0.08;
+      osc.llx = Math.sin(this.demoYaw) * 0.25;
+      osc.rlx = -Math.sin(this.demoYaw) * 0.25;
+    } else {
+      // Freeze: 片手で支えて静止、足はクロス
+      const s = Math.sin(t * 5);
+      target = {
+        rx: 0.9, rz: -0.5, tx: 0.2, tz: 0.1,
+        lax: -0.9, laz: 0.25, rax: 2.8, raz: -0.5,
+        llx: -2.0, llz: 0.5, rlx: -1.4, rlz: -0.6,
+        hx: -0.5, hz: 0.2, dy: 0,
+      };
+      yawTarget = 0.4;
+      osc.rz = s * 0.02;
+    }
+
+    // ポーズをスムージング（フェーズ切替で瞬間移動しない）
+    const k = 1 - Math.exp(-dt * 12);
+    const p = this.demoPose;
+    for (const key in target) {
+      p[key] = p[key] ?? 0;
+      p[key] += (target[key] - p[key]) * k;
+    }
+    const v = (key: string): number => p[key] + (osc[key] ?? 0);
+
+    // 回転速度もなめらかに加減速
+    this.demoSpinRate += (spinTarget - this.demoSpinRate) * (1 - Math.exp(-dt * 5));
+    this.demoYaw += this.demoSpinRate * dt;
+    if (!spinning) {
+      // 回転が落ち着いたら目標の向きへ（最短方向で補間）
+      const settle = 1 - Math.min(1, Math.abs(this.demoSpinRate) / 3);
+      let diff = (yawTarget - this.demoYaw) % (Math.PI * 2);
+      if (diff > Math.PI) diff -= Math.PI * 2;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      this.demoYaw += diff * k * settle;
+    }
+
+    this.hipGroup.rotation.order = 'YXZ';
+    this.hipGroup.rotation.set(v('rx'), this.demoYaw, v('rz'));
+    this.torso.rotation.set(v('tx'), 0, v('tz'));
+    this.leftArm.rotation.set(v('lax'), 0, v('laz'));
+    this.rightArm.rotation.set(v('rax'), 0, v('raz'));
+    this.leftLeg.rotation.set(v('llx'), 0, v('llz'));
+    this.rightLeg.rotation.set(v('rlx'), 0, v('rlz'));
+    this.headGroup.position.set(0, 1.35, 0);
+    this.headGroup.rotation.set(v('hx'), 0, v('hz'));
+    this.mesh.rotation.y = 0;
+
+    // 骨盤を軸に回転させる: position = pivot - R * pivot
+    const pivot = Player.DEMO_PIVOT;
+    const offset = pivot.clone().sub(pivot.clone().applyEuler(this.hipGroup.rotation));
+    this.hipGroup.position.set(offset.x, offset.y, offset.z);
+
+    // 全身が床(DEMO_FLOOR)にちょうど接するよう高さを補正
+    this.mesh.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.mesh, true);
+    const lowest = box.min.y - this.mesh.position.y;
+    this.hipGroup.position.y += Player.DEMO_FLOOR - lowest + (osc.dy ?? 0);
+  }
+
   public animateGoldGlow(time: number): void {
     if (!this.isInvincible) return;
     const flash = Math.sin(time * 24) > 0;

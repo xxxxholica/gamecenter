@@ -4,16 +4,9 @@
 
 import { Game } from './game.ts';
 import { installHomeReturn } from '../../../shared/homeReturn.ts';
-import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
-
-mountArcadeGuide({
-  moveLabel: '隊列操作',
-  buttons: [{ indices: [0, 1, 7], label: 'アクション' }],
-  showHomeHint: true,
-});
 
 window.addEventListener('DOMContentLoaded', () => {
   console.log('[TANI RUNNER 124] Initializing Arcade Engine...');

@@ -153,8 +153,7 @@ html, body {
    ========================================================= */
 
 #screen-title {
-  justify-content: center;
-  cursor: pointer;
+  display: none !important;
 }
 
 .title-screen-wrap {

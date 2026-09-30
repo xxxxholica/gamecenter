@@ -23,7 +23,10 @@ import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
-import { PadEdge, startPadLoop } from './input/arcadePad';
+import { PadEdge, startPadLoop } from '../../../shared/arcadePad';
+import { audio } from './audio';
+
+const { bgm, sfx } = audio;
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -120,9 +123,14 @@ window.addEventListener('DOMContentLoaded', () => {
     driveHUD.updateBestTime(best ? timeAttack.formatTime(best.bestTimeMs) : null);
   };
 
+  let lastWarnSec = -1;   // the last whole second for which the low-time beep sounded
+
   const restartRace = () => {
     driveHUD.hideResultModal();
     driveHUD.hidePauseModal();
+    lastWarnSec = -1;
+    bgm.duck(1);
+    sfx.startEngine();
     driveScene.respawnCar();
     if (driveScene.carController) {
       driveScene.carController.canDrive = false;
@@ -135,6 +143,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   timeAttack.callbacks.onCountdown = (step) => {
     driveHUD.showCountdown(step);
+    sfx.countdown(step);
     if (step === 'GO') {
       if (driveScene.carController) {
         driveScene.carController.canDrive = true;
@@ -152,19 +161,35 @@ window.addEventListener('DOMContentLoaded', () => {
 
   timeAttack.callbacks.onSectorPassed = (sector) => {
     driveHUD.showSectorBanner(sector);
+    sfx.sector();
   };
 
-  timeAttack.callbacks.onGate = (_i, bonusMs) => raceDirector.onGate(bonusMs);
-  timeAttack.callbacks.onRemaining = (ms) => raceDirector.onRemaining(ms);
+  timeAttack.callbacks.onGate = (_i, bonusMs) => {
+    raceDirector.onGate(bonusMs);
+    sfx.gate();
+  };
+  timeAttack.callbacks.onRemaining = (ms) => {
+    raceDirector.onRemaining(ms);
+    const sec = Math.ceil(ms / 1000);
+    if (sec <= 10 && sec > 0 && sec !== lastWarnSec) {
+      lastWarnSec = sec;
+      sfx.warning();
+    }
+  };
 
   timeAttack.callbacks.onGoal = (result) => {
     raceDirector.onGoal(result);
     driveHUD.showResultModal(result);
+    bgm.duck(0.3);
+    if (result.timedOut) sfx.timeUp();
+    else sfx.goal();
     syncBestTimeDisplay();
   };
 
   // Safe helper to move player car back to garage turntable
   const returnCarToGarage = () => {
+    sfx.stopEngine();
+    bgm.duck(1);
     if (driveScene.active) {
       driveScene.stop();
     }
@@ -207,7 +232,11 @@ window.addEventListener('DOMContentLoaded', () => {
       restartRace();
     },
     onPauseChange: (paused) => {
+      const changed = driveScene.paused !== paused;
       driveScene.paused = paused;                        // the pause menu really freezes the game
+      sfx.setEngineSuspended(paused);
+      bgm.duck(paused ? 0.35 : 1);
+      if (changed) sfx.pause(paused);
     },
   });
 
@@ -216,6 +245,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Telemetry & physics callbacks
   driveScene.callbacks.onSpeedUpdate = (speed, rpm, gear, isDrifting) => {
     driveHUD.updateTelemetry(speed, rpm, gear, isDrifting);
+    sfx.updateEngine(rpm, speed, !!isDrifting);
   };
   driveScene.callbacks.onCameraModeChange = (mode) => {
     driveHUD.updateCamBtnState(mode);
@@ -233,12 +263,14 @@ window.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   const titleScreen = new TitleScreen(titleContainer, {
     onStart: () => {
+      sfx.uiConfirm();
       flow.goToCarSelect();
     },
   });
 
   const carSelectScreen = new CarSelectScreen(carSelectContainer, {
     onSelectCar: (carType) => {
+      sfx.uiMove();
       garage.turntableGroup.remove(currentCar.group);
       if (carType === 'trail_j') {
         currentCar = trailJ;
@@ -251,24 +283,30 @@ window.addEventListener('DOMContentLoaded', () => {
       carSelectScreen.updateSpecs(currentCar.specs);
     },
     onColorChange: (bodyColor, roofColor) => {
+      sfx.uiMove();
       currentCar.setBodyColor(bodyColor);
       if (roofColor !== undefined) {
         currentCar.setRoofColor(roofColor);
       }
     },
     onToggleLights: (enabled) => {
+      sfx.uiMove();
       currentCar.setLights(enabled);
     },
     onToggleTurntable: (enabled) => {
+      sfx.uiMove();
       garage.isRotating = enabled;
     },
     onCameraViewChange: (view) => {
+      sfx.uiMove();
       garage.setCameraView(view);
     },
     onNext: () => {
+      sfx.uiConfirm();
       flow.goToMapSelect();
     },
     onBack: () => {
+      sfx.uiBack();
       flow.goToTitle();
     },
   });
@@ -278,26 +316,32 @@ window.addEventListener('DOMContentLoaded', () => {
   const mapSelectScreen = new MapSelectScreen(mapSelectContainer, {
     onSelectMap: (mapId) => {
       if (mapFactories[mapId]) {
+        if (mapId !== currentMapId) sfx.uiMove();
         currentMapId = mapId;
       }
     },
     onStartRace: () => {
+      sfx.uiConfirm();
       flow.goToTimeSelect();
     },
     onBack: () => {
+      sfx.uiBack();
       flow.goToCarSelect();
     },
   });
 
   const timeSelectScreen = new TimeSelectScreen(timeSelectContainer, {
     onSelect: (t) => {
+      if (t !== currentTimeOfDay) sfx.uiMove();
       currentTimeOfDay = t;
       saveTimeOfDay(t);
     },
     onStartRace: () => {
+      sfx.uiConfirm();
       flow.startRace();
     },
     onBack: () => {
+      sfx.uiBack();
       flow.goToMapSelect();
     },
   });
@@ -309,6 +353,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   const flow = new GameFlowManager({
     onEnterTitle: () => {
+      bgm.play('menu');
       carSelectScreen.hide();
       mapSelectScreen.hide();
       timeSelectScreen.hide();
@@ -321,6 +366,7 @@ window.addEventListener('DOMContentLoaded', () => {
       titleScreen.show();
     },
     onEnterCarSelect: () => {
+      bgm.play('menu');
       titleScreen.hide();
       mapSelectScreen.hide();
       timeSelectScreen.hide();
@@ -332,6 +378,7 @@ window.addEventListener('DOMContentLoaded', () => {
       carSelectScreen.show();
     },
     onEnterMapSelect: () => {
+      bgm.play('menu');
       titleScreen.hide();
       carSelectScreen.hide();
       timeSelectScreen.hide();
@@ -344,6 +391,7 @@ window.addEventListener('DOMContentLoaded', () => {
       mapSelectScreen.show(records);
     },
     onEnterTimeSelect: () => {
+      bgm.play('menu');
       titleScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();
@@ -354,6 +402,7 @@ window.addEventListener('DOMContentLoaded', () => {
       timeSelectScreen.show(currentTimeOfDay);
     },
     onStartRace: async () => {
+      bgm.play('race');
       titleScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();

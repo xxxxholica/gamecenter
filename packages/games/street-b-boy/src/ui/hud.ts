@@ -144,6 +144,18 @@ export class HudManager {
     this.elCenterBanner.style.display = 'none';
   }
 
+  public setGameplayHUDVisible(visible: boolean): void {
+    const display = visible ? 'block' : 'none';
+    const scoreEl = document.getElementById('hud-score');
+    const stageEl = document.getElementById('hud-stage');
+    const timeEl = document.getElementById('hud-time');
+    const livesEl = document.getElementById('hud-lives');
+    if (scoreEl) scoreEl.style.display = display;
+    if (stageEl) stageEl.style.display = display;
+    if (timeEl) timeEl.style.display = display;
+    if (livesEl) livesEl.style.display = display;
+  }
+
   public showTitle(show: boolean): void {
     this.elTitleOverlay.style.display = show ? 'flex' : 'none';
   }
@@ -176,6 +188,10 @@ export class HudManager {
 
   public hideResult(): void {
     this.elResultOverlay.style.display = 'none';
+  }
+
+  public getRankings(): RankingRecord[] {
+    return this.loadRankings();
   }
 
   private loadRankings(): RankingRecord[] {

@@ -1,5 +1,5 @@
 import { CarSpecs } from '../models/CarBase';
-import { PadEdge, startPadLoop, type PadPress } from '../input/arcadePad';
+import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
 
 export interface CarSelectEvents {
   onSelectCar: (carType: 'trail_j' | 'cross_j' | 'truck_j') => void;

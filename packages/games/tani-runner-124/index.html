@@ -41,21 +41,8 @@
     </div>
   </div>
 
-  <!-- Start Screen -->
-  <div id="start-screen" class="overlay-screen">
-    <div class="arcade-card">
-      <h1 class="game-title">単位増殖ラン</h1>
-      <div class="level-select">
-        <button class="level-btn" data-level="elementary">小学生</button>
-        <button class="level-btn" data-level="middle">中学生</button>
-        <button class="level-btn" data-level="kosen">高専生</button>
-      </div>
-      <div id="level-desc" class="level-desc"></div>
-      <button id="start-btn" class="arcade-btn start-btn">開始</button>
-      <div class="ranking-title">ランキング</div>
-      <ol id="start-ranking" class="ranking-list ranking-below"></ol>
-    </div>
-  </div>
+  <!-- Level Select Screen (開始後に遷移。中身は levelSelectScreen.ts が描画する) -->
+  <div id="level-select-screen" class="overlay-screen level-select-screen hidden"></div>
 
   <!-- Fail Screen (留年) -->
   <div id="fail-screen" class="overlay-screen hidden">

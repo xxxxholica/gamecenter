@@ -11,14 +11,9 @@ export class Stage3Phone implements Stage {
   mission = '残量0.000%ブラックアウト直前に挿入せよ！';
   instruction = '[ENTER / ↑] ケーブルを挿す(1回)';
   briefing: StageBriefing = {
-    goal: 'バッテリーが0%になる直前に、充電ケーブルを挿せ',
-    controls: [{ key: 'ENTER / ↑', text: 'ケーブルを挿す(1回だけ)' }],
-    rules: [
-      { kind: 'ok', text: '残量が0%に近いほど高得点(画面の「極限残量」を見る)' },
-      { kind: 'ng', text: '0%になって電源が落ちると大惨事(0点)' },
-      { kind: 'ng', text: '早すぎ(30%未満)も失敗' },
-      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
-    ],
+    key: 'ENTER / ↑',
+    ok: '0%になる直前にケーブルを挿す',
+    ng: '0%で電源が落ちる・早すぎ',
   };
   limitLabel = 'バッテリー消費';
 

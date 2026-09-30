@@ -1,7 +1,7 @@
 // Collects each workspace's build output into a single deployable dist/ tree:
 //   dist/                  <- packages/hub/dist
 //   dist/games/<slug>/     <- packages/games/<slug>/dist
-import { existsSync, rmSync, cpSync, readdirSync } from 'node:fs';
+import { existsSync, rmSync, renameSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { hiddenSlugs } from '../packages/hub/src/games.ts';
@@ -16,7 +16,8 @@ rmSync(outDir, { recursive: true, force: true });
 if (!existsSync(hubDist)) {
   throw new Error(`hub build not found at ${hubDist}`);
 }
-cpSync(hubDist, outDir, { recursive: true });
+// コピーではなく移動する(midnight-skyway は約300MBあり、コピーだとディスクを二重に使うため)
+renameSync(hubDist, outDir);
 // 非表示のゲームはハブに出ないので、サムネイルも配置しない
 for (const slug of hiddenSlugs) {
   rmSync(path.join(outDir, 'thumbnails', `${slug}.webp`), { force: true });
@@ -31,6 +32,7 @@ for (const slug of readdirSync(gamesDir)) {
     console.warn(`skipping ${slug}: no dist/ (build failed or not built)`);
     continue;
   }
-  cpSync(gameDist, path.join(outDir, 'games', slug), { recursive: true });
+  mkdirSync(path.join(outDir, 'games'), { recursive: true });
+  renameSync(gameDist, path.join(outDir, 'games', slug));
   console.log(`assembled games/${slug}`);
 }

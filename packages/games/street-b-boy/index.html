@@ -56,6 +56,9 @@
          0px  3px 0 #000000,
          4px  4px 0 #000000;
     }
+    #hud-score, #hud-stage, #hud-time, #hud-lives {
+      display: none;
+    }
     #hud-score {
       top: 24px;
       left: 32px;
@@ -126,8 +129,9 @@
       animation: pop-bounce 0.3s ease-out;
     }
 
-    /* TITLE SCREEN OVERLAY */
+    /* TITLE SCREEN OVERLAY (旧オーバーレイは非表示にして共通ArcadeTitleScreenを使用) */
     #title-overlay {
+      display: none !important;
       position: absolute;
       top: 0;
       left: 0;
@@ -273,6 +277,7 @@
 
     /* RANKING SCREEN OVERLAY */
     #ranking-overlay {
+      display: none !important;
       position: absolute;
       top: 0;
       left: 0;

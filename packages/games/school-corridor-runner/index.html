@@ -334,20 +334,9 @@
 
 
 
-    /* タイトルオーバーレイ（実際のステージの上に浮かぶポップアップウィンドウ） */
+    /* タイトルオーバーレイ（旧ポップアップウィンドウは非表示にして共通ArcadeTitleScreenを使用） */
     #title-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(5, 3, 10, 0.4);
-      backdrop-filter: blur(3px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 40;
-      padding: 20px;
+      display: none !important;
     }
 
     .title-popup-card {

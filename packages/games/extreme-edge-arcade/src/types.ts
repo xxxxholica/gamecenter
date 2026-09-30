@@ -8,11 +8,11 @@ export interface StageResult {
   judgmentText: string; // "大惨事" or "成功"
 }
 
-/** 種目の始まる前に見せる説明。「何をするか」「どう操作するか」「何が成功で何が大惨事か」を短く伝える */
+/** 種目の始まる前に見せる説明。「使うボタン」「してよいこと」「してはいけないこと」を1行ずつだけ伝える */
 export interface StageBriefing {
-  goal: string;
-  controls: { key: string; text: string }[];
-  rules: { kind: 'ok' | 'ng' | 'info'; text: string }[];
+  key: string; // 使うボタン
+  ok: string; // 何をすればよいか
+  ng: string; // 何をすると駄目か(大惨事・失敗)
 }
 
 export interface Stage {
