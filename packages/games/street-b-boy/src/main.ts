@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { InputManager, InputState } from './engine/input';
 import { SoundManager } from './engine/audio';
 import { Player, BoundingBox2D } from './entities/player';
-import { Stage } from './world/stage';
+import { Stage, STAGE_CONFIGS } from './world/stage';
+import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { BoomboxModel } from './world/boombox';
 import { HudManager } from './ui/hud';
-import { CassetteTape } from './entities/objects';
+import { CassetteTape, StageBlock } from './entities/objects';
 import { TextureGenerator } from './world/textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
@@ -21,6 +22,9 @@ mountArcadeGuide({
   ],
   showHomeHint: true,
 });
+
+/** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
+const RESPAWN_MIN_TIME = 30;
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'game_over' | 'clear';
 
@@ -58,6 +62,12 @@ class StreetBBoyGame {
   private comboTimer: number = 0;
   private lastGrindSoundTime: number = 0;
 
+  // 最後に通過したチェックポイント(ミスした時の再開地点)
+  private checkpoint: { x: number; y: number } | null = null;
+
+  // ?debug=collision のときだけ有効な、判定の可視化
+  private collisionDebug: CollisionDebugOverlay | null = null;
+
   private lastTime: number = performance.now();
 
   constructor() {
@@ -83,6 +93,11 @@ class StreetBBoyGame {
     this.input = new InputManager();
     this.sound = new SoundManager();
     this.hud = new HudManager();
+
+    if (CollisionDebugOverlay.isRequested()) {
+      this.collisionDebug = new CollisionDebugOverlay(this.scene);
+      (window as unknown as { __sbb?: StreetBBoyGame }).__sbb = this; // 開発時の検証用フック
+    }
 
     this.setupEventListeners();
     this.setupTitleScene();
@@ -225,6 +240,8 @@ class StreetBBoyGame {
     this.hud.updateLives(this.lives);
 
     this.stage = new Stage(this.scene, this.currentStage);
+    this.checkpoint = null;
+    this.sound.setBaseTempo(this.stage.config.tempo);
     this.player = new Player();
     this.player.reset(1.5, 0.5);
     this.scene.add(this.player.mesh);
@@ -289,6 +306,8 @@ class StreetBBoyGame {
     this.hud.updateTime(this.timeLeft);
 
     this.stage = new Stage(this.scene, this.currentStage);
+    this.checkpoint = null;
+    this.sound.setBaseTempo(this.stage.config.tempo);
     if (this.player) {
       this.player.reset(1.5, 0.5);
     }
@@ -305,13 +324,7 @@ class StreetBBoyGame {
   }
 
   private getStageInitialTime(stage: number): number {
-    switch (stage) {
-      case 1: return 75;
-      case 2: return 70;
-      case 3: return 65;
-      case 4: return 60;
-      default: return 75;
-    }
+    return (STAGE_CONFIGS[stage] ?? STAGE_CONFIGS[1]).timeLimit;
   }
 
   // -------------------------------------------------------------
@@ -358,8 +371,24 @@ class StreetBBoyGame {
         break;
     }
 
+    this.updateCollisionDebug();
     this.renderer.render(this.scene, this.camera);
   };
+
+  /** 判定の可視化(?debug=collision)。solid=緑 / oneWay=青 / trigger=黄 / hazard=赤 / player=白 / attack=マゼンタ */
+  private updateCollisionDebug(): void {
+    if (!this.collisionDebug) return;
+    const shapes: DebugShape[] = [];
+    if (this.stage && (this.state === 'playing' || this.state === 'attract_demo' || this.state === 'clear')) {
+      shapes.push(...this.stage.getCollisionShapes());
+      if (this.player) {
+        shapes.push({ kind: 'player', box: this.player.getAABB() });
+        const attack = this.player.getAttackAABB();
+        if (attack) shapes.push({ kind: 'attack', box: attack });
+      }
+    }
+    this.collisionDebug.update(shapes);
+  }
 
   // -------------------------------------------------------------
   // TITLE UPDATE
@@ -539,188 +568,62 @@ class StreetBBoyGame {
       return;
     }
 
-    // Platform Collisions (Full Solid AABB: Top landing, Bottom ceiling headbutt, Left/Right side walls)
+    // -------------------------------------------------------------
+    // 体を止める判定(ソリッド / 一方通行)。すべて resolveSolid を通す。
+    //  solid  : 地面・ブロック・缶・消火栓の本体・サブウーファー → 上に乗れる / 横は壁 / 下から頭突き
+    //  oneWay : 薄い足場板・ゴンドラ・レールカート・崩れる足場 → 下からは通り抜け、上からだけ着地
+    // -------------------------------------------------------------
     let groundedThisFrame = false;
-
-    for (const plat of this.stage.platforms) {
-      const platLeft = plat.x;
-      const platRight = plat.x + plat.w;
-      const platTop = plat.y;
-      const platBottom = plat.y - plat.h;
-
-      const pLeft = this.player.x - this.player.width / 2;
-      const pRight = this.player.x + this.player.width / 2;
-      const pBottom = this.player.y;
-      const pTop = this.player.y + this.player.height;
-
-      const overlapX = Math.min(pRight, platRight) - Math.max(pLeft, platLeft);
-      const overlapY = Math.min(pTop, platTop) - Math.max(pBottom, platBottom);
-
-      if (overlapX > 0.02 && overlapY > 0) {
-        const prevTop = this.player.prevY + this.player.height;
-        const prevBottom = this.player.prevY;
-
-        // 1. Headbutt / Ceiling: Jumping from underneath the platform
-        if ((this.player.vy > 0 && prevTop <= platBottom + 0.38) || (overlapY < overlapX && this.player.vy > 0 && pBottom < platBottom)) {
-          this.player.y = platBottom - this.player.height;
-          this.player.vy = -1.5;
-          this.sound.playSmash();
-          this.triggerCameraShake(0.08, 0.1);
-        }
-        // 2. Landing on top of platform from above
-        else if ((this.player.vy <= 0 && prevBottom >= platTop - 0.38) || (overlapY < overlapX && this.player.vy <= 0 && pBottom >= platBottom + (platTop - platBottom) * 0.25)) {
-          this.player.y = platTop;
-          this.player.vy = 0;
-          this.player.isGrounded = true;
-          groundedThisFrame = true;
-        }
-        // 3. Side collision: Running or jumping into platform walls / stairs
-        else {
-          if (this.player.prevX < plat.x || (this.player.x < plat.x + plat.w / 2 && overlapX < overlapY)) {
-            this.player.x = platLeft - this.player.width / 2;
-            this.player.vx = Math.min(0, this.player.vx);
-          } else {
-            this.player.x = platRight + this.player.width / 2;
-            this.player.vx = Math.max(0, this.player.vx);
-          }
-        }
-      }
-    }
-
-    // Moving Gondola Platforms (Full Solid AABB: Top landing & carry, Bottom headbutt, Side collision)
-    for (const mp of this.stage.movingPlatforms) {
-      const mpLeft = mp.currentX;
-      const mpRight = mp.currentX + mp.width;
-      const mpTop = mp.currentY;
-      const mpBottom = mp.currentY - mp.height;
-
-      const pLeft = this.player.x - this.player.width / 2;
-      const pRight = this.player.x + this.player.width / 2;
-      const pBottom = this.player.y;
-      const pTop = this.player.y + this.player.height;
-
-      const overlapX = Math.min(pRight, mpRight) - Math.max(pLeft, mpLeft);
-      const overlapY = Math.min(pTop, mpTop) - Math.max(pBottom, mpBottom);
-
-      if (overlapX > 0.02 && overlapY > 0) {
-        const prevTop = this.player.prevY + this.player.height;
-        const prevBottom = this.player.prevY;
-
-        // 1. Headbutt / Ceiling: Jumping from underneath moving platform
-        if ((this.player.vy > 0 && prevTop <= mpBottom + 0.38) || (overlapY < overlapX && this.player.vy > 0 && pBottom < mpBottom)) {
-          this.player.y = mpBottom - this.player.height;
-          this.player.vy = -1.5;
-          this.sound.playSmash();
-          this.triggerCameraShake(0.08, 0.1);
-        }
-        // 2. Landing on top of moving platform & carrying motion
-        else if ((this.player.vy <= 0 && prevBottom >= mpTop - 0.38) || (overlapY < overlapX && this.player.vy <= 0 && pBottom >= mpBottom)) {
-          this.player.y = mpTop;
-          this.player.vy = 0;
-          this.player.isGrounded = true;
-          groundedThisFrame = true;
-          this.player.x += mp.vx * dt;
-          this.player.y += mp.vy * dt;
-        }
-        // 3. Side collision with moving platform
-        else {
-          if (this.player.prevX < mp.currentX || (this.player.x < mp.currentX + mp.width / 2 && overlapX < overlapY)) {
-            this.player.x = mpLeft - this.player.width / 2;
-            this.player.vx = Math.min(0, this.player.vx);
-          } else {
-            this.player.x = mpRight + this.player.width / 2;
-            this.player.vx = Math.max(0, this.player.vx);
-          }
-        }
-      }
-    }
-
-    // Stage Blocks Collisions (Question & Brick Blocks)
-    for (const block of this.stage.blocks) {
-      if (block.isDestroyed) continue;
-      const bBox = block.getAABB();
-
-      const pLeft = this.player.x - this.player.width / 2;
-      const pRight = this.player.x + this.player.width / 2;
-      const pBottom = this.player.y;
-      const pTop = this.player.y + this.player.height;
-
-      const bLeft = bBox.x;
-      const bRight = bBox.x + bBox.w;
-      const bBottom = bBox.y;
-      const bTop = bBox.y + bBox.h;
-
-      const overlapX = Math.min(pRight, bRight) - Math.max(pLeft, bLeft);
-      const overlapY = Math.min(pTop, bTop) - Math.max(pBottom, bBottom);
-
-      if (overlapX > 0.08 && overlapY > 0.08) {
-        const prevTop = this.player.prevY + this.player.height;
-        const prevBottom = this.player.prevY;
-
-        // 1. Headbutt from below
-        if ((this.player.vy > 0 && prevTop <= bBottom + 0.35) || (overlapY < overlapX && this.player.vy > 0 && pBottom < bBottom)) {
-          this.player.y = bBottom - this.player.height;
-          this.player.vy = -1.5;
-          const hitResult = block.hit();
-
-          if (hitResult.type === 'brick') {
-            this.sound.playSmash();
-            this.stage.particleSystem.spawnBrickDebris(block.x, block.y);
-            this.stage.scene.remove(block.mesh);
-            this.addScore(50);
-            this.triggerCameraShake(0.12, 0.15);
-          } else if (hitResult.type === 'question' && hitResult.spawnedItem) {
-            if (hitResult.isGold) {
-              // Spawn Gold Cassette popping out!
-              this.sound.playPowerup();
-              const gold = new CassetteTape(block.x, block.y + 1.2, true);
-              this.stage.cassettes.push(gold);
-              this.stage.scene.add(gold.mesh);
-              this.stage.particleSystem.spawnSparkles(block.x, block.y + 1.2, 14, 0xffea00);
-            } else {
-              // Spawn Cassette Coin
-              this.sound.playCoin();
-              this.addScore(100);
-              this.stage.particleSystem.spawnSparkles(block.x, block.y + 1.2, 8, 0x00f0ff);
-            }
-          }
-        }
-        // 2. Landing on top of block
-        else if ((this.player.vy <= 0 && prevBottom >= bTop - 0.35) || (overlapY < overlapX && this.player.vy <= 0 && pBottom >= bBottom)) {
-          this.player.y = bTop;
-          this.player.vy = 0;
-          this.player.isGrounded = true;
-          groundedThisFrame = true;
-        }
-        // 3. Side collision with block
-        else {
-          if (this.player.x < block.x) {
-            this.player.x = bLeft - this.player.width / 2;
-            this.player.vx = 0;
-          } else {
-            this.player.x = bRight + this.player.width / 2;
-            this.player.vx = 0;
-          }
-        }
-      }
-    }
-
-    if (!groundedThisFrame && this.player.isGrounded && this.player.vy < 0) {
-      this.player.isGrounded = false;
-    }
-
-    // Refresh player AABB after platform and block collision adjustments
-    const pBox = this.player.getAABB();
-
-    // Breakable Street Obstacles (Trash cans, cardboard boxes)
     const attackBox = this.player.getAttackAABB();
 
+    for (const plat of this.stage.platforms) {
+      const hit = this.resolveSolid(
+        { x: plat.x, y: plat.y - plat.h, w: plat.w, h: plat.h },
+        plat.oneWay ? 'oneWay' : 'solid'
+      );
+      if (hit === 'top') {
+        groundedThisFrame = true;
+      } else if (hit === 'bottom') {
+        this.sound.playSmash();
+        this.triggerCameraShake(0.08, 0.1);
+      }
+    }
+
+    // 動く足場(ゴンドラ・レールカート): 上に乗ると一緒に運ばれる
+    for (const mp of this.stage.movingPlatforms) {
+      if (this.resolveSolid(mp.getAABB(), 'oneWay') === 'top') {
+        groundedThisFrame = true;
+        this.player.x += mp.vx * dt;
+        this.player.y += mp.vy * dt;
+      }
+    }
+
+    // 崩れる足場: 乗ると崩壊のカウントダウンが始まる
+    for (const cp of this.stage.crumblingPlatforms) {
+      if (!cp.isActive) continue;
+      if (this.resolveSolid(cp.getAABB(), 'oneWay') === 'top') {
+        groundedThisFrame = true;
+        cp.touch();
+      }
+    }
+
+    // ブロック(?ブロック / レンガ)
+    for (const block of this.stage.blocks) {
+      if (block.isDestroyed) continue;
+      const hit = this.resolveSolid(block.getAABB(), 'solid', 0.08, 0.08);
+      if (hit === 'top') {
+        groundedThisFrame = true;
+      } else if (hit === 'bottom') {
+        this.onBlockHit(block);
+      }
+    }
+
+    // 壊せる障害物(缶・段ボール): スピン/無敵の攻撃で壊れる。壊れなければソリッド
     for (let i = this.stage.obstacles.length - 1; i >= 0; i--) {
       const obs = this.stage.obstacles[i];
       if (obs.isDestroyed) continue;
       const obsBox = obs.getAABB();
 
-      // Spin attack or Gold Dash destroys obstacle!
       if (attackBox && this.checkAABB(attackBox, obsBox)) {
         obs.isDestroyed = true;
         this.sound.playSmash();
@@ -732,21 +635,43 @@ class StreetBBoyGame {
         continue;
       }
 
-      // Solid obstacle blocking player if not attacking
-      if (this.checkAABB(pBox, obsBox)) {
-        if (this.player.vy <= 0 && pBox.y >= obsBox.y + obsBox.h - 0.3) {
-          this.player.y = obsBox.y + obsBox.h;
-          this.player.vy = 0;
-          this.player.isGrounded = true;
-        } else if (this.player.x < obsBox.x) {
-          this.player.x = obsBox.x - this.player.width / 2;
-          this.player.vx = 0;
-        } else if (this.player.x > obsBox.x + obsBox.w) {
-          this.player.x = obsBox.x + obsBox.w + this.player.width / 2;
-          this.player.vx = 0;
-        }
+      if (this.resolveSolid(obsBox, 'solid') === 'top') groundedThisFrame = true;
+    }
+
+    // 消火栓: 攻撃で噴出する。本体は噴出の前後を問わず常にソリッド(水柱は後段のトリガー)
+    for (const hyd of this.stage.fireHydrants) {
+      const hydBox = hyd.getAABB();
+      if (!hyd.isErupted && attackBox && this.checkAABB(attackBox, hydBox)) {
+        hyd.erupt();
+        this.sound.playGeyser();
+        this.stage.particleSystem.spawnWater(hyd.x, hyd.y + 0.8, 18);
+        this.triggerCameraShake(0.3, 0.3);
+        this.addScore(300);
+        this.registerComboHit();
+      }
+      if (this.resolveSolid(hydBox, 'solid') === 'top') groundedThisFrame = true;
+    }
+
+    // サブウーファー: ソリッド。上から乗ると高く跳ね上げる
+    for (const sub of this.stage.subwoofers) {
+      if (this.resolveSolid(sub.getAABB(), 'solid') === 'top') {
+        sub.bounce();
+        this.player.vy = 20.0;
+        this.player.isGrounded = false;
+        this.sound.playSubwoofer();
+        this.stage.particleSystem.spawnShockwave(sub.x, sub.y + 0.9);
+        this.triggerCameraShake(0.35, 0.3);
+        this.registerComboHit();
+        this.addScore(200);
       }
     }
+
+    if (!groundedThisFrame && this.player.isGrounded && this.player.vy < 0) {
+      this.player.isGrounded = false;
+    }
+
+    // Refresh player AABB after all solid collision adjustments
+    const pBox = this.player.getAABB();
 
     // Cassette Collection
     for (const cassette of this.stage.cassettes) {
@@ -775,24 +700,6 @@ class StreetBBoyGame {
     // Check if player invincibility expired to revert BGM tempo
     if (!this.player.isInvincible) {
       this.sound.setGoldMode(false);
-    }
-
-    // Subwoofer Bounce Pads
-    for (const sub of this.stage.subwoofers) {
-      const sBox = sub.getAABB();
-      if (this.checkAABB(pBox, sBox)) {
-        if (this.player.vy <= 0 && this.player.prevY >= sBox.y + sBox.h - 0.4) {
-          sub.bounce();
-          this.player.y = sBox.y + sBox.h;
-          this.player.vy = 20.0;
-          this.player.isGrounded = false;
-          this.sound.playSubwoofer();
-          this.stage.particleSystem.spawnShockwave(sub.x, sub.y + 0.9);
-          this.triggerCameraShake(0.35, 0.3);
-          this.registerComboHit();
-          this.addScore(200);
-        }
-      }
     }
 
     // Grind Rails
@@ -850,42 +757,30 @@ class StreetBBoyGame {
       }
     }
 
-    // Fire Hydrants (Eruption & Water Column Boost)
+    // 消火栓の水柱(トリガー): 噴出中に触れると高く打ち上げる
     for (const hyd of this.stage.fireHydrants) {
-      const hydBox = hyd.getAABB();
-      if (!hyd.isErupted && attackBox && this.checkAABB(attackBox, hydBox)) {
-        hyd.erupt();
+      const column = hyd.getColumnAABB();
+      if (column && this.checkAABB(pBox, column)) {
+        this.player.vy = 20.5;
+        this.player.isGrounded = false;
         this.sound.playGeyser();
-        this.stage.particleSystem.spawnWater(hyd.x, hyd.y + 0.8, 18);
-        this.triggerCameraShake(0.3, 0.3);
-        this.addScore(300);
+        this.stage.particleSystem.spawnWater(this.player.x, this.player.y + 0.5, 8);
+        this.triggerCameraShake(0.2, 0.2);
         this.registerComboHit();
       }
+    }
 
-      if (hyd.isErupted) {
-        if (this.checkAABB(pBox, hydBox)) {
-          this.player.vy = 20.5;
-          this.player.isGrounded = false;
-          this.sound.playGeyser();
-          this.stage.particleSystem.spawnWater(this.player.x, this.player.y + 0.5, 8);
-          this.triggerCameraShake(0.2, 0.2);
-          this.registerComboHit();
-        }
-      } else {
-        if (this.checkAABB(pBox, hydBox)) {
-          if (this.player.vy <= 0 && this.player.prevY >= hydBox.y + hydBox.h - 0.3) {
-            this.player.y = hydBox.y + hydBox.h;
-            this.player.vy = 0;
-            this.player.isGrounded = true;
-            groundedThisFrame = true;
-          } else if (this.player.x < hyd.x) {
-            this.player.x = hydBox.x - this.player.width / 2;
-            this.player.vx = 0;
-          } else {
-            this.player.x = hydBox.x + hydBox.w + this.player.width / 2;
-            this.player.vx = 0;
-          }
-        }
+    // チェックポイント(トリガー): 通過するとミス後の再開地点になる
+    for (const cp of this.stage.checkpoints) {
+      if (!cp.isReached && this.checkAABB(pBox, cp.getAABB())) {
+        cp.reach();
+        this.checkpoint = { x: cp.x, y: cp.y };
+        this.sound.playPowerup();
+        this.stage.particleSystem.spawnSparkles(cp.x, cp.y + 2.6, 14, 0x00ff88);
+        this.hud.showCenterBanner('ready', 'CHECK POINT');
+        window.setTimeout(() => {
+          if (this.state === 'playing' && !this.player?.isDead) this.hud.hideCenterBanner();
+        }, 900);
       }
     }
 
@@ -954,10 +849,18 @@ class StreetBBoyGame {
       }
     }
 
-    // Projectile Collisions (Deflection with Spin Attack, Damage on Player, Deflected hitting Enemies)
+    // Projectile Collisions (Deflection with Spin Attack, Damage on Player, Deflected hitting Enemies, Obstacle Blocking)
     for (const proj of this.stage.projectiles) {
       if (proj.isDead) continue;
       const projBox = proj.getAABB();
+
+      // 弾はソリッド(地面・ブロック・缶・消火栓・スピーカー)で止まる。一方通行の板は素通りする
+      if (this.stage.isBlockedBySolid(projBox)) {
+        proj.isDead = true;
+        this.sound.playSmash();
+        this.stage.particleSystem.spawnSparks(proj.x, proj.y, 6);
+        continue;
+      }
 
       // Deflected Projectile hitting Enemies
       if (proj.isDeflected) {
@@ -1002,7 +905,7 @@ class StreetBBoyGame {
 
     // Goal Reach Check (Turntable stage at end of level)
     const goalBox = this.stage.getGoalAABB();
-    if (this.checkAABB(pBox, goalBox) || (this.player.x >= this.stage.goalX - 1.5 && this.player.y >= this.stage.goalY - 0.4)) {
+    if (this.checkAABB(pBox, goalBox)) {
       this.handleGoalClear();
       return;
     }
@@ -1138,9 +1041,16 @@ class StreetBBoyGame {
 
     window.setTimeout(() => {
       if (this.lives > 0) {
-        // Respawn at guaranteed safe platform checkpoint (never over a pit!)
+        // 通過済みのチェックポイントがあればそこから。無ければ、穴の上にならない安全な足場から再開する
         if (this.player && this.stage) {
-          const safePos = this.stage.getSafeRespawnPosition(this.player.x);
+          const safePos = this.checkpoint
+            ? { x: this.checkpoint.x, y: this.checkpoint.y + 0.3 }
+            : this.stage.getSafeRespawnPosition(this.player.x);
+          // タイムアップでのミスは、再開後すぐにまたタイムアップにならないよう時間を戻す
+          if (this.timeLeft < RESPAWN_MIN_TIME) {
+            this.timeLeft = RESPAWN_MIN_TIME;
+            this.hud.updateTime(this.timeLeft);
+          }
           this.player.reset(safePos.x, safePos.y, true);
           // Snap camera immediately to respawn location to prevent camera disorientation
           this.camera.position.x = safePos.x;
@@ -1188,6 +1098,99 @@ class StreetBBoyGame {
   private addScore(pts: number): void {
     this.score += pts;
     this.hud.updateScore(this.score);
+  }
+
+  /**
+   * 体を止める判定の共通処理。プレイヤーの位置と速度をその場で補正し、どの面に当たったかを返す。
+   *  solid  : 上から着地('top') / 下から頭突き('bottom') / 横から押し戻し('side')
+   *  oneWay : 上から着地('top')だけ。下や横からは通り抜ける
+   */
+  private resolveSolid(
+    box: BoundingBox2D,
+    kind: 'solid' | 'oneWay',
+    minOverlapX: number = 0.02,
+    minOverlapY: number = 0
+  ): 'top' | 'bottom' | 'side' | null {
+    const p = this.player;
+    if (!p) return null;
+
+    const bLeft = box.x;
+    const bRight = box.x + box.w;
+    const bBottom = box.y;
+    const bTop = box.y + box.h;
+
+    const pLeft = p.x - p.width / 2;
+    const pRight = p.x + p.width / 2;
+    const pBottom = p.y;
+    const pTop = p.y + p.height;
+
+    const overlapX = Math.min(pRight, bRight) - Math.max(pLeft, bLeft);
+    const overlapY = Math.min(pTop, bTop) - Math.max(pBottom, bBottom);
+    if (overlapX <= minOverlapX || overlapY <= minOverlapY) return null;
+
+    const prevTop = p.prevY + p.height;
+    const prevBottom = p.prevY;
+
+    if (kind === 'oneWay') {
+      if (p.vy <= 0 && prevBottom >= bTop - 0.38) {
+        p.y = bTop;
+        p.vy = 0;
+        p.isGrounded = true;
+        return 'top';
+      }
+      return null;
+    }
+
+    // 1. 下から頭突き
+    if ((p.vy > 0 && prevTop <= bBottom + 0.38) || (overlapY < overlapX && p.vy > 0 && pBottom < bBottom)) {
+      p.y = bBottom - p.height;
+      p.vy = -1.5;
+      return 'bottom';
+    }
+    // 2. 上から着地
+    if ((p.vy <= 0 && prevBottom >= bTop - 0.38) || (overlapY < overlapX && p.vy <= 0 && pBottom >= bBottom + (bTop - bBottom) * 0.25)) {
+      p.y = bTop;
+      p.vy = 0;
+      p.isGrounded = true;
+      return 'top';
+    }
+    // 3. 横から押し戻し
+    if (p.prevX < bLeft || (p.x < bLeft + box.w / 2 && overlapX < overlapY)) {
+      p.x = bLeft - p.width / 2;
+      p.vx = Math.min(0, p.vx);
+    } else {
+      p.x = bRight + p.width / 2;
+      p.vx = Math.max(0, p.vx);
+    }
+    return 'side';
+  }
+
+  /** ブロックを下から叩いたときの効果(レンガは砕け、?ブロックはカセットを出す) */
+  private onBlockHit(block: StageBlock): void {
+    if (!this.stage) return;
+    const hitResult = block.hit();
+
+    if (hitResult.type === 'brick') {
+      this.sound.playSmash();
+      this.stage.particleSystem.spawnBrickDebris(block.x, block.y);
+      this.stage.scene.remove(block.mesh);
+      this.addScore(50);
+      this.triggerCameraShake(0.12, 0.15);
+    } else if (hitResult.type === 'question' && hitResult.spawnedItem) {
+      if (hitResult.isGold) {
+        // Spawn Gold Cassette popping out!
+        this.sound.playPowerup();
+        const gold = new CassetteTape(block.x, block.y + 1.2, true);
+        this.stage.cassettes.push(gold);
+        this.stage.scene.add(gold.mesh);
+        this.stage.particleSystem.spawnSparkles(block.x, block.y + 1.2, 14, 0xffea00);
+      } else {
+        // Spawn Cassette Coin
+        this.sound.playCoin();
+        this.addScore(100);
+        this.stage.particleSystem.spawnSparkles(block.x, block.y + 1.2, 8, 0x00f0ff);
+      }
+    }
   }
 
   private checkAABB(a: BoundingBox2D, b: BoundingBox2D): boolean {

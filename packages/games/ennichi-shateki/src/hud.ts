@@ -70,12 +70,14 @@ export class ArcadeHUD {
     // Top-Right: 時間
     this.timerEl = document.createElement('div');
     this.timerEl.className = 'hud-text hud-tr';
-    this.timerEl.innerHTML = '時間 <span class="num" id="hud-time-val">30.0</span>';
+    this.timerEl.innerHTML = `時間 <span class="num" id="hud-time-val">30.0</span>
+      <div class="ext-left">延長枠 <span id="hud-ext-val">15.0</span></div>`;
 
     // Bottom-Right: 爆発弾
     this.ammoEl = document.createElement('div');
     this.ammoEl.className = 'hud-text hud-br';
     this.ammoEl.innerHTML = `
+      <div class="ammo-wrap"><span class="bomb-gauge-label">弾</span><span class="ammo-pips" id="hud-ammo-pips"></span></div>
       <div class="bomb-gauge-wrap" id="hud-bomb-wrap">
         <span class="bomb-gauge-label">爆発弾</span>
         <div class="bomb-gauge-bar"><div class="bomb-gauge-fill" id="hud-bomb-fill"></div></div>
@@ -202,6 +204,25 @@ export class ArcadeHUD {
   }
 
   // Update In-Game HUD elements
+  private lastAmmoText: string = '';
+
+  /** 通常弾の残数。0のときは再装填中の表示にする */
+  public updateAmmo(ammo: number, max: number, reloading: boolean) {
+    const el = document.getElementById('hud-ammo-pips');
+    if (!el) return;
+    const text = reloading ? '装填中' : '●'.repeat(ammo) + '○'.repeat(Math.max(0, max - ammo));
+    if (text === this.lastAmmoText) return;
+    this.lastAmmoText = text;
+    el.textContent = text;
+    el.classList.toggle('reloading', reloading);
+  }
+
+  /** 残りの延長枠(秒)。0になったらこれ以上延長されない */
+  public updateExtension(remaining: number) {
+    const el = document.getElementById('hud-ext-val');
+    if (el) el.textContent = Math.max(0, remaining).toFixed(1);
+  }
+
   public updateInGame(
     score: number,
     timeLeft: number,

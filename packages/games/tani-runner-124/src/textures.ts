@@ -20,11 +20,18 @@ export type MathOpType =
   | 'kernel'          // ker (Kernel Subspace: -C)
   | 'coker'           // coker (Cokernel Loss: -C)
   | 'eigen_decay'     // λ=0.5 (Eigen Damping: ÷2)
-  | 'divergence';     // ∇・F (Divergence Outflow: -C)
+  | 'divergence'      // ∇・F (Divergence Outflow: -C)
+  | 'affine'          // ax+b (中学生: 一次式。人数×a に b を足す)
+  | 'square'          // x² (中学生: 人数の2乗。増えすぎないよう ×10 が上限)
+  | 'percent_up'      // 150% (中学生: ×1.5)
+  | 'sqrt'            // √x (中学生: 人数の平方根)
+  | 'percent_down';   // 70% など (中学生: 割合で減る。value が残る割合[%])
 
 export interface GateInfo {
   type: MathOpType;
   value: number;
+  /** 一次式 ax+b の a(affine のときだけ使う) */
+  factor?: number;
   label: string;
   isPositive: boolean;
 }
@@ -122,8 +129,8 @@ export class TextureGenerator {
     return texture;
   }
 
-  // Boss Wall Texture: Just the huge number "124"
-  public static createBossWallTexture(): THREE.CanvasTexture {
+  // Boss Wall Texture: 卒業要件の大きな数字(標準は124)
+  public static createBossWallTexture(requirement: number = 124): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
     canvas.height = 512;
@@ -160,10 +167,10 @@ export class TextureGenerator {
 
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 20;
-    ctx.strokeText("124", 512, 256);
+    ctx.strokeText(String(requirement), 512, 256);
 
     ctx.fillStyle = '#ff1744';
-    ctx.fillText("124", 512, 256);
+    ctx.fillText(String(requirement), 512, 256);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -203,6 +210,58 @@ export class TextureGenerator {
 
     ctx.fillStyle = '#ffffff';
     ctx.fillText(multiplierStr, 256, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
+  // 障害物(課題)のテクスチャ: 赤黒の警告ストライプ + 「課題」
+  public static createObstacleTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#2a0008';
+    ctx.fillRect(0, 0, 256, 128);
+    ctx.fillStyle = '#e0143c';
+    for (let x = -128; x < 384; x += 48) {
+      ctx.beginPath();
+      ctx.moveTo(x, 128);
+      ctx.lineTo(x + 24, 128);
+      ctx.lineTo(x + 24 + 128, 0);
+      ctx.lineTo(x + 128, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(56, 26, 144, 76);
+    ctx.font = "900 62px 'Arial Black', 'Impact', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('課題', 128, 66);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
+  // アイテム(友達)の数字ラベル「+N」
+  public static createPickupTexture(value: number): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = "900 92px 'Arial Black', 'Impact', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 16;
+    ctx.strokeText(`+${value}`, 128, 66);
+    ctx.fillStyle = '#39ff88';
+    ctx.fillText(`+${value}`, 128, 66);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;

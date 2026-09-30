@@ -7,6 +7,7 @@ export class SoundManager {
   private stepIndex: number = 0;
   private nextNoteTime: number = 0;
   private tempo: number = 96; // 96 BPM classic 90s Boom-Bap
+  private baseTempo: number = 96;
   private timerId: number | null = null;
 
   // Sound synthesis noise buffer for snares & scratches
@@ -60,7 +61,13 @@ export class SoundManager {
 
   public setGoldMode(active: boolean): void {
     this.isGoldMode = active;
-    this.tempo = active ? 144 : 96; // Fast frantic tempo during invincibility!
+    this.tempo = active ? this.baseTempo * 1.5 : this.baseTempo; // Fast frantic tempo during invincibility!
+  }
+
+  /** ステージごとのBGMテンポ(BPM)を設定する */
+  public setBaseTempo(bpm: number): void {
+    this.baseTempo = bpm;
+    this.tempo = this.isGoldMode ? bpm * 1.5 : bpm;
   }
 
   private scheduleLoop = (): void => {

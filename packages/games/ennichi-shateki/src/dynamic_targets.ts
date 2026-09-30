@@ -3,6 +3,11 @@ import { createDuckTexture } from './textures';
 import { sounds } from './audio';
 
 // Flying Balloon Entity
+// アケコン(スティック)での照準は、マウスより狙いがブレやすい。風船・アヒル・UFOは見た目を少し大きくし、
+// 当たり判定にも少し余裕(HIT_MARGIN)を持たせる。棚の景品は prizes.ts の判定余裕だけで調整する
+export const TARGET_SCALE = 1.3;
+export const HIT_MARGIN = 0.02;
+
 export class FloatingBalloon {
   public mesh: THREE.Group;
   public pos: THREE.Vector3;
@@ -19,6 +24,7 @@ export class FloatingBalloon {
     this.colorHex = colorHex;
     this.floatSeed = seed;
     this.mesh = this.buildMesh();
+    this.mesh.scale.setScalar(TARGET_SCALE);
     this.mesh.position.copy(this.pos);
   }
 
@@ -63,7 +69,7 @@ export class FloatingBalloon {
         // Respawn balloon
         this.isPopped = false;
         this.mesh.visible = true;
-        this.mesh.scale.set(1, 1, 1);
+        this.mesh.scale.setScalar(TARGET_SCALE);
         sounds.playRestock();
       }
       return;
@@ -92,6 +98,7 @@ export class FloatingBalloon {
     const box = new THREE.Box3();
     if (!this.isPopped) {
       box.setFromObject(this.mesh);
+      box.expandByScalar(HIT_MARGIN);
     }
     return box;
   }
@@ -114,6 +121,7 @@ export class MovingDuck {
     this.pos = new THREE.Vector3(startX, y, z);
     this.speed = speed;
     this.mesh = this.buildMesh();
+    this.mesh.scale.setScalar(TARGET_SCALE);
     this.mesh.position.copy(this.pos);
   }
 
@@ -193,6 +201,7 @@ export class MovingDuck {
     const box = new THREE.Box3();
     if (!this.isDown) {
       box.setFromObject(this.mesh);
+      box.expandByScalar(HIT_MARGIN);
     }
     return box;
   }
@@ -212,6 +221,7 @@ export class FlyingUFO {
   constructor() {
     this.pos = new THREE.Vector3(0, 2.35, -0.6);
     this.mesh = this.buildMesh();
+    this.mesh.scale.setScalar(TARGET_SCALE);
     this.mesh.position.copy(this.pos);
   }
 
@@ -313,6 +323,7 @@ export class FlyingUFO {
     const box = new THREE.Box3();
     if (!this.isHit) {
       box.setFromObject(this.mesh);
+      box.expandByScalar(HIT_MARGIN);
     }
     return box;
   }

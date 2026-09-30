@@ -518,17 +518,33 @@ export class GrindRail {
     pipe.castShadow = true;
     this.mesh.add(pipe);
 
-    // Support posts
-    const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 8);
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
-    for (let px = 0.6; px < length; px += 3.0) {
-      const post = new THREE.Mesh(postGeo, postMat);
-      post.position.set(px, -0.6, 0);
-      post.castShadow = true;
-      this.mesh.add(post);
-    }
-
     this.mesh.position.set(x, y, 0);
+  }
+
+  /**
+   * 支柱を立てる。groundAt(x) はその x の真下にある足場の上面の高さ(なければ null)を返す。
+   * 足場がある所は地面まで届く支柱、足場のない所(穴の上)は上から吊るすケーブルにして、宙に浮いて見えないようにする。
+   */
+  public buildSupports(groundAt: (worldX: number) => number | null): void {
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
+    const positions: number[] = [];
+    for (let px = 0.4; px < this.length - 0.3; px += 3.0) positions.push(px);
+    positions.push(this.length - 0.4);
+
+    for (const px of positions) {
+      const ground = groundAt(this.x + px);
+      if (ground !== null && ground < this.y - 0.1) {
+        const h = this.y - ground;
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, h, 8), postMat);
+        post.position.set(px, -h / 2, 0);
+        post.castShadow = true;
+        this.mesh.add(post);
+      } else if (ground === null) {
+        const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 6), postMat);
+        cable.position.set(px, 2, 0);
+        this.mesh.add(cable);
+      }
+    }
   }
 
   public getAABB(): BoundingBox2D {
@@ -599,12 +615,24 @@ export class FireHydrant {
     this.waterColumn.visible = true;
   }
 
+  /** 消火栓の本体。噴出前後を問わず常にソリッド(上に乗れて、横は壁) */
   public getAABB(): BoundingBox2D {
     return {
       x: this.x - 0.4,
       y: this.y,
       w: 0.8,
-      h: this.isErupted ? 6.5 : 1.1
+      h: 1.1
+    };
+  }
+
+  /** 噴出中の水柱(トリガー)。体は止めず、触れると打ち上げる。噴出前は判定なし */
+  public getColumnAABB(): BoundingBox2D | null {
+    if (!this.isErupted) return null;
+    return {
+      x: this.x - 0.45,
+      y: this.y + 1.0,
+      w: 0.9,
+      h: 6.0
     };
   }
 }
@@ -711,10 +739,10 @@ export class SteamVent {
 
   public getAABB(): BoundingBox2D {
     return {
-      x: this.x - 0.6,
+      x: this.x - 0.5,
       y: this.y,
-      w: 1.2,
-      h: this.isSteaming ? 5.0 : 0.2
+      w: 1.0,
+      h: this.isSteaming ? 4.5 : 0
     };
   }
 }
@@ -730,8 +758,15 @@ export class LaserGrid {
   public isActive: boolean = true;
   public beamMesh: THREE.Mesh;
   private animTimer: number = Math.random() * 3.0;
+  private nodeMat: THREE.MeshStandardMaterial;
+  /** 点滅1周期の秒数(2.5秒 = 96BPMの4拍)。周期を揃えた複数のレーザーは位相(phase)で交互に点滅させる */
+  private period: number = 3.6;
 
-  constructor(x: number, y: number, width: number = 3.0, beamHeight: number = 1.15, isIntermittent: boolean = false) {
+  constructor(x: number, y: number, width: number = 3.0, beamHeight: number = 1.15, isIntermittent: boolean = false, beat?: { period: number; phase: number }) {
+    if (beat) {
+      this.period = beat.period;
+      this.animTimer = beat.phase * beat.period;
+    }
     this.x = x;
     this.y = y;
     this.width = width;
@@ -739,15 +774,25 @@ export class LaserGrid {
     this.isIntermittent = isIntermittent;
     this.mesh = new THREE.Group();
 
-    const postH = Math.max(1.8, beamHeight + 0.6);
-    // Left and Right Emitter Nodes
-    const nodeGeo = new THREE.BoxGeometry(0.2, postH, 0.3);
-    const nodeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.8 });
+    // エミッタはビームの高さに浮かぶ小さな発信器だけ(触れるとミス)。
+    // 地面まで届く背の高い柱は「壁」に見えて紛らわしいので置かない。
+    // 半透明の細い光の筋は位置を示すだけの飾りで、判定はない。
+    const nodeGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const nodeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xff0033, emissiveIntensity: 0.6, metalness: 0.8 });
+    this.nodeMat = nodeMat;
     const leftNode = new THREE.Mesh(nodeGeo, nodeMat);
-    leftNode.position.set(0, postH / 2, 0);
+    leftNode.position.set(0, beamHeight, 0);
     const rightNode = new THREE.Mesh(nodeGeo, nodeMat);
-    rightNode.position.set(width, postH / 2, 0);
+    rightNode.position.set(width, beamHeight, 0);
     this.mesh.add(leftNode, rightNode);
+
+    const guideGeo = new THREE.BoxGeometry(0.06, beamHeight, 0.06);
+    const guideMat = new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.18 });
+    const leftGuide = new THREE.Mesh(guideGeo, guideMat);
+    leftGuide.position.set(0, beamHeight / 2, 0);
+    const rightGuide = new THREE.Mesh(guideGeo, guideMat);
+    rightGuide.position.set(width, beamHeight / 2, 0);
+    this.mesh.add(leftGuide, rightGuide);
 
     // Glowing Red Laser Beam
     const beamGeo = new THREE.CylinderGeometry(0.04, 0.04, width, 8);
@@ -764,7 +809,8 @@ export class LaserGrid {
     this.animTimer += dt;
 
     if (this.isIntermittent) {
-      const cycle = this.animTimer % 3.6;
+      // 周期の 0〜55% が発射、55〜78% が消灯、78〜100% が予告(黄色の点滅)
+      const cycle = ((this.animTimer % this.period) / this.period) * 3.6;
       if (cycle < 2.0) {
         // Active Danger Laser
         this.isActive = true;
@@ -788,17 +834,20 @@ export class LaserGrid {
       this.beamMesh.scale.x = 0.8 + Math.sin(this.animTimer * 16) * 0.3;
       this.beamMesh.scale.z = 0.8 + Math.sin(this.animTimer * 16) * 0.3;
     }
+    // 停止中はエミッタも消灯し、触れても安全であることを見た目で示す
+    this.nodeMat.emissiveIntensity = this.isActive ? 0.6 : 0.05;
   }
 
   public getBeamAABB(): BoundingBox2D {
     if (!this.isActive) {
       return { x: -999, y: -999, w: 0, h: 0 };
     }
+    // ビームと両端のエミッタ(0.3四方)を含む帯
     return {
-      x: this.x + 0.1,
-      y: this.y + this.beamHeight - 0.1,
-      w: this.width - 0.2,
-      h: 0.25
+      x: this.x - 0.15,
+      y: this.y + this.beamHeight - 0.15,
+      w: this.width + 0.3,
+      h: 0.3
     };
   }
 }
@@ -819,7 +868,7 @@ export class MovingPlatform {
   public vy: number = 0;
   private animTimer: number = Math.random() * 5;
 
-  constructor(x: number, y: number, w: number, deltaX: number = 0, deltaY: number = 0, speed: number = 1.5) {
+  constructor(x: number, y: number, w: number, deltaX: number = 0, deltaY: number = 0, speed: number = 1.5, style: 'gondola' | 'cart' = 'gondola') {
     this.startX = x;
     this.startY = y;
     this.currentX = x;
@@ -842,14 +891,33 @@ export class MovingPlatform {
     deck.receiveShadow = true;
     this.mesh.add(deck);
 
-    // Twin suspension cables
-    const cableGeo = new THREE.CylinderGeometry(0.02, 0.02, 8, 6);
-    const cableMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9 });
-    const cableL = new THREE.Mesh(cableGeo, cableMat);
-    cableL.position.set(0.4, 4, 0);
-    const cableR = new THREE.Mesh(cableGeo, cableMat);
-    cableR.position.set(w - 0.4, 4, 0);
-    this.mesh.add(cableL, cableR);
+    if (style === 'cart') {
+      // レールカート: 吊り下げケーブルの代わりに車輪と連結器。地面のレールを走るので宙に浮いて見えない
+      const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.18, 14);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.4 });
+      for (const wx of [0.9, w - 0.9]) {
+        for (const wz of [-0.9, 0.9]) {
+          const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+          wheel.rotation.x = Math.PI / 2;
+          wheel.position.set(wx, -this.height - 0.05, wz);
+          this.mesh.add(wheel);
+        }
+      }
+      const lampGeo = new THREE.BoxGeometry(0.3, 0.2, 0.5);
+      const lampMat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
+      const lamp = new THREE.Mesh(lampGeo, lampMat);
+      lamp.position.set(w - 0.2, 0.1, 0);
+      this.mesh.add(lamp);
+    } else {
+      // Twin suspension cables
+      const cableGeo = new THREE.CylinderGeometry(0.02, 0.02, 8, 6);
+      const cableMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9 });
+      const cableL = new THREE.Mesh(cableGeo, cableMat);
+      cableL.position.set(0.4, 4, 0);
+      const cableR = new THREE.Mesh(cableGeo, cableMat);
+      cableR.position.set(w - 0.4, 4, 0);
+      this.mesh.add(cableL, cableR);
+    }
 
     this.mesh.position.set(x, y, 0);
   }
@@ -876,5 +944,163 @@ export class MovingPlatform {
       w: this.width,
       h: this.height
     };
+  }
+}
+
+
+// 11. CRUMBLING PLATFORM (面3: 踏むと少し揺れて落ちる足場板。一定時間で復活する)
+export class CrumblingPlatform {
+  public mesh: THREE.Group;
+  public x: number;
+  public y: number; // 上面の高さ
+  public width: number;
+  public readonly height: number = 0.5;
+  public state: 'idle' | 'shaking' | 'falling' | 'gone' = 'idle';
+
+  private timer: number = 0;
+  private offsetY: number = 0;
+  private vy: number = 0;
+
+  private static readonly SHAKE_TIME = 0.55;
+  private static readonly FALL_TIME = 1.0;
+  private static readonly GONE_TIME = 2.6;
+
+  constructor(x: number, y: number, width: number) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.mesh = new THREE.Group();
+
+    const plankGeo = new THREE.BoxGeometry(width, this.height, 2.4);
+    const plankMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.85 });
+    const plank = new THREE.Mesh(plankGeo, plankMat);
+    plank.position.set(width / 2, -this.height / 2, 0);
+    plank.castShadow = true;
+    this.mesh.add(plank);
+
+    // ひび割れ(崩れる足場だと一目で分かる橙色の線) + 一方通行の板と共通の縁の線
+    const crackMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a });
+    for (let cx = 0.6; cx < width - 0.3; cx += 0.9) {
+      const crack = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.02, 2.0), crackMat);
+      crack.position.set(cx, 0.005, 0);
+      this.mesh.add(crack);
+    }
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(width, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0x66ccff }));
+    edge.position.set(width / 2, 0, 1.2);
+    this.mesh.add(edge);
+
+    this.mesh.position.set(x, y, 0);
+  }
+
+  /** 乗っている間に呼ぶ。最初の一度だけ崩壊のカウントダウンを始める */
+  public touch(): void {
+    if (this.state === 'idle') {
+      this.state = 'shaking';
+      this.timer = CrumblingPlatform.SHAKE_TIME;
+    }
+  }
+
+  /** 乗れる状態(揺れ始めても、落ち始めるまでは乗れる) */
+  public get isActive(): boolean {
+    return this.state === 'idle' || this.state === 'shaking';
+  }
+
+  public update(dt: number): void {
+    switch (this.state) {
+      case 'shaking':
+        this.timer -= dt;
+        this.mesh.position.x = this.x + (Math.random() - 0.5) * 0.08;
+        this.mesh.position.y = this.y + (Math.random() - 0.5) * 0.05;
+        if (this.timer <= 0) {
+          this.state = 'falling';
+          this.timer = CrumblingPlatform.FALL_TIME;
+          this.vy = 0;
+          this.mesh.position.x = this.x;
+        }
+        break;
+      case 'falling':
+        this.timer -= dt;
+        this.vy -= 22 * dt;
+        this.offsetY += this.vy * dt;
+        this.mesh.position.y = this.y + this.offsetY;
+        this.mesh.rotation.z = Math.max(-0.5, this.offsetY * 0.08);
+        if (this.timer <= 0) {
+          this.state = 'gone';
+          this.timer = CrumblingPlatform.GONE_TIME;
+          this.mesh.visible = false;
+        }
+        break;
+      case 'gone':
+        this.timer -= dt;
+        if (this.timer <= 0) {
+          this.state = 'idle';
+          this.offsetY = 0;
+          this.vy = 0;
+          this.mesh.rotation.z = 0;
+          this.mesh.position.set(this.x, this.y, 0);
+          this.mesh.visible = true;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  public getAABB(): BoundingBox2D {
+    return {
+      x: this.x,
+      y: this.y - this.height + this.offsetY,
+      w: this.width,
+      h: this.height
+    };
+  }
+}
+
+// 12. CHECKPOINT (通過すると、ミスした時にここから再開できる旗)
+export class Checkpoint {
+  public mesh: THREE.Group;
+  public x: number;
+  public y: number;
+  public isReached: boolean = false;
+  private flag: THREE.Mesh;
+  private flagMat: THREE.MeshBasicMaterial;
+  private animTimer: number = Math.random() * 3;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+    this.mesh = new THREE.Group();
+
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.0, 8), poleMat);
+    pole.position.y = 1.5;
+    this.mesh.add(pole);
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.12, 12), poleMat);
+    base.position.y = 0.06;
+    this.mesh.add(base);
+
+    this.flagMat = new THREE.MeshBasicMaterial({ color: 0x888899, side: THREE.DoubleSide });
+    this.flag = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.6), this.flagMat);
+    this.flag.position.set(0.55, 2.6, 0);
+    this.mesh.add(this.flag);
+
+    this.mesh.position.set(x, y, 0);
+  }
+
+  public reach(): void {
+    if (this.isReached) return;
+    this.isReached = true;
+    this.flagMat.color.setHex(0x00ff88);
+  }
+
+  public update(dt: number): void {
+    this.animTimer += dt;
+    this.flag.rotation.y = Math.sin(this.animTimer * (this.isReached ? 6 : 2)) * 0.25;
+  }
+
+  /** 旗の周りの縦長のトリガー(体は止めない) */
+  public getAABB(): BoundingBox2D {
+    return { x: this.x - 0.6, y: this.y, w: 1.2, h: 3.0 };
   }
 }

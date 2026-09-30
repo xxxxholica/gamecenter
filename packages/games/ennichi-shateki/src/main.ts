@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FestivalStall } from './stall';
 import { CorkRifle } from './gun';
-import { PrizeEntity, createAllPrizes } from './prizes';
+import { PrizeEntity, createAllPrizes, shuffleShelfLayout } from './prizes';
 import { DynamicTargetsManager } from './dynamic_targets';
 import { CorkSystem } from './cork';
 import { ArcadeInput } from './input';
@@ -50,7 +50,18 @@ class ArcadeCorkShooter {
   private score: number = 0;
   private highScore: number = 9800;
   private timeLeft: number = 30.0;
-  readonly MAX_TIME_CAP = 45.0; // Prevent infinite runaway seconds while keeping extension thrills
+  readonly MAX_TIME_CAP = 45.0; // 念のための上限。実際は下の延長枠で 30+15=45秒 を超えない
+  // 延長できる秒数の総量(1プレイ)。延長の種類を増やしても、この枠を使い切ったらそれ以上は延びない
+  readonly EXTENSION_BUDGET = 15.0;
+  private extensionUsed: number = 0;
+  private extensionExhaustedNotified: boolean = false;
+  private comboBonusTier: number = 0;
+
+  // 通常弾は6発で再装填(連打だけで押し切れないようにする)
+  readonly MAX_AMMO = 6;
+  readonly RELOAD_TIME = 1.0;
+  private ammo: number = 6;
+  private reloadTimer: number = 0;
   private totalDefeatedCount: number = 0;
 
   // Explosive Bomb Cooldown
@@ -81,6 +92,7 @@ class ArcadeCorkShooter {
   constructor() {
     this.initThree();
     this.initGame();
+    this.loadHighScores();
     this.setupEvents();
     this.animate(0);
   }
@@ -306,8 +318,17 @@ class ArcadeCorkShooter {
     this.gun.group.visible = true;
     this.gun.reset();
     this.corkSystem.reset();
+    // 毎回、同じ段の中で景品の並びを入れ替える(高得点の景品は上段のまま)
+    shuffleShelfLayout(this.prizes);
     this.resetAllPrizes();
     this.dynamicTargets.reset();
+    this.ammo = this.MAX_AMMO;
+    this.reloadTimer = 0;
+    this.extensionUsed = 0;
+    this.extensionExhaustedNotified = false;
+    this.comboBonusTier = 0;
+    this.hud.updateExtension(this.EXTENSION_BUDGET);
+    this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
 
     this.camera.position.set(0, 1.48, 2.15);
     this.camera.lookAt(0, 1.25, -0.6);
@@ -318,16 +339,50 @@ class ArcadeCorkShooter {
     this.hud.showFlash('構エ', '大屋台 動く景品と風船 登場', 1.2);
   }
 
+  // --- HIGH SCORES (ブラウザに保存して、再読み込みしても残す) ---
+  private static readonly HIGH_SCORE_KEY = 'ennichi_shateki_highscores';
+
+  private loadHighScores() {
+    try {
+      const raw = localStorage.getItem(ArcadeCorkShooter.HIGH_SCORE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      const entries = parsed
+        .filter((e) => e && typeof e.score === 'number' && typeof e.name === 'string')
+        .slice(0, 5)
+        .map((e, idx) => ({ rank: idx + 1, score: e.score, name: e.name }));
+      if (entries.length === 0) return;
+      this.hud.highScores = entries;
+      this.highScore = entries[0].score;
+    } catch {
+      // 保存データが壊れていたら初期値のまま
+    }
+  }
+
+  /** 今回のスコアがトップ5に入るなら、順位の位置に挿入して保存する(1位でなくても記録される) */
+  private recordHighScore(score: number) {
+    const list = this.hud.highScores;
+    if (list.length >= 5 && score <= list[list.length - 1].score) return;
+    list.push({ rank: 0, score, name: 'しゃてき名人' });
+    list.sort((a, b) => b.score - a.score);
+    this.hud.highScores = list.slice(0, 5);
+    this.hud.highScores.forEach((e, idx) => (e.rank = idx + 1));
+    try {
+      localStorage.setItem(ArcadeCorkShooter.HIGH_SCORE_KEY, JSON.stringify(this.hud.highScores));
+    } catch {
+      // 保存できない環境(プライベートモードなど)では、今回の起動中だけ有効
+    }
+  }
+
   private enterResults() {
     this.state = 'results';
     this.stateTimer = 0;
 
     const isNewRecord = this.score > this.highScore;
+    if (isNewRecord) this.highScore = this.score;
+    this.recordHighScore(this.score);
     if (isNewRecord) {
-      this.highScore = this.score;
-      this.hud.highScores.unshift({ rank: 1, score: this.score, name: 'しゃてき名人' });
-      this.hud.highScores = this.hud.highScores.slice(0, 5);
-      this.hud.highScores.forEach((e, idx) => (e.rank = idx + 1));
       sounds.playGrandPrizeFanfare();
     } else {
       sounds.playTaiko();
@@ -353,6 +408,12 @@ class ArcadeCorkShooter {
   // --- SHOOTING LOGIC ---
 
   private tryShootNormal(): boolean {
+    // 弾切れ(再装填中)は撃てない
+    if (this.ammo <= 0) return false;
+    this.ammo--;
+    if (this.ammo === 0) this.reloadTimer = this.RELOAD_TIME;
+    this.hud.updateAmmo(this.ammo, this.MAX_AMMO, this.ammo === 0);
+
     sounds.playShoot(false);
     this.screenShake = 0.2;
 
@@ -406,6 +467,17 @@ class ArcadeCorkShooter {
       this.comboTimer -= dt;
       if (this.comboTimer <= 0) {
         this.comboCount = 0;
+        this.comboBonusTier = 0;
+      }
+    }
+
+    // 再装填
+    if (this.ammo <= 0 && this.reloadTimer > 0) {
+      this.reloadTimer -= dt;
+      if (this.reloadTimer <= 0) {
+        this.ammo = this.MAX_AMMO;
+        this.reloadTimer = 0;
+        this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
       }
     }
 
@@ -467,6 +539,7 @@ class ArcadeCorkShooter {
             this.screenShake = 0.9;
             this.hud.showFlash('黄金UFO 撃墜', `+${pts}g 獲得`, 1.5, true);
             this.prizePileManager.recordDefeated('ufo', '黄金UFO');
+            this.addTimeBonus(1.5, '黄金UFO 撃墜');
           } else if (targetName === 'お祭り風船') {
             this.screenShake = 0.4;
             this.hud.showFlash('風船破裂', `+${pts}g`, 0.8);
@@ -477,6 +550,7 @@ class ArcadeCorkShooter {
             this.prizePileManager.recordDefeated('duck', '射的アヒル');
           }
 
+          this.checkComboBonus();
           this.checkScoreMilestones();
         } else if (isExplosive) {
           this.screenShake = 0.85;
@@ -498,12 +572,39 @@ class ArcadeCorkShooter {
     }
   }
 
-  // Safe time extend capped strictly to MAX 1.5 seconds
+  /**
+   * 時間の延長。1プレイで延長できる総量は EXTENSION_BUDGET(15秒)まで。
+   * 延長の種類(金の大ダルマ・得点・連鎖・黄金UFO)がいくつあっても、枠を使い切ればそれ以上は延びないので、無限には続かない。
+   */
   private addTimeBonus(rawBonus: number, reason: string) {
-    const bonus = Math.min(1.5, Math.max(0.1, rawBonus));
+    const remaining = this.EXTENSION_BUDGET - this.extensionUsed;
+    if (remaining <= 0.05) {
+      if (!this.extensionExhaustedNotified) {
+        this.extensionExhaustedNotified = true;
+        this.hud.showFlash('延長枠 使い切り', 'これ以上は延びません', 1.4, true);
+      }
+      return;
+    }
+    const bonus = Math.min(Math.max(0.1, rawBonus), remaining);
+    this.extensionUsed += bonus;
     this.timeLeft = Math.min(this.MAX_TIME_CAP, this.timeLeft + bonus);
+    this.hud.updateExtension(this.EXTENSION_BUDGET - this.extensionUsed);
     sounds.playTimeExtend();
     this.hud.showFlash(`延長 +${bonus.toFixed(1)}秒`, reason, 1.6, true);
+  }
+
+  /** 連鎖(コンボ)が5・10に達したときの延長。1つの連鎖につき各段階1回だけ */
+  private checkComboBonus() {
+    const tiers = [
+      { at: 5, bonus: 0.5 },
+      { at: 10, bonus: 1.0 },
+    ];
+    for (let i = 0; i < tiers.length; i++) {
+      if (this.comboCount >= tiers[i].at && this.comboBonusTier < i + 1) {
+        this.comboBonusTier = i + 1;
+        this.addTimeBonus(tiers[i].bonus, `${tiers[i].at}連鎖 達成`);
+      }
+    }
   }
 
   // --- AUTOMATIC REPLENISHMENT ---
@@ -755,7 +856,8 @@ class ArcadeCorkShooter {
           this.hud.showFlash('撃破', `${prize.config.name} +${addedPoints}g`, 1.0);
         }
 
-        // Score-based time recovery (+0.5s per 2500 pts)
+        // 連鎖(5・10)と得点による時間延長(延長枠の範囲内)
+        this.checkComboBonus();
         this.checkScoreMilestones();
 
         // Automatic restocking queue:

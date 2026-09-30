@@ -439,6 +439,42 @@ export class TextureGenerator {
     return texture;
   }
 
+  /** ネオン面の背景壁: 暗い地にシアンとマゼンタの格子 */
+  public static getNeonGridTexture(): THREE.CanvasTexture {
+    const key = 'neon_grid';
+    if (this.cache.has(key)) return this.cache.get(key)!;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#0c0714';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#ff2a8a';
+    for (let x = 0; x <= 256; x += 64) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 256);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#19d8ff';
+    for (let y = 0; y <= 256; y += 64) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(256, y);
+      ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    this.cache.set(key, texture);
+    return texture;
+  }
+
   public static getNeonBillboardTexture(text: string): THREE.CanvasTexture {
     const key = `neon_billboard_${text}`;
     if (this.cache.has(key)) return this.cache.get(key)!;

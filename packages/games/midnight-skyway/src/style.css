@@ -1,0 +1,1395 @@
+/* =========================================================
+   MIDNIGHT SKYWAY: PURE ARCADE RACING STYLING (JAPANESE & BILINGUAL)
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #05070c;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic Bold', 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+}
+
+#app, #canvas-container {
+  position: absolute;
+  inset: 0;
+}
+
+/* Base Panel */
+.panel {
+  position: absolute;
+  background: rgba(10, 14, 22, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  backdrop-filter: blur(8px);
+  border-radius: 4px;
+}
+
+/* =========================================================
+   FULLSCREEN FLOW SCREENS
+   ========================================================= */
+
+.screen-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 26px 40px;
+  pointer-events: auto;
+  z-index: 50;
+  background: radial-gradient(circle at center, rgba(10, 18, 32, 0.45) 0%, rgba(4, 6, 12, 0.88) 100%);
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.99); }
+  to { opacity: 1; transform: scale(1.0); }
+}
+
+/* Arcade Title Banner */
+.arcade-title-bar {
+  margin-top: 6px;
+  transform: skewX(-12deg);
+}
+
+.arcade-title-main {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #ffffff;
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.3) 0%, rgba(0, 240, 255, 0.05) 100%);
+  border-left: 6px solid #00f0ff;
+  padding: 6px 32px;
+  text-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+}
+
+/* Arcade Action Bar (Bottom) */
+.arcade-action-bar {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  max-width: 960px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.arcade-btn-back {
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: rgba(25, 34, 48, 0.9);
+  color: #a0aec0;
+  border: 1px solid #4a5b73;
+  transform: skewX(-10deg);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+
+.arcade-btn-back:hover {
+  background: rgba(45, 56, 76, 1);
+  color: #fff;
+  border-color: #7b8eab;
+}
+
+.arcade-btn-go, .arcade-btn-start {
+  padding: 14px 44px;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #05070c;
+  border: none;
+  transform: skewX(-10deg);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+
+.arcade-btn-go {
+  background: linear-gradient(135deg, #ffcc00 0%, #ff8800 100%);
+  box-shadow: 0 0 25px rgba(255, 204, 0, 0.5);
+}
+
+.arcade-btn-go:hover {
+  background: linear-gradient(135deg, #ffdd33 0%, #ff9900 100%);
+  box-shadow: 0 0 35px rgba(255, 204, 0, 0.8);
+  transform: skewX(-10deg) scale(1.03);
+}
+
+.arcade-btn-start {
+  background: linear-gradient(135deg, #00f0ff 0%, #00aaff 100%);
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.6);
+}
+
+.arcade-btn-start:hover {
+  background: linear-gradient(135deg, #33f5ff 0%, #00bbff 100%);
+  box-shadow: 0 0 45px rgba(0, 240, 255, 0.9);
+  transform: skewX(-10deg) scale(1.04);
+}
+
+.glow {
+  animation: arcadePulse 1.4s infinite alternate;
+}
+
+@keyframes arcadePulse {
+  from { filter: brightness(1.0); }
+  to { filter: brightness(1.2); }
+}
+
+/* =========================================================
+   1. TITLE SCREEN (MINIMAL ARCADE)
+   ========================================================= */
+
+#screen-title {
+  justify-content: center;
+  cursor: pointer;
+}
+
+.title-screen-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 32px;
+}
+
+.title-sup-tag {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: #00f0ff;
+  text-shadow: 0 0 12px #00f0ff;
+}
+
+.title-main-logo {
+  font-size: 72px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 8px;
+  line-height: 1.0;
+  background: linear-gradient(180deg, #ffffff 0%, #d0e8ff 35%, #00bbff 75%, #0044aa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 30px rgba(0, 187, 255, 0.6)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.9));
+  transform: skewX(-8deg);
+}
+
+.title-sub-logo {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  color: #ffcc00;
+  text-shadow: 0 0 20px #ffaa00;
+  margin-top: 6px;
+  transform: skewX(-8deg);
+}
+
+.title-prompt {
+  margin-top: 16px;
+}
+
+.prompt-text {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ffffff;
+  text-shadow: 0 0 18px #00f0ff, 0 0 30px #00f0ff;
+  animation: promptBlink 0.9s infinite alternate ease-in-out;
+}
+
+@keyframes promptBlink {
+  from { opacity: 0.35; transform: scale(0.97); }
+  to { opacity: 1.0; transform: scale(1.03); }
+}
+
+.title-footer-compact {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #64748b;
+}
+
+/* =========================================================
+   2. CAR SELECT SCREEN (SHOWCASE LAYOUT)
+   ========================================================= */
+
+#screen-car-select {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  pointer-events: none;
+}
+
+#screen-car-select .arcade-title-bar,
+#screen-car-select .car-select-left-column,
+#screen-car-select .arcade-action-bar {
+  pointer-events: auto;
+}
+
+.car-select-content-arcade {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1080px;
+  width: 100%;
+  margin: auto 0;
+  position: relative;
+  pointer-events: none;
+}
+
+.car-select-left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 300px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.car-card-list-arcade {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.car-card-arcade {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(12, 18, 28, 0.85);
+  border: 2px solid #253347;
+  border-radius: 4px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transform: skewX(-6deg);
+  transition: all 0.15s ease-out;
+  outline: none;
+}
+
+.car-card-focus-bar {
+  width: 4px;
+  height: 28px;
+  background: #00f0ff;
+  border-radius: 2px;
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: all 0.15s ease-out;
+  box-shadow: 0 0 10px #00f0ff;
+}
+
+.car-card-arcade.active .car-card-focus-bar {
+  opacity: 1;
+  transform: scaleY(1.0);
+  animation: focusBarPulse 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes focusBarPulse {
+  from { opacity: 0.7; box-shadow: 0 0 6px #00f0ff; }
+  to { opacity: 1; box-shadow: 0 0 16px #00f0ff; }
+}
+
+.car-card-inner {
+  flex: 1;
+}
+
+.car-card-arcade:hover {
+  background: rgba(20, 30, 48, 0.92);
+  border-color: #48658b;
+  transform: skewX(-6deg) translateX(4px);
+}
+
+.car-card-arcade.active {
+  background: rgba(18, 32, 54, 0.95);
+  border-color: #00f0ff;
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.45);
+  transform: skewX(-6deg) translateX(8px);
+}
+
+.car-badge-arcade {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #00f0ff;
+}
+
+.car-name-arcade {
+  font-size: 20px;
+  font-weight: 900;
+  font-style: italic;
+  color: #ffffff;
+  margin: 1px 0 6px 0;
+}
+
+/* Center Spacer so 3D car is 100% visible */
+.car-center-showcase-spacer {
+  flex: 1;
+  min-width: 240px;
+  pointer-events: none;
+}
+
+/* Segmented Gauges */
+.arcade-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gauge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.g-lbl {
+  font-size: 11px;
+  font-weight: 900;
+  color: #94a3b8;
+  width: 40px;
+}
+
+.g-blocks {
+  display: flex;
+  gap: 3px;
+}
+
+.g-blocks span {
+  display: inline-block;
+  width: 12px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  transform: skewX(-15deg);
+  border-radius: 1px;
+}
+
+.g-blocks span.on {
+  background: #00f0ff;
+  box-shadow: 0 0 6px #00f0ff;
+}
+
+.g-blocks span.on.gold {
+  background: #ffcc00;
+  box-shadow: 0 0 6px #ffcc00;
+}
+
+.g-val {
+  font-size: 10px;
+  font-weight: 800;
+  color: #a0aec0;
+  font-family: ui-monospace, monospace;
+}
+
+/* Single Button Color Control Panel */
+.color-change-panel-arcade {
+  background: rgba(12, 18, 28, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 4px;
+  padding: 10px 14px;
+  transform: skewX(-6deg);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+.color-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.arcade-sub-lbl {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ffaa00;
+}
+
+.color-count-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #00f0ff;
+  font-family: ui-monospace, monospace;
+}
+
+.arcade-color-cycle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(22, 34, 54, 0.9);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  border-radius: 3px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #fff;
+  transition: all 0.15s ease-out;
+  text-align: left;
+}
+
+.arcade-color-cycle-btn:hover {
+  background: rgba(30, 48, 76, 1);
+  border-color: #00f0ff;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+  transform: scale(1.02);
+}
+
+.color-chip-preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 6px rgba(0, 240, 255, 0.5);
+  flex-shrink: 0;
+  transition: background 0.2s ease-out;
+}
+
+.color-info-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.color-name-arcade {
+  font-size: 13px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.color-sub-hint {
+  font-size: 10px;
+  font-weight: 800;
+  color: #00f0ff;
+  letter-spacing: 0.5px;
+}
+
+.color-dots-bar {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.color-dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.color-dot-indicator.active {
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+  transform: scale(1.3);
+}
+
+/* =========================================================
+   3. MAP SELECT SCREEN (CLEAN 2-STAGE CARDS)
+   ========================================================= */
+
+.map-cards-container-arcade {
+  display: flex;
+  gap: 18px;
+  max-width: 1200px;
+  width: 100%;
+  margin: auto 0;
+}
+
+.map-card-arcade {
+  flex: 1;
+  background: rgba(14, 20, 32, 0.88);
+  border: 2px solid #253347;
+  border-radius: 4px;
+  padding: 22px 20px;
+  cursor: pointer;
+  transform: skewX(-6deg);
+  transition: all 0.2s ease-out;
+}
+
+.map-card-arcade:hover {
+  background: rgba(22, 32, 50, 0.95);
+  border-color: #48658b;
+  transform: skewX(-6deg) translateY(-4px);
+}
+
+.map-card-arcade.active {
+  background: rgba(25, 38, 62, 0.98);
+  border-color: #00f0ff;
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.45);
+  transform: skewX(-6deg) translateY(-6px);
+}
+
+.map-num-badge {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ff0055;
+  text-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
+}
+
+.map-card-title-arcade {
+  font-size: 22px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 4px 0 2px 0;
+}
+
+.map-card-sub-arcade {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffcc00;
+  margin-bottom: 16px;
+}
+
+.map-meta-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.meta-tag {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 2px;
+}
+
+.meta-tag.stars {
+  color: #ffcc00;
+}
+
+.meta-tag.highlight {
+  border-color: #ff0055;
+  color: #ff6688;
+}
+
+.map-record-arcade {
+  background: rgba(0, 0, 0, 0.5);
+  border-left: 4px solid #00f0ff;
+  padding: 8px 12px;
+}
+
+.rec-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #7b8eab;
+}
+
+.rec-time-digital {
+  font-size: 28px;
+  font-weight: 900;
+  font-family: ui-monospace, monospace;
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+/* =========================================================
+   4. DRIVE HUD (ULTRA-CLEAN 3-ZONE LAYOUT)
+   ========================================================= */
+
+#drive-hud-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#drive-hud-container button {
+  pointer-events: auto;
+}
+
+/* Top Left: Transparent Minimap (No Background) */
+.hud-minimap-arcade {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  pointer-events: none;
+}
+
+#minimap-canvas {
+  display: block;
+  background: transparent;
+  border: none;
+}
+
+/* Top Right: Course / Open Data Credit Notation (Plain White Text) */
+#hud-attribution, .hud-attribution-plain {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  z-index: 20;
+  max-width: 650px;
+  text-align: right;
+  line-height: 1.4;
+}
+
+/* Sector Banner Anchor (Floats above bottom-right cluster) */
+.hud-sector-banner-anchor {
+  position: absolute;
+  bottom: 185px;
+  right: 24px;
+  pointer-events: none;
+  text-align: right;
+  z-index: 100;
+}
+
+.hud-sector-banner {
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 900;
+  border-radius: 2px;
+  display: inline-block;
+  transform: skewX(-10deg);
+}
+
+.sector-fast {
+  background: #00ff66;
+  color: #05070c;
+  box-shadow: 0 0 12px rgba(0, 255, 102, 0.7);
+}
+
+.sector-slow {
+  background: #ff0044;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 0, 68, 0.7);
+}
+
+/* Bottom Right: Unified Racing Telemetry Cluster (Time, Best, Speed, Gear, Tachometer) */
+.hud-speedo-arcade {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: linear-gradient(135deg, rgba(8, 12, 20, 0.86) 0%, rgba(14, 20, 32, 0.94) 100%);
+  border-right: 4px solid #00f0ff;
+  border-top: 1px solid rgba(0, 240, 255, 0.4);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  padding: 12px 20px 10px 20px;
+  transform: skewX(-12deg);
+  border-radius: 4px;
+  min-width: 250px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.25);
+  transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+/* Top row: Lap Time & Best Time */
+.cluster-time-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.time-block {
+  display: flex;
+  align-items: baseline;
+}
+
+.time-tag {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #ffaa00;
+  margin-right: 5px;
+}
+
+.hud-time-main {
+  font-size: 26px;
+  font-weight: 900;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+  line-height: 1;
+}
+
+.best-time-block {
+  display: flex;
+  align-items: baseline;
+}
+
+.best-tag {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #00f0ff;
+  margin-right: 4px;
+}
+
+.hud-best-time-arcade {
+  font-size: 14px;
+  font-weight: 800;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #00f0ff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+  line-height: 1;
+}
+
+/* Middle row: Speed & Gear */
+.speedo-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.speedo-primary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.speedo-num {
+  font-size: 58px;
+  font-weight: 900;
+  font-style: italic;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #00f0ff;
+  line-height: 0.95;
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.7);
+}
+
+.speedo-unit {
+  font-size: 13px;
+  font-weight: 900;
+  color: #7b8eab;
+  letter-spacing: 1px;
+}
+
+.speedo-gear-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.gear-tag {
+  font-size: 9px;
+  font-weight: 900;
+  color: #64748b;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+
+.gear-tag.drift-active {
+  color: #ff9f1a;
+  background: rgba(255, 159, 26, 0.25);
+  border: 1px solid #ff9f1a;
+  padding: 1px 4px;
+  border-radius: 2px;
+  animation: driftGlow 0.3s infinite alternate;
+}
+
+@keyframes driftGlow {
+  from { text-shadow: 0 0 5px #ff9f1a; box-shadow: 0 0 6px rgba(255, 159, 26, 0.4); }
+  to { text-shadow: 0 0 12px #ff3838; box-shadow: 0 0 12px rgba(255, 56, 56, 0.8); }
+}
+
+.speedo-gear {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffcc00;
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.6);
+  line-height: 1;
+}
+
+.speedo-tacho-wrap {
+  margin-top: 8px;
+}
+
+.speedo-tacho {
+  width: 100%;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tacho-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00f0ff 0%, #ffcc00 70%, #ff0055 100%);
+  transition: width 0.05s linear;
+}
+
+.tacho-fill.redline {
+  background: #ff0044;
+  box-shadow: 0 0 10px #ff0044;
+}
+
+.tacho-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  font-weight: 800;
+  color: #64748b;
+  margin-top: 3px;
+  font-family: ui-monospace, monospace;
+}
+
+.tacho-scale-labels .red-mark {
+  color: #ff0044;
+}
+
+/* Center Countdown */
+.hud-countdown {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 120px;
+  font-weight: 900;
+  font-style: italic;
+  font-family: ui-monospace, monospace;
+  color: #ffff00;
+  text-shadow: 0 0 35px rgba(255, 255, 0, 0.95), 0 4px 16px #000;
+  pointer-events: none;
+  animation: countdownPulse 0.5s ease-out;
+}
+
+.hud-countdown.go {
+  color: #00ff66;
+  text-shadow: 0 0 45px rgba(0, 255, 102, 1.0), 0 4px 16px #000;
+  font-size: 130px;
+}
+
+@keyframes countdownPulse {
+  0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+  50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+}
+
+/* =========================================================
+   5. MODALS (RESULT & PAUSE)
+   ========================================================= */
+
+.hud-result-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 5, 10, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+}
+
+.hud-arcade-modal-box {
+  background: #0d121c;
+  border: 2px solid #00f0ff;
+  border-radius: 4px;
+  padding: 28px 40px;
+  text-align: center;
+  min-width: 380px;
+  transform: skewX(-4deg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 240, 255, 0.35);
+}
+
+.arcade-modal-title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #00f0ff;
+  margin-bottom: 12px;
+}
+
+.arcade-modal-title.gold {
+  color: #ffcc00;
+  text-shadow: 0 0 20px rgba(255, 204, 0, 0.6);
+  font-size: 34px;
+}
+
+.hud-result-new-record {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ff0055;
+  text-shadow: 0 0 12px #ff0055;
+  animation: blink 0.7s infinite alternate;
+}
+
+@keyframes blink {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+.hud-result-time-big {
+  font-size: 52px;
+  font-weight: 900;
+  font-family: ui-monospace, monospace;
+  color: #ffffff;
+  margin: 8px 0 16px 0;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+}
+
+.hud-result-stats-table {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+}
+
+.stat-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+  color: #94a3b8;
+  margin: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 3px;
+}
+
+.stat-line .val {
+  color: #ffffff;
+  font-family: ui-monospace, monospace;
+}
+
+.arcade-modal-buttons, .hud-arcade-result-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-arcade-result-buttons {
+  flex-direction: row;
+  justify-content: center;
+}
+
+.arcade-modal-buttons button, .hud-arcade-result-buttons button {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: #182233;
+  border: 1px solid #354763;
+  color: #fff;
+  cursor: pointer;
+  transform: skewX(-6deg);
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+
+.arcade-modal-buttons button:hover, .hud-arcade-result-buttons button:hover {
+  background: #25354f;
+  border-color: #00f0ff;
+}
+
+.arcade-btn-primary {
+  background: linear-gradient(135deg, #00f0ff 0%, #0088cc 100%) !important;
+  color: #05070c !important;
+  border: none !important;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+}
+
+.arcade-btn-primary:hover {
+  background: linear-gradient(135deg, #33f5ff 0%, #0099ee 100%) !important;
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.8);
+}
+
+/* =========================================================
+   6. STAGE LOADING SCREEN
+   ========================================================= */
+
+#screen-stage-loading {
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at center, rgba(14, 22, 36, 0.94) 0%, rgba(5, 7, 12, 0.98) 100%);
+  z-index: 60;
+}
+
+.stage-loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 500px;
+  text-align: center;
+  gap: 16px;
+}
+
+.stage-loading-badge {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  padding: 4px 14px;
+  border-radius: 2px;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+
+.stage-loading-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  text-align: center;
+}
+
+.stage-num-block {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #00f0ff;
+  text-shadow: 0 0 16px rgba(0, 240, 255, 0.7);
+  text-transform: uppercase;
+}
+
+.stage-name-block {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ffffff;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+}
+
+.stage-loading-bar-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stage-loading-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.stage-loading-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #00f0ff 0%, #ffcc00 100%);
+  box-shadow: 0 0 15px #00f0ff;
+  border-radius: 4px;
+  transition: width 0.12s linear;
+}
+
+.stage-loading-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stage-loading-status {
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+
+.stage-loading-percent {
+  color: #00f0ff;
+  font-family: ui-monospace, monospace;
+}
+
+.stage-loading-credit {
+  font-size: 11px;
+  color: #64748b;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* アケコンで選択中のメニューボタン(hover と同じ見た目) */
+.arcade-modal-buttons button.pad-focus, .hud-arcade-result-buttons button.pad-focus {
+  background: #25354f;
+  border-color: #00f0ff;
+  box-shadow: 0 0 0 2px #00f0ff, 0 0 18px rgba(0, 240, 255, 0.7);
+}
+
+/* ---------- Competitive race widgets (time limit, ghost gap, drift / boost) ---------- */
+.hud-race-top {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 30;
+}
+.hud-remaining {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 18px;
+  background: rgba(8, 12, 20, 0.78);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  transform: skewX(-10deg);
+}
+.hud-remaining-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #ffcc00; }
+.hud-remaining-num { font-size: 34px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(0, 240, 255, 0.7); }
+.hud-remaining.low { border-color: #ff0044; }
+.hud-remaining.low .hud-remaining-num { color: #ff4466; animation: hudBlink 0.5s steps(2) infinite; }
+@keyframes hudBlink { 50% { opacity: 0.35; } }
+.hud-gate-bonus {
+  padding: 3px 14px;
+  font-size: 15px;
+  font-weight: 900;
+  color: #05070c;
+  background: #00ff66;
+  box-shadow: 0 0 14px rgba(0, 255, 102, 0.8);
+  transform: skewX(-10deg);
+  animation: hudPop 0.35s ease-out;
+}
+@keyframes hudPop { from { transform: skewX(-10deg) scale(1.5); opacity: 0; } to { transform: skewX(-10deg) scale(1); opacity: 1; } }
+.hud-ghost-gap { min-height: 24px; font-size: 20px; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
+.hud-ghost-gap.ahead { color: #00ff88; }
+.hud-ghost-gap.behind { color: #ff5577; }
+.hud-drift {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 260px;
+  pointer-events: none;
+  z-index: 30;
+}
+.hud-drift-line { font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
+.hud-drift-tag { font-size: 11px; letter-spacing: 2px; color: #ff0055; }
+.hud-drift-chain { color: #ffcc00; }
+.hud-boost-bar { width: 240px; height: 8px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); transform: skewX(-20deg); }
+.hud-boost-fill { height: 100%; width: 0; background: linear-gradient(90deg, #00f0ff, #ffffff); }
+.hud-drift.boosting .hud-boost-fill { box-shadow: 0 0 12px #00f0ff; }
+.hud-drift-popup { font-size: 22px; font-weight: 900; color: #00f0ff; text-shadow: 0 0 12px rgba(0, 240, 255, 0.9); animation: hudPop 0.3s ease-out; }
+
+/* ---------- Result panel: beside the car (winning run), not a full-screen dim ---------- */
+.hud-result-modal.hud-result-side {
+  background: transparent;
+  backdrop-filter: none;
+  justify-content: flex-start;
+  padding-left: 4vw;
+  pointer-events: none;
+}
+.hud-result-side .hud-arcade-modal-box {
+  pointer-events: auto;
+  min-width: 340px;
+  max-width: 380px;
+  padding: 22px 30px;
+  background: linear-gradient(135deg, rgba(6, 12, 24, 0.66) 0%, rgba(6, 12, 24, 0.36) 100%);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 240, 255, 0.55);
+  border-left: 5px solid #00f0ff;
+  box-shadow: 0 0 26px rgba(0, 240, 255, 0.28);
+  animation: resultSlideIn 0.5s ease-out;
+}
+@keyframes resultSlideIn {
+  from { opacity: 0; transform: skewX(-4deg) translateX(-40px); }
+  to { opacity: 1; transform: skewX(-4deg) translateX(0); }
+}
+.hud-result-side .hud-result-time-big { font-size: 44px; margin: 4px 0 12px 0; }
+.hud-result-side .hud-result-stats-table { background: transparent; border-top: 1px solid rgba(255, 255, 255, 0.18); border-radius: 0; padding: 8px 2px 0; }
+.hud-result-side .stat-line { color: #cbd5e1; }
+.hud-result-side .hud-arcade-result-buttons { flex-direction: column; align-items: stretch; gap: 8px; }
+.hud-result-side .hud-arcade-result-buttons button { background: rgba(24, 34, 51, 0.7); }
+.result-open .hud-minimap-arcade, .result-open .hud-race-top, .result-open .hud-drift { opacity: 0; transition: opacity 0.3s; }
+
+/* ---------- Car select: machine buttons in a row at the bottom centre, so the whole car stays visible ---------- */
+#screen-car-select .car-select-bottom { pointer-events: auto; }
+.car-select-bottom {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.car-select-bottom .car-card-list-arcade { flex-direction: row; gap: 14px; justify-content: center; }
+.car-select-bottom .car-card-arcade { flex: 0 0 auto; width: 250px; padding: 7px 12px; }
+.car-select-bottom .car-card-arcade:hover { transform: skewX(-6deg) translateY(-3px); }
+.car-select-bottom .car-card-arcade.active { transform: skewX(-6deg) translateY(-5px); }
+.car-select-bottom .car-name-arcade { font-size: 17px; margin: 0 0 3px 0; }
+.car-select-bottom .car-badge-arcade { font-size: 9px; }
+.car-select-bottom .arcade-gauges { gap: 2px; }
+.car-select-bottom .g-blocks span { width: 10px; height: 5px; }
+.car-select-bottom .g-lbl { font-size: 10px; width: 36px; }
+
+/* Car select: everything below the car scales with the window (em units off one clamped font size) */
+#screen-car-select { font-size: clamp(9px, min(1.15vw, 2.1vh), 18px); padding: 1.8em 2.6em; }
+#screen-car-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
+.car-select-bottom { width: 100%; max-width: 78em; margin-bottom: 1em; }
+.car-select-bottom .car-card-list-arcade { width: 100%; gap: 1.4em; flex-wrap: wrap; justify-content: center; }
+.car-select-bottom .car-card-arcade { flex: 1 1 14em; width: auto; min-width: 0; max-width: 26em; padding: 1em 1.4em; gap: 0.8em; }
+.car-select-bottom .car-card-focus-bar { width: 0.3em; height: 3em; }
+.car-select-bottom .car-badge-arcade { font-size: 0.85em; }
+.car-select-bottom .car-name-arcade { font-size: 1.9em; margin: 0.1em 0 0.45em 0; }
+.car-select-bottom .arcade-gauges { gap: 0.5em; }
+.car-select-bottom .gauge-row { gap: 0.8em; }
+.car-select-bottom .g-lbl { font-size: 0.9em; width: 3.6em; }
+.car-select-bottom .g-blocks { gap: 0.3em; }
+.car-select-bottom .g-blocks span { width: 1.3em; height: 0.6em; }
+#screen-car-select .arcade-action-bar { max-width: 78em; gap: 1.2em; margin-bottom: 0; }
+#screen-car-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
+#screen-car-select .arcade-btn-go { padding: 0.8em 3em; font-size: 1.4em; }
+#screen-car-select .arcade-action-bar .arcade-color-cycle-btn { width: auto; flex: 0 1 22em; min-width: 0; padding: 0.6em 1.2em; gap: 0.9em; transform: skewX(-10deg); }
+#screen-car-select .arcade-action-bar .arcade-color-cycle-btn:hover { transform: skewX(-10deg); }
+#screen-car-select .color-chip-preview { width: 2em; height: 2em; }
+#screen-car-select .color-name-arcade { font-size: 1.15em; }
+#screen-car-select .color-sub-hint { font-size: 0.85em; }
+
+/* Course select: the course layout inside each card */
+.map-outline {
+  display: block;
+  width: 100%;
+  height: 120px;
+  margin: 8px 0 10px 0;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.map-outline .ol-route { fill: none; stroke: #00f0ff; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.map-outline .ol-route-glow { fill: none; stroke: rgba(0, 240, 255, 0.35); stroke-width: 6; stroke-linejoin: round; filter: blur(1.5px); }
+.map-outline .ol-closed { fill: none; stroke: rgba(148, 163, 184, 0.55); stroke-width: 1.6; stroke-dasharray: 3 3; }
+.map-outline .ol-arrow { fill: #ffffff; }
+.map-outline .ol-start { fill: #00ff66; stroke: #05070c; stroke-width: 1.2; }
+.map-card-arcade.active .map-outline { border-color: rgba(0, 240, 255, 0.45); }
+
+/* Course select: like the machine select, the cards sit along the bottom and the machine stays visible (no dimming) */
+#screen-map-select {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  pointer-events: none;
+  font-size: clamp(9px, min(1.15vw, 2.1vh), 18px);
+  padding: 1.8em 2.6em;
+}
+#screen-map-select .arcade-title-bar,
+#screen-map-select .map-cards-container-arcade,
+#screen-map-select .arcade-action-bar { pointer-events: auto; }
+#screen-map-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
+#screen-map-select .map-cards-container-arcade {
+  margin: auto 0 1.2em 0;                 /* pushes the cards to the bottom, under the machine */
+  max-width: 82em;
+  gap: 1.4em;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#screen-map-select .map-card-arcade { flex: 1 1 15em; min-width: 0; max-width: 27em; padding: 1.1em 1.4em; }
+#screen-map-select .map-num-badge { font-size: 0.85em; }
+#screen-map-select .map-card-title-arcade { font-size: 1.7em; }
+#screen-map-select .map-card-sub-arcade { font-size: 0.95em; margin-bottom: 0.5em; }
+#screen-map-select .map-outline { height: 7.5em; margin: 0.4em 0 0.7em 0; }
+#screen-map-select .map-meta-row { gap: 0.6em; margin-bottom: 0.8em; flex-wrap: wrap; }
+#screen-map-select .meta-tag { font-size: 0.9em; padding: 0.3em 0.8em; }
+#screen-map-select .map-record-arcade { padding: 0.5em 0.9em; }
+#screen-map-select .rec-label { font-size: 0.8em; }
+#screen-map-select .rec-time-digital { font-size: 2em; }
+#screen-map-select .arcade-action-bar { max-width: 82em; margin-bottom: 0; }
+#screen-map-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
+#screen-map-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
+
+/* Car select: two chips and a short description, with room to breathe */
+.car-select-bottom .car-card-arcade { align-items: stretch; min-height: 19em; padding: 1.3em 1.7em; }
+.car-select-bottom .car-card-inner { display: flex; flex-direction: column; }
+.car-select-bottom .arcade-gauges { gap: 0.75em; margin-top: 0.3em; }
+.car-chips { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 1.3em 0 1em 0; }
+.car-chips span { padding: 0.3em 0.9em; font-size: 1em; font-weight: 800; color: #e2e8f0; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 2px; }
+.car-desc-arcade { margin: 0; font-size: 1em; line-height: 1.75; color: #aab6c8; }
+.car-select-bottom .car-card-focus-bar { align-self: center; }
+
+/* Altitude readout (courses that climb) */
+.hud-altitude { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
+.hud-altitude-tag { font-size: 11px; letter-spacing: 2px; color: #00f0ff; }
+.hud-altitude-unit { font-size: 13px; color: #94a3b8; }
+
+/* ---------- Time of day select (day / night): like the other select screens, the machine stays visible ---------- */
+#screen-time-select {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  pointer-events: none;
+  font-size: clamp(9px, min(1.15vw, 2.1vh), 18px);
+  padding: 1.8em 2.6em;
+}
+#screen-time-select .arcade-title-bar,
+#screen-time-select .time-cards-container,
+#screen-time-select .arcade-action-bar { pointer-events: auto; }
+#screen-time-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
+#screen-time-select .arcade-action-bar { max-width: 82em; margin-bottom: 0; }
+#screen-time-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
+#screen-time-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
+.time-cards-container {
+  display: flex;
+  gap: 1.6em;
+  width: 100%;
+  max-width: 58em;
+  margin: auto 0 1.2em 0;
+  justify-content: center;
+}
+/* the cards take their look (dark card, cyan frame and glow when selected) from .map-card-arcade, like the course select */
+.time-card { padding: 1.1em 1.4em; padding-bottom: 1.3em; }
+.time-card-art { height: 9em; display: flex; justify-content: center; align-items: center; margin: 0.3em 0 0.6em; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 3px; }
+.time-card-art svg { height: 82%; width: auto; }
+.time-card.day .time-card-art { background: linear-gradient(160deg, rgba(58, 118, 176, 0.75), rgba(126, 178, 214, 0.65)); }
+.time-card.night .time-card-art { background: linear-gradient(160deg, rgba(4, 8, 24, 0.85), rgba(22, 34, 76, 0.8)); }
+.time-card.active .time-card-art { border-color: rgba(0, 240, 255, 0.45); }
+.time-card-desc { font-size: 1em; line-height: 1.7; color: #aab6c8; margin-top: 0.4em; }
+
+/* ---------- The choice cards of all the select screens (machine / course / time of day) share one size ---------- */
+#screen-car-select, #screen-map-select, #screen-time-select { --choice-w: 24em; --choice-h: 24em; }
+.car-select-bottom .car-card-arcade,
+#screen-map-select .map-card-arcade,
+.time-card {
+  flex: 0 1 var(--choice-w);
+  width: var(--choice-w);
+  max-width: var(--choice-w);
+  min-height: var(--choice-h);
+  min-width: 0;
+  box-sizing: border-box;
+}
+.car-select-bottom .car-card-inner { justify-content: space-between; flex: 1; }
+.time-card { display: flex; flex-direction: column; }
+.time-card-art { height: 9em; align-items: center; }
+.time-cards-container { max-width: none; gap: 1.4em; }
+
+/* ---------- 戻る / 決定 (レース開始) buttons: one size on every select screen ---------- */
+#screen-car-select .arcade-action-bar .arcade-btn-back,
+#screen-car-select .arcade-action-bar .arcade-btn-go,
+#screen-map-select .arcade-action-bar .arcade-btn-back,
+#screen-map-select .arcade-action-bar .arcade-btn-start,
+#screen-time-select .arcade-action-bar .arcade-btn-back,
+#screen-time-select .arcade-action-bar .arcade-btn-start {
+  box-sizing: border-box;
+  width: 13em;
+  height: 3.4em;
+  padding: 0;
+  font-size: 1.3em;
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}

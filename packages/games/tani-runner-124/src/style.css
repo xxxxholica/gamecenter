@@ -241,6 +241,132 @@ html, body {
   -webkit-text-stroke: 2px #000;
 }
 
+/* レベル選択(小学生・中学生・高専生) */
+.level-select {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.level-btn {
+  flex: 1;
+  padding: 12px 0;
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #9aa7c0;
+  background: rgba(10, 16, 30, 0.85);
+  border: 3px solid #3a4560;
+  cursor: pointer;
+}
+
+.level-btn.selected {
+  color: #ffea00;
+  border-color: #ffea00;
+  background: rgba(60, 50, 0, 0.85);
+  box-shadow: 0 0 18px rgba(255, 234, 0, 0.45);
+}
+
+.level-desc {
+  min-height: 26px;
+  margin-bottom: 14px;
+  font-size: 18px;
+  color: #cfd8ee;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.level-change-btn {
+  display: block;
+  margin: 14px auto 0;
+  padding: 8px 22px;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  color: #cfd8ee;
+  background: transparent;
+  border: 2px solid #55617f;
+  cursor: pointer;
+}
+
+/* ボーナス飛行の操作ヒント(加速の残り・リング成功数) */
+.bonus-hint {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffea00;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+}
+
+/* 取得単位とランキング */
+.final-sub-text {
+  font-size: 30px;
+  font-weight: 800;
+  color: #ffd700;
+  letter-spacing: 3px;
+  margin: -24px 0 18px;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+}
+
+.final-score-text {
+  font-size: 44px;
+  font-weight: 900;
+  color: #ffea00;
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+  -webkit-text-stroke: 2px #000;
+}
+
+.ranking-list {
+  list-style: none;
+  counter-reset: rank;
+  margin: 0 auto 28px;
+  padding: 0;
+  max-width: 260px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.ranking-title {
+  margin-top: 22px;
+  font-size: 16px;
+  letter-spacing: 6px;
+  color: #8aa0c0;
+  text-shadow: 2px 2px 0 #000;
+}
+
+/* 開始ボタンの下に置くランキング */
+.ranking-below {
+  margin: 6px auto 0;
+}
+
+.ranking-list li {
+  counter-increment: rank;
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 10px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.ranking-list li::before {
+  content: counter(rank) '.';
+  color: #8aa0c0;
+}
+
+.ranking-list li.ranking-empty {
+  color: #5b667f;
+}
+
+.ranking-list li.ranking-current {
+  color: #00ff66;
+  background: rgba(0, 255, 102, 0.12);
+}
+
 /* ボタン: 「開始」 / 「再挑戦」 */
 .arcade-btn {
   display: block;

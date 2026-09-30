@@ -21,7 +21,7 @@
     <div class="hud-top-bar">
       <!-- 画面隅: 「要件 124」 -->
       <div class="hud-corner-box">
-        <span class="hud-corner-text">要件 124</span>
+        <span id="req-text" class="hud-corner-text">要件 124</span>
       </div>
 
       <!-- 画面中央上: 「単位」 ＋ 数字 -->
@@ -37,6 +37,7 @@
     <!-- ボーナス測定中倍率HUD (画面中央上部) -->
     <div id="bonus-multiplier-hud" class="bonus-multiplier-hud hidden">
       <div id="bonus-current-mult" class="bonus-mult-text">×1.0</div>
+      <div id="bonus-hint" class="bonus-hint"></div>
     </div>
   </div>
 
@@ -44,7 +45,15 @@
   <div id="start-screen" class="overlay-screen">
     <div class="arcade-card">
       <h1 class="game-title">単位増殖ラン</h1>
+      <div class="level-select">
+        <button class="level-btn" data-level="elementary">小学生</button>
+        <button class="level-btn" data-level="middle">中学生</button>
+        <button class="level-btn" data-level="kosen">高専生</button>
+      </div>
+      <div id="level-desc" class="level-desc"></div>
       <button id="start-btn" class="arcade-btn start-btn">開始</button>
+      <div class="ranking-title">ランキング</div>
+      <ol id="start-ranking" class="ranking-list ranking-below"></ol>
     </div>
   </div>
 
@@ -53,6 +62,7 @@
     <div class="arcade-card fail-card">
       <div class="fail-text">留年</div>
       <button id="retry-fail-btn" class="arcade-btn retry-btn">再挑戦</button>
+      <button id="level-change-fail-btn" class="level-change-btn">レベル選択</button>
     </div>
   </div>
 
@@ -61,7 +71,11 @@
     <div class="arcade-card success-card">
       <div class="success-text">卒業</div>
       <div id="final-multiplier-display" class="final-multiplier-text">倍率 ×1.0</div>
+      <div id="final-ring-display" class="final-sub-text">リング 0/3</div>
+      <div id="final-score-display" class="final-score-text">0</div>
+      <ol id="success-ranking" class="ranking-list"></ol>
       <button id="retry-success-btn" class="arcade-btn success-btn">再挑戦</button>
+      <button id="level-change-success-btn" class="level-change-btn">レベル選択</button>
     </div>
   </div>
 

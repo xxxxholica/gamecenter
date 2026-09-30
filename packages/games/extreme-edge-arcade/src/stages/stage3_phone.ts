@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Stage, StageResult } from '../types';
+import { Stage, StageResult, StageBriefing } from '../types';
 import { InputManager } from '../input';
 import { EffectsManager } from '../effects';
 import { sound } from '../audio';
@@ -9,7 +9,17 @@ export class Stage3Phone implements Stage {
   numberText = 'STAGE 2';
   title = 'スマホ充電';
   mission = '残量0.000%ブラックアウト直前に挿入せよ！';
-  instruction = '[ENTER / ↑] 挿入';
+  instruction = '[ENTER / ↑] ケーブルを挿す(1回)';
+  briefing: StageBriefing = {
+    goal: 'バッテリーが0%になる直前に、充電ケーブルを挿せ',
+    controls: [{ key: 'ENTER / ↑', text: 'ケーブルを挿す(1回だけ)' }],
+    rules: [
+      { kind: 'ok', text: '残量が0%に近いほど高得点(画面の「極限残量」を見る)' },
+      { kind: 'ng', text: '0%になって電源が落ちると大惨事(0点)' },
+      { kind: 'ng', text: '早すぎ(30%未満)も失敗' },
+      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
+    ],
+  };
   limitLabel = 'バッテリー消費';
 
   private scene!: THREE.Scene;
@@ -17,8 +27,9 @@ export class Stage3Phone implements Stage {
   private stageGroup = new THREE.Group();
 
   // Timing
-  private readonly totalTime = 5.0;
-  private timeLeft = 5.0;
+  // 電池が尽きるまでの秒数。毎回 4.5〜5.5秒 の間で変わる
+  private readonly totalTime = 4.5 + Math.random();
+  private timeLeft = this.totalTime;
   private pluggedIn = false;
   private isDead = false;
   private active = false;

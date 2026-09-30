@@ -232,6 +232,90 @@
       pointer-events: none;
     }
 
+    /* 種目の説明カード */
+    #brief-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 45;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.68);
+      cursor: pointer;
+    }
+
+    .brief-card {
+      width: min(92vw, 820px);
+      padding: clamp(16px, 3vw, 32px) clamp(18px, 4vw, 44px);
+      border: 4px solid #00ff66;
+      background: rgba(6, 12, 10, 0.94);
+      box-shadow: 0 0 40px rgba(0, 255, 102, 0.35);
+      text-align: left;
+    }
+
+    .brief-stage {
+      font-size: clamp(14px, 2.6vw, 22px);
+      color: #00ff66;
+      letter-spacing: 3px;
+    }
+
+    .brief-goal {
+      margin: 6px 0 clamp(10px, 2vw, 18px);
+      font-size: clamp(22px, 4.6vw, 40px);
+      color: #ffffff;
+      line-height: 1.25;
+      text-shadow: 3px 3px 0 #000;
+    }
+
+    .brief-head {
+      margin-top: clamp(8px, 1.6vw, 14px);
+      font-size: clamp(13px, 2.2vw, 18px);
+      color: #9aa7a0;
+      border-bottom: 2px solid #2b3a33;
+      letter-spacing: 4px;
+    }
+
+    .brief-controls, .brief-rules {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+    }
+
+    .brief-controls li, .brief-rules li {
+      font-size: clamp(15px, 2.8vw, 24px);
+      color: #f1f1f1;
+      line-height: 1.5;
+    }
+
+    .brief-key {
+      display: inline-block;
+      margin-right: 12px;
+      padding: 0 12px;
+      border: 2px solid #ffe600;
+      color: #ffe600;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .brief-mark {
+      display: inline-block;
+      width: 1.6em;
+      font-weight: bold;
+    }
+
+    .brief-rules li.ok .brief-mark { color: #00ff66; }
+    .brief-rules li.ng { color: #ff9a9a; }
+    .brief-rules li.ng .brief-mark { color: #ff1a1a; }
+    .brief-rules li.info .brief-mark { color: #8ecbff; }
+
+    .brief-start {
+      margin-top: clamp(12px, 2.4vw, 22px);
+      text-align: center;
+      font-size: clamp(20px, 3.6vw, 32px);
+      color: #ffe600;
+      letter-spacing: 6px;
+    }
+
     /* Center Staging Flash Banner */
     #center-banner {
       position: absolute;
@@ -576,6 +660,9 @@
 
   <!-- Center Flashing Staging Messages -->
   <div id="center-banner"></div>
+
+  <!-- 種目の説明カード(開始前にボタン待ち) -->
+  <div id="brief-overlay"></div>
 
   <!-- Attract DEMO Mode Overlays -->
   <div id="demo-banner" class="blink-1s">-- デモ中 DEMO --</div>

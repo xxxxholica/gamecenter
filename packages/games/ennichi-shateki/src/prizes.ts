@@ -81,6 +81,13 @@ export class PrizeEntity {
     this.updateMeshTransform();
   }
 
+  /** 棚の中の並び位置(-1〜+1)を変える。開始のたびに景品の配置を入れ替えるために使う */
+  public setShelfOffsetRatio(ratio: number) {
+    this.config.shelfOffsetRatio = ratio;
+    const xSpan = (this.shelf.xMax - this.shelf.xMin) * 0.92;
+    this.basePos.x = this.shelf.xMin + (this.shelf.xMax - this.shelf.xMin) * 0.5 + ratio * (xSpan * 0.5);
+  }
+
   public triggerSpawnEffect() {
     this.isSpawning = true;
     this.spawnTimer = 0;
@@ -674,6 +681,8 @@ export class PrizeEntity {
   public getBoundingBox(): THREE.Box3 {
     const box = new THREE.Box3();
     box.setFromObject(this.mesh);
+    // アケコンでの照準のブレを見込んで、判定を見た目より少し(約2〜3cm)広げる
+    box.expandByScalar(0.03);
     return box;
   }
 
@@ -1071,4 +1080,26 @@ export function createAllPrizes(shelves: ShelfInfo[]): PrizeEntity[] {
   );
 
   return prizes;
+}
+
+/**
+ * 同じ段の景品の並びをランダムに入れ替える(段の間は動かさないので、高得点の景品は上段のまま)。
+ * 位置(スロット)は変えず、どの景品がどのスロットに載るかだけを変える。
+ */
+export function shuffleShelfLayout(prizes: PrizeEntity[]): void {
+  const byShelf = new Map<number, PrizeEntity[]>();
+  for (const p of prizes) {
+    const list = byShelf.get(p.config.shelfIndex) ?? [];
+    list.push(p);
+    byShelf.set(p.config.shelfIndex, list);
+  }
+  for (const list of byShelf.values()) {
+    const ratios = list.map((p) => p.config.shelfOffsetRatio).sort((a, b) => a - b);
+    // Fisher-Yates
+    for (let i = ratios.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ratios[i], ratios[j]] = [ratios[j], ratios[i]];
+    }
+    list.forEach((p, i) => p.setShelfOffsetRatio(ratios[i]));
+  }
 }

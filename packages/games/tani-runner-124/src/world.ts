@@ -5,6 +5,34 @@
 
 import * as THREE from 'three';
 import { TextureGenerator, GateInfo } from './textures.ts';
+import { generateGateConfigs, GateConfig } from './gateGenerator.ts';
+import { generateCourseItems, generateRings, ObstacleSpec, PickupSpec, RingSpec } from './courseGenerator.ts';
+import type { LevelId } from './levels.ts';
+
+export interface WorldObstacle {
+  spec: ObstacleSpec;
+  mesh: THREE.Group;
+  /** 今この瞬間の中心X(揺れる障害物は時間で変わる) */
+  currentX: number;
+  hit: boolean;
+}
+
+export interface WorldPickup {
+  spec: PickupSpec;
+  mesh: THREE.Group;
+  collected: boolean;
+}
+
+export interface WorldRing {
+  spec: RingSpec;
+  mesh: THREE.Mesh;
+  hit: boolean;
+  /** 通り抜けた生徒の数(一定数でリング成功) */
+  passCount: number;
+}
+
+/** ボーナス飛行のリング(縦長のゲート)の幅の半分。飛行の高さは連打の回数で大きく変わるので、高さは問わず左右位置だけで判定する */
+export const RING_HALF_WIDTH = 2.6;
 
 export interface GatePair {
   z: number;
@@ -33,6 +61,8 @@ export class WorldManager {
   // Track dimensions
   public trackWidth: number = 10.0;
   public bossWallZ: number = -450.0;
+  /** ゲートを置く位置(奥行き)。中身(種類と左右)は開始のたびにランダムに作る */
+  private readonly gateZs: number[] = [-45, -95, -150, -205, -260, -315, -370, -415];
   public bonusTrackEndZ: number = -1000.0;
 
   // Course elements
@@ -40,6 +70,18 @@ export class WorldManager {
   public bonusSegments: THREE.Mesh[] = [];
   public gates: GatePair[] = [];
   public bossWallGroup: THREE.Group | null = null;
+  private bossWallFrontMat: THREE.MeshLambertMaterial | null = null;
+
+  /** 卒業要件(壁を破るのに必要な人数)。標準は124で、開始のたびに抽選される */
+  public requirement: number = 124;
+  /** 今のレベル(ゲートの数式の種類や障害物の厳しさが変わる) */
+  public level: LevelId = 'kosen';
+
+  // ゲートの間に置く障害物・アイテム、ボーナス飛行のリング
+  public obstacles: WorldObstacle[] = [];
+  public pickups: WorldPickup[] = [];
+  public rings: WorldRing[] = [];
+  private elapsed: number = 0;
   public rampMesh: THREE.Mesh | null = null;
 
   // Multiplier zones along bonus track
@@ -59,7 +101,8 @@ export class WorldManager {
     this.buildLighting();
     this.buildCourseTrack();
     this.buildBonusRunway();
-    this.buildGates();
+    this.regenerateGates();
+    this.regenerateItems();
     this.buildBossWall();
   }
 
@@ -149,59 +192,30 @@ export class WorldManager {
     });
   }
 
-  // 3. University Mathematics Gates
-  private buildGates(): void {
-    const gateConfigs: { z: number; left: GateInfo; right: GateInfo }[] = [
-      // Gate 1: 重積分 vs 偏微分
-      {
-        z: -45,
-        left: { type: 'integral_double', value: 2, label: '∬', isPositive: true },
-        right: { type: 'diff_partial', value: 10, label: '∂/∂x', isPositive: false }
-      },
-      // Gate 2: 核空間没収 vs 級数総和
-      {
-        z: -95,
-        left: { type: 'kernel', value: 15, label: 'ker', isPositive: false },
-        right: { type: 'series_sum', value: 20, label: '∑ +20', isPositive: true }
-      },
-      // Gate 3: 三重積分 vs 1階微分
-      {
-        z: -150,
-        left: { type: 'integral_triple', value: 3, label: '∭', isPositive: true },
-        right: { type: 'diff_1st', value: 2, label: 'd/dx', isPositive: false }
-      },
-      // Gate 4: 固有値減衰 vs 定積分
-      {
-        z: -205,
-        left: { type: 'eigen_decay', value: 2, label: 'λ=0.5', isPositive: false },
-        right: { type: 'integral_add', value: 30, label: '∫ +30', isPositive: true }
-      },
-      // Gate 5: 級数総和 vs 余核退化
-      {
-        z: -260,
-        left: { type: 'series_sum', value: 35, label: '∑ +35', isPositive: true },
-        right: { type: 'coker', value: 25, label: 'coker', isPositive: false }
-      },
-      // Gate 6: 2階微分 vs テンソル積
-      {
-        z: -315,
-        left: { type: 'diff_2nd', value: 3, label: 'd²/dx²', isPositive: false },
-        right: { type: 'tensor_prod', value: 2, label: '⊗2', isPositive: true }
-      },
-      // Gate 7: 固有空間拡大 vs 勾配流出
-      {
-        z: -370,
-        left: { type: 'eigen_boost', value: 2, label: 'λ=2', isPositive: true },
-        right: { type: 'divergence', value: 30, label: '∇・F', isPositive: false }
-      },
-      // Gate 8: 無限大極限 vs 三重積分 (Final Double Chance!)
-      {
-        z: -415,
-        left: { type: 'limit_inf', value: 50, label: 'lim ∞', isPositive: true },
-        right: { type: 'integral_triple', value: 3, label: '∭', isPositive: true }
-      }
-    ];
+  // 3. University Mathematics Gates(開始のたびに作り直す)
+  public regenerateGates(): void {
+    this.disposeGates();
+    this.buildGates(generateGateConfigs(this.gateZs, this.requirement, this.level));
+  }
 
+  private disposeGates(): void {
+    for (const pair of this.gates) {
+      for (const gate of [pair.leftGate, pair.rightGate]) {
+        this.scene.remove(gate.mesh);
+        gate.mesh.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.geometry.dispose();
+          const mat = mesh.material as THREE.MeshBasicMaterial | THREE.MeshLambertMaterial;
+          if (mat.map) mat.map.dispose();
+          mat.dispose();
+        });
+      }
+    }
+    this.gates = [];
+  }
+
+  private buildGates(gateConfigs: GateConfig[]): void {
     const gateW = 4.4;
     const gateH = 3.2;
 
@@ -221,6 +235,16 @@ export class WorldManager {
       // Frame posts
       this.addGatePosts(leftMesh, gateW, gateH, cfg.left.isPositive);
       this.addGatePosts(rightMesh, gateW, gateH, cfg.right.isPositive);
+
+      // どちらも良いゲート: 間に金色の柱を立てる(隊列を分けて両方に通すと両取りできる合図)
+      if (cfg.left.isPositive && cfg.right.isPositive) {
+        const pillar = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25, gateH, 0.25),
+          new THREE.MeshBasicMaterial({ color: 0xffd700 })
+        );
+        pillar.position.set(2.4, 0, 0);
+        leftMesh.add(pillar);
+      }
 
       this.scene.add(leftMesh);
       this.scene.add(rightMesh);
@@ -255,9 +279,10 @@ export class WorldManager {
     const wallD = 2.0;
 
     const wallGeo = new THREE.BoxGeometry(wallW, wallH, wallD);
-    const wallTex = TextureGenerator.createBossWallTexture();
+    const wallTex = TextureGenerator.createBossWallTexture(this.requirement);
     const sideMat = new THREE.MeshLambertMaterial({ color: 0x221310 });
     const frontMat = new THREE.MeshLambertMaterial({ map: wallTex });
+    this.bossWallFrontMat = frontMat;
 
     const materials = [sideMat, sideMat, sideMat, sideMat, frontMat, sideMat];
     const wallMesh = new THREE.Mesh(wallGeo, materials);
@@ -293,13 +318,117 @@ export class WorldManager {
     return { mult: 20.0, label: '×20.0' };
   }
 
-  public reset(): void {
-    this.gates.forEach(g => {
-      g.leftGate.passed = false;
-      g.leftGate.mesh.visible = true;
-      g.rightGate.passed = false;
-      g.rightGate.mesh.visible = true;
+  // ------------------------------------------------------------
+  // 障害物・アイテム・リング
+  // ------------------------------------------------------------
+  private disposeObject(root: THREE.Object3D): void {
+    this.scene.remove(root);
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh | THREE.Sprite;
+      const geo = (mesh as THREE.Mesh).geometry;
+      if (geo) geo.dispose();
+      const mat = (mesh as THREE.Mesh).material as THREE.Material & { map?: THREE.Texture | null };
+      if (mat) {
+        if (mat.map) mat.map.dispose();
+        mat.dispose();
+      }
     });
+  }
+
+  public regenerateItems(): void {
+    this.obstacles.forEach((o) => this.disposeObject(o.mesh));
+    this.pickups.forEach((p) => this.disposeObject(p.mesh));
+    this.rings.forEach((r) => this.disposeObject(r.mesh));
+    this.obstacles = [];
+    this.pickups = [];
+    this.rings = [];
+    this.elapsed = 0;
+
+    const items = generateCourseItems(this.gateZs, this.level);
+    const obstacleTex = TextureGenerator.createObstacleTexture();
+
+    for (const spec of items.obstacles) {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(spec.width, 1.7, 0.7),
+        new THREE.MeshLambertMaterial({ map: obstacleTex.clone(), color: 0xffffff })
+      );
+      body.position.y = 0.85;
+      group.add(body);
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(body.geometry),
+        new THREE.LineBasicMaterial({ color: 0xffffff })
+      );
+      edges.position.y = 0.85;
+      group.add(edges);
+      group.position.set(spec.centerX, 0, spec.z);
+      this.scene.add(group);
+      this.obstacles.push({ spec, mesh: group, currentX: spec.centerX, hit: false });
+    }
+
+    for (const spec of items.pickups) {
+      const group = new THREE.Group();
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0x39ff88, transparent: true, opacity: 0.85 })
+      );
+      group.add(orb);
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: TextureGenerator.createPickupTexture(spec.value), transparent: true }));
+      label.scale.set(2.2, 1.1, 1);
+      label.position.y = 1.2;
+      group.add(label);
+      group.position.set(spec.x, 1.0, spec.z);
+      this.scene.add(group);
+      this.pickups.push({ spec, mesh: group, collected: false });
+    }
+
+    for (const spec of generateRings(this.bossWallZ)) {
+      // 遠くや高空からも見えるよう、2本の高い柱と飾りの輪でできたゲート
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(RING_HALF_WIDTH, 0.22, 10, 32),
+        new THREE.MeshBasicMaterial({ color: 0xffd700 })
+      );
+      ring.position.set(spec.x, 6.0, spec.z);
+      const pillarGeo = new THREE.CylinderGeometry(0.22, 0.22, 44, 8);
+      for (const side of [-1, 1]) {
+        const pillar = new THREE.Mesh(pillarGeo, ring.material);
+        pillar.position.set(side * RING_HALF_WIDTH, 16, 0);
+        ring.add(pillar);
+      }
+      this.scene.add(ring);
+      this.rings.push({ spec, mesh: ring, hit: false, passCount: 0 });
+    }
+  }
+
+  /** 揺れる障害物とアイテムの動き(毎フレーム) */
+  public updateItems(dt: number): void {
+    this.elapsed += dt;
+    for (const o of this.obstacles) {
+      if (o.spec.sway > 0) {
+        o.currentX = o.spec.centerX + o.spec.sway * Math.sin(o.spec.phase + o.spec.swaySpeed * this.elapsed);
+        o.mesh.position.x = o.currentX;
+      }
+    }
+    for (const p of this.pickups) {
+      if (!p.collected) p.mesh.position.y = 1.0 + Math.sin(this.elapsed * 3 + p.spec.z) * 0.18;
+    }
+  }
+
+  public hideItem(root: THREE.Object3D): void {
+    root.visible = false;
+  }
+
+  /** 開始のたびに、要件・ゲート・障害物・アイテムを作り直す(同じ正解の暗記を防ぐ) */
+  public reset(requirement: number = 124, level: LevelId = 'kosen'): void {
+    this.requirement = requirement;
+    this.level = level;
+    if (this.bossWallFrontMat) {
+      this.bossWallFrontMat.map?.dispose();
+      this.bossWallFrontMat.map = TextureGenerator.createBossWallTexture(requirement);
+      this.bossWallFrontMat.needsUpdate = true;
+    }
+    this.regenerateGates();
+    this.regenerateItems();
 
     if (this.bossWallGroup) {
       this.bossWallGroup.visible = true;

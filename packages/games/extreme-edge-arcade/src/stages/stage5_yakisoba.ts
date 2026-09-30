@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Stage, StageResult } from '../types';
+import { Stage, StageResult, StageBriefing } from '../types';
 import { InputManager } from '../input';
 import { EffectsManager } from '../effects';
 import { sound } from '../audio';
@@ -9,7 +9,17 @@ export class Stage5Yakisoba implements Stage {
   numberText = 'STAGE 4';
   title = '焼きそば湯切り';
   mission = 'フタ崩壊寸前を攻めて湯を切り切れ！';
-  instruction = '[ENTER / ↑] 傾ける';
+  instruction = '[↑ / W] カップを傾ける';
+  briefing: StageBriefing = {
+    goal: 'フタを剥がさずに、カップのお湯を全部切れ',
+    controls: [{ key: '↑ / W(レバー前)', text: '押した分だけカップが傾く' }],
+    rules: [
+      { kind: 'info', text: '傾けるほどお湯が出るが、フタが浮いて震える' },
+      { kind: 'ok', text: 'フタが限界に近いまま切り切るほど高得点' },
+      { kind: 'ng', text: 'フタが剥がれる(傾けすぎ)と大惨事(0点)' },
+      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
+    ],
+  };
   limitLabel = 'フタ剥がれ度';
 
   private scene!: THREE.Scene;
@@ -23,6 +33,9 @@ export class Stage5Yakisoba implements Stage {
   private failed = false;
   private completed = false;
   private timeLeft = 8.0;
+  // お湯の出方とフタの負担の大きさ。毎回 ±10%程度変わる
+  private readonly flowScale = 0.9 + Math.random() * 0.2;
+  private readonly stressScale = 0.9 + Math.random() * 0.2;
   private active = false;
 
   // Meshes
@@ -243,7 +256,7 @@ export class Stage5Yakisoba implements Stage {
       // Water drainage logic
       if (tiltDegrees > 18 && this.waterRemaining > 0) {
         // Pour rate increases with tilt angle
-        const flowRate = Math.pow((tiltDegrees - 18) / 45, 1.6) * 34;
+        const flowRate = Math.pow((tiltDegrees - 18) / 45, 1.6) * 34 * this.flowScale;
         this.waterRemaining = Math.max(0, this.waterRemaining - flowRate * dt);
 
         this.waterStreamMesh.visible = true;
@@ -310,7 +323,7 @@ export class Stage5Yakisoba implements Stage {
       if (tiltDegrees > 42) {
         const excess = (tiltDegrees - 42) / 30; // 0 at 42deg, 1.0 at 72deg
         // Stress builds rapidly if held at steep angles
-        this.lidStress += excess * dt * 0.65;
+        this.lidStress += excess * dt * 0.65 * this.stressScale;
 
         // Lid flap visibly curls open as stress accumulates
         this.lidFlapGroup.rotation.x = -Math.pow(this.lidStress, 1.4) * 0.95;

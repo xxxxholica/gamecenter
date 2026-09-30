@@ -9,12 +9,13 @@ gamecenter/
   packages/
     hub/                      # ゲーム選択画面 (トップページ, Vite + TypeScript)
     games/
-      school-corridor-runner/  # 学園脱出ラン (Three.js)
+      school-corridor-runner/  # テンパレラン (Three.js)
       extreme-edge-arcade/     # 極限ギリギリ選手権 (Three.js)
       tani-runner-124/         # 単位増殖ラン (Three.js)
       phaser-fighter/          # サイバー2Dファイター (Phaser 3)
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
+      midnight-skyway/         # ミッドナイト・スカイウェイ (Three.js, 3Dレース / PLATEAU・ヘルシンキの3D都市モデル)
     shared/homeReturn.ts      # 全ゲーム共通: SELECT長押しでハブへ戻る
   scripts/assemble.mjs        # 各パッケージのbuildをdist/に集約
   scripts/dev-all.mjs         # hub + 全ゲームのdevサーバーを単一プロセス・単一ポートで起動
@@ -67,6 +68,7 @@ dist/
     phaser-fighter/
     ennichi-shateki/
     street-b-boy/
+    midnight-skyway/
 ```
 
 ## デプロイ

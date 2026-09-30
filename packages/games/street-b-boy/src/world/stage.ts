@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { BoundingBox2D } from '../entities/player';
 import {
   CassetteTape, StageBlock, StreetObstacle, ParticleSystem,
-  GrindRail, FireHydrant, SubwooferPad, SteamVent, LaserGrid, MovingPlatform
+  GrindRail, FireHydrant, SubwooferPad, SteamVent, LaserGrid, MovingPlatform,
+  CrumblingPlatform, Checkpoint
 } from '../entities/objects';
 import { BaseEnemy, SecurityBot, SkaterDog, SurveillanceDrone, EnemyProjectile } from '../entities/enemies';
 import { BoomboxModel } from './boombox';
 import { TextureGenerator } from './textures';
+import { CollisionShape, ONE_WAY_MAX_THICKNESS } from '../engine/collision';
 
 export interface Platform {
   x: number;
@@ -14,7 +16,58 @@ export interface Platform {
   w: number;
   h: number;
   mesh: THREE.Mesh;
+  /** 薄い足場板。下からは通り抜け、上からだけ着地できる */
+  oneWay: boolean;
 }
+
+export type BackdropTheme = 'bronx' | 'subway' | 'rooftop' | 'neon';
+
+/** ステージごとの設定。構成(足場・ギミック)は buildStageN に、見た目と進行のパラメータはここに集める */
+export interface StageConfig {
+  title: string;
+  theme: BackdropTheme;
+  goalX: number;
+  goalY: number;
+  timeLimit: number;
+  /** BGMのテンポ(BPM) */
+  tempo: number;
+  ambientHex: number;
+  hemiSky: number;
+  hemiGround: number;
+  moonHex: number;
+  glowColor: number;
+  dustColor: number;
+  lampXs: number[];
+  lampStyle: 'pole' | 'hanging';
+  platformColor: number;
+}
+
+export const STAGE_CONFIGS: Record<number, StageConfig> = {
+  1: {
+    title: 'BRONX STREET', theme: 'bronx', goalX: 138, goalY: 3.5, timeLimit: 75, tempo: 96,
+    ambientHex: 0x384865, hemiSky: 0xaaccff, hemiGround: 0x222633, moonHex: 0xddeeff,
+    glowColor: 0xffea00, dustColor: 0x00f0ff, lampXs: [12, 35, 62, 90, 115, 138], lampStyle: 'pole',
+    platformColor: 0x2b323d
+  },
+  2: {
+    title: 'SUBWAY CYPHER', theme: 'subway', goalX: 150, goalY: 3.5, timeLimit: 70, tempo: 100,
+    ambientHex: 0x284545, hemiSky: 0x88eecc, hemiGround: 0x182220, moonHex: 0xaaffdd,
+    glowColor: 0x00ffaa, dustColor: 0x00ff88, lampXs: [14, 44, 70, 96, 124, 150], lampStyle: 'hanging',
+    platformColor: 0x222e28
+  },
+  3: {
+    title: 'ROOFTOP SKYLINE', theme: 'rooftop', goalX: 148, goalY: 2.8, timeLimit: 65, tempo: 104,
+    ambientHex: 0x353258, hemiSky: 0xaa99ff, hemiGround: 0x1b1828, moonHex: 0xeeccff,
+    glowColor: 0xffea00, dustColor: 0x00f0ff, lampXs: [12, 44, 78, 110, 140, 148], lampStyle: 'pole',
+    platformColor: 0x222632
+  },
+  4: {
+    title: 'NEON BLOCK PARTY', theme: 'neon', goalX: 160, goalY: 4.0, timeLimit: 60, tempo: 112,
+    ambientHex: 0x483a55, hemiSky: 0xffccaa, hemiGround: 0x2b1e30, moonHex: 0xffeebb,
+    glowColor: 0xff0066, dustColor: 0xffea00, lampXs: [14, 48, 80, 105, 132, 160], lampStyle: 'hanging',
+    platformColor: 0x2b323d
+  }
+};
 
 export class Stage {
   public scene: THREE.Scene;
@@ -26,16 +79,19 @@ export class Stage {
   public projectiles: EnemyProjectile[] = [];
   public particleSystem: ParticleSystem;
 
-  // New Street Gimmicks
+  // Street gimmicks
   public grindRails: GrindRail[] = [];
   public fireHydrants: FireHydrant[] = [];
   public subwoofers: SubwooferPad[] = [];
   public steamVents: SteamVent[] = [];
   public laserGrids: LaserGrid[] = [];
   public movingPlatforms: MovingPlatform[] = [];
+  public crumblingPlatforms: CrumblingPlatform[] = [];
+  public checkpoints: Checkpoint[] = [];
 
   public stageNumber: number;
   public stageTitle: string;
+  public readonly config: StageConfig;
 
   // Goal turntable & giant boombox
   public goalTurntable: THREE.Mesh;
@@ -62,14 +118,8 @@ export class Stage {
     this.particleSystem = new ParticleSystem();
     this.scene.add(this.particleSystem.group);
 
-    const titles: Record<number, { title: string; goalX: number; goalY: number }> = {
-      1: { title: 'BRONX STREET', goalX: 138, goalY: 3.5 },
-      2: { title: 'SUBWAY CYPHER', goalX: 144, goalY: 3.5 },
-      3: { title: 'ROOFTOP SKYLINE', goalX: 148, goalY: 2.8 },
-      4: { title: 'NEON BLOCK PARTY', goalX: 160, goalY: 4.0 }
-    };
-
-    const cfg = titles[stageNumber] || titles[1];
+    this.config = STAGE_CONFIGS[stageNumber] || STAGE_CONFIGS[1];
+    const cfg = this.config;
     this.stageTitle = cfg.title;
     this.goalX = cfg.goalX;
     this.goalY = cfg.goalY;
@@ -101,9 +151,8 @@ export class Stage {
       dustPos[i * 3 + 2] = (Math.random() - 0.5) * 16;
     }
     dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
-    const dustColor = (stageNumber === 2) ? 0x00ff88 : (stageNumber === 4) ? 0xffea00 : 0x00f0ff;
     const dustMat = new THREE.PointsMaterial({
-      color: dustColor,
+      color: cfg.dustColor,
       size: 0.14,
       transparent: true,
       opacity: 0.5
@@ -112,51 +161,34 @@ export class Stage {
     this.scene.add(this.dustPoints);
 
     this.buildLighting();
-    this.buildCityBackdrop();
+    this.buildBackdrop();
     this.buildLevelContent();
+    this.finalizeLevel();
+    this.validateLayout();
   }
 
+  // -------------------------------------------------------------
+  // LIGHTING
+  // -------------------------------------------------------------
   private buildLighting(): void {
-    let ambientHex = 0x384865;
-    let hemiSky = 0xaaccff;
-    let hemiGround = 0x222633;
-    let moonHex = 0xddeeff;
+    const cfg = this.config;
+    // 環境光・月光・街灯は bgGroup に入れる。scene 直下に置くと dispose で消えず、面を進めるたびに光が積み重なって白飛びする
+    const ambientLight = new THREE.AmbientLight(cfg.ambientHex, 2.3);
+    this.bgGroup.add(ambientLight);
 
-    if (this.stageNumber === 2) {
-      ambientHex = 0x284545;
-      hemiSky = 0x88eecc;
-      hemiGround = 0x182220;
-      moonHex = 0xaaffdd;
-    } else if (this.stageNumber === 3) {
-      ambientHex = 0x353258;
-      hemiSky = 0xaa99ff;
-      hemiGround = 0x1b1828;
-      moonHex = 0xeeccff;
-    } else if (this.stageNumber === 4) {
-      ambientHex = 0x483a55;
-      hemiSky = 0xffccaa;
-      hemiGround = 0x2b1e30;
-      moonHex = 0xffeebb;
-    }
+    const hemiLight = new THREE.HemisphereLight(cfg.hemiSky, cfg.hemiGround, 1.4);
+    this.bgGroup.add(hemiLight);
 
-    const ambientLight = new THREE.AmbientLight(ambientHex, 2.3);
-    this.scene.add(ambientLight);
-
-    const hemiLight = new THREE.HemisphereLight(hemiSky, hemiGround, 1.4);
-    this.scene.add(hemiLight);
-
-    const moonLight = new THREE.DirectionalLight(moonHex, 2.2);
+    const moonLight = new THREE.DirectionalLight(cfg.moonHex, 2.2);
     moonLight.position.set(50, 60, 40);
-    this.scene.add(moonLight);
+    this.bgGroup.add(moonLight);
 
-    const lampPositions = [12, 35, 62, 90, 115, this.goalX];
-    lampPositions.forEach((lx) => {
-      this.createStreetlamp(lx);
+    cfg.lampXs.forEach((lx) => {
+      this.createLampFixture(lx);
     });
 
-    const glowColor = (this.stageNumber === 2) ? 0x00ffaa : (this.stageNumber === 4) ? 0xff0066 : 0xffea00;
     for (let i = 0; i < Stage.ACTIVE_LAMP_LIGHTS; i++) {
-      const spot = new THREE.SpotLight(glowColor, 4.5, 16, Math.PI / 4.5, 0.5, 1.2);
+      const spot = new THREE.SpotLight(cfg.glowColor, 4.5, 16, Math.PI / 4.5, 0.5, 1.2);
       this.scene.add(spot);
       this.scene.add(spot.target);
       this.spotlights.push(spot);
@@ -187,179 +219,293 @@ export class Stage {
     });
   }
 
-  private createStreetlamp(x: number): void {
+  private createLampFixture(x: number): void {
     const lampGroup = new THREE.Group();
     lampGroup.position.set(x, 0, -1.8);
+    const glowColor = this.config.glowColor;
+    const metal = new THREE.MeshStandardMaterial({ color: 0x1f242b, metalness: 0.8, roughness: 0.3 });
 
-    const poleGeo = new THREE.CylinderGeometry(0.1, 0.14, 6.5, 12);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x1f242b, metalness: 0.8, roughness: 0.3 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.y = 3.25;
-    pole.castShadow = true;
-    lampGroup.add(pole);
+    if (this.config.lampStyle === 'pole') {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 6.5, 12), metal);
+      pole.position.y = 3.25;
+      pole.castShadow = true;
+      lampGroup.add(pole);
 
-    const armGeo = new THREE.BoxGeometry(1.6, 0.1, 0.12);
-    const arm = new THREE.Mesh(armGeo, poleMat);
-    arm.position.set(0.6, 6.4, 0.6);
-    lampGroup.add(arm);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.12), metal);
+      arm.position.set(0.6, 6.4, 0.6);
+      lampGroup.add(arm);
 
-    const headGeo = new THREE.CylinderGeometry(0.35, 0.2, 0.3, 12);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.set(1.2, 6.25, 0.6);
-    lampGroup.add(head);
+      const head = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.2, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+      head.position.set(1.2, 6.25, 0.6);
+      lampGroup.add(head);
+    } else {
+      // 天井から吊り下げた蛍光灯・ネオン管(地面まで届く柱がないので、足場と紛らわしくない)
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+      for (const wx of [0.5, 1.9]) {
+        const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 3.0, 4), wireMat);
+        wire.position.set(wx, 7.6, 0.6);
+        lampGroup.add(wire);
+      }
+      const tube = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.14, 0.14), new THREE.MeshBasicMaterial({ color: glowColor }));
+      tube.position.set(1.2, 6.1, 0.6);
+      lampGroup.add(tube);
+    }
 
-    const glowColor = (this.stageNumber === 2) ? 0x00ffaa : (this.stageNumber === 4) ? 0xff0066 : 0xffea00;
-    const bulbGeo = new THREE.SphereGeometry(0.18, 12, 12);
-    const bulbMat = new THREE.MeshBasicMaterial({ color: glowColor });
-    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), new THREE.MeshBasicMaterial({ color: glowColor }));
     bulb.position.set(1.2, 6.1, 0.6);
     lampGroup.add(bulb);
 
     // Volumetric Light Cone
-    const coneGeo = new THREE.ConeGeometry(2.0, 6.0, 16, 1, true);
-    const coneMat = new THREE.MeshBasicMaterial({
-      color: glowColor,
-      transparent: true,
-      opacity: 0.1,
-      side: THREE.DoubleSide
-    });
-    const cone = new THREE.Mesh(coneGeo, coneMat);
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(2.0, 6.0, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
+    );
     cone.position.set(1.2, 3.1, 0.6);
     lampGroup.add(cone);
 
     this.lampXs.push(x);
-
-    this.scene.add(lampGroup);
+    this.bgGroup.add(lampGroup);
   }
 
-  private buildCityBackdrop(): void {
-    const buildingMat = new THREE.MeshStandardMaterial({ color: 0x090c14, roughness: 0.9 });
-    const winMat1 = new THREE.MeshBasicMaterial({ color: 0xffea70 });
-    const winMat2 = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+  // -------------------------------------------------------------
+  // BACKDROP (背景は判定なし。プレイ面(z=±1.4)から離し、暗く沈めて足場と見分ける)
+  // -------------------------------------------------------------
+  private buildBackdrop(): void {
+    switch (this.config.theme) {
+      case 'subway':
+        this.buildSubwayBackdrop();
+        break;
+      case 'rooftop':
+        this.buildRooftopBackdrop();
+        break;
+      case 'neon':
+        this.buildNeonBackdrop();
+        break;
+      default:
+        this.buildBronxBackdrop();
+        break;
+    }
+  }
 
-    // 1. Distant Skyscrapers
-    for (let x = -20; x < 190; x += 14 + Math.random() * 8) {
-      const w = 10 + Math.random() * 8;
-      const h = 25 + Math.random() * 35;
+  /** 遠景の高層ビル群。窓はインスタンス描画にしてドローコールを抑える */
+  private buildSkyline(opts: {
+    z: number;
+    minH: number;
+    varH: number;
+    minW: number;
+    varW: number;
+    xFrom: number;
+    xTo: number;
+    stepBase: number;
+    windowChance: number;
+    color: number;
+  }): void {
+    const buildingMat = new THREE.MeshStandardMaterial({ color: opts.color, roughness: 0.9 });
+    const warm: THREE.Matrix4[] = [];
+    const cool: THREE.Matrix4[] = [];
+    const m = new THREE.Matrix4();
+
+    for (let x = opts.xFrom; x < opts.xTo; x += opts.stepBase + Math.random() * 8) {
+      const w = opts.minW + Math.random() * opts.varW;
+      const h = opts.minH + Math.random() * opts.varH;
       const d = 12;
-      const bGeo = new THREE.BoxGeometry(w, h, d);
-      const building = new THREE.Mesh(bGeo, buildingMat);
-      building.position.set(x, h / 2 - 2, -24);
+      const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
+      building.position.set(x, h / 2 - 2, opts.z);
       this.bgGroup.add(building);
 
+      const frontZ = opts.z + d / 2 + 0.05;
       for (let wy = 4; wy < h - 4; wy += 3.5) {
         for (let wx = -w / 2 + 2; wx < w / 2 - 2; wx += 2.5) {
-          if (Math.random() > 0.45) {
-            const winGeo = new THREE.PlaneGeometry(1.0, 1.4);
-            const win = new THREE.Mesh(winGeo, Math.random() > 0.3 ? winMat1 : winMat2);
-            win.position.set(x + wx, wy, -17.9);
-            this.bgGroup.add(win);
+          if (Math.random() < opts.windowChance) {
+            m.makeTranslation(x + wx, wy, frontZ);
+            (Math.random() > 0.3 ? warm : cool).push(m.clone());
           }
         }
       }
     }
 
-    // 2. Rooftop Water Towers (on stages 1, 3, 4)
-    if (this.stageNumber !== 2) {
-      const wtTex = TextureGenerator.getWaterTowerTexture();
-      [28, 76, 122].forEach((wx) => {
-        const wtGroup = new THREE.Group();
-        wtGroup.position.set(wx, 7.5, -4.5);
-
-        // Wooden Barrel Body
-        const bGeo = new THREE.CylinderGeometry(1.8, 1.8, 3.2, 16);
-        const bMat = new THREE.MeshStandardMaterial({ map: wtTex, roughness: 0.8 });
-        const barrel = new THREE.Mesh(bGeo, bMat);
-        barrel.position.y = 2.4;
-        wtGroup.add(barrel);
-
-        // Conical Roof
-        const rGeo = new THREE.ConeGeometry(2.1, 1.4, 16);
-        const rMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.6 });
-        const roof = new THREE.Mesh(rGeo, rMat);
-        roof.position.y = 4.7;
-        wtGroup.add(roof);
-
-        // 4 Steel Legs
-        const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6);
-        const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
-        [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(([lx, lz]) => {
-          const leg = new THREE.Mesh(legGeo, legMat);
-          leg.position.set(lx, 1.2, lz);
-          wtGroup.add(leg);
-        });
-
-        this.bgGroup.add(wtGroup);
-      });
+    const winGeo = new THREE.PlaneGeometry(1.0, 1.4);
+    for (const [list, color] of [[warm, 0xffea70], [cool, 0x00f0ff]] as [THREE.Matrix4[], number][]) {
+      if (list.length === 0) continue;
+      const inst = new THREE.InstancedMesh(winGeo, new THREE.MeshBasicMaterial({ color }), list.length);
+      list.forEach((mat, i) => inst.setMatrixAt(i, mat));
+      inst.instanceMatrix.needsUpdate = true;
+      this.bgGroup.add(inst);
     }
+  }
 
-    // 3. HVAC Outdoor Air Conditioner Units with Rotating Fans
-    [15, 52, 98, 132].forEach((hx) => {
+  /** 壁の前面(z=-2.3)にぴったり貼り付けた背景の飾り。プレイ面(±1.4)とは十分離れている */
+  private addWallMountedHvac(xs: number[], y: number): void {
+    xs.forEach((hx) => {
       const hvacGroup = new THREE.Group();
-      hvacGroup.position.set(hx, 3.5, -3.2);
+      hvacGroup.position.set(hx, y, -2.0);
 
-      const boxGeo = new THREE.BoxGeometry(1.6, 1.3, 1.0);
-      const boxMat = new THREE.MeshStandardMaterial({ color: 0x333a44, metalness: 0.7, roughness: 0.4 });
-      const box = new THREE.Mesh(boxGeo, boxMat);
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 1.3, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0x272d36, metalness: 0.7, roughness: 0.5 })
+      );
       hvacGroup.add(box);
 
-      // Fan Grille & Rotating Blade
-      const fanGeo = new THREE.BoxGeometry(0.8, 0.08, 0.04);
-      const fanMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-      const fan = new THREE.Mesh(fanGeo, fanMat);
-      fan.position.set(0, 0, 0.52);
+      const fan = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 0.04), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      fan.position.set(0, 0, 0.32);
       hvacGroup.add(fan);
       this.hvacFans.push(fan);
 
       this.bgGroup.add(hvacGroup);
     });
+  }
 
-    // 4. Midground Walls (Subway Tiles or Graffiti Bricks)
-    if (this.stageNumber === 2) {
-      const tileTex = TextureGenerator.getSubwayTileTexture();
-      tileTex.repeat.set(3, 1);
-      for (let x = -10; x < 180; x += 18) {
-        const wallGeo = new THREE.BoxGeometry(18, 9, 0.6);
-        const wallMat = new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.5 });
-        const wall = new THREE.Mesh(wallGeo, wallMat);
-        wall.position.set(x + 9, 4.5, -2.6);
-        this.bgGroup.add(wall);
-      }
-    } else {
-      const graffitiTags = ['STREET B-BOY', 'HIP HOP', 'BREAK', 'CYPHER', '90s BEATS', 'BRONX'];
-      for (let x = -10; x < 180; x += 18) {
-        const tag = graffitiTags[Math.abs(Math.floor(x / 18)) % graffitiTags.length];
-        const wallGeo = new THREE.BoxGeometry(18, 9, 0.6);
-        const wallMat = new THREE.MeshStandardMaterial({
-          map: TextureGenerator.getBrickWallWithGraffiti(tag),
-          roughness: 0.8
-        });
-        const wall = new THREE.Mesh(wallGeo, wallMat);
-        wall.position.set(x + 9, 4.5, -2.6);
-        this.bgGroup.add(wall);
-      }
-    }
-
-    // 5. Neon Billboards
-    if (this.stageNumber === 3 || this.stageNumber === 4) {
-      const bText = (this.stageNumber === 3) ? 'ROOFTOP CYPHER' : 'KING OF BREAKS';
-      const bGeo = new THREE.BoxGeometry(12, 5, 0.4);
-      const bMat = new THREE.MeshStandardMaterial({
-        map: TextureGenerator.getNeonBillboardTexture(bText),
-        roughness: 0.3
-      });
-      const bMesh = new THREE.Mesh(bGeo, bMat);
-      bMesh.position.set(45, 9.5, -3.2);
-      this.bgGroup.add(bMesh);
-
-      const bMesh2 = new THREE.Mesh(bGeo, bMat);
-      bMesh2.position.set(105, 9.5, -3.2);
-      this.bgGroup.add(bMesh2);
+  /** 背景の壁。プレイ面の足場より暗く落として、乗れるものと見分けやすくする */
+  private addMidgroundWall(height: number, material: (x: number) => THREE.Material): void {
+    for (let x = -10; x < 190; x += 18) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(18, height, 0.6), material(x));
+      wall.position.set(x + 9, height / 2, -2.6);
+      this.bgGroup.add(wall);
     }
   }
 
-  public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false): void {
+  private buildBronxBackdrop(): void {
+    this.buildSkyline({ z: -24, minH: 25, varH: 35, minW: 10, varW: 8, xFrom: -20, xTo: 190, stepBase: 14, windowChance: 0.55, color: 0x090c14 });
+
+    // Rooftop Water Towers (壁の上に頭を出す)
+    const wtTex = TextureGenerator.getWaterTowerTexture();
+    [28, 76, 122].forEach((wx) => {
+      const wtGroup = new THREE.Group();
+      wtGroup.position.set(wx, 7.5, -4.5);
+
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.8, 1.8, 3.2, 16),
+        new THREE.MeshStandardMaterial({ map: wtTex, roughness: 0.8 })
+      );
+      barrel.position.y = 2.4;
+      wtGroup.add(barrel);
+
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(2.1, 1.4, 16),
+        new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.6 })
+      );
+      roof.position.y = 4.7;
+      wtGroup.add(roof);
+
+      const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6);
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
+      [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.set(lx, 1.2, lz);
+        wtGroup.add(leg);
+      });
+
+      this.bgGroup.add(wtGroup);
+    });
+
+    // Graffiti Bricks(暗めに落とす)
+    const graffitiTags = ['STREET B-BOY', 'HIP HOP', 'BREAK', 'CYPHER', '90s BEATS', 'BRONX'];
+    this.addMidgroundWall(9, (x) => new THREE.MeshStandardMaterial({
+      map: TextureGenerator.getBrickWallWithGraffiti(graffitiTags[Math.abs(Math.floor(x / 18)) % graffitiTags.length]),
+      color: 0x8a8a8a,
+      roughness: 0.8
+    }));
+    this.addWallMountedHvac([15, 52, 98, 132], 5.8);
+  }
+
+  private buildSubwayBackdrop(): void {
+    // 地下なので摩天楼はなし。タイル壁と柱、駅名の看板だけで構成する
+    const tileTex = TextureGenerator.getSubwayTileTexture();
+    tileTex.repeat.set(3, 1);
+    this.addMidgroundWall(10, () => new THREE.MeshStandardMaterial({ map: tileTex, color: 0x777f7b, roughness: 0.5 }));
+
+    // 駅の柱(壁の前面に貼り付く角柱。地面には届くが、プレイ面よりずっと奥)
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1b2420, roughness: 0.8 });
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xffdd00 });
+    for (let x = 6; x < 170; x += 24) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 10, 0.5), pillarMat);
+      pillar.position.set(x, 5, -2.05);
+      this.bgGroup.add(pillar);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.25, 0.52), stripeMat);
+      stripe.position.set(x, 1.2, -2.05);
+      this.bgGroup.add(stripe);
+    }
+
+    // 駅名標
+    const stationNames = ['42 ST', 'CYPHER ST', 'BREAK AVE', 'GOAL LINE', 'B-BOY PLAZA'];
+    for (let i = 0; i < stationNames.length; i++) {
+      const sign = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 2.2, 0.3),
+        new THREE.MeshStandardMaterial({ map: TextureGenerator.getNeonBillboardTexture(stationNames[i]), roughness: 0.4 })
+      );
+      sign.position.set(20 + i * 32, 7.4, -2.1);
+      this.bgGroup.add(sign);
+    }
+
+    // 天井
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(220, 1, 10), new THREE.MeshStandardMaterial({ color: 0x0c110f, roughness: 1 }));
+    ceiling.position.set(80, 11, -3);
+    this.bgGroup.add(ceiling);
+  }
+
+  private buildRooftopBackdrop(): void {
+    // 壁はなく、開けた夜空とビル群。手前の低い層と奥の高い層で奥行きを出す
+    this.buildSkyline({ z: -18, minH: 14, varH: 26, minW: 8, varW: 8, xFrom: -20, xTo: 190, stepBase: 12, windowChance: 0.5, color: 0x0b0d18 });
+    this.buildSkyline({ z: -46, minH: 40, varH: 40, minW: 12, varW: 10, xFrom: -30, xTo: 210, stepBase: 18, windowChance: 0.3, color: 0x070912 });
+
+    // 大きな月
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(9, 40), new THREE.MeshBasicMaterial({ color: 0xf1e6ff }));
+    moon.position.set(70, 42, -110);
+    this.bgGroup.add(moon);
+
+    // 星
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(300 * 3);
+    for (let i = 0; i < 300; i++) {
+      starPos[i * 3] = -20 + Math.random() * 220;
+      starPos[i * 3 + 1] = 18 + Math.random() * 50;
+      starPos[i * 3 + 2] = -100;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    this.bgGroup.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, sizeAttenuation: true })));
+
+    // 航空障害灯
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+    for (const bx of [10, 60, 105, 150]) {
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), beaconMat);
+      beacon.position.set(bx, 40, -18);
+      this.bgGroup.add(beacon);
+    }
+  }
+
+  private buildNeonBackdrop(): void {
+    this.buildSkyline({ z: -24, minH: 25, varH: 35, minW: 10, varW: 8, xFrom: -20, xTo: 190, stepBase: 14, windowChance: 0.4, color: 0x0d0714 });
+
+    // ネオン格子の壁(低め)。看板が壁の上に見えるようにする
+    const gridTex = TextureGenerator.getNeonGridTexture();
+    gridTex.repeat.set(6, 2);
+    this.addMidgroundWall(6, () => new THREE.MeshStandardMaterial({ map: gridTex, color: 0x9a9a9a, roughness: 0.6 }));
+
+    const billboards = [
+      { x: 30, text: 'KING OF BREAKS' },
+      { x: 70, text: 'NEON BLOCK PARTY' },
+      { x: 112, text: 'GRAND MASTER' },
+      { x: 148, text: 'B-BOY FOREVER' }
+    ];
+    for (const b of billboards) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 5, 0.4),
+        new THREE.MeshStandardMaterial({ map: TextureGenerator.getNeonBillboardTexture(b.text), roughness: 0.3 })
+      );
+      mesh.position.set(b.x, 9.5, -3.2);
+      this.bgGroup.add(mesh);
+    }
+    this.addWallMountedHvac([20, 90, 125], 4.5);
+  }
+
+  // -------------------------------------------------------------
+  // BUILDER API
+  // -------------------------------------------------------------
+  /**
+   * 足場を追加する。厚み0.6以下の板は一方通行(下から通り抜け・上から着地)。
+   * 一方通行の板には縁に水色の線を、ネオン面のソリッドな足場には上面にテーマ色の線を入れて、見た目で区別できるようにする。
+   */
+  public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false, oneWay: boolean = h <= ONE_WAY_MAX_THICKNESS): void {
     const geo = new THREE.BoxGeometry(w, h, 2.8);
     let mat: THREE.Material;
 
@@ -368,10 +514,7 @@ export class Stage {
       tex.repeat.set(w / 4, 1);
       mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
     } else {
-      mat = new THREE.MeshStandardMaterial({
-        color: (this.stageNumber === 2) ? 0x222e28 : (this.stageNumber === 3) ? 0x222632 : 0x2b323d,
-        roughness: 0.7
-      });
+      mat = new THREE.MeshStandardMaterial({ color: this.config.platformColor, roughness: 0.7 });
     }
 
     const mesh = new THREE.Mesh(geo, mat);
@@ -380,7 +523,14 @@ export class Stage {
     mesh.castShadow = true;
     this.scene.add(mesh);
 
-    this.platforms.push({ x, y, w, h, mesh });
+    if (oneWay || this.config.theme === 'neon') {
+      const lineColor = oneWay ? 0x66ccff : this.config.glowColor;
+      const line = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: lineColor }));
+      line.position.set(0, h / 2, 1.4);
+      mesh.add(line);
+    }
+
+    this.platforms.push({ x, y, w, h, mesh, oneWay });
   }
 
   public addBlock(block: StageBlock): void {
@@ -439,14 +589,37 @@ export class Stage {
     this.scene.add(platform.mesh);
   }
 
+  public addCrumblingPlatform(platform: CrumblingPlatform): void {
+    this.crumblingPlatforms.push(platform);
+    this.scene.add(platform.mesh);
+  }
+
+  public addCheckpoint(cp: Checkpoint): void {
+    this.checkpoints.push(cp);
+    this.scene.add(cp.mesh);
+  }
+
+  /** 全ての足場を置き終えた後の仕上げ(レールの支柱など、他の足場の位置に依存するもの) */
+  private finalizeLevel(): void {
+    this.grindRails.forEach((rail) => rail.buildSupports((wx) => this.groundHeightBelow(wx, rail.y)));
+  }
+
+  /** wx の真下にある足場の上面の高さ(maxY 以下で最も高いもの)。無ければ null */
+  private groundHeightBelow(wx: number, maxY: number): number | null {
+    let best: number | null = null;
+    for (const p of this.platforms) {
+      if (wx >= p.x && wx <= p.x + p.w && p.y <= maxY + 0.05) {
+        if (best === null || p.y > best) best = p.y;
+      }
+    }
+    return best;
+  }
+
   // -------------------------------------------------------------
-  // LEVEL LAYOUT BUILDER (4 DIVERSE, GIMMICK-PACKED STAGES)
+  // LEVEL LAYOUT BUILDER
   // -------------------------------------------------------------
   private buildLevelContent(): void {
     switch (this.stageNumber) {
-      case 1:
-        this.buildStage1();
-        break;
       case 2:
         this.buildStage2();
         break;
@@ -458,15 +631,30 @@ export class Stage {
         break;
       default:
         this.buildStage1();
+        break;
     }
   }
 
+  private addSign(x: number, y: number, text: string): void {
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(3.4, 1.7, 0.2),
+      new THREE.MeshStandardMaterial({ map: TextureGenerator.getNeonBillboardTexture(text), roughness: 0.4 })
+    );
+    sign.position.set(x, y, -1.9);
+    this.bgGroup.add(sign);
+  }
+
   // -------------------------------------------------------------
-  // STAGE 1: BRONX STREET (Starter with Grind Rail, Drones & Fire Hydrant)
+  // STAGE 1: BRONX STREET (基本の動きを覚える面: 看板つきの導入、レール、ドローン、消火栓)
   // -------------------------------------------------------------
   private buildStage1(): void {
     // Road 1: X -6 to 25
     this.addPlatform(-6, 0, 31, 4, true);
+
+    // チュートリアルの看板(背景)
+    this.addSign(4, 4.4, 'JUMP: Z/SPACE');
+    this.addSign(15, 4.4, 'SPIN: X/K');
+    this.addSign(23, 4.4, 'HIT HYDRANT!');
 
     // Intro Question & Brick Blocks
     this.addBlock(new StageBlock(8, 3.2, 'question'));
@@ -474,25 +662,26 @@ export class Stage {
     this.addBlock(new StageBlock(12, 3.2, 'question'));
     this.addBlock(new StageBlock(14, 3.2, 'brick'));
 
-    // Cardboard obstacles & patrolling enemies
-    this.addObstacle(new StreetObstacle(17.5, 0, 'cardboard'));
-    this.addEnemy(new SecurityBot(20.5, 0, 2.0));
+    // Patrolling enemy first, then a cardboard box to spin through
+    this.addEnemy(new SecurityBot(17.5, 0, 2.0));
+    this.addObstacle(new StreetObstacle(20.5, 0, 'cardboard'));
 
-    // Street Gimmick 1: Fire Hydrant moved further in to X = 23 with Gold Cassette launcher!
+    // Fire hydrant launches to a gold cassette
     this.addFireHydrant(new FireHydrant(23, 0));
-    this.addCassette(new CassetteTape(23, 6.2, true)); // Gold Cassette!
+    this.addCassette(new CassetteTape(23, 6.2, true));
 
     // Pit 1: X 25 to 29 (Gap 4.0 units - requires run jump or grind rail)
     this.addGrindRail(new GrindRail(24.5, 1.4, 7.5));
 
     // Road 2: X 29 to 51
     this.addPlatform(29, 0, 22, 4, true);
+    this.addCheckpoint(new Checkpoint(30.5, 0));
 
     // Steam Vent & aggressive Skater Dog
     this.addSteamVent(new SteamVent(32, 0));
     this.addEnemy(new SkaterDog(35, 0, 5));
 
-    // Elevated scaffolding platform
+    // Elevated scaffolding platform (一方通行)
     this.addPlatform(36, 2.6, 8, 0.5);
     this.addCassette(new CassetteTape(38, 3.8));
     this.addCassette(new CassetteTape(40, 3.8));
@@ -504,6 +693,7 @@ export class Stage {
     // Pit 2: X 51 to 55 (Gap 4.0 units)
     // Road 3: X 55 to 78
     this.addPlatform(55, 0, 23, 4, true);
+    this.addCheckpoint(new Checkpoint(56.5, 0));
 
     // Stepping subway entrance stairs guarded by Drone & Security Bot
     this.addPlatform(58, 1.6, 5, 1.6);
@@ -522,6 +712,7 @@ export class Stage {
     // Pit 3: X 78 to 82 (Gap 4.0 units)
     // Road 4: X 82 to 112
     this.addPlatform(82, 0, 30, 4, true);
+    this.addCheckpoint(new Checkpoint(83.5, 0));
 
     this.addEnemy(new SkaterDog(90, 0, 6));
     this.addEnemy(new SurveillanceDrone(96, 4.5, 6));
@@ -547,7 +738,7 @@ export class Stage {
   }
 
   // -------------------------------------------------------------
-  // STAGE 2: SUBWAY CYPHER (Subway Tracks, Rails, Shooting Bots, Lasers)
+  // STAGE 2: SUBWAY CYPHER (線路と停車中の電車。3つ目の線路はレールカートで渡る)
   // -------------------------------------------------------------
   private buildStage2(): void {
     // Station Platform 1: X -6 to 24
@@ -574,6 +765,7 @@ export class Stage {
 
     // Station Platform 2: X 38 to 64
     this.addPlatform(38, 0, 26, 4);
+    this.addCheckpoint(new Checkpoint(39.5, 0));
 
     // SECURITY LASER GRID guarded by Drone!
     this.addLaserGrid(new LaserGrid(43, 0, 3.5, 1.15, false));
@@ -581,7 +773,7 @@ export class Stage {
     this.addEnemy(new SecurityBot(50, 0, 3.5));
     this.addEnemy(new SkaterDog(56, 0, 5));
 
-    // Overhead Walkway
+    // Overhead Walkway (一方通行)
     this.addPlatform(49, 2.6, 7, 0.5);
     this.addBlock(new StageBlock(51, 5.6, 'question', true)); // Hidden Gold Cassette!
     this.addBlock(new StageBlock(53, 5.6, 'brick'));
@@ -596,6 +788,7 @@ export class Stage {
 
     // Station Platform 3: X 76 to 104
     this.addPlatform(76, 0, 28, 4);
+    this.addCheckpoint(new Checkpoint(77.5, 0));
 
     this.addBlock(new StageBlock(82, 3.2, 'question'));
     this.addBlock(new StageBlock(84, 3.2, 'brick'));
@@ -607,13 +800,15 @@ export class Stage {
     // Subwoofer Bounce Pad
     this.addSubwoofer(new SubwooferPad(98, 0));
 
-    // Sunken track 3: X 104 to 118
+    // Sunken track 3: X 104 to 118。線路の上をレールカートが往復する(面2の固有ギミック)。
+    // 敵はカートの邪魔にならないよう置かない。グラインドレールで渡る近道もある。
     this.addPlatform(104, -1.0, 14, 3);
-    this.addEnemy(new SkaterDog(108, -1.0, 5));
+    this.addMovingPlatform(new MovingPlatform(107, 0.2, 6, 3.5, 0, 1.3, 'cart'));
     this.addGrindRail(new GrindRail(105, 1.4, 11.0));
 
     // Final Concourse Platform: X 118 to 150
     this.addPlatform(118, 0, 32, 4);
+    this.addCheckpoint(new Checkpoint(119.5, 0));
     // Double Laser Grid: one crouch slide, one high barrier
     this.addLaserGrid(new LaserGrid(123, 0, 3.2, 1.15, true));
     this.addLaserGrid(new LaserGrid(129, 0, 3.2, 2.3, false));
@@ -622,10 +817,24 @@ export class Stage {
 
     this.addPlatform(136, 1.5, 8, 1.5);
     this.addPlatform(144, 3.5, 12, 3.5);
+
+    this.addTrackRails([[24, 38], [64, 76], [104, 118]], -1.0);
+  }
+
+  /** 線路の飾り(判定なし)。ソリッドな床の上に細いレールを2本敷く */
+  private addTrackRails(spans: [number, number][], floorY: number): void {
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x6b7378, metalness: 0.8, roughness: 0.4 });
+    for (const [x0, x1] of spans) {
+      for (const z of [-0.7, 0.7]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.06, 0.08), railMat);
+        rail.position.set((x0 + x1) / 2, floorY + 0.03, z);
+        this.bgGroup.add(rail);
+      }
+    }
   }
 
   // -------------------------------------------------------------
-  // STAGE 3: ROOFTOP SKYLINE (High Speed Gondolas, Drones & Abyss)
+  // STAGE 3: ROOFTOP SKYLINE (ビルの谷間。崩れる足場板とゴンドラで渡る縦の動きの面)
   // -------------------------------------------------------------
   private buildStage3(): void {
     // Rooftop 1: X -6 to 22
@@ -639,8 +848,10 @@ export class Stage {
     this.addEnemy(new SecurityBot(17, 0, 3));
     this.addFireHydrant(new FireHydrant(20, 0));
 
-    // Scaffolding Bridge 1: X 24 to 32 over the sky gap!
-    this.addPlatform(24, 1.6, 8, 0.6);
+    // 崩れる足場板 X 24〜32(面3の固有ギミック)。乗ると約0.5秒で落ちるので立ち止まらずに渡る
+    this.addCrumblingPlatform(new CrumblingPlatform(24, 1.6, 2.4));
+    this.addCrumblingPlatform(new CrumblingPlatform(27.3, 1.6, 2.4));
+    this.addCrumblingPlatform(new CrumblingPlatform(30.6, 1.6, 2.4));
     this.addEnemy(new SurveillanceDrone(27, 4.4, 4));
     this.addCassette(new CassetteTape(26, 2.8));
     this.addCassette(new CassetteTape(28, 2.8));
@@ -648,12 +859,13 @@ export class Stage {
 
     // Rooftop 2: X 34 to 54
     this.addPlatform(34, 2.4, 20, 5);
+    this.addCheckpoint(new Checkpoint(35.5, 2.4));
     this.addEnemy(new SkaterDog(40, 2.4, 5));
 
     // Grind Rail along rooftop parapet
     this.addGrindRail(new GrindRail(36, 3.6, 8.0));
 
-    // High air duct route with Gold Cassette!
+    // High air duct route with Gold Cassette! (一方通行)
     this.addPlatform(42, 5.0, 6, 0.6);
     this.addBlock(new StageBlock(44, 8.0, 'question', true));
     this.addBlock(new StageBlock(46, 8.0, 'brick'));
@@ -666,6 +878,7 @@ export class Stage {
 
     // Rooftop 3: X 68 to 90
     this.addPlatform(68, 1.5, 22, 5);
+    this.addCheckpoint(new Checkpoint(69.5, 1.5));
     this.addBlock(new StageBlock(74, 4.7, 'question'));
     this.addBlock(new StageBlock(76, 4.7, 'brick'));
     this.addEnemy(new SecurityBot(75, 1.5, 3));
@@ -681,6 +894,7 @@ export class Stage {
 
     // Rooftop 4: X 101 to 124
     this.addPlatform(101, 2.0, 23, 5);
+    this.addCheckpoint(new Checkpoint(102.5, 2.0));
     this.addObstacle(new StreetObstacle(106, 2.0, 'cardboard'));
     this.addEnemy(new SkaterDog(108, 2.0, 5));
     this.addObstacle(new StreetObstacle(112, 2.0, 'cardboard'));
@@ -691,14 +905,18 @@ export class Stage {
 
     // Penthouse Helipad & DJ Stage: X 136 to 158
     this.addPlatform(136, 1.5, 22, 4);
+    this.addCheckpoint(new Checkpoint(137.5, 1.5));
     this.addEnemy(new SecurityBot(140, 1.5, 2.5));
     this.addPlatform(144, 2.8, 12, 2.8);
   }
 
   // -------------------------------------------------------------
-  // STAGE 4: NEON BLOCK PARTY (Full Gimmick Master Gauntlet)
+  // STAGE 4: NEON BLOCK PARTY (ビートに合わせて交互に点滅するレーザーが主役の総まとめ)
   // -------------------------------------------------------------
   private buildStage4(): void {
+    // BGMのテンポに合わせ、4拍(2.5秒)を1周期にする
+    const BEAT_PERIOD = 2.5;
+
     // Neon Boulevard 1: X -6 to 24
     this.addPlatform(-6, 0, 30, 4, true);
 
@@ -719,24 +937,27 @@ export class Stage {
 
     // Neon Boulevard 2: X 36 to 62
     this.addPlatform(36, 0, 26, 4, true);
+    this.addCheckpoint(new Checkpoint(37.5, 0));
 
-    // Blinking Laser Grid obstacle
-    this.addLaserGrid(new LaserGrid(40, 0, 3.5, 1.15, true));
+    // ビート同期レーザー(交互に点滅する2連)
+    this.addLaserGrid(new LaserGrid(40, 0, 3.5, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
+    this.addLaserGrid(new LaserGrid(52, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
     this.addEnemy(new SecurityBot(44, 0, 3));
 
-    // Gimmick: Steam Vent & High Secret Gold Cassette
+    // Gimmick: Steam Vent & High Secret Gold Cassette (一方通行)
     this.addSteamVent(new SteamVent(46, 0));
     this.addPlatform(48, 2.8, 6, 0.6);
     this.addBlock(new StageBlock(50, 5.8, 'question', true));
 
-    this.addEnemy(new SkaterDog(52, 0, 6));
-    this.addEnemy(new SurveillanceDrone(56, 4.6, 5));
+    this.addEnemy(new SkaterDog(57, 0, 3));
+    this.addEnemy(new SurveillanceDrone(58, 4.6, 5));
 
     // Fast Moving Gondola Platform over Neon Abyss
     this.addMovingPlatform(new MovingPlatform(64, 2.0, 7.0, 4.5, 0, 2.5));
 
     // Neon Boulevard 3: X 76 to 106
     this.addPlatform(76, 0, 30, 4, true);
+    this.addCheckpoint(new Checkpoint(77.5, 0));
 
     this.addBlock(new StageBlock(82, 3.2, 'question'));
     this.addBlock(new StageBlock(84, 3.2, 'brick'));
@@ -748,16 +969,19 @@ export class Stage {
     // Subwoofer Bounce Pad launch!
     this.addSubwoofer(new SubwooferPad(90, 0));
 
-    // High Grind Rail over dual pulsing lasers!
+    // High Grind Rail over dual pulsing lasers (ビート同期・交互点滅)
     this.addGrindRail(new GrindRail(93, 2.8, 12.0));
-    this.addLaserGrid(new LaserGrid(96, 0, 3.0, 1.15, true));
-    this.addLaserGrid(new LaserGrid(103, 0, 3.0, 1.15, false));
+    this.addLaserGrid(new LaserGrid(96, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
+    this.addLaserGrid(new LaserGrid(102.5, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
 
-    this.addEnemy(new SecurityBot(102, 0, 3));
     this.addEnemy(new SurveillanceDrone(105, 4.6, 5));
 
-    // Gimmick: Dual Subwoofer Ramp
+    // スピーカーの島(X 108〜112): サブウーファーが宙に浮かないよう足場を置く。
+    // 島の上のサブウーファーで高く跳ぶと、上空のカセットを取れる。
+    this.addPlatform(108, 0, 4, 4, true);
     this.addSubwoofer(new SubwooferPad(110, 0));
+    this.addCassette(new CassetteTape(109, 8.0));
+    this.addCassette(new CassetteTape(111, 8.0));
 
     // Stepped Champion Pyramid leading to Grandmaster Turntable (solid steps)
     this.addPlatform(116, 1.5, 8, 1.5);
@@ -773,6 +997,9 @@ export class Stage {
     this.addPlatform(154, 4.0, 14, 4.0);
   }
 
+  // -------------------------------------------------------------
+  // UPDATE
+  // -------------------------------------------------------------
   public update(dt: number, time: number, focusX?: number): void {
     if (focusX !== undefined) this.updateLampLights(focusX);
 
@@ -787,20 +1014,13 @@ export class Stage {
       f.rotation.z += 15 * dt;
     });
 
-    // Update Stage Blocks
     this.blocks.forEach((b) => b.update(dt));
-
-    // Update Cassettes
     this.cassettes.forEach((c) => c.update(dt));
-
-    // Update Subwoofers
     this.subwoofers.forEach((s) => s.update(dt));
-
-    // Update Laser Grids
     this.laserGrids.forEach((l) => l.update(dt));
-
-    // Update Moving Platforms
     this.movingPlatforms.forEach((m) => m.update(dt));
+    this.crumblingPlatforms.forEach((c) => c.update(dt));
+    this.checkpoints.forEach((c) => c.update(dt));
 
     // Update Steam Vents & Spawn Steam Particles
     this.steamVents.forEach((v) => {
@@ -844,11 +1064,165 @@ export class Stage {
 
   public getGoalAABB(): BoundingBox2D {
     return {
-      x: this.goalX - 2.0,
+      x: this.goalX - 2.5,
       y: this.goalY,
-      w: 4.0,
-      h: 2.0
+      w: 5.0,
+      h: 2.5
     };
+  }
+
+  // -------------------------------------------------------------
+  // COLLISION QUERIES
+  // -------------------------------------------------------------
+  /** 全ての判定を種類別に列挙する(デバッグ表示用。プレイヤーの判定は呼び出し側で足す) */
+  public getCollisionShapes(): CollisionShape[] {
+    const shapes: CollisionShape[] = [];
+
+    for (const p of this.platforms) {
+      shapes.push({ kind: p.oneWay ? 'oneWay' : 'solid', box: { x: p.x, y: p.y - p.h, w: p.w, h: p.h } });
+    }
+    for (const m of this.movingPlatforms) shapes.push({ kind: 'oneWay', box: m.getAABB() });
+    for (const c of this.crumblingPlatforms) {
+      if (c.isActive) shapes.push({ kind: 'oneWay', box: c.getAABB() });
+    }
+    for (const b of this.blocks) {
+      if (!b.isDestroyed) shapes.push({ kind: 'solid', box: b.getAABB() });
+    }
+    for (const o of this.obstacles) {
+      if (!o.isDestroyed) shapes.push({ kind: 'solid', box: o.getAABB() });
+    }
+    for (const h of this.fireHydrants) {
+      shapes.push({ kind: 'solid', box: h.getAABB() });
+      const column = h.getColumnAABB();
+      if (column) shapes.push({ kind: 'trigger', box: column });
+    }
+    for (const s of this.subwoofers) shapes.push({ kind: 'solid', box: s.getAABB() });
+    for (const v of this.steamVents) {
+      if (v.isSteaming) shapes.push({ kind: 'trigger', box: v.getAABB() });
+    }
+    for (const r of this.grindRails) shapes.push({ kind: 'trigger', box: r.getAABB() });
+    for (const c of this.cassettes) {
+      if (!c.isCollected) shapes.push({ kind: 'trigger', box: c.getAABB() });
+    }
+    for (const c of this.checkpoints) shapes.push({ kind: 'trigger', box: c.getAABB() });
+    for (const l of this.laserGrids) shapes.push({ kind: 'hazard', box: l.getBeamAABB() });
+    for (const e of this.enemies) {
+      if (!e.isDead) shapes.push({ kind: 'hazard', box: e.getAABB() });
+    }
+    for (const p of this.projectiles) {
+      if (!p.isDead) shapes.push({ kind: 'hazard', box: p.getAABB() });
+    }
+    shapes.push({ kind: 'trigger', box: this.getGoalAABB() });
+    return shapes;
+  }
+
+  /** 弾や敵の横移動を止める壁になる箱(ソリッドのみ。一方通行の板は含まない) */
+  private getWallBoxes(): { box: BoundingBox2D; minTopClearance: number }[] {
+    const walls: { box: BoundingBox2D; minTopClearance: number }[] = [];
+    for (const p of this.platforms) {
+      if (p.oneWay) continue;
+      walls.push({ box: { x: p.x, y: p.y - p.h, w: p.w, h: p.h }, minTopClearance: 0.3 });
+    }
+    for (const b of this.blocks) {
+      if (!b.isDestroyed) walls.push({ box: b.getAABB(), minTopClearance: 0.2 });
+    }
+    for (const o of this.obstacles) {
+      if (!o.isDestroyed) walls.push({ box: o.getAABB(), minTopClearance: 0.2 });
+    }
+    for (const h of this.fireHydrants) walls.push({ box: h.getAABB(), minTopClearance: 0.2 });
+    for (const s of this.subwoofers) walls.push({ box: s.getAABB(), minTopClearance: 0.2 });
+    return walls;
+  }
+
+  /** 弾が壁(ソリッド)に当たったか。一方通行の板は弾を止めない */
+  public isBlockedBySolid(box: BoundingBox2D): boolean {
+    for (const wall of this.getWallBoxes()) {
+      const b = wall.box;
+      if (box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Resolves collision between an enemy and environmental walls
+   * (solid platforms, stairs, blocks, street obstacles, hydrants, subwoofers).
+   * Reverses enemy direction when colliding with a wall.
+   */
+  public updateEnemyCollisions(enemy: BaseEnemy): void {
+    if (enemy.isDead) return;
+
+    const halfW = enemy.width / 2;
+    const eLeft = enemy.x - halfW;
+    const eRight = enemy.x + halfW;
+    const eBottom = enemy.y;
+    const eTop = enemy.y + enemy.height;
+
+    const prevLeft = enemy.prevX - halfW;
+    const prevRight = enemy.prevX + halfW;
+
+    for (const { box, minTopClearance } of this.getWallBoxes()) {
+      const wLeft = box.x;
+      const wRight = box.x + box.w;
+      const wTop = box.y + box.h;
+      const wBottom = box.y;
+
+      // 足より高くそびえ、体と縦に重なるものだけが壁になる
+      if (wTop > eBottom + minTopClearance && wBottom < eTop - 0.2) {
+        // Moving right into the wall's left face
+        if (prevRight <= wLeft + 0.25 && eRight >= wLeft) {
+          enemy.x = wLeft - halfW;
+          enemy.reverseDirection();
+          enemy.mesh.position.x = enemy.x;
+          return;
+        }
+        // Moving left into the wall's right face
+        if (prevLeft >= wRight - 0.25 && eLeft <= wRight) {
+          enemy.x = wRight + halfW;
+          enemy.reverseDirection();
+          enemy.mesh.position.x = enemy.x;
+          return;
+        }
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // VALIDATION (開発時の配置チェック。問題があればコンソールにエラーを出す)
+  // -------------------------------------------------------------
+  private validateLayout(): void {
+    const problems: string[] = [];
+
+    // ゴールのターンテーブル(半径2.8)が足場に完全に支えられているか
+    const radius = 2.8;
+    const minX = this.goalX - radius;
+    const maxX = this.goalX + radius;
+    const goalSupported = this.platforms.some((p) => {
+      return p.x <= minX && p.x + p.w >= maxX && Math.abs(p.y - this.goalY) <= 0.1;
+    });
+    if (!goalSupported) {
+      problems.push(`ゴールのターンテーブル X=[${minX.toFixed(1)}, ${maxX.toFixed(1)}] Y=${this.goalY} が足場に完全には支えられていません`);
+    }
+
+    // 地面に置くものは、真下に足場があるか
+    const groundItems: { label: string; x: number; y: number; halfW: number }[] = [
+      ...this.subwoofers.map((s) => ({ label: 'サブウーファー', x: s.x, y: s.y, halfW: 0.8 })),
+      ...this.fireHydrants.map((h) => ({ label: '消火栓', x: h.x, y: h.y, halfW: 0.4 })),
+      ...this.steamVents.map((v) => ({ label: '蒸気口', x: v.x, y: v.y, halfW: 0.5 })),
+      ...this.obstacles.map((o) => ({ label: '障害物', x: o.x, y: o.y, halfW: o.width / 2 })),
+      ...this.checkpoints.map((c) => ({ label: 'チェックポイント', x: c.x, y: c.y, halfW: 0.3 }))
+    ];
+    for (const item of groundItems) {
+      const supported = this.platforms.some((p) => {
+        return p.x <= item.x - item.halfW + 0.01 && p.x + p.w >= item.x + item.halfW - 0.01 && Math.abs(p.y - item.y) <= 0.1;
+      });
+      if (!supported) {
+        problems.push(`${item.label} (X=${item.x}, Y=${item.y}) の真下に足場がありません`);
+      }
+    }
+
+    for (const p of problems) {
+      console.error(`[Stage ${this.stageNumber}] ${p}`);
+    }
   }
 
   /**
@@ -856,18 +1230,19 @@ export class Stage {
    * Ensures the spawn position is never over a pit, laser grid, or thin edge.
    */
   public getSafeRespawnPosition(deathX: number): { x: number; y: number } {
-    const firstPlat = this.platforms[0];
+    const solidPlatforms = this.platforms.filter((p) => !p.oneWay);
+    const firstPlat = solidPlatforms[0];
     const defaultPos = {
       x: firstPlat ? Math.max(1.5, firstPlat.x + 3.0) : 1.5,
       y: (firstPlat ? firstPlat.y : 0) + 0.3
     };
 
-    if (deathX <= 6.0 || this.platforms.length === 0) {
+    if (deathX <= 6.0 || solidPlatforms.length === 0) {
       return defaultPos;
     }
 
     // Filter wide, stable ground platforms that are at or behind the death point
-    const candidates = this.platforms
+    const candidates = solidPlatforms
       .filter((p) => p.w >= 6.0 && p.x + 1.5 <= deathX)
       .sort((a, b) => b.x - a.x); // Closest platform behind death point first
 
@@ -915,107 +1290,9 @@ export class Stage {
     return defaultPos;
   }
 
-  /**
-   * Resolves collision between an enemy and environmental walls
-   * (platforms, stairs, blocks, and street obstacles).
-   * Reverses enemy direction when colliding with a wall.
-   */
-  public updateEnemyCollisions(enemy: BaseEnemy): void {
-    if (enemy.isDead) return;
-
-    const halfW = enemy.width / 2;
-    const eLeft = enemy.x - halfW;
-    const eRight = enemy.x + halfW;
-    const eBottom = enemy.y;
-    const eTop = enemy.y + enemy.height;
-
-    const prevLeft = enemy.prevX - halfW;
-    const prevRight = enemy.prevX + halfW;
-
-    // 1. Check Platforms (Elevated platform walls / steps)
-    for (const plat of this.platforms) {
-      const platLeft = plat.x;
-      const platRight = plat.x + plat.w;
-      const platTop = plat.y;
-      const platBottom = plat.y - plat.h;
-
-      // Platform acts as a wall if it rises higher than the enemy's feet
-      // and overlaps the enemy's vertical body
-      if (platTop > eBottom + 0.3 && platBottom < eTop - 0.2) {
-        // Moving right into platform's left wall
-        if (prevRight <= platLeft + 0.25 && eRight >= platLeft) {
-          enemy.x = platLeft - halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-        // Moving left into platform's right wall
-        if (prevLeft >= platRight - 0.25 && eLeft <= platRight) {
-          enemy.x = platRight + halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-      }
-    }
-
-    // 2. Check Blocks (Question blocks & Brick blocks)
-    for (const block of this.blocks) {
-      if (block.isDestroyed) continue;
-      const bBox = block.getAABB();
-      const bLeft = bBox.x;
-      const bRight = bBox.x + bBox.w;
-      const bTop = bBox.y + bBox.h;
-      const bBottom = bBox.y;
-
-      if (bTop > eBottom + 0.2 && bBottom < eTop - 0.2) {
-        // Moving right into block
-        if (prevRight <= bLeft + 0.25 && eRight >= bLeft) {
-          enemy.x = bLeft - halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-        // Moving left into block
-        if (prevLeft >= bRight - 0.25 && eLeft <= bRight) {
-          enemy.x = bRight + halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-      }
-    }
-
-    // 3. Check Breakable Street Obstacles (Trash cans, Cardboard boxes)
-    for (const obs of this.obstacles) {
-      if (obs.isDestroyed) continue;
-      const oBox = obs.getAABB();
-      const oLeft = oBox.x;
-      const oRight = oBox.x + oBox.w;
-      const oTop = oBox.y + oBox.h;
-      const oBottom = oBox.y;
-
-      if (oTop > eBottom + 0.2 && oBottom < eTop - 0.2) {
-        // Moving right into obstacle
-        if (prevRight <= oLeft + 0.25 && eRight >= oLeft) {
-          enemy.x = oLeft - halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-        // Moving left into obstacle
-        if (prevLeft >= oRight - 0.25 && eLeft <= oRight) {
-          enemy.x = oRight + halfW;
-          enemy.reverseDirection();
-          enemy.mesh.position.x = enemy.x;
-          return;
-        }
-      }
-    }
-  }
-
   public dispose(): void {
     this.particleSystem.clear();
+    this.scene.remove(this.particleSystem.group);
     this.projectiles.forEach((proj) => {
       this.scene.remove(proj.mesh);
       proj.mesh.geometry.dispose();
@@ -1061,6 +1338,12 @@ export class Stage {
     });
     this.movingPlatforms.forEach((m) => {
       this.scene.remove(m.mesh);
+    });
+    this.crumblingPlatforms.forEach((c) => {
+      this.scene.remove(c.mesh);
+    });
+    this.checkpoints.forEach((c) => {
+      this.scene.remove(c.mesh);
     });
     this.spotlights.forEach((s) => {
       this.scene.remove(s);

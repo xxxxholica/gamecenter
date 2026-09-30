@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Stage, StageResult } from '../types';
+import { Stage, StageResult, StageBriefing } from '../types';
 import { InputManager } from '../input';
 import { EffectsManager } from '../effects';
 import { sound } from '../audio';
@@ -9,7 +9,20 @@ export class Stage1Drink implements Stage {
   numberText = 'STAGE 1';
   title = 'ドリンクバー';
   mission = '泡を溢れさせずにフチ極限まで注げ！';
-  instruction = '[ENTER] 注ぐ / [↓] 確定';
+  instruction = '[ENTER長押し] 注ぐ / [↓] 確定';
+  briefing: StageBriefing = {
+    goal: 'グラスのフチぎりぎりまで、あふれさせずに注げ',
+    controls: [
+      { key: 'ENTER 長押し', text: '注ぐ(離すと止まる)' },
+      { key: '↓', text: '注ぎ終わり(確定)' },
+    ],
+    rules: [
+      { kind: 'ok', text: '液面と泡がフチに近いほど高得点' },
+      { kind: 'info', text: '泡は注ぐと増え、止めると落ち着く(あふれそうなら一度離す)' },
+      { kind: 'ng', text: 'フチを超えると大惨事(0点)。足りなすぎ(35%未満)も失敗' },
+      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
+    ],
+  };
   limitLabel = '液面・泡限界';
 
   private scene!: THREE.Scene;
@@ -30,6 +43,9 @@ export class Stage1Drink implements Stage {
   private failed = false;
   private timeLeft = 12.0;
   private active = false;
+  // 毎回わずかに違う(±10%程度)。同じ手順の暗記だけでは通らないようにする
+  private readonly pourSpeed = 0.7 * (0.9 + Math.random() * 0.2);
+  private readonly foamSurgeSpeed = 1.3 * (0.9 + Math.random() * 0.2);
 
   // Meshes
   private glassMesh!: THREE.Mesh;
@@ -250,12 +266,10 @@ export class Stage1Drink implements Stage {
         }
 
         // Liquid rises steadily
-        const pourSpeed = 0.70;
-        this.liquidHeight += pourSpeed * dt;
+        this.liquidHeight += this.pourSpeed * dt;
 
         // Foam surges up much faster!
-        const foamSurgeSpeed = 1.30;
-        this.foamHeight += foamSurgeSpeed * dt;
+        this.foamHeight += this.foamSurgeSpeed * dt;
 
         // Slight nozzle vibration
         this.nozzleGroup.position.x = (Math.random() - 0.5) * 0.02;

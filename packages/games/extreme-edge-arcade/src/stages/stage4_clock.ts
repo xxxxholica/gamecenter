@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Stage, StageResult } from '../types';
+import { Stage, StageResult, StageBriefing } from '../types';
 import { InputManager } from '../input';
 import { EffectsManager } from '../effects';
 import { sound } from '../audio';
@@ -9,7 +9,17 @@ export class Stage4Clock implements Stage {
   numberText = 'STAGE 3';
   title = '目覚まし時計';
   mission = '07:00ジャスト鳴動直前に止めろ！';
-  instruction = '[ENTER] 一撃停止';
+  instruction = '[ENTER] 止める(1回)';
+  briefing: StageBriefing = {
+    goal: 'アラームが鳴る 07:00:00 の直前で、時計を止めろ',
+    controls: [{ key: 'ENTER', text: '止める(1回だけ)' }],
+    rules: [
+      { kind: 'ok', text: '07:00:00 に近いほど高得点' },
+      { kind: 'ng', text: '鳴ってしまったら大惨事(0点)' },
+      { kind: 'ng', text: '早すぎ(40%未満)も失敗' },
+      { kind: 'info', text: '限界が近づくと、画面の縁が赤く光る' },
+    ],
+  };
   limitLabel = '07:00接近度';
 
   private scene!: THREE.Scene;
@@ -20,6 +30,8 @@ export class Stage4Clock implements Stage {
   // Let's run 10 virtual seconds over ~4.5 real seconds: rate = 10 / 4.5 = 2.22
   private virtualSeconds = 0.0; // 0.0 to 10.0
   private readonly maxVirtualSeconds = 10.0;
+  // 時計の進む速さ(仮想秒/実秒)。毎回 2.0〜2.5 の間で変わる
+  private readonly timeRate = 2.0 + Math.random() * 0.5;
   private active = false;
   private stopped = false;
   private alarmed = false;
@@ -308,7 +320,7 @@ export class Stage4Clock implements Stage {
     if (!this.stopped && !this.alarmed) {
       const prevInt = Math.floor(this.virtualSeconds);
       // Advance virtual time (10 virtual seconds over ~4.5 real seconds)
-      this.virtualSeconds += dt * 2.22;
+      this.virtualSeconds += dt * this.timeRate;
       const newInt = Math.floor(this.virtualSeconds);
 
       // Play tick sound every virtual second — pitch escalates in danger zone
@@ -407,7 +419,7 @@ export class Stage4Clock implements Stage {
   }
 
   getRemainingTime(): number {
-    const realTimeLeft = Math.max(0, (this.maxVirtualSeconds - this.virtualSeconds) / 2.22);
+    const realTimeLeft = Math.max(0, (this.maxVirtualSeconds - this.virtualSeconds) / this.timeRate);
     return realTimeLeft;
   }
 

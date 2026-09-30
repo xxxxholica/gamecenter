@@ -47,7 +47,7 @@ const allGames: GameEntry[] = [
   },
   {
     slug: 'school-corridor-runner',
-    title: '学園脱出ラン',
+    title: 'テンパレラン',
     englishTitle: 'TEMPALE RUN',
     description:
       '放課後の校舎を全力疾走。追いかけてくる先生の目を盗み、手裏剣と辞書ボムで妨害物を破壁しながら校門突破を目指すエンドレスランナー。',
@@ -93,6 +93,16 @@ const allGames: GameEntry[] = [
       'ブレイクダンス少年が街を駆け抜けるアーケード2.5Dプラットフォーマー。スピン攻撃で段ボールやレーザーを蹴散らし、レールグラインドやサブウーファーのバウンドを駆使してゴールドカセットを狙え。',
     thumbnail: 'thumbnails/street-b-boy.webp',
     accent: '#ffea00',
+    developer: XXXXHOLICA,
+  },
+  {
+    slug: 'midnight-skyway',
+    title: 'ミッドナイト・スカイウェイ',
+    englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
+    description:
+      '夜の都市に浮かぶ架空の高架高速を駆け抜けるタイムアタック。PLATEAUの3D都市モデルで再現したヘルシンキと東京丸の内の2ステージを、3台のマシンから選んで走り、自己ベストを更新しろ。',
+    thumbnail: 'thumbnails/midnight-skyway.webp',
+    accent: '#00e5ff',
     developer: XXXXHOLICA,
   },
 ];

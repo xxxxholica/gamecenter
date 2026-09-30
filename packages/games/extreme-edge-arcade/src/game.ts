@@ -14,6 +14,7 @@ import { RankingManager } from './ranking';
 
 export type GameState =
   | 'TITLE'
+  | 'STAGE_BRIEF'
   | 'STAGE_INTRO'
   | 'STAGE_PLAY'
   | 'STAGE_JUDGMENT'
@@ -56,12 +57,19 @@ export class GameManager {
   private stateTimer = 0.0;
   private currentJudgment: StageResult | null = null;
 
+  // 各種目は、失敗(大惨事・足りなすぎ)しても1回だけやり直せる。成績は、その種目の挑戦のうち最も良いもの
+  private static readonly MAX_ATTEMPTS = 2;
+  private attempt = 1;
+  private attemptResults: StageResult[] = [];
+
   // HTML HUD Elements
   private titleOverlay!: HTMLElement;
   private hudOverlay!: HTMLElement;
   private centerBanner!: HTMLElement;
   private fadeOverlay!: HTMLElement;
   private resultOverlay!: HTMLElement;
+  private briefOverlay!: HTMLElement;
+  private briefTimer = 0.0;
 
   // Attract Overlays
   private demoBanner!: HTMLElement;
@@ -113,6 +121,8 @@ export class GameManager {
     this.centerBanner = document.getElementById('center-banner')!;
     this.fadeOverlay = document.getElementById('fade-overlay')!;
     this.resultOverlay = document.getElementById('result-overlay')!;
+    this.briefOverlay = document.getElementById('brief-overlay')!;
+    this.briefOverlay.addEventListener('click', () => this.dismissBriefing());
 
     this.demoBanner = document.getElementById('demo-banner')!;
     this.demoPrompt = document.getElementById('demo-prompt')!;
@@ -161,6 +171,7 @@ export class GameManager {
     this.titleOverlay.style.display = 'flex';
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';
+    this.briefOverlay.style.display = 'none';
     this.fadeOverlay.style.opacity = '0';
     this.resultOverlay.style.display = 'none';
     this.rankingOverlay.style.display = 'none';
@@ -203,6 +214,8 @@ export class GameManager {
     sound.playStart();
 
     this.stageRecords = [];
+    this.attempt = 1;
+    this.attemptResults = [];
     this.currentStageIndex = 0;
 
     this.titleOverlay.style.display = 'none';
@@ -293,7 +306,7 @@ export class GameManager {
     });
   }
 
-  private loadStage(index: number) {
+  private loadStage(index: number, isRetry: boolean = false) {
     if (this.currentStage) {
       this.currentStage.cleanup(this.scene);
       this.currentStage = null;
@@ -304,22 +317,27 @@ export class GameManager {
     this.currentStage = factory(this.effects);
     this.currentStage.init(this.scene, this.camera);
 
-    this.state = 'STAGE_INTRO';
-    this.stateTimer = 1.8; // 1.8 seconds clear intro
     this.currentJudgment = null;
 
     // Set HUD stage text & persistent operational guide
-    this.hudRoundText.textContent = `${index + 1}/${this.stageFactories.length}`;
+    this.updateRoundText(index);
     this.hudStageText.textContent = this.currentStage.title;
     this.hudActionGuide.textContent = this.currentStage.instruction;
+    this.hudTimeText.textContent = this.currentStage.getRemainingTime().toFixed(1);
 
-    // Flash Stage Name, Mission Objective, & Action Prompt
-    this.centerBanner.style.display = 'flex';
-    this.centerBanner.innerHTML = `
-      <div class="banner-title">${this.currentStage.numberText} ${this.currentStage.title}</div>
-      <div class="banner-mission">${this.currentStage.mission}</div>
-      <div class="banner-action pulse-text">${this.currentStage.instruction}</div>
-    `;
+    if (isRetry) {
+      // やり直しは説明カードを飛ばし、すぐ準備に入る
+      this.state = 'STAGE_INTRO';
+      this.stateTimer = 0.5;
+      this.centerBanner.style.display = 'flex';
+      this.centerBanner.innerHTML = `<div class="banner-title">もう一度！</div><div class="banner-action pulse-text">最後の挑戦</div>`;
+    } else {
+      // 種目の説明カードを出し、ボタンが押されるまで待つ(何をすればよいか分からないまま始まらないようにする)
+      this.state = 'STAGE_BRIEF';
+      this.briefTimer = 0.0;
+      this.centerBanner.style.display = 'none';
+      this.showBriefing(this.currentStage);
+    }
 
     // Unfade screen
     this.fadeOverlay.style.opacity = '0';
@@ -327,6 +345,53 @@ export class GameManager {
 
     // Cinematic Intro Zoom from far distance into gameplay view
     this.effects.startIntroZoom(1.8);
+  }
+
+  private updateRoundText(index: number) {
+    const base = `${index + 1}/${this.stageFactories.length}`;
+    this.hudRoundText.textContent = `${base}  挑戦${this.attempt}/${GameManager.MAX_ATTEMPTS}`;
+  }
+
+  /** その種目の挑戦のうち、最も良い結果(成功のうち最高点。成功がなければ最後の結果) */
+  private bestAttempt(): StageResult {
+    const successes = this.attemptResults.filter((r) => r.success);
+    if (successes.length > 0) {
+      return successes.reduce((a, b) => (b.scorePercent > a.scorePercent ? b : a));
+    }
+    return this.attemptResults.reduce((a, b) => (b.scorePercent > a.scorePercent ? b : a));
+  }
+
+  /** 種目の説明カード。やること・操作・成功と大惨事の条件を、開始前に短く見せる */
+  private showBriefing(stage: Stage) {
+    const b = stage.briefing;
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const marks = { ok: '◎', ng: '×', info: '・' };
+    this.briefOverlay.innerHTML = `
+      <div class="brief-card">
+        <div class="brief-stage">${esc(stage.numberText)}　${esc(stage.title)}</div>
+        <div class="brief-goal">${esc(b.goal)}</div>
+        <div class="brief-head">操作</div>
+        <ul class="brief-controls">
+          ${b.controls.map((c) => `<li><span class="brief-key">${esc(c.key)}</span>${esc(c.text)}</li>`).join('')}
+        </ul>
+        <div class="brief-head">ルール</div>
+        <ul class="brief-rules">
+          ${b.rules.map((r) => `<li class="${r.kind}"><span class="brief-mark">${marks[r.kind]}</span>${esc(r.text)}</li>`).join('')}
+        </ul>
+        <div class="brief-start blink-1s">ボタンで開始</div>
+      </div>
+    `;
+    this.briefOverlay.style.display = 'flex';
+  }
+
+  /** 説明カードを閉じて開始準備(READY)に入る */
+  private dismissBriefing() {
+    if (this.state !== 'STAGE_BRIEF' || this.briefTimer < 0.5) return;
+    this.briefOverlay.style.display = 'none';
+    this.state = 'STAGE_INTRO';
+    this.stateTimer = 0.5;
+    this.centerBanner.style.display = 'flex';
+    this.centerBanner.innerHTML = `<div class="banner-action pulse-text">READY</div>`;
   }
 
   update(dt: number) {
@@ -396,9 +461,24 @@ export class GameManager {
         break;
       }
 
+      case 'STAGE_BRIEF': {
+        this.briefTimer += dt;
+        // 直前の連打で誤って閉じないよう、表示から0.5秒は受け付けない
+        if (this.briefTimer >= 0.5 && (this.input.wasButton0Pressed() || this.input.wasButton1Pressed())) {
+          this.dismissBriefing();
+        }
+        // 放置されたらタイトルへ戻す
+        if (this.briefTimer >= 60) {
+          this.showTitle();
+        }
+        break;
+      }
+
       case 'STAGE_INTRO': {
         this.stateTimer -= dt;
-        if (this.stateTimer <= 0) {
+        // 説明を閉じたボタンを離してから始める(押しっぱなしのまま操作が始まらないように)。長くても1.5秒で開始
+        const released = !this.input.isButton0() && !this.input.isLeverUp();
+        if ((this.stateTimer <= 0 && released) || this.stateTimer <= -1.5) {
           // Intro finishes -> Start Active Play!
           this.state = 'STAGE_PLAY';
           this.centerBanner.style.display = 'none';
@@ -431,13 +511,7 @@ export class GameManager {
 
         if (result && result.completed) {
           this.currentJudgment = result;
-          this.stageRecords.push({
-            stageNumber: this.currentStage.numberText,
-            stageTitle: this.currentStage.title,
-            success: result.success,
-            scorePercent: result.scorePercent,
-            judgmentText: result.judgmentText,
-          });
+          this.attemptResults.push(result);
 
           this.enterJudgment();
         }
@@ -461,6 +535,28 @@ export class GameManager {
       case 'STAGE_FADEOUT': {
         this.stateTimer -= dt;
         if (this.stateTimer <= 0) {
+          const last = this.currentJudgment;
+          if (last && !last.success && this.attempt < GameManager.MAX_ATTEMPTS) {
+            // 失敗: 同じ種目をもう一度(説明カードは出さない)
+            this.attempt++;
+            this.loadStage(this.currentStageIndex, true);
+            break;
+          }
+
+          // 種目の成績を確定(挑戦のうち最良のもの)
+          const best = this.bestAttempt();
+          if (this.currentStage) {
+            this.stageRecords.push({
+              stageNumber: this.currentStage.numberText,
+              stageTitle: this.currentStage.title,
+              success: best.success,
+              scorePercent: best.scorePercent,
+              judgmentText: best.judgmentText,
+            });
+          }
+          this.attempt = 1;
+          this.attemptResults = [];
+
           this.currentStageIndex++;
           if (this.currentStageIndex < this.stageFactories.length) {
             // Next stage
@@ -511,6 +607,7 @@ export class GameManager {
       this.centerBanner.innerHTML = `
         <div class="judgment-fail">大惨事</div>
         <div class="judgment-score">0.0%</div>
+        ${this.attempt < GameManager.MAX_ATTEMPTS ? '<div class="banner-title">もう一度挑戦できる</div>' : ''}
       `;
     }
   }
@@ -525,6 +622,7 @@ export class GameManager {
 
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';
+    this.briefOverlay.style.display = 'none';
     this.fadeOverlay.style.opacity = '0';
     this.dangerVignette.style.opacity = '0';
     this.dangerFlash.style.opacity = '0';

@@ -8,9 +8,13 @@ import { buttonIconHtml } from '../../../shared/arcadeGuide.ts';
 import { inputManager } from './input.ts';
 import { sound } from './audio.ts';
 import { StudentCrowd } from './studentMesh.ts';
-import { WorldManager, GatePair } from './world.ts';
+import { WorldManager, GatePair, RING_HALF_WIDTH } from './world.ts';
+import { pickRequirement } from './courseGenerator.ts';
+import { LEVELS, LEVEL_ORDER, LevelId, loadLevel, saveLevel } from './levels.ts';
 import { EffectsManager } from './effects.ts';
 import { GateInfo, MathOpType } from './textures.ts';
+import { gateResult } from './gateGenerator.ts';
+import { RankingStore } from './ranking.ts';
 
 export type GameState =
   | 'TITLE'
@@ -42,6 +46,20 @@ export class Game {
   public mashCount: number = 0;
   public bonusTimer: number = 0;
   public maxAchievedMultiplier: number = 1.0;
+  /** 壁に着いた時点の人数(124を消費する前)。取得単位 = これ × 到達倍率 */
+  public creditsAtWall: number = 0;
+
+  // ボーナス飛行の操作: 加速は3回まで、リング成功ごとに取得単位 +10%
+  private flightTotal: number = 0;
+
+  /** 選んでいるレベル(小学生・中学生・高専生)。前回の選択を覚えている */
+  public level: LevelId = loadLevel();
+  private levelBtns: HTMLElement[] = [];
+  private prevMoveX: number = 0;
+  private flightBoostsLeft: number = 0;
+  public ringsHit: number = 0;
+  private reqTextElem: HTMLElement | null = null;
+  private bonusHintElem: HTMLElement | null = null;
   public lastDingMultiplier: number = 1.0;
 
   // Third-person camera tracking
@@ -59,6 +77,8 @@ export class Game {
   private failScreen: HTMLElement | null = null;
   private successScreen: HTMLElement | null = null;
   private finalMultElem: HTMLElement | null = null;
+  private finalScoreElem: HTMLElement | null = null;
+  private finalRingElem: HTMLElement | null = null;
 
   constructor() {
     const canvas = document.getElementById('webgl-canvas') as HTMLCanvasElement;
@@ -87,6 +107,7 @@ export class Game {
 
     this.cacheDOMElements();
     this.setupEventListeners();
+    this.applyLevelSelection(this.level);
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -107,6 +128,10 @@ export class Game {
     this.failScreen = document.getElementById('fail-screen');
     this.successScreen = document.getElementById('success-screen');
     this.finalMultElem = document.getElementById('final-multiplier-display');
+    this.finalScoreElem = document.getElementById('final-score-display');
+    this.finalRingElem = document.getElementById('final-ring-display');
+    this.reqTextElem = document.getElementById('req-text');
+    this.bonusHintElem = document.getElementById('bonus-hint');
   }
 
   private setupEventListeners(): void {
@@ -116,6 +141,22 @@ export class Game {
       e.stopPropagation();
       this.startGame();
     });
+
+    // レベル選択(タップ/クリックで選ぶ。アケコンは左右で選ぶ)
+    this.levelBtns = Array.from(document.querySelectorAll<HTMLElement>('.level-btn'));
+    for (const btn of this.levelBtns) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.applyLevelSelection(btn.dataset.level as LevelId);
+      });
+    }
+    // 結果画面から、レベル選択(開始画面)へ戻る
+    for (const id of ['level-change-fail-btn', 'level-change-success-btn']) {
+      document.getElementById(id)?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.showStartScreen();
+      });
+    }
 
     const retryFailBtn = document.getElementById('retry-fail-btn');
     retryFailBtn?.addEventListener('click', (e) => {
@@ -140,6 +181,39 @@ export class Game {
     });
   }
 
+  /** レベルを選ぶ。ボタンの強調、説明、そのレベルのランキング表示を更新する */
+  private applyLevelSelection(level: LevelId): void {
+    this.level = level;
+    saveLevel(level);
+    for (const btn of this.levelBtns) {
+      btn.classList.toggle('selected', btn.dataset.level === level);
+    }
+    const desc = document.getElementById('level-desc');
+    if (desc) desc.textContent = LEVELS[level].description;
+    RankingStore.render(document.getElementById('start-ranking'), level);
+  }
+
+  /** 左右でレベルを切り替える(アケコン/キーボード)。押しっぱなしで連続して動かないよう、倒した瞬間だけ反応する */
+  private handleLevelInput(moveX: number): void {
+    const dir = moveX > 0.5 && this.prevMoveX <= 0.5 ? 1 : moveX < -0.5 && this.prevMoveX >= -0.5 ? -1 : 0;
+    this.prevMoveX = moveX;
+    if (dir === 0) return;
+    const idx = LEVEL_ORDER.indexOf(this.level);
+    const next = Math.max(0, Math.min(LEVEL_ORDER.length - 1, idx + dir));
+    if (next !== idx) this.applyLevelSelection(LEVEL_ORDER[next]);
+  }
+
+  /** 開始画面(レベル選択)に戻る */
+  private showStartScreen(): void {
+    this.state = 'TITLE';
+    sound.stopBgm();
+    this.failScreen?.classList.add('hidden');
+    this.successScreen?.classList.add('hidden');
+    this.bonusHudElem?.classList.add('hidden');
+    this.startScreen?.classList.remove('hidden');
+    this.applyLevelSelection(this.level);
+  }
+
   public startGame(): void {
     sound.init();
     sound.playCoin();
@@ -153,6 +227,7 @@ export class Game {
     this.mashCount = 0;
     this.maxAchievedMultiplier = 1.0;
     this.lastDingMultiplier = 1.0;
+    this.creditsAtWall = 0;
 
     // Reset camera to start line
     this.camPos.set(0, 6.0, 10.0);
@@ -161,8 +236,12 @@ export class Game {
     // Completely reset crowd state (clears flying/dead states from previous run)
     this.crowd.reset(this.currentCredits);
 
-    this.world.reset();
+    // 今回の卒業要件を抽選し、ゲート・障害物・アイテム・リングを作り直す
+    this.graduationRequirement = pickRequirement(this.level);
+    this.world.reset(this.graduationRequirement, this.level);
+    this.ringsHit = 0;
     this.effects.clearAll();
+    if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
 
     this.startScreen?.classList.add('hidden');
     this.failScreen?.classList.add('hidden');
@@ -214,6 +293,9 @@ export class Game {
 
     const input = inputManager.poll();
 
+    // 開始画面では、左右でレベルを選ぶ
+    if (this.state === 'TITLE') this.handleLevelInput(input.moveX);
+
     // Handle Start on Title/Results
     if ((this.state === 'TITLE' || this.state === 'GAME_OVER' || this.state === 'GAME_CLEAR') && input.actionJustPressed) {
       this.startGame();
@@ -231,7 +313,7 @@ export class Game {
         this.updateBonusLaunch();
         break;
       case 'BONUS_FLIGHT':
-        this.updateBonusFlight(dt);
+        this.updateBonusFlight(dt, input);
         break;
     }
 
@@ -258,6 +340,10 @@ export class Game {
         break;
       }
     }
+
+    // 障害物(課題)とアイテム(友達)
+    this.world.updateItems(dt);
+    this.processCourseItems();
 
     // Third-person camera tracking:
     // Follows behind and above the crowd, smoothly expanding zoom based on crowd size
@@ -341,7 +427,8 @@ export class Game {
     const delta = newTotal - this.currentCredits;
 
     const isMultiplicative = (op: MathOpType) =>
-      op === 'integral_double' || op === 'integral_triple' || op === 'tensor_prod' || op === 'eigen_boost' || op === 'limit_inf';
+      op === 'integral_double' || op === 'integral_triple' || op === 'tensor_prod' || op === 'eigen_boost' || op === 'limit_inf' ||
+      op === 'affine' || op === 'square' || op === 'percent_up';
 
     const gained = delta > 0;
     if (gained && !touchedNegative) {
@@ -360,64 +447,90 @@ export class Game {
     this.setCredits(newTotal, delta);
   }
 
-  // Calculate side gate result:
-  // University Mathematics operations (Integrals, Summations, Tensors vs Derivatives, Kernels, Divergence)
+  // ゲート1つを適用した結果(計算は gateGenerator.ts の gateResult と共通)
   private calcSideGateResult(count: number, info: GateInfo): {
     survivors: number;
     eliminated: number;
   } {
-    if (count <= 0) {
-      return { survivors: 0, eliminated: 0 };
+    return gateResult(count, info);
+  }
+
+  // 障害物に触れた生徒は脱落し、アイテムの近くを通ると人数が増える
+  private processCourseItems(): void {
+    for (const ob of this.world.obstacles) {
+      if (ob.hit || this.playerZ > ob.spec.z) continue;
+      ob.hit = true;
+
+      const half = ob.spec.width / 2 + 0.25;
+      const hitPositions: { x: number; y: number; z: number }[] = [];
+      for (let i = 0; i < this.crowd.count; i++) {
+        const s = this.crowd.students[i];
+        if (!s.active || s.isFlying) continue;
+        const wx = this.crowd.groupX + s.localX;
+        if (Math.abs(wx - ob.currentX) <= half) {
+          hitPositions.push({ x: wx, y: 0.5, z: this.playerZ + s.localZ });
+        }
+      }
+
+      if (hitPositions.length > 0) {
+        const burst = Math.min(hitPositions.length, 30);
+        for (let k = 0; k < burst; k++) {
+          const p = hitPositions[k];
+          this.effects.spawnDispersalDebris(p.x, p.y, p.z, 2, true);
+        }
+        sound.playCreditDown();
+        inputManager.rumble(250, 0.8, 0.5);
+        this.effects.shake(0.4, 0.28);
+        const newTotal = this.currentCredits - hitPositions.length;
+        this.setCredits(newTotal, -hitPositions.length);
+        if (this.state !== 'RUNNING') return;
+      }
     }
 
-    if (info.isPositive) {
-      let survivors = count;
-      switch (info.type) {
-        case 'integral_double':
-        case 'tensor_prod':
-        case 'eigen_boost':
-          survivors = count * 2;
+    for (const pk of this.world.pickups) {
+      if (pk.collected || this.playerZ > pk.spec.z) continue;
+      pk.collected = true;
+
+      let near = false;
+      for (let i = 0; i < this.crowd.count; i++) {
+        const s = this.crowd.students[i];
+        if (!s.active || s.isFlying) continue;
+        if (Math.abs(this.crowd.groupX + s.localX - pk.spec.x) < 1.4) {
+          near = true;
           break;
-        case 'integral_triple':
-          survivors = count * 3;
-          break;
-        case 'integral_add':
-        case 'series_sum':
-        case 'limit_inf':
-          survivors = count + info.value;
-          break;
-        default:
-          survivors = count * (info.value || 1);
-          break;
+        }
       }
-      return { survivors, eliminated: 0 };
-    } else {
-      // University Mathematics Reductions:
-      let survivors = 0;
-      switch (info.type) {
-        case 'diff_1st':
-        case 'eigen_decay':
-          // Order reduction / damping (half)
-          survivors = Math.max(0, Math.floor(count / 2));
-          break;
-        case 'diff_2nd':
-          // 2nd-order deep reduction (one third)
-          survivors = Math.max(0, Math.floor(count / 3));
-          break;
-        case 'diff_partial':
-        case 'kernel':
-        case 'coker':
-        case 'divergence':
-          // Subspace loss / leakage
-          survivors = Math.max(0, count - info.value);
-          break;
-        default:
-          survivors = Math.max(0, count - info.value);
-          break;
-      }
-      const eliminated = count - survivors;
-      return { survivors, eliminated };
+      if (!near) continue;
+
+      this.world.hideItem(pk.mesh);
+      this.effects.spawnDispersalDebris(pk.spec.x, 1.0, pk.spec.z, 8, false);
+      sound.playCreditUp(false);
+      inputManager.rumble(100, 0.2, 0.5);
+      this.setCredits(this.currentCredits + pk.spec.value, pk.spec.value);
     }
+  }
+
+  // ボーナス飛行のリング: 飛行中の生徒の3割が2本の柱の間を通ると成功(取得単位 +10%)。高さは問わない
+  private checkRingCrossing(x: number, _y: number, prevZ: number, z: number): void {
+    for (const ring of this.world.rings) {
+      if (ring.hit || !(prevZ > ring.spec.z && z <= ring.spec.z)) continue;
+      if (Math.abs(x - ring.spec.x) > RING_HALF_WIDTH) continue;
+
+      ring.passCount++;
+      if (ring.passCount >= Math.max(3, this.flightTotal * LEVELS[this.level].ringPassRatio)) {
+        ring.hit = true;
+        this.ringsHit++;
+        (ring.mesh.material as THREE.MeshBasicMaterial).color.setHex(0x39ff88);
+        sound.playMultiplierDing(1500);
+        inputManager.rumble(100, 0.3, 0.6);
+        this.updateBonusHint();
+      }
+    }
+  }
+
+  private updateBonusHint(): void {
+    if (!this.bonusHintElem) return;
+    this.bonusHintElem.textContent = `加速 ${this.flightBoostsLeft} ・ リング ${this.ringsHit}/${this.world.rings.length}`;
   }
 
   // Check 124 Wall Barrier Encounter
@@ -437,6 +550,9 @@ export class Game {
       sound.playWallBreak();
       inputManager.rumble(600, 1.0, 0.9);
       this.effects.shake(0.9, 0.7);
+
+      // 取得単位の元になる人数(124を消費する前)
+      this.creditsAtWall = this.currentCredits;
 
       // Consume 124 credits
       const surplus = this.currentCredits - this.graduationRequirement;
@@ -494,6 +610,9 @@ export class Game {
     this.crowd.launchFlight(this.flightBoost);
 
     // Show bonus multiplier HUD
+    this.flightBoostsLeft = LEVELS[this.level].maxBoosts;
+    this.flightTotal = this.currentCredits;
+    this.updateBonusHint();
     this.bonusHudElem?.classList.remove('hidden');
     if (this.bonusMultTextElem) {
       this.bonusMultTextElem.textContent = '×1.0';
@@ -501,8 +620,19 @@ export class Game {
   }
 
   // State: Flying & sliding along bonus track
-  private updateBonusFlight(dt: number): void {
-    const { furthestZ, allStopped } = this.crowd.updateFlight(dt);
+  private updateBonusFlight(dt: number, input: ReturnType<typeof inputManager.poll>): void {
+    // 方向: 空中の生徒を左右に振ってリングを狙う。加速: ボタンでもう一押し(3回まで)
+    this.crowd.steerFlight(dt, input.moveX);
+    if (input.actionJustPressed && this.flightBoostsLeft > 0) {
+      this.flightBoostsLeft--;
+      this.crowd.boostFlight(9.0);
+      sound.playShootRocket();
+      inputManager.rumble(120, 0.5, 0.5);
+      this.effects.shake(0.3, 0.2);
+      this.updateBonusHint();
+    }
+
+    const { furthestZ, allStopped } = this.crowd.updateFlight(dt, (x, y, prevZ, z) => this.checkRingCrossing(x, y, prevZ, z));
 
     // Check current multiplier at leading student
     const { mult, label } = this.world.getMultiplierAtZ(furthestZ);
@@ -558,6 +688,18 @@ export class Game {
     if (this.finalMultElem) {
       this.finalMultElem.textContent = `倍率 ×${this.maxAchievedMultiplier.toFixed(1)}`;
     }
+
+    // 取得単位 = 壁に着いた人数 × 到達倍率。余った人数が多いほど、遠くまで飛ぶほど増える
+    const score = Math.round(this.creditsAtWall * this.maxAchievedMultiplier * (1 + 0.1 * this.ringsHit));
+    const rankIndex = RankingStore.add(score, this.level);
+    if (this.finalRingElem) {
+      this.finalRingElem.textContent = `${LEVELS[this.level].label}　リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
+    }
+    if (this.finalScoreElem) {
+      this.finalScoreElem.textContent = `${score} 単位`;
+    }
+    RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
+    RankingStore.render(document.getElementById('start-ranking'), this.level);
 
     this.bonusHudElem?.classList.add('hidden');
     this.successScreen?.classList.remove('hidden');

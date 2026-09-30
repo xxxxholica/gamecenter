@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MIDNIGHT SKYWAY: TIME ATTACK</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- 3D Canvas Container -->
+      <div id="canvas-container"></div>
+
+      <!-- Screen 1: Title Screen -->
+      <div id="screen-title" class="screen-overlay"></div>
+
+      <!-- Screen 2: Car Select Screen -->
+      <div id="screen-car-select" class="screen-overlay" style="display: none;"></div>
+
+      <!-- Screen 3: Map Select Screen -->
+      <div id="screen-map-select" class="screen-overlay" style="display: none;"></div>
+
+      <!-- Screen 3b: Time of Day Select Screen (day / night) -->
+      <div id="screen-time-select" class="screen-overlay" style="display: none;"></div>
+
+      <!-- Stage Loading Screen -->
+      <div id="screen-stage-loading" class="screen-overlay" style="display: none;"></div>
+
+      <!-- Screen 4: Drive HUD & Race Overlays -->
+      <div id="drive-hud-container" style="display: none;"></div>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

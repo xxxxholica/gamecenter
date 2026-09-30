@@ -125,6 +125,32 @@ html, body {
   align-items: center;
 }
 
+/* 弾の残数と延長枠 */
+.hud-br {
+  gap: 18px;
+}
+.ammo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+.ammo-pips {
+  letter-spacing: 3px;
+  color: #ffd84a;
+  min-width: 96px;
+}
+.ammo-pips.reloading {
+  color: #ff6b3d;
+  animation: dangerFlash 0.3s steps(1) infinite;
+}
+.ext-left {
+  font-size: 14px;
+  color: #9ee7ff;
+  text-align: right;
+  letter-spacing: 1px;
+}
+
 /* Danger timer flashing */
 .danger-blink .num {
   color: #d91414 !important;

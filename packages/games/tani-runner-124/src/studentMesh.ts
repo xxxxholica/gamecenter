@@ -403,7 +403,10 @@ export class StudentCrowd {
   }
 
   // Update flight and bounce physics
-  public updateFlight(dt: number): { furthestZ: number; allStopped: boolean } {
+  public updateFlight(
+    dt: number,
+    onStep?: (worldX: number, worldY: number, prevZ: number, worldZ: number) => void
+  ): { furthestZ: number; allStopped: boolean } {
     const gravity = -34.0;
     const groundY = 0.15;
     let furthestZ = this.groupZ;
@@ -416,10 +419,12 @@ export class StudentCrowd {
       if (!s.stopped) {
         allStopped = false;
 
+        const prevZ = s.worldZ;
         s.vy += gravity * dt;
         s.worldX += s.vx * dt;
         s.worldY += s.vy * dt;
         s.worldZ += s.vz * dt;
+        if (onStep) onStep(s.worldX, s.worldY, prevZ, s.worldZ);
 
         s.rotX += s.rotVx * dt;
         s.rotZ += s.rotVz * dt;
@@ -457,6 +462,26 @@ export class StudentCrowd {
 
     this.updateInstancedMeshes();
     return { furthestZ, allStopped };
+  }
+
+  /** 飛行中の方向操作: 空中の生徒を左右に振る(moveX: -1〜+1) */
+  public steerFlight(dt: number, moveX: number): void {
+    if (moveX === 0) return;
+    for (let i = 0; i < this.count; i++) {
+      const s = this.students[i];
+      if (!s.active || s.stopped || s.worldY <= 0.2) continue;
+      s.vx = Math.max(-14, Math.min(14, s.vx + moveX * 32 * dt));
+    }
+  }
+
+  /** 飛行中の加速: 空中の生徒をもう一押し前へ飛ばす */
+  public boostFlight(power: number): void {
+    for (let i = 0; i < this.count; i++) {
+      const s = this.students[i];
+      if (!s.active || s.stopped) continue;
+      s.vz -= power;
+      s.vy += 3.0;
+    }
   }
 
   // Kill all students on fail (collapse to floor)
