@@ -13,7 +13,7 @@ export class CrossJModel extends CarBase {
     wheelbase: '2,460 mm',
     drivetrain: 'フルタイム4WD / ハイトワゴン',
     weight: '870 kg',
-    description: '3面図の寸法比率（全高1.50m）を正確に再現。重厚な6ライトピラーフレーム、切削アルミホイール、精密内装を実装。',
+    description: '全高1.50mの3面図の寸法比率を正確に再現。重厚な6ライトピラーフレーム、切削アルミホイール、精密内装を実装。',
   };
 
   constructor() {

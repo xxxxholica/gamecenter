@@ -355,13 +355,18 @@ export class Stage {
     });
   }
 
-  /** 背景の壁。プレイ面の足場より暗く落として、乗れるものと見分けやすくする */
-  private addMidgroundWall(height: number, material: (x: number) => THREE.Material): void {
-    for (let x = -10; x < 190; x += 18) {
+  /** 背景の壁。プレイ面の足場(x = -6から開始)と左端を完全に一致させる */
+  private addMidgroundWall(height: number, material: (x: number) => THREE.Material, startX: number = -6): void {
+    for (let x = startX; x < 190; x += 18) {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(18, height, 0.6), material(x));
       wall.position.set(x + 9, height / 2, -2.6);
       this.bgGroup.add(wall);
     }
+    // 左端(x = -6)の終端を綺麗に見せるエンドピラー(境界の柱)
+    const endPillarMat = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.8 });
+    const endPillar = new THREE.Mesh(new THREE.BoxGeometry(0.8, height + 1.0, 1.2), endPillarMat);
+    endPillar.position.set(startX, (height + 1.0) / 2, -2.5);
+    this.bgGroup.add(endPillar);
   }
 
   private buildBronxBackdrop(): void {
@@ -506,7 +511,10 @@ export class Stage {
    * 一方通行の板には縁に水色の線を、ネオン面のソリッドな足場には上面にテーマ色の線を入れて、見た目で区別できるようにする。
    */
   public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false, oneWay: boolean = h <= ONE_WAY_MAX_THICKNESS): void {
-    const geo = new THREE.BoxGeometry(w, h, 2.8);
+    // 粗いローポリ直方体から、セグメント分割された高品位ジオメトリに強化
+    const widthSegs = Math.max(1, Math.min(64, Math.round(w * 1.5)));
+    const heightSegs = Math.max(1, Math.min(16, Math.round(h * 2)));
+    const geo = new THREE.BoxGeometry(w, h, 2.8, widthSegs, heightSegs, 2);
     let mat: THREE.Material;
 
     if (isAsphalt) {
@@ -523,9 +531,73 @@ export class Stage {
     mesh.castShadow = true;
     this.scene.add(mesh);
 
+    // 段差・足場のクォリティ改善（立体スチールコーピング、六角ボルト、縁石ブロック、垂直サポートリブ）
+    if (!oneWay) {
+      const metalMat = new THREE.MeshStandardMaterial({
+        color: 0x9aa2a8,
+        metalness: 0.85,
+        roughness: 0.25
+      });
+      const boltMat = new THREE.MeshStandardMaterial({
+        color: 0xd4dadf,
+        metalness: 0.95,
+        roughness: 0.2
+      });
+
+      // 1. 手前上エッジのスチールコーピングパイプ（丸みと光沢のある面取りレール）
+      const copingGeo = new THREE.CylinderGeometry(0.045, 0.045, w, 12);
+      copingGeo.rotateZ(Math.PI / 2);
+      const coping = new THREE.Mesh(copingGeo, metalMat);
+      coping.position.set(0, h / 2, 1.4);
+      coping.castShadow = true;
+      mesh.add(coping);
+
+      // 2. コーピングに一定間隔で打ち込まれた六角ボルト・リベット
+      const boltGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.04, 6);
+      const boltSpacing = 2.0;
+      const numBolts = Math.max(2, Math.floor(w / boltSpacing));
+      for (let i = 0; i <= numBolts; i++) {
+        const bx = -w / 2 + 0.3 + ((w - 0.6) * i) / numBolts;
+        const bolt = new THREE.Mesh(boltGeo, boltMat);
+        bolt.rotation.x = Math.PI / 2;
+        bolt.position.set(bx, h / 2 - 0.02, 1.42);
+        mesh.add(bolt);
+      }
+
+      // 3. アスファルト道路の段差縁石（Curb）立体ブロック
+      if (isAsphalt) {
+        const curbMat = new THREE.MeshStandardMaterial({ color: 0x8f9598, roughness: 0.85 });
+        const curbGeo = new THREE.BoxGeometry(w, 0.12, 0.2);
+        const curb = new THREE.Mesh(curbGeo, curbMat);
+        curb.position.set(0, h / 2 - 0.06, 1.35);
+        mesh.add(curb);
+      }
+
+      // 4. 高さ1.0以上の段差垂直面にある立体サポートリブ / 目地スリット
+      if (h >= 1.0) {
+        const ribMat = new THREE.MeshStandardMaterial({ color: 0x1f2326, metalness: 0.6, roughness: 0.4 });
+        const ribGeo = new THREE.BoxGeometry(0.08, h - 0.12, 0.04);
+        const numRibs = Math.max(1, Math.floor(w / 3.2));
+        for (let i = 1; i <= numRibs; i++) {
+          const rx = -w / 2 + (w * i) / (numRibs + 1);
+          const rib = new THREE.Mesh(ribGeo, ribMat);
+          rib.position.set(rx, 0, 1.42);
+          mesh.add(rib);
+        }
+      }
+
+      // 5. 段差の左右端の補強スチールコーナー金具
+      const bracketGeo = new THREE.BoxGeometry(0.12, Math.min(h, 0.7), 0.1);
+      for (const endX of [-w / 2 + 0.06, w / 2 - 0.06]) {
+        const bracket = new THREE.Mesh(bracketGeo, metalMat);
+        bracket.position.set(endX, h / 2 - Math.min(h, 0.7) / 2, 1.4);
+        mesh.add(bracket);
+      }
+    }
+
     if (oneWay || this.config.theme === 'neon') {
       const lineColor = oneWay ? 0x66ccff : this.config.glowColor;
-      const line = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: lineColor }));
+      const line = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: lineColor }));
       line.position.set(0, h / 2, 1.4);
       mesh.add(line);
     }
@@ -800,11 +872,8 @@ export class Stage {
     // Subwoofer Bounce Pad
     this.addSubwoofer(new SubwooferPad(98, 0));
 
-    // Sunken track 3: X 104 to 118。線路の上をレールカートが往復する(面2の固有ギミック)。
-    // 敵はカートの邪魔にならないよう置かない。グラインドレールで渡る近道もある。
-    this.addPlatform(104, -1.0, 14, 3);
-    this.addMovingPlatform(new MovingPlatform(107, 0.2, 6, 3.5, 0, 1.3, 'cart'));
-    this.addGrindRail(new GrindRail(105, 1.4, 11.0));
+    // Sunken track 3: X 104 to 118。レールと床を撤去し、動く床のみの奈落エリアにする(落ちたらデス)
+    this.addMovingPlatform(new MovingPlatform(108, 0.5, 5.0, 4.0, 0, 1.6, 'gondola'));
 
     // Final Concourse Platform: X 118 to 150
     this.addPlatform(118, 0, 32, 4);
@@ -818,7 +887,7 @@ export class Stage {
     this.addPlatform(136, 1.5, 8, 1.5);
     this.addPlatform(144, 3.5, 12, 3.5);
 
-    this.addTrackRails([[24, 38], [64, 76], [104, 118]], -1.0);
+    this.addTrackRails([[24, 38], [64, 76]], -1.0);
   }
 
   /** 線路の飾り(判定なし)。ソリッドな床の上に細いレールを2本敷く */
@@ -857,8 +926,8 @@ export class Stage {
     this.addCassette(new CassetteTape(28, 2.8));
     this.addCassette(new CassetteTape(30, 2.8));
 
-    // Rooftop 2: X 34 to 54
-    this.addPlatform(34, 2.4, 20, 5);
+    // Rooftop 2: X 34 to 51 (動く床とめり込まないよう長さを調整)
+    this.addPlatform(34, 2.4, 17, 5);
     this.addCheckpoint(new Checkpoint(35.5, 2.4));
     this.addEnemy(new SkaterDog(40, 2.4, 5));
 
@@ -872,8 +941,8 @@ export class Stage {
 
     this.addEnemy(new SecurityBot(48, 2.4, 3));
 
-    // Fast Moving Gondola Platform over abyss (speed 2.4)
-    this.addMovingPlatform(new MovingPlatform(56, 2.2, 6.0, 4.0, 0, 2.4));
+    // Fast Moving Gondola Platform over abyss (めり込みを解消した配置: X 55.5〜62.5)
+    this.addMovingPlatform(new MovingPlatform(59, 2.2, 5.0, 3.5, 0, 2.0));
     this.addEnemy(new SurveillanceDrone(60, 5.0, 5));
 
     // Rooftop 3: X 68 to 90
@@ -888,8 +957,8 @@ export class Stage {
     // Subwoofer Bounce Pad on Rooftop 3!
     this.addSubwoofer(new SubwooferPad(87, 1.5));
 
-    // High Vertical Moving Gondola Platform (speed 2.6)
-    this.addMovingPlatform(new MovingPlatform(92, 2.2, 6.0, 0, 2.4, 2.6));
+    // High Vertical Moving Gondola Platform (床の間に収まる自然な上下動)
+    this.addMovingPlatform(new MovingPlatform(93, 2.8, 5.0, 0, 1.6, 2.0));
     this.addEnemy(new SurveillanceDrone(95, 5.2, 5));
 
     // Rooftop 4: X 101 to 124
@@ -974,6 +1043,9 @@ export class Stage {
     this.addLaserGrid(new LaserGrid(96, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
     this.addLaserGrid(new LaserGrid(102.5, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
 
+    // レール上空に浮遊の敵(ドローン)を追加して、上のレールルートも適正なスリル・難易度にする
+    this.addEnemy(new SurveillanceDrone(96.5, 3.9, 3.5));
+    this.addEnemy(new SurveillanceDrone(100.5, 4.1, 4.0));
     this.addEnemy(new SurveillanceDrone(105, 4.6, 5));
 
     // スピーカーの島(X 108〜112): サブウーファーが宙に浮かないよう足場を置く。

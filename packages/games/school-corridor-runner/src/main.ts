@@ -951,8 +951,8 @@ class Game {
             laneScores[l] += 200 * weight;
           }
         }
-      } else if (obs.type === ObstacleType.WET_FLOOR_CONE) {
-        // 立入禁止コーン＆水拭き床: 破壊不能・飛び越え不能（完全迂回必須！）
+      } else if (obs.type === ObstacleType.FIRE) {
+        // 猛火/火災: 破壊不能・飛び越え不能（完全迂回必須！）
         laneScores[obs.lane] += 550 * weight;
       } else if (
         obs.type === ObstacleType.GIMMICK_JUMP ||
@@ -1003,9 +1003,9 @@ class Game {
       }
     }
 
-    // 立入禁止コーンが近接している場合の強制退避
-    const nearCone = upcoming.find(o => o.type === ObstacleType.WET_FLOOR_CONE && o.lane === currentLane && (playerZ - o.z) < 28);
-    if (nearCone) {
+    // 猛火が近接している場合の強制退避
+    const nearFire = upcoming.find(o => o.type === ObstacleType.FIRE && o.lane === currentLane && (playerZ - o.z) < 28);
+    if (nearFire) {
       const safeLanes = ([0, 1, 2] as LaneIndex[]).filter(l => l !== currentLane);
       bestLane = safeLanes.sort((a, b) => laneScores[a] - laneScores[b])[0];
     }
@@ -1293,12 +1293,12 @@ class Game {
       if (dist <= radius || (obs.type === ObstacleType.GIMMICK_BOMB && Math.abs(obs.z - blastCenter.z) < 5.0)) {
         if (
           obs.type === ObstacleType.TEACHER ||
-          obs.type === ObstacleType.WET_FLOOR_CONE ||
+          obs.type === ObstacleType.FIRE ||
           obs.type === ObstacleType.GIMMICK_SLIDE ||
           obs.type === ObstacleType.GIMMICK_JUMP ||
           obs.type === ObstacleType.HANGING_SIGN
         ) {
-          continue; // 先生、コーン、スライディング強制、看板、ジャンプ強制は爆風で破壊不可！
+          continue; // 先生、猛火、スライディング強制、看板、ジャンプ強制は爆風で破壊不可！
         }
 
         this.destroyObstacle(obs, true);
@@ -1349,10 +1349,10 @@ class Game {
       this.particleSystem.spawnLockerBreak(obs.group.position);
       this.scoreData.score += 1500 * (1 + this.scoreData.combo * 0.1);
       this.scoreData.destroyedCount++;
-    } else if (forced && obs.type === ObstacleType.WET_FLOOR_CONE) {
-      this.soundSystem.playDeskBreak();
-      this.particleSystem.spawnDeskBreak(obs.group.position);
-      this.scoreData.score += 350 * (1 + this.scoreData.combo * 0.1);
+    } else if (forced && obs.type === ObstacleType.FIRE) {
+      this.soundSystem.playLockerBreak();
+      this.particleSystem.spawnBombExplosion(obs.group.position, this.camera.position);
+      this.scoreData.score += 400 * (1 + this.scoreData.combo * 0.1);
       this.scoreData.destroyedCount++;
     } else if (forced && obs.type === ObstacleType.HANGING_SIGN) {
       this.soundSystem.playDeskBreak();
@@ -1637,7 +1637,7 @@ class Game {
     if (
       obs &&
       obs.type !== ObstacleType.TEACHER &&
-      obs.type !== ObstacleType.WET_FLOOR_CONE &&
+      obs.type !== ObstacleType.FIRE &&
       obs.type !== ObstacleType.GIMMICK_SLIDE &&
       obs.type !== ObstacleType.GIMMICK_JUMP &&
       obs.type !== ObstacleType.HANGING_SIGN

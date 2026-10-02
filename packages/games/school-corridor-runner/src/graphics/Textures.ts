@@ -716,6 +716,113 @@ export function createConeStripeTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+// 激しく燃え盛る火炎（飛び越え不能・完全迂回必須）テクスチャ
+export function createFlameTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, 256, 512);
+
+  // 1. 背景の火炎オーラ（赤〜オレンジのグラデーション）
+  const flameGrad = ctx.createLinearGradient(128, 512, 128, 0);
+  flameGrad.addColorStop(0.0, 'rgba(255, 255, 220, 1.0)'); // 底面: 白熱
+  flameGrad.addColorStop(0.2, 'rgba(255, 200, 30, 0.95)'); // 下部: 鮮烈イエロー
+  flameGrad.addColorStop(0.5, 'rgba(255, 80, 0, 0.85)');   // 中央: 燃えるオレンジ
+  flameGrad.addColorStop(0.8, 'rgba(200, 20, 0, 0.55)');   // 上部: 深紅
+  flameGrad.addColorStop(1.0, 'rgba(80, 0, 0, 0.0)');      // 先端: 消滅
+
+  // 炎の舌（有機的なカーブを描く）
+  ctx.fillStyle = flameGrad;
+  ctx.beginPath();
+  ctx.moveTo(30, 512);
+  ctx.bezierCurveTo(20, 380, 60, 250, 100, 140);
+  ctx.bezierCurveTo(115, 80, 125, 20, 128, 0);
+  ctx.bezierCurveTo(131, 20, 141, 80, 156, 140);
+  ctx.bezierCurveTo(196, 250, 236, 380, 226, 512);
+  ctx.closePath();
+  ctx.fill();
+
+  // 2. 側面のゆらめく火炎の舌
+  ctx.fillStyle = 'rgba(255, 120, 0, 0.65)';
+  ctx.beginPath();
+  ctx.moveTo(10, 512);
+  ctx.quadraticCurveTo(20, 340, 75, 220);
+  ctx.quadraticCurveTo(85, 300, 60, 420);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(246, 512);
+  ctx.quadraticCurveTo(236, 340, 181, 220);
+  ctx.quadraticCurveTo(171, 300, 196, 420);
+  ctx.closePath();
+  ctx.fill();
+
+  // 3. 中心の超高温コア（白熱するコアフレーム）
+  const coreGrad = ctx.createLinearGradient(128, 512, 128, 120);
+  coreGrad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+  coreGrad.addColorStop(0.4, 'rgba(255, 255, 180, 0.9)');
+  coreGrad.addColorStop(0.7, 'rgba(255, 210, 60, 0.5)');
+  coreGrad.addColorStop(1.0, 'rgba(255, 140, 0, 0.0)');
+
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.moveTo(70, 512);
+  ctx.bezierCurveTo(80, 400, 110, 280, 128, 120);
+  ctx.bezierCurveTo(146, 280, 176, 400, 186, 512);
+  ctx.closePath();
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
+// 焦土・焼け跡床テクスチャ
+export function createCharredFloorTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, 256, 256);
+
+  // 外側に向かって薄れる黒焦げグラデーション
+  const grad = ctx.createRadialGradient(128, 128, 20, 128, 128, 124);
+  grad.addColorStop(0.0, 'rgba(20, 10, 5, 0.95)');
+  grad.addColorStop(0.35, 'rgba(35, 18, 10, 0.88)');
+  grad.addColorStop(0.7, 'rgba(25, 12, 8, 0.55)');
+  grad.addColorStop(0.9, 'rgba(15, 8, 5, 0.2)');
+  grad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(128, 128, 124, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 中心部の赤熱した割れ目・残り火（Ember cracks）
+  ctx.strokeStyle = 'rgba(255, 90, 0, 0.85)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(100, 120);
+  ctx.lineTo(125, 115);
+  ctx.lineTo(145, 135);
+  ctx.lineTo(165, 125);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255, 180, 30, 0.9)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(115, 135);
+  ctx.lineTo(130, 125);
+  ctx.lineTo(140, 145);
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
 // ゴールドコイン（高得点アイテム）テクスチャ
 export function createCoinTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');

@@ -16,7 +16,7 @@ import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
 import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
-import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
+import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 
 export type GameState =
@@ -156,23 +156,33 @@ export class Game {
 
     // 結果画面から、難易度選択へ戻る
     for (const id of ['level-change-fail-btn', 'level-change-success-btn']) {
-      document.getElementById(id)?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.openLevelSelect();
-      });
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.innerHTML = `${buttonIconHtml([1])} レベル選択`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openLevelSelect();
+        });
+      }
     }
 
     const retryFailBtn = document.getElementById('retry-fail-btn');
-    retryFailBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.startGame();
-    });
+    if (retryFailBtn) {
+      retryFailBtn.innerHTML = `${buttonIconHtml([0, 9])} 再挑戦`;
+      retryFailBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startGame();
+      });
+    }
 
     const retrySuccessBtn = document.getElementById('retry-success-btn');
-    retrySuccessBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.startGame();
-    });
+    if (retrySuccessBtn) {
+      retrySuccessBtn.innerHTML = `${buttonIconHtml([0, 9])} 再挑戦`;
+      retrySuccessBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startGame();
+      });
+    }
 
     this.failScreen?.addEventListener('click', () => {
       if (this.state === 'GAME_OVER') this.startGame();

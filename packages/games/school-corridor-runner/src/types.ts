@@ -22,7 +22,7 @@ export enum ObstacleType {
   FALLING_LOCKER = 'FALLING_LOCKER',   // 動的・倒壊ロッカー（手前に倒壊・ジャンプで跳び越え可）
   BOUNCING_BALL = 'BOUNCING_BALL',     // 動的・バウンドボール（横断バウンド・シュリケンまたはスライド）
   SWEEPING_POLISHER = 'SWEEPING_POLISHER', // 動的・清掃ポリッシャー（左右往復・シュリケン/ボム可）
-  WET_FLOOR_CONE = 'WET_FLOOR_CONE',       // 破壊不可・立入禁止コーン＆水拭き床（左右移動で迂回必須）
+  FIRE = 'FIRE',                       // 破壊不可・業火/火災（飛び越え不能・左右移動で迂回必須）
 }
 
 export interface GameScore {

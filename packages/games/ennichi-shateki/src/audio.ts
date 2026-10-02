@@ -9,6 +9,10 @@ class SoundSystem {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  private bgmGain: GainNode | null = null;
+  private isBgmPlaying: boolean = false;
+  private bgmTimer: number | null = null;
+  private bgmStep: number = 0;
   private isMuted: boolean = false;
   private lastSoundTimes: { [key: string]: number } = {};
   private hasAttachedLifecycle: boolean = false;
@@ -30,6 +34,10 @@ class SoundSystem {
 
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 0.65;
+
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = 0.28;
+      this.bgmGain.connect(this.masterGain);
 
       // Audio Chain: Sound Nodes -> MasterGain -> Limiter -> Destination
       this.masterGain.connect(this.limiter);
@@ -748,6 +756,151 @@ class SoundSystem {
     gain.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + 0.07);
+  }
+
+  // ==========================================
+  // 祭囃子 (Matsuri Bayashi) Procedural BGM
+  // ==========================================
+
+  public startBgm() {
+    if (this.isBgmPlaying) return;
+    this.ensureAudioActive();
+    if (!this.ctx || !this.bgmGain) return;
+
+    this.isBgmPlaying = true;
+    this.bgmStep = 0;
+
+    // BPM 132, 16th note step = ~113.6ms
+    const stepInterval = (60 / 132) / 4;
+
+    const schedule = () => {
+      if (!this.isBgmPlaying) return;
+      this.playFestivalStep();
+      this.bgmStep = (this.bgmStep + 1) % 64; // 4-bar phrase loop
+      this.bgmTimer = window.setTimeout(schedule, stepInterval * 1000);
+    };
+
+    schedule();
+  }
+
+  public stopBgm() {
+    this.isBgmPlaying = false;
+    if (this.bgmTimer !== null) {
+      clearTimeout(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+  }
+
+  private playFestivalStep() {
+    if (!this.ctx || !this.bgmGain || this.isMuted || document.hidden) return;
+    const t = this.ctx.currentTime;
+    const step = this.bgmStep;
+    const stepInBar = step % 16;
+
+    // 1. 和太鼓 (Taiko Drums)
+    // ドン (Low Taiko: steps 0, 3, 6, 8, 10, 14 etc.)
+    const isDon = stepInBar === 0 || stepInBar === 6 || stepInBar === 8 || stepInBar === 10 || (stepInBar === 14 && step % 32 === 30);
+    if (isDon) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(95, t);
+      osc.frequency.exponentialRampToValueAtTime(36, t + 0.09);
+      gain.gain.setValueAtTime(0.42, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(this.bgmGain);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    }
+
+    // カッ (Rim / Edge: steps 4, 12)
+    const isKa = stepInBar === 4 || stepInBar === 12;
+    if (isKa) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(620, t);
+      osc.frequency.exponentialRampToValueAtTime(180, t + 0.04);
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.connect(gain);
+      gain.connect(this.bgmGain);
+      osc.start(t);
+      osc.stop(t + 0.055);
+    }
+
+    // 2. 鉦 / チャンチキ (Atarigane: 16th notes syncopation)
+    // チャン・チキ・チン・チキ
+    const isKane = (step % 2 === 1) || (stepInBar === 0) || (stepInBar === 8);
+    if (isKane) {
+      const isAccent = stepInBar === 0 || stepInBar === 8;
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc1.type = 'sine';
+      osc2.type = 'square';
+      osc1.frequency.setValueAtTime(2637, t); // E7
+      osc2.frequency.setValueAtTime(3520, t); // A7
+      gain.gain.setValueAtTime(isAccent ? 0.09 : 0.04, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + (isAccent ? 0.06 : 0.035));
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.bgmGain);
+      osc1.start(t);
+      osc2.start(t);
+      osc1.stop(t + 0.07);
+      osc2.stop(t + 0.07);
+    }
+
+    // 3. 篠笛 (Shinobue Flute melody in Japanese pentatonic scale)
+    // D4=293.66, F4=349.23, G4=392.00, A4=440.00, C5=523.25, D5=587.33, F5=698.46, A5=880.00
+    const D4 = 293.66, F4 = 349.23, G4 = 392.00, A4 = 440.00, C5 = 523.25, D5 = 587.33, F5 = 698.46;
+    const melody64 = [
+      // Bar 1
+      D5, 0, D5, F5,  G5(F5), 0, D5, 0,  F5, 0, G4, 0,  A4, 0, C5, 0,
+      // Bar 2
+      D5, 0, C5, 0,  A4, G4, F4, 0,  G4, 0, A4, 0,  D4, 0, 0, 0,
+      // Bar 3
+      F5, 0, F5, G4,  A4, 0, C5, 0,  D5, 0, F5, 0,  D5, 0, C5, 0,
+      // Bar 4
+      A4, 0, G4, F4,  D4, 0, F4, G4,  A4, 0, F4, 0,  D4, 0, 0, 0
+    ];
+
+    function G5(f: number) { return f; } // helper
+    const noteFreq = melody64[step];
+    if (noteFreq && noteFreq > 0) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      // Warm pure flute tone
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(noteFreq, t);
+
+      // Subtle vibrato
+      const vibrato = this.ctx.createOscillator();
+      const vibGain = this.ctx.createGain();
+      vibrato.frequency.setValueAtTime(5.5, t);
+      vibGain.gain.setValueAtTime(4.0, t);
+      vibrato.connect(osc.frequency);
+      vibrato.start(t);
+      vibrato.stop(t + 0.22);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2200, t);
+
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.bgmGain);
+
+      osc.start(t);
+      osc.stop(t + 0.22);
+    }
   }
 }
 

@@ -11,6 +11,8 @@ export interface DriveSceneCallbacks {
   onPositionUpdate?: (carPos: THREE.Vector3, carRotY: number, forwardTraffic: THREE.Vector2[]) => void;
   onProgressUpdate?: (fraction: number, speedKmH: number, dt: number) => void;
   onCameraModeChange?: (mode: CameraMode) => void;
+  /** 自車の物理の直後、マップの拘束(壁・路面)の前。オンライン対戦の車同士の当たり判定に使う。 */
+  onBeforeConstrain?: (car: CarController, dt: number) => void;
 }
 
 export class DriveScene {
@@ -37,6 +39,8 @@ export class DriveScene {
 
   /** Frozen (pause menu): nothing moves, the last frame stays on screen. */
   public paused: boolean = false;
+  /** スタート位置のずらし(オンライン対戦のグリッド): lateral=+で進行方向の右、back=後ろへ(m)。 */
+  public gridOffset: { lateral: number; back: number } | null = null;
   private timeOfDay: TimeOfDay = 'day';
   private headSpot!: THREE.SpotLight;
 
@@ -383,6 +387,11 @@ export class DriveScene {
     const startPos = this.currentMap.startPosition.clone();
     // Slightly lift to prevent ground clipping
     startPos.y += 0.05;
+    if (this.gridOffset) {
+      const r = this.currentMap.startRotationY;
+      startPos.x += Math.cos(r) * this.gridOffset.lateral - Math.sin(r) * this.gridOffset.back;
+      startPos.z += -Math.sin(r) * this.gridOffset.lateral - Math.cos(r) * this.gridOffset.back;
+    }
     this.carController.resetPosition(startPos, this.currentMap.startRotationY);
     this.currentMap.onRespawn(this.carController);              // grounded on the road before the countdown starts
     const carPos = this.carController.position;
@@ -407,6 +416,11 @@ export class DriveScene {
     this.carController.cameraMode = mode;
     this.controls.enabled = (mode === 'orbit');
     if (mode === 'chase') this.chaseHeading = this.carController.rotationY;   // no swing when coming back to the chase view
+    
+    // Adjust field of view: natural FOV for first-person cockpit (62°), standard for third-person chase (54°)
+    this.camera.fov = mode === 'cockpit' ? 62 : 54;
+    this.camera.updateProjectionMatrix();
+
     this.callbacks.onCameraModeChange?.(mode);
     if (mode === 'orbit' && this.carController) {
       this.controls.target.copy(this.carController.position).add(new THREE.Vector3(0, 0.8, 0));
@@ -415,7 +429,8 @@ export class DriveScene {
 
   public cycleCameraMode(): void {
     if (!this.carController) return;
-    const modes: CameraMode[] = ['chase', 'cockpit', 'hood', 'orbit'];
+    // 視点は一人称(cockpit)と三人称後方(chase)の2つに限定
+    const modes: CameraMode[] = ['chase', 'cockpit'];
     const currentIdx = modes.indexOf(this.carController.cameraMode);
     const nextMode = modes[(currentIdx + 1) % modes.length];
     this.setCameraMode(nextMode);
@@ -477,17 +492,20 @@ export class DriveScene {
 
     } else if (mode === 'cockpit') {
       this.controls.enabled = false;
-      // Inside driver's cockpit (Right-hand drive in Japan)
-      // Kei car driver is on the right side: offset ~ +0.32m X relative to car facing
-      // Local offset: driver side 0.32, Up 1.05, Forward -0.05
-      // NB: `right` here is +X-based (the car's LEFT); the steering wheel sits at model x = -0.32 (the car's right)
+      // 車種ごとのコクピットアイポイント・注視位置を使用
+      const eyeOffset = this.currentCar.cockpitEyeOffset;
+      const lookOffset = this.currentCar.cockpitLookOffset;
+
       const eyePos = carPos.clone()
-        .add(right.clone().multiplyScalar(-0.32))
-        .add(new THREE.Vector3(0, 1.05, 0))
-        .add(forward.clone().multiplyScalar(-0.05));
+        .add(right.clone().multiplyScalar(eyeOffset.x))
+        .add(new THREE.Vector3(0, eyeOffset.y, 0))
+        .add(forward.clone().multiplyScalar(eyeOffset.z));
 
       this.camera.position.copy(eyePos);
-      const lookTarget = eyePos.clone().add(forward.clone().multiplyScalar(15.0));
+      const lookTarget = eyePos.clone()
+        .add(forward.clone().multiplyScalar(lookOffset.z))
+        .add(new THREE.Vector3(0, lookOffset.y, 0))
+        .add(right.clone().multiplyScalar(lookOffset.x));
       this.camera.lookAt(lookTarget);
 
     } else if (mode === 'hood') {
@@ -522,6 +540,7 @@ export class DriveScene {
     // 1. Update car physics & mechanics
     if (this.carController) {
       this.carController.update(dt);
+      this.callbacks.onBeforeConstrain?.(this.carController, dt);
       if (this.currentMap) {
         this.currentMap.constrainCar(this.carController, dt);
         this.currentMap.update(dt, this.carController.position);
@@ -610,9 +629,11 @@ export class DriveScene {
       }
     }
 
-    // 2. Update Camera (wider view while a drift boost is on)
+    // 2. Update Camera (mode-dependent FOV, wider view while a drift boost is on)
     if (this.carController) {
-      const fovTarget = this.carController.boostTimer > 0 ? 63 : 55;
+      const isCockpit = this.carController.cameraMode === 'cockpit';
+      const baseFov = isCockpit ? 62 : 54;
+      const fovTarget = this.carController.boostTimer > 0 ? (baseFov + 6) : baseFov;
       if (Math.abs(this.camera.fov - fovTarget) > 0.05) {
         this.camera.fov += (fovTarget - this.camera.fov) * Math.min(1, 6 * dt);
         this.camera.updateProjectionMatrix();

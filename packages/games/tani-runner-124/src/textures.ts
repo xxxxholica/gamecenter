@@ -78,15 +78,16 @@ export class TextureGenerator {
   }
 
   // Gate Texture: University Mathematics symbols (e.g. "∬", "d/dx", "∑ +20", "ker")
-  public static createGateTexture(gate: GateInfo): THREE.CanvasTexture {
+  // isWhite が true の場合(高専生)、赤・青の区別をなくして全て白ゲートにする
+  public static createGateTexture(gate: GateInfo, isWhite: boolean = false): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 320;
     const ctx = canvas.getContext('2d')!;
 
     const isPos = gate.isPositive;
-    const mainColor = isPos ? '#00f0ff' : '#ff0033';
-    const darkBg = isPos ? 'rgba(0, 25, 55, 0.88)' : 'rgba(55, 0, 10, 0.88)';
+    const mainColor = isWhite ? '#ffffff' : (isPos ? '#00f0ff' : '#ff0033');
+    const darkBg = isWhite ? 'rgba(24, 25, 30, 0.92)' : (isPos ? 'rgba(0, 25, 55, 0.88)' : 'rgba(55, 0, 10, 0.88)');
 
     // Background
     ctx.fillStyle = darkBg;
@@ -98,7 +99,7 @@ export class TextureGenerator {
     ctx.strokeRect(10, 10, 512 - 20, 320 - 20);
 
     // Inner bright border
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = isWhite ? '#e0e4ea' : '#ffffff';
     ctx.lineWidth = 4;
     ctx.strokeRect(22, 22, 512 - 44, 320 - 44);
 
@@ -121,7 +122,7 @@ export class TextureGenerator {
     ctx.strokeText(text, 256, 160);
 
     // Bright fill
-    ctx.fillStyle = isPos ? '#ffea00' : '#ffffff';
+    ctx.fillStyle = isWhite ? '#ffffff' : (isPos ? '#ffea00' : '#ffffff');
     ctx.fillText(text, 256, 160);
 
     const texture = new THREE.CanvasTexture(canvas);

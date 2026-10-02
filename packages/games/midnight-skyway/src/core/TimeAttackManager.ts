@@ -132,6 +132,20 @@ export class TimeAttackManager {
     this.callbacks.onCountdown?.(3);
   }
 
+  /**
+   * オンライン対戦: GO まで msUntilGo ミリ秒になるようにカウントダウンを始める(全員のGOを揃える)。
+   * 3 → 2 → 1 → GO の表示は 1 秒刻みのまま、最初の刻みだけ短くなる。
+   */
+  public startCountdownSynced(msUntilGo: number): void {
+    this.reset();
+    this.state = 'COUNTDOWN';
+    const remaining = Math.max(0, msUntilGo);
+    this.countdownStep = Math.min(3, Math.max(1, Math.ceil(remaining / 1000)));
+    this.countdownTimer = 1 - (remaining - (this.countdownStep - 1) * 1000) / 1000;
+    this.callbacks.onStateChange?.(this.state);
+    this.callbacks.onCountdown?.(this.countdownStep);
+  }
+
   public update(dt: number, progressFraction: number, currentSpeedKmH: number): void {
     if (currentSpeedKmH > this.topSpeedKmH) {
       this.topSpeedKmH = Math.round(currentSpeedKmH);

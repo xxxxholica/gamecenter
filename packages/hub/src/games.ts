@@ -29,24 +29,20 @@ const XXXXHOLICA: Developer = {
   url: 'https://github.com/xxxxholica',
   avatar: 'https://github.com/xxxxholica.png',
 };
-const KURENAI_BEAT: Developer = {
-  name: 'KURENAI-beat',
-  url: 'https://github.com/KURENAI-beat',
-  avatar: 'https://github.com/KURENAI-beat.png',
-};
+
 
 // この配列の順番がそのままピックアップの巡回順・一覧の表示順になる。
 const allGames: GameEntry[] = [
   {
     slug: 'phaser-fighter',
-    title: 'サイバー2Dファイター',
-    englishTitle: 'PHASER 2D FIGHTER',
+    title: 'ストリートストライカー',
+    englishTitle: 'STREET STRIKER',
     description:
       'SF6スタイルの本格2D対戦格闘ゲーム。ドライブインパクト、パリィ、OD技、スーパーアーツを搭載。個性豊かな6人のファイターによる白熱の攻防！',
     thumbnail: 'thumbnails/phaser-fighter.webp',
     logo: 'logos/phaser-fighter.webp',
     accent: '#00f0ff',
-    developer: KURENAI_BEAT,
+    developer: XXXXHOLICA,
   },
   {
     slug: 'school-corridor-runner',

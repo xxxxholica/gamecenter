@@ -3,7 +3,7 @@ import { Stage, StageResult } from './types';
 import { InputManager } from './input';
 import { EffectsManager } from './effects';
 import { sound } from './audio';
-import { buttonIconHtml } from '../../../shared/arcadeGuide';
+import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { Stage1Drink } from './stages/stage1_drink';
 import { Stage3Phone } from './stages/stage3_phone';
@@ -153,6 +153,7 @@ export class GameManager {
 
     // Retry button on result
     const retryBtn = document.getElementById('btn-retry')!;
+    retryBtn.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${retryBtn.textContent}`;
     retryBtn.addEventListener('click', () => {
       if (this.state === 'RESULT') {
         this.startGame();
@@ -163,6 +164,13 @@ export class GameManager {
   private showTitle() {
     this.state = 'TITLE';
     this.cleanupAttract();
+    sound.stopBgm();
+    sound.setMuted(true);
+
+    mountArcadeGuide({
+      buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
+      showHomeHint: true,
+    });
 
     this.titleOverlay.style.display = 'none';
     this.hudOverlay.style.display = 'none';
@@ -187,7 +195,7 @@ export class GameManager {
         accentColor: '#ff2b4d',
         tagline: '日常の「ギリギリ」連続チャレンジ',
         startButtonLabel: '開始',
-        promptLabel: 'PRESS START / SPACE / 画面クリック',
+        promptLabel: 'PRESS START / ボタンで開始',
         onStart: () => {
           this.startGame();
         },
@@ -233,6 +241,7 @@ export class GameManager {
     this.cleanupTitleScene();
     this.cleanupAttract();
 
+    sound.setMuted(false);
     sound.init();
     sound.playStart();
 
@@ -274,6 +283,21 @@ export class GameManager {
     this.hudStageText.textContent = this.currentStage.title;
     this.hudActionGuide.textContent = this.currentStage.instruction;
     this.hudTimeText.textContent = this.currentStage.getRemainingTime().toFixed(1);
+
+    // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
+    const stageGuideOptions = [
+      // Stage 1 (ドリンクバー)
+      { moveLabel: '上: 長押しで注ぐ(離して確定)', showHomeHint: true },
+      // Stage 2 (スマホ充電)
+      { moveLabel: '上: ケーブル挿入', showHomeHint: true },
+      // Stage 3 (目覚まし時計)
+      { moveLabel: '上: 時計ストップ', showHomeHint: true },
+      // Stage 4 (焼きそば湯切り)
+      { moveLabel: '上: 傾けて湯切り', showHomeHint: true },
+    ];
+    if (stageGuideOptions[index]) {
+      mountArcadeGuide(stageGuideOptions[index]);
+    }
 
     if (isRetry) {
       // やり直しは説明カードを飛ばし、すぐ準備に入る
@@ -321,9 +345,16 @@ export class GameManager {
         <div class="brief-row"><span class="brief-key">${esc(b.key)}</span></div>
         <div class="brief-row ok"><span class="brief-mark">◎</span>${esc(b.ok)}</div>
         <div class="brief-row ng"><span class="brief-mark">×</span>${esc(b.ng)}</div>
-        <div class="brief-start blink-1s">ボタンで開始</div>
+        <button type="button" class="brief-start-btn blink-1s" id="brief-proceed-btn">
+          ${buttonIconHtml([0, 1, 2, 3])} 決定して開始
+        </button>
       </div>
     `;
+    const proceedBtn = document.getElementById('brief-proceed-btn');
+    proceedBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dismissBriefing();
+    });
     this.briefOverlay.style.display = 'flex';
   }
 
@@ -363,7 +394,7 @@ export class GameManager {
       case 'STAGE_BRIEF': {
         this.briefTimer += dt;
         // 直前の連打で誤って閉じないよう、表示から0.5秒は受け付けない
-        if (this.briefTimer >= 0.5 && (this.input.wasButton0Pressed() || this.input.wasButton1Pressed())) {
+        if (this.briefTimer >= 0.5 && (this.input.wasButton0Pressed() || this.input.wasButton1Pressed() || this.input.wasLeverUpPressed())) {
           this.dismissBriefing();
         }
         // 放置されたらタイトルへ戻す
@@ -382,6 +413,7 @@ export class GameManager {
           this.state = 'STAGE_PLAY';
           this.centerBanner.style.display = 'none';
           this.currentStage?.start();
+          sound.startBgm();
         }
         break;
       }
@@ -404,9 +436,10 @@ export class GameManager {
           this.hudSubInfo.style.display = 'none';
         }
 
-        // Drive danger vignette from limit value — no number shown to player
+        // Drive danger vignette & BGM intensity from limit value — no number shown to player
         const limitVal = this.currentStage.getLimitValue();
         this.updateDangerOverlay(limitVal, dt);
+        sound.setBgmIntensity(limitVal / 100);
 
         if (result && result.completed) {
           this.currentJudgment = result;
@@ -481,6 +514,7 @@ export class GameManager {
   private enterJudgment() {
     this.state = 'STAGE_JUDGMENT';
     this.stateTimer = 1.0; // 1.0s judgment display
+    sound.stopBgm();
 
     // Immediately clear danger overlays & sub info
     this.dangerVignette.style.opacity = '0';
@@ -507,11 +541,17 @@ export class GameManager {
 
   private enterResult() {
     this.state = 'RESULT';
+    sound.stopBgm();
     if (this.currentStage) {
       this.currentStage.cleanup(this.scene);
       this.currentStage = null;
     }
     this.effects.clear();
+
+    mountArcadeGuide({
+      buttons: [{ indices: [0, 1, 2, 3, 9], label: '再挑戦' }],
+      showHomeHint: true,
+    });
 
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';

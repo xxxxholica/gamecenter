@@ -47,6 +47,10 @@ export class ResultsPrizePileManager {
   private spotlight: THREE.SpotLight | null = null;
   private deskMesh: THREE.Group | null = null;
   private isActive: boolean = false;
+  /** この山を置く x のずれ(オンライン対戦: 4人分の山を、各レーンの前に並べる)。 */
+  public offsetX = 0;
+  /** 補助光(環境光・暖色の点光源)を足すか。複数の山を並べる時は、最初の山だけ true にする。 */
+  public fillLights = true;
   private timer: number = 0;
   private tempProjVec: THREE.Vector3 = new THREE.Vector3();
 
@@ -133,6 +137,12 @@ export class ResultsPrizePileManager {
     return Array.from(map.values()).sort((a, b) => b.weight - a.weight);
   }
 
+  /** 倒した景品の内訳(種類→個数)をまとめて設定する(オンライン対戦: サーバーから届いた結果から山を作る)。 */
+  public setDefeated(counts: Record<string, number>) {
+    this.defeatedItems = [];
+    for (const [type, n] of Object.entries(counts)) for (let i = 0; i < n; i++) this.defeatedItems.push({ type, name: type });
+  }
+
   // Reset tracking at start of new round
   public reset() {
     this.defeatedItems = [];
@@ -149,6 +159,7 @@ export class ResultsPrizePileManager {
     this.isActive = true;
     this.timer = 0;
     this.containerGroup = new THREE.Group();
+    this.containerGroup.position.x = this.offsetX;
     scene.add(this.containerGroup);
 
     // 1. Build lightweight Japanese festival display table (商品台 / 赤毛氈) on counter
@@ -163,11 +174,13 @@ export class ResultsPrizePileManager {
     this.containerGroup.add(this.spotlight.target);
 
     // 3. Warm Ambient & Lantern Fill Lights to keep background bright and festive (no dark gloom)
-    const ambientFill = new THREE.AmbientLight(0xffedd8, 1.35);
-    const lanternWarmFill = new THREE.PointLight(0xff9944, 2.2, 10.0);
-    lanternWarmFill.position.set(0, 2.4, 1.2);
-    this.containerGroup.add(ambientFill);
-    this.containerGroup.add(lanternWarmFill);
+    if (this.fillLights) {
+      const ambientFill = new THREE.AmbientLight(0xffedd8, 1.35);
+      const lanternWarmFill = new THREE.PointLight(0xff9944, 2.2, 10.0);
+      lanternWarmFill.position.set(0, 2.4, 1.2);
+      this.containerGroup.add(ambientFill);
+      this.containerGroup.add(lanternWarmFill);
+    }
 
     // Items list: if 0 defeated, give a small cute consolation prize
     const itemsToSpawn: DefeatedPrizeRecord[] =
@@ -494,7 +507,9 @@ export class ResultsPrizePileManager {
           // Despawn check: as soon as item exits camera field of view, despawn immediately
           let isOutOfSight = false;
           if (camera) {
-            this.tempProjVec.copy(item.pos).project(camera);
+            this.tempProjVec.copy(item.pos);
+            this.tempProjVec.x += this.offsetX;                    // 山の位置のずれを足して、画面の外に出たかを見る
+            this.tempProjVec.project(camera);
             // In normalized device coordinates:
             // y < -1.10 is below the bottom screen cutoff
             // |x| > 1.25 is beyond the left/right screen edges

@@ -9,9 +9,9 @@ export class Stage4Clock implements Stage {
   numberText = 'STAGE 3';
   title = '目覚まし時計';
   mission = '07:00ジャスト鳴動直前に止めろ！';
-  instruction = '[ENTER] 止める(1回)';
+  instruction = '[レバー上]: 時計を止める';
   briefing: StageBriefing = {
-    key: 'ENTER',
+    key: '[レバー上]',
     ok: '07:00:00の直前で止める',
     ng: '鳴ってしまう・早すぎ',
   };
@@ -31,6 +31,7 @@ export class Stage4Clock implements Stage {
   private stopped = false;
   private alarmed = false;
   private hammerAnim = 0;
+  private bellTimer = 0;
 
   // Meshes
   private clockGroup = new THREE.Group();
@@ -339,8 +340,8 @@ export class Stage4Clock implements Stage {
 
       this.updateHands();
 
-      // Check Button 0 (Enter) or any tap to stop!
-      if (input.wasButton0Pressed() || input.wasLeverDownPressed() || input.wasLeverUpPressed()) {
+      // Check Lever Up (or Button 0 / Enter for compatibility) to stop!
+      if (input.wasLeverUpPressed() || input.isLeverUp() || input.wasButton0Pressed()) {
         this.stopped = true;
         sound.playClick(1500);
 
@@ -388,13 +389,17 @@ export class Stage4Clock implements Stage {
       }
     }
 
-    // Animate ringing hammer if alarmed
+    // Animate ringing hammer if alarmed (ベル音は毎フレームではなく0.12秒間隔で再生)
     if (this.alarmed) {
       this.hammerAnim += dt * 50;
       this.hammerMesh.rotation.z = Math.sin(this.hammerAnim) * 0.45;
       this.clockGroup.position.x = (Math.random() - 0.5) * 0.08;
       this.clockGroup.position.y = 1.2 + (Math.random() - 0.5) * 0.08;
-      sound.playBellRing();
+      this.bellTimer -= dt;
+      if (this.bellTimer <= 0) {
+        this.bellTimer = 0.12;
+        sound.playBellRing();
+      }
     }
 
     return null;

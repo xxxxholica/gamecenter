@@ -1326,20 +1326,20 @@ html, body {
 .hud-altitude-unit { font-size: 13px; color: #94a3b8; }
 
 /* ---------- Time of day select (day / night): like the other select screens, the machine stays visible ---------- */
-#screen-time-select {
+#screen-time-select, #screen-mode-select {
   background: transparent !important;
   backdrop-filter: none !important;
   pointer-events: none;
   font-size: clamp(9px, min(1.15vw, 2.1vh), 18px);
   padding: 1.8em 2.6em;
 }
-#screen-time-select .arcade-title-bar,
-#screen-time-select .time-cards-container,
-#screen-time-select .arcade-action-bar { pointer-events: auto; }
-#screen-time-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
-#screen-time-select .arcade-action-bar { max-width: 82em; margin-bottom: 0; }
-#screen-time-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
-#screen-time-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
+#screen-time-select .arcade-title-bar, #screen-mode-select .arcade-title-bar,
+#screen-time-select .time-cards-container, #screen-mode-select .time-cards-container,
+#screen-time-select .arcade-action-bar, #screen-mode-select .arcade-action-bar { pointer-events: auto; }
+#screen-time-select .arcade-title-main, #screen-mode-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
+#screen-time-select .arcade-action-bar, #screen-mode-select .arcade-action-bar { max-width: 82em; margin-bottom: 0; }
+#screen-time-select .arcade-btn-back, #screen-mode-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
+#screen-time-select .arcade-btn-start, #screen-mode-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
 .time-cards-container {
   display: flex;
   gap: 1.6em;
@@ -1358,7 +1358,7 @@ html, body {
 .time-card-desc { font-size: 1em; line-height: 1.7; color: #aab6c8; margin-top: 0.4em; }
 
 /* ---------- The choice cards of all the select screens (machine / course / time of day) share one size ---------- */
-#screen-car-select, #screen-map-select, #screen-time-select { --choice-w: 24em; --choice-h: 24em; }
+#screen-car-select, #screen-map-select, #screen-time-select, #screen-mode-select { --choice-w: 24em; --choice-h: 24em; }
 .car-select-bottom .car-card-arcade,
 #screen-map-select .map-card-arcade,
 .time-card {
@@ -1379,8 +1379,8 @@ html, body {
 #screen-car-select .arcade-action-bar .arcade-btn-go,
 #screen-map-select .arcade-action-bar .arcade-btn-back,
 #screen-map-select .arcade-action-bar .arcade-btn-start,
-#screen-time-select .arcade-action-bar .arcade-btn-back,
-#screen-time-select .arcade-action-bar .arcade-btn-start {
+#screen-time-select .arcade-action-bar .arcade-btn-back, #screen-mode-select .arcade-action-bar .arcade-btn-back,
+#screen-time-select .arcade-action-bar .arcade-btn-start, #screen-mode-select .arcade-action-bar .arcade-btn-start {
   box-sizing: border-box;
   width: 13em;
   height: 3.4em;
@@ -1392,3 +1392,7 @@ html, body {
   justify-content: center;
   white-space: nowrap;
 }
+
+/* 満員のオンライン対戦(モード選択): グレーアウトして押せない */
+.map-card-arcade.disabled { opacity: 0.38; filter: grayscale(1); cursor: not-allowed; }
+.map-card-arcade.disabled:hover { transform: skewX(-6deg); box-shadow: none; }     /* 浮き上がらない(カードの傾きは保つ) */

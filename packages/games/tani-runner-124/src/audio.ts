@@ -13,7 +13,16 @@ class SoundEngine {
       this.ctx = new AudioContextClass();
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
+
+      const compressor = this.ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-6, this.ctx.currentTime);
+      compressor.knee.setValueAtTime(10, this.ctx.currentTime);
+      compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+      compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+      compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+
+      this.masterGain.connect(compressor);
+      compressor.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -220,7 +229,7 @@ class SoundEngine {
     osc.stop(now + 0.55);
   }
 
-  // Rocket Launch (Shoot Student at Boss)
+  // Rocket Launch (Shoot Student at Boss / Flight Boost)
   public playShootRocket(): void {
     if (!this.ctx || !this.masterGain) return;
     const now = this.ctx.currentTime;
@@ -231,7 +240,7 @@ class SoundEngine {
     osc.frequency.setValueAtTime(200, now);
     osc.frequency.exponentialRampToValueAtTime(900, now + 0.08);
 
-    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.setValueAtTime(0.18, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     osc.connect(gain);
@@ -246,33 +255,34 @@ class SoundEngine {
     if (!this.ctx || !this.masterGain) return;
     const now = this.ctx.currentTime;
 
-    // Sub thump
+    // Sub thump (controlled punch, no clipping)
     const sub = this.ctx.createOscillator();
     const subGain = this.ctx.createGain();
     sub.type = 'sine';
     sub.frequency.setValueAtTime(140, now);
-    sub.frequency.exponentialRampToValueAtTime(30, now + 0.6);
-    subGain.gain.setValueAtTime(0.7, now);
-    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    sub.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+    subGain.gain.setValueAtTime(0.24, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
     sub.connect(subGain);
     subGain.connect(this.masterGain);
     sub.start(now);
-    sub.stop(now + 0.6);
+    sub.stop(now + 0.5);
 
-    // Whistle whoosh
+    // Whistle whoosh (smooth aerodynamic whoosh)
     const whoosh = this.ctx.createOscillator();
     const wGain = this.ctx.createGain();
     whoosh.type = 'triangle';
     whoosh.frequency.setValueAtTime(250, now);
-    whoosh.frequency.exponentialRampToValueAtTime(1200, now + 0.4);
-    wGain.gain.setValueAtTime(0.4, now);
-    wGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    whoosh.frequency.exponentialRampToValueAtTime(1200, now + 0.35);
+    wGain.gain.setValueAtTime(0.16, now);
+    wGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
     whoosh.connect(wGain);
     wGain.connect(this.masterGain);
     whoosh.start(now);
-    whoosh.stop(now + 0.45);
+    whoosh.stop(now + 0.4);
 
-    this.playNoise(0.5, 0.6);
+    // Controlled wind noise
+    this.playNoise(0.3, 0.14);
   }
 
   // Body Bounce Sound
@@ -342,15 +352,15 @@ class SoundEngine {
     sub.type = 'sine';
     sub.frequency.setValueAtTime(90, now);
     sub.frequency.exponentialRampToValueAtTime(25, now + 1.2);
-    subGain.gain.setValueAtTime(0.8, now);
-    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+    subGain.gain.setValueAtTime(0.35, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
     sub.connect(subGain);
     subGain.connect(this.masterGain);
     sub.start(now);
-    sub.stop(now + 1.2);
+    sub.stop(now + 1.0);
 
     // Big explosion noise
-    this.playNoise(1.5, 0.7);
+    this.playNoise(1.0, 0.3);
   }
 
   // Clear Fanfare (卒業確定)

@@ -1,4 +1,5 @@
 import { CarSpecs } from '../models/CarBase';
+import { CAR_PALETTES, type CarType, type ColorPreset } from '../../../../shared/carPalette';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
 
 export interface CarSelectEvents {
@@ -8,15 +9,12 @@ export interface CarSelectEvents {
   onToggleTurntable?: (enabled: boolean) => void;
   onCameraViewChange?: (view: 'orbit' | 'front' | 'side' | 'cockpit') => void;
   onNext: () => void;
+  /** ユーザーがマシンか色を選んだ時(画面を開いただけの初期選択では呼ばれない)。オンライン対戦の希望送信に使う。 */
+  onPick?: (carType: CarType, preset: ColorPreset) => void;
   onBack: () => void;
 }
 
-export interface ColorPreset {
-  name: string;
-  bodyColor: number;
-  roofColor: number;
-  bgGradient: string;
-}
+export type { ColorPreset };
 
 export class CarSelectScreen {
   private container: HTMLElement;
@@ -34,34 +32,9 @@ export class CarSelectScreen {
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
   private isVisible: boolean = false;
-
-  private trailJColors: ColorPreset[] = [
-    { name: 'キネティックイエロー', bodyColor: 0xded235, roofColor: 0x1a1c22, bgGradient: '#ded235' },
-    { name: 'ジャングルグリーン', bodyColor: 0x243325, roofColor: 0x1a1c22, bgGradient: '#243325' },
-    { name: 'ブリスクブルー', bodyColor: 0x1976d2, roofColor: 0x1a1c22, bgGradient: '#1976d2' },
-    { name: 'ミディアムグレー', bodyColor: 0x4b5563, roofColor: 0x1a1c22, bgGradient: '#4b5563' },
-    { name: 'シフォンアイボリー', bodyColor: 0xe6cf9e, roofColor: 0x1a1c22, bgGradient: '#e6cf9e' },
-    { name: 'ピュアホワイト', bodyColor: 0xf5f6fa, roofColor: 0x1a1c22, bgGradient: '#f5f6fa' },
-    { name: 'ブルーイッシュブラック', bodyColor: 0x11141a, roofColor: 0x11141a, bgGradient: '#11141a' },
-  ];
-
-  private crossJColors: ColorPreset[] = [
-    { name: 'オレンジ×白', bodyColor: 0xe05615, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #e05615 50%, #ffffff 50%)' },
-    { name: 'デニムブルー×ガンメ', bodyColor: 0x2952a3, roofColor: 0x2d3436, bgGradient: 'linear-gradient(135deg, #2952a3 50%, #2d3436 50%)' },
-    { name: 'フェニックスレッド×黒', bodyColor: 0xd63031, roofColor: 0x1a1c22, bgGradient: 'linear-gradient(135deg, #d63031 50%, #1a1c22 50%)' },
-    { name: 'クールカーキ×白', bodyColor: 0x3d4d3d, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #3d4d3d 50%, #ffffff 50%)' },
-    { name: 'オフブルー×白', bodyColor: 0x54a0ff, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #54a0ff 50%, #ffffff 50%)' },
-    { name: 'ピュアホワイト×黒', bodyColor: 0xf5f6fa, roofColor: 0x1a1c22, bgGradient: 'linear-gradient(135deg, #f5f6fa 50%, #1a1c22 50%)' },
-  ];
-
-  private truckJColors: ColorPreset[] = [
-    { name: 'ホワイト', bodyColor: 0xf5f6fa, roofColor: 0xf5f6fa, bgGradient: '#f5f6fa' },
-    { name: 'シルバーメタリック', bodyColor: 0xc8d6e5, roofColor: 0xc8d6e5, bgGradient: '#c8d6e5' },
-    { name: 'タフカーキ', bodyColor: 0x3b4a3f, roofColor: 0x3b4a3f, bgGradient: '#3b4a3f' },
-    { name: 'サンドベージュ', bodyColor: 0xd2b58c, roofColor: 0xd2b58c, bgGradient: '#d2b58c' },
-    { name: 'マットブラック', bodyColor: 0x22262e, roofColor: 0x22262e, bgGradient: '#22262e' },
-    { name: 'レスキューオレンジ', bodyColor: 0xe67e22, roofColor: 0xe67e22, bgGradient: '#e67e22' },
-  ];
+  /** オンライン対戦の待機中: 決定ボタンは無く(時間で自動開始)、色は他の参加者と被れない。 */
+  private onlineMode = false;
+  private takenBodies = new Set<number>();
 
   constructor(container: HTMLElement, events: CarSelectEvents) {
     this.container = container;
@@ -69,10 +42,8 @@ export class CarSelectScreen {
     this.render();
   }
 
-  private getColorsForCar(carType: 'trail_j' | 'cross_j' | 'truck_j'): ColorPreset[] {
-    if (carType === 'cross_j') return this.crossJColors;
-    if (carType === 'truck_j') return this.truckJColors;
-    return this.trailJColors;
+  private getColorsForCar(carType: CarType): ColorPreset[] {
+    return CAR_PALETTES[carType];
   }
 
   private render(): void {
@@ -190,6 +161,29 @@ export class CarSelectScreen {
     this.container.querySelector('#cs-btn-next')?.addEventListener('click', () => this.events.onNext());
   }
 
+  /** オンライン対戦の待機中の表示にする(決定ボタンを隠し、戻るは「退出」)。 */
+  public setOnlineMode(on: boolean): void {
+    this.onlineMode = on;
+    const back = this.container.querySelector<HTMLElement>('#cs-btn-back');
+    if (back) back.textContent = on ? '退出' : '戻る';
+    if (!on) this.takenBodies = new Set();
+  }
+
+  /** 他の参加者が使っている色(body)。色の切り替えでは飛ばされる。 */
+  public setTakenColors(bodies: Set<number>): void {
+    this.takenBodies = bodies;
+  }
+
+  /** サーバーが確定させたマシン/色を選択に反映する(希望は送らない)。 */
+  public setCar(type: CarType, body: number): void {
+    this.currentCarType = type;
+    this.container.querySelectorAll<HTMLElement>('.car-card-arcade').forEach((c) => c.classList.toggle('active', c.dataset.car === type));
+    this.events.onSelectCar(type);
+    const i = this.getColorsForCar(type).findIndex((c) => c.bodyColor === body);
+    if (i >= 0) this.selectedColorIndex[type] = i;
+    this.applyCurrentColor();
+  }
+
   public selectNextCar(): void {
     const currentIdx = this.carTypes.indexOf(this.currentCarType);
     const nextIdx = (currentIdx + 1) % this.carTypes.length;
@@ -210,14 +204,33 @@ export class CarSelectScreen {
     });
 
     this.events.onSelectCar(carType);
+    this.skipTakenColor(carType);
     this.applyCurrentColor();
+    this.emitPick();
+  }
+
+  /** 選択中の色が他の参加者と被っていたら、空いている次の色へ進める。 */
+  private skipTakenColor(carType: CarType): void {
+    if (!this.onlineMode) return;
+    const colors = this.getColorsForCar(carType);
+    for (let k = 0; k < colors.length; k++) {
+      if (!this.takenBodies.has(colors[this.selectedColorIndex[carType]].bodyColor)) return;
+      this.selectedColorIndex[carType] = (this.selectedColorIndex[carType] + 1) % colors.length;
+    }
+  }
+
+  private emitPick(): void {
+    const preset = this.getColorsForCar(this.currentCarType)[this.selectedColorIndex[this.currentCarType]];
+    if (preset) this.events.onPick?.(this.currentCarType, preset);
   }
 
   public cycleColor(): void {
     const colors = this.getColorsForCar(this.currentCarType);
     this.selectedColorIndex[this.currentCarType] =
       (this.selectedColorIndex[this.currentCarType] + 1) % colors.length;
+    this.skipTakenColor(this.currentCarType);
     this.applyCurrentColor();
+    this.emitPick();
   }
 
   public setColorIndex(index: number): void {
@@ -225,6 +238,7 @@ export class CarSelectScreen {
     if (index >= 0 && index < colors.length) {
       this.selectedColorIndex[this.currentCarType] = index;
       this.applyCurrentColor();
+      this.emitPick();
     }
   }
 
@@ -278,6 +292,7 @@ export class CarSelectScreen {
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
+        if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;     // 名前の入力中にマシン操作へ誤爆しない
         if (e.code === 'ArrowDown' || e.code === 'KeyS') {
           e.preventDefault();
           this.selectNextCar();

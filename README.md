@@ -12,7 +12,7 @@ gamecenter/
       school-corridor-runner/  # テンパレラン (Three.js)
       extreme-edge-arcade/     # 極限ギリギリ選手権 (Three.js)
       tani-runner-124/         # 単位増殖ラン (Three.js)
-      phaser-fighter/          # サイバー2Dファイター (Phaser 3)
+      phaser-fighter/          # STREET STRIKER（ストリートストライカー） (Phaser 3)
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
       midnight-skyway/         # ミッドナイト・スカイウェイ (Three.js, 3Dレース / PLATEAU・ヘルシンキの3D都市モデル)

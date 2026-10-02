@@ -539,10 +539,13 @@ export class GrindRail {
         post.position.set(px, -h / 2, 0);
         post.castShadow = true;
         this.mesh.add(post);
-      } else if (ground === null) {
-        const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 6), postMat);
-        cable.position.set(px, 2, 0);
-        this.mesh.add(cable);
+      } else {
+        // 地面に設置していないレールの柱は奈落の下まで続いているように見せる
+        const abyssDepth = 35; // 画面外・奈落の底まで十分届く長さ
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, abyssDepth, 8), postMat);
+        post.position.set(px, -abyssDepth / 2, 0);
+        post.castShadow = true;
+        this.mesh.add(post);
       }
     }
   }

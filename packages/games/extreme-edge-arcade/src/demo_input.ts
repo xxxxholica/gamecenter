@@ -56,8 +56,8 @@ export class DemoInputManager extends InputManager {
 
     // Stage 3 (id=3, Stage4Clock): Alarm Clock
     else if (this.stageId === 3) {
-      // Virtual seconds advance at 2.22x. Hits 9.8s at around 4.1s real time
-      if (this.demoTime >= 4.05 && this.demoTime < 4.25) {
+      // Virtual seconds advance at 2.0-2.5x. Stop at around 3.85s (approx 9.2-9.6s virtual)
+      if (this.demoTime >= 3.85 && this.demoTime < 4.1) {
         this.simBtn0 = true;
       } else {
         this.simBtn0 = false;

@@ -6,11 +6,15 @@ import { STAGES } from './stages';
 export interface MapSelectEvents {
   onSelectMap: (mapId: string) => void;
   onStartRace: () => void;
+  /** オンライン対戦: コース希望から待機画面へ進む。 */
+  onStartOnline: () => void;
   onBack: () => void;
+  /** オンライン対戦のコース希望: 選択済みのカードをもう一度押す(または Delete キー)と、希望を取り消す。 */
+  onClearPick?: () => void;
 }
 
 /** Stage order on screen (left to right). */
-const MAP_ORDER = STAGES.map((s) => s.id);
+const COURSE_ORDER = STAGES.map((s) => s.id);
 
 export class MapSelectScreen {
   private container: HTMLElement;
@@ -20,6 +24,10 @@ export class MapSelectScreen {
   private isVisible: boolean = false;
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
+  /** オンライン対戦のコース希望: 決定ボタンは無く(時間で自動開始)、選んだ時点で希望として送られる。 */
+  private onlineMode = false;
+  /** 主催者がコースを固定している間は、希望は変えられない。 */
+  private locked = false;
 
   constructor(container: HTMLElement, events: MapSelectEvents) {
     this.container = container;
@@ -69,6 +77,11 @@ export class MapSelectScreen {
     cards.forEach((card) => {
       card.addEventListener('click', () => {
         const mapId = card.dataset.map;
+        if (this.locked) return;
+        if (this.onlineMode && mapId && mapId === this.selectedMapId) {   // 選択済みを押し直すと取り消し
+          this.clearPick();
+          return;
+        }
         if (mapId && mapId !== this.selectedMapId) {
           this.setSelectedMap(mapId);
         }
@@ -76,7 +89,7 @@ export class MapSelectScreen {
     });
 
     this.container.querySelector('#ms-btn-back')?.addEventListener('click', () => this.events.onBack());
-    this.container.querySelector('#ms-btn-start')?.addEventListener('click', () => this.events.onStartRace());
+    this.container.querySelector('#ms-btn-start')?.addEventListener('click', () => this.confirm());
   }
 
   public setSelectedMap(mapId: string): void {
@@ -88,9 +101,62 @@ export class MapSelectScreen {
     this.events.onSelectMap(mapId);
   }
 
+  private order(): string[] {
+    return COURSE_ORDER;
+  }
+
+  private clearPick(): void {
+    if (this.locked || !this.onlineMode) return;
+    this.selectedMapId = '';
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.remove('active'));
+    this.events.onClearPick?.();
+  }
+
   private stepMap(dir: number): void {
-    const i = MAP_ORDER.indexOf(this.selectedMapId);
-    this.setSelectedMap(MAP_ORDER[Math.min(MAP_ORDER.length - 1, Math.max(0, i + dir))]);
+    if (this.locked) return;
+    const order = this.order();
+    const i = order.indexOf(this.selectedMapId);
+    this.setSelectedMap(order[Math.min(order.length - 1, Math.max(0, i + dir))]);
+  }
+
+  /** 決定: オフラインなら時間帯選択へ。オンラインでは待機画面へ(希望は選んだ時点で送られている)。 */
+  private confirm(): void {
+    if (this.onlineMode) this.events.onStartOnline();
+    else this.events.onStartRace();
+  }
+
+  /** オンライン対戦のコース希望の画面にする。 */
+  public setOnlineMode(on: boolean): void {
+    this.onlineMode = on;
+    if (!on) this.locked = false;
+    const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel);
+    const title = q('.arcade-title-main');
+    if (title) title.textContent = on ? 'コース希望' : 'コース選択';
+    const back = q('#ms-btn-back');
+    if (back) back.textContent = on ? 'マシン選択へ' : 'マシン選択へ';
+    const start = q('#ms-btn-start');
+    if (start && !on) start.textContent = '決定';
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : '自己ベスト記録'; });
+    if (on) {
+      this.selectedMapId = '';                               // オフラインで選んでいたコースの強調を消す(希望なしの状態)
+      this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.remove('active'));
+      COURSE_ORDER.forEach((id) => { const e = q(`#rec-time-${id}`); if (e) e.textContent = '0人'; });
+    }
+  }
+
+  /**
+   * 希望の集計と自分の希望を画面に反映する(希望は送らない)。
+   * fixed: 主催者がコースを固定している時のコースid(その間は変えられない)。mine: 自分の希望(null=希望なし)。
+   */
+  public setOnlineState(votes: Record<string, number>, mine: string | null, fixed: string | null): void {
+    this.locked = fixed !== null;
+    for (const id of COURSE_ORDER) {
+      const e = this.container.querySelector(`#rec-time-${id}`);
+      if (e) e.textContent = `${votes[id] ?? 0}人`;
+    }
+    const active = fixed ?? mine ?? '';                      // 希望なし: どのカードも選ばれていない
+    this.selectedMapId = active;
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.toggle('active', c.dataset.map === active));
   }
 
   public getSelectedMap(): string {
@@ -106,7 +172,7 @@ export class MapSelectScreen {
       return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
     };
 
-    for (const id of MAP_ORDER) {
+    for (const id of COURSE_ORDER) {
       const rec = records[id];
       const el = this.container.querySelector(`#rec-time-${id}`);
       if (el) el.textContent = rec ? formatTime(rec.bestTimeMs) : '--:--.---';
@@ -126,7 +192,7 @@ export class MapSelectScreen {
       if (!this.isVisible) return;
       if (p.left) this.stepMap(-1);
       else if (p.right) this.stepMap(1);
-      else if (p.any(0, 9)) this.events.onStartRace();
+      else if (p.any(0, 9)) this.confirm();
       else if (p.any(1)) this.events.onBack();
     });
 
@@ -135,16 +201,19 @@ export class MapSelectScreen {
         if (!this.isVisible) return;
         if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
-          this.events.onStartRace();
+          this.confirm();
         } else if (e.code === 'Escape') {
           e.preventDefault();
           this.events.onBack();
         } else if (e.code === 'ArrowLeft') {
           this.stepMap(-1);
+        } else if ((e.code === 'Delete' || e.code === 'Backspace') && this.onlineMode) {
+          e.preventDefault();
+          this.clearPick();
         } else if (e.code === 'ArrowRight') {
           this.stepMap(1);
-        } else if (e.code.startsWith('Digit') && MAP_ORDER[Number(e.code.slice(5)) - 1]) {
-          this.setSelectedMap(MAP_ORDER[Number(e.code.slice(5)) - 1]);
+        } else if (e.code.startsWith('Digit') && !this.locked && this.order()[Number(e.code.slice(5)) - 1]) {
+          this.setSelectedMap(this.order()[Number(e.code.slice(5)) - 1]);
         }
       };
       window.addEventListener('keydown', this.keyHandler);

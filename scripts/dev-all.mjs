@@ -10,6 +10,7 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import connect from 'connect';
 import { createServer as createViteServer } from 'vite';
 
@@ -27,6 +28,22 @@ const slugs = readdirSync(gamesDir, { withFileTypes: true })
 const app = connect();
 const httpServer = http.createServer(app);
 
+// 開発用: 本番ではリバースプロキシが担う /admin/ を、ここで代わりに中継する。
+// ローカル専用なので認証は無い。ブラウザで http://localhost:5173/admin/ を開く。
+const DEV_PROXY_SECRET = 'dev-only-proxy-secret-0123456789';
+const ONLINE_ADMIN_PORT = 8788;
+app.use('/admin', (req, res) => {
+  const upstream = http.request(
+    { host: '127.0.0.1', port: ONLINE_ADMIN_PORT, method: req.method, path: req.url || '/', headers: { ...req.headers, host: 'localhost', 'x-online-proxy': DEV_PROXY_SECRET } },
+    (up) => {
+      res.writeHead(up.statusCode ?? 502, up.headers);
+      up.pipe(res);
+    },
+  );
+  upstream.on('error', () => res.writeHead(502).end('admin server is not running'));
+  req.pipe(upstream);
+});
+
 let viteServers = [];
 
 try {
@@ -35,6 +52,7 @@ try {
       createViteServer({
         root: path.join(gamesDir, slug),
         base: `/games/${slug}/`,
+        appType: 'mpa',                                       // 存在しないパスにページを返さず 404 にする(本番と同じ)
         server: {
           middlewareMode: true,
           ws: { server: httpServer },
@@ -47,6 +65,7 @@ try {
   const hubVite = await createViteServer({
     root: hubDir,
     base: '/',
+    appType: 'mpa',                                           // /game のような打ち間違いのパスで、ハブが壊れた表示で出ないよう 404 にする
     server: {
       middlewareMode: true,
       ws: { server: httpServer },
@@ -74,6 +93,15 @@ httpServer.listen(PORT, () => {
   console.log(`\n  Hub -> http://localhost:${PORT}/\n`);
 });
 
+// オンライン対戦サーバー(開発用: 全ゲームを起動時から開放)。
+// 試す時は http://localhost:5173/games/<ゲーム>/ を複数タブで開き、START後のモード選択から「オンライン対戦」を選ぶ。管理画面は http://localhost:5173/admin/
+const onlineServer = spawn(process.execPath, ['--watch', 'src/index.ts'], {
+  cwd: path.join(root, 'packages/server'),
+  env: { ...process.env, ONLINE_ALLOWED_ORIGINS: '*', ONLINE_PROXY_SECRET: DEV_PROXY_SECRET, ONLINE_ADMIN_PORT: String(ONLINE_ADMIN_PORT), ONLINE_MAX_CONNS_PER_IP: '50', ONLINE_CONNECTS_PER_MIN: '300' },
+  stdio: 'inherit',
+});
+onlineServer.on('error', (err) => console.error('[online] サーバーを起動できませんでした:', err.message));
+
 let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) {
@@ -81,6 +109,7 @@ async function shutdown() {
     process.exit(1);
   }
   shuttingDown = true;
+  onlineServer.kill();
   const results = await Promise.allSettled(viteServers.map((vite) => vite.close()));
   for (const result of results) {
     if (result.status === 'rejected') console.error(result.reason);

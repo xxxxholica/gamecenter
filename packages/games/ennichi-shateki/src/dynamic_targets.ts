@@ -215,6 +215,13 @@ export class FlyingUFO {
   public isHit: boolean = false;
   public fallVelocity: THREE.Vector3 = new THREE.Vector3();
   public respawnTimer: number = 0;
+  /**
+   * オンライン対戦の共有の的として使う時(外部制御): 位置・出現は外(online/SharedUfo)が決める。ここでは動かさず、
+   * 命中しても自分では墜ちない(当たりはサーバーが決める。命中の通知だけ出る)。
+   */
+  public external: boolean = false;
+  /** 外部制御中に、いま出現していて当たり判定があるか */
+  public externalActive: boolean = false;
   // 縁の電飾。点光源にすると画面全体の全画素で光源計算が増えるため、光る小球(ライティング不要のMeshBasicMaterial)で表現する
   private lights: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 
@@ -269,6 +276,13 @@ export class FlyingUFO {
   }
 
   public update(dt: number, elapsed: number) {
+    if (this.external) {
+      // 位置は外が決める。縁の電飾だけ点滅させる
+      this.lights.forEach((l, idx) => {
+        l.mat.color.copy(l.base).multiplyScalar(0.55 + Math.sin(elapsed * 10.0 + idx * 1.5) * 0.45);
+      });
+      return;
+    }
     if (this.isHit) {
       // Crash downward
       this.fallVelocity.y -= 9.8 * dt;
@@ -312,6 +326,10 @@ export class FlyingUFO {
   }
 
   public hit(): THREE.Vector3 {
+    if (this.external) {
+      sounds.playHit(true, 0.9);                              // 命中の手応えだけ(墜ちるかはサーバーの判定を待つ)
+      return this.pos.clone();
+    }
     this.isHit = true;
     this.respawnTimer = 6.0;
     this.fallVelocity.set((Math.random() - 0.5) * 2.0, 1.5, -0.8);
@@ -321,7 +339,7 @@ export class FlyingUFO {
 
   public getBoundingBox(): THREE.Box3 {
     const box = new THREE.Box3();
-    if (!this.isHit) {
+    if (this.external ? this.externalActive : !this.isHit) {
       box.setFromObject(this.mesh);
       box.expandByScalar(HIT_MARGIN);
     }

@@ -9,11 +9,7 @@ import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 installHomeReturn();
 
 mountArcadeGuide({
-  moveLabel: '操作',
-  buttons: [
-    { indices: [0, 2], label: 'アクション0' },
-    { indices: [1, 3], label: 'アクション1' },
-  ],
+  buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
   showHomeHint: true,
 });
 

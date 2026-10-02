@@ -13,7 +13,8 @@
     "data:tokyo": "node scripts/tokyo_tiles.mjs && node scripts/tokyo_download.mjs 1300 && node scripts/tokyo_design_route.mjs && node scripts/tokyo_convert.mjs",
     "data:helsinki-skyway": "node scripts/helsinki_skyway_design.mjs auto && node scripts/helsinki_convert.mjs",
     "data:helsinki-far": "node scripts/helsinki_download.mjs 17 && node scripts/helsinki_far_convert.mjs",
-    "data:tokyo-far": "FAR=1 node scripts/tokyo_convert.mjs"
+    "data:tokyo-far": "FAR=1 node scripts/tokyo_convert.mjs",
+    "test": "node --test test/"
   },
   "dependencies": {
     "three": "^0.170.0"

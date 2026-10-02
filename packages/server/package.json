@@ -1,0 +1,15 @@
+{
+  "name": "server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.ts",
+    "dev": "node --watch src/index.ts",
+    "test": "node --test src/",
+    "ctl": "node src/ctl.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -84,20 +84,19 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
     id: 'kosen',
     label: '高専生',
     description: '積分・微分・固有値・極限',
+    // 卒業要件はタイトルの124単位固定。最大でもギリギリ届く水準に調整
     requirements: [
-      { value: 140, weight: 0.5 },
-      { value: 165, weight: 0.3 },
-      { value: 190, weight: 0.2 }
+      { value: 124, weight: 1.0 }
     ],
-    margin: 1.15,
-    maxPure: 1.9,
+    margin: 1.00,
+    maxPure: 1.06,
     // 高専生だけ、どちらを選んでも減る組を大幅に増やす(ましな方を選ぶ、分けて被害を抑える判断が増える)
     patterns: { goodBad: 0.25, multAdd: 0.2, addAdd: 0.1, badBad: 0.45 },
     badPairVariants: true,
-    minBadBad: 3,
+    minBadBad: 2,
     obstacle: { widthMin: 3.4, widthMax: 4.8, swayFromGap: 2, swayChance: 0.55 },
-    mix: { obstacleOnly: 0.45, pickupOnly: 0.2, both: 0.25, bonusRow: 0.1 },
-    pickupScale: 1.2,
+    mix: { obstacleOnly: 0.65, pickupOnly: 0.15, both: 0.15, bonusRow: 0.05 },
+    pickupScale: 0.2,
     ringPassRatio: 0.35,
     maxBoosts: 3
   }

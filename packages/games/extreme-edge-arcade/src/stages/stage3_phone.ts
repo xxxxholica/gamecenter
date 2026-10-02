@@ -9,9 +9,9 @@ export class Stage3Phone implements Stage {
   numberText = 'STAGE 2';
   title = 'スマホ充電';
   mission = '残量0.000%ブラックアウト直前に挿入せよ！';
-  instruction = '[ENTER / ↑] ケーブルを挿す(1回)';
+  instruction = '[レバー上]: ケーブルを挿す';
   briefing: StageBriefing = {
-    key: 'ENTER / ↑',
+    key: '[レバー上]',
     ok: '0%になる直前にケーブルを挿す',
     ng: '0%で電源が落ちる・早すぎ',
   };

@@ -1,10 +1,14 @@
-export type GameScreen = 'TITLE' | 'CAR_SELECT' | 'MAP_SELECT' | 'TIME_SELECT' | 'RACE';
+export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'TIME_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
 
 export interface GameFlowCallbacks {
   onEnterTitle: () => void;
+  onEnterModeSelect: () => void;
   onEnterCarSelect: () => void;
   onEnterMapSelect: () => void;
   onEnterTimeSelect: () => void;
+  onEnterOnlineLobby: () => void;
+  onEnterOnlineCourse: () => void;
+  onEnterOnlineWait: () => void;
   onStartRace: () => void;
   onRetryRace: () => void;
   onTogglePause?: () => void;
@@ -38,6 +42,11 @@ export class GameFlowManager {
     this.callbacks.onEnterTitle();
   }
 
+  public goToModeSelect(): void {
+    this.currentScreen = 'MODE_SELECT';
+    this.callbacks.onEnterModeSelect();
+  }
+
   public goToCarSelect(): void {
     this.currentScreen = 'CAR_SELECT';
     this.callbacks.onEnterCarSelect();
@@ -51,6 +60,21 @@ export class GameFlowManager {
   public goToTimeSelect(): void {
     this.currentScreen = 'TIME_SELECT';
     this.callbacks.onEnterTimeSelect();
+  }
+
+  public goToOnlineLobby(): void {
+    this.currentScreen = 'ONLINE_LOBBY';
+    this.callbacks.onEnterOnlineLobby();
+  }
+
+  public goToOnlineCourse(): void {
+    this.currentScreen = 'ONLINE_COURSE';
+    this.callbacks.onEnterOnlineCourse();
+  }
+
+  public goToOnlineWait(): void {
+    this.currentScreen = 'ONLINE_WAIT';
+    this.callbacks.onEnterOnlineWait();
   }
 
   public startRace(): void {

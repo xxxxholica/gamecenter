@@ -122,9 +122,24 @@ class StreetBBoyGame {
 
     const btnRestart = document.getElementById('btn-restart');
     if (btnRestart) {
-      btnRestart.addEventListener('click', () => {
+      btnRestart.innerHTML = `${buttonIconHtml([0])} ${btnRestart.textContent?.trim() || '再挑戦'}`;
+      const restartAction = (e: Event) => {
+        e.stopPropagation();
         this.sound.init();
         this.startGame();
+      };
+      btnRestart.addEventListener('click', restartAction);
+      btnRestart.addEventListener('pointerdown', restartAction);
+    }
+
+    // Result overlay click/pointer anywhere to restart
+    const resultOverlay = document.getElementById('result-overlay');
+    if (resultOverlay) {
+      resultOverlay.addEventListener('click', () => {
+        if (this.state === 'game_over' || (this.state === 'clear' && this.stateTimer > 2.0)) {
+          this.sound.init();
+          this.startGame();
+        }
       });
     }
 
@@ -493,8 +508,8 @@ class StreetBBoyGame {
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
       this.hud.showCenterBanner('timeup');
-      this.sound.playHurt();
-      this.handlePlayerDeath();
+      this.sound.playTimeUp();
+      this.handlePlayerDeath(true);
       return;
     }
 
@@ -673,7 +688,7 @@ class StreetBBoyGame {
         if (cassette.isGold) {
           this.sound.playPowerup();
           this.sound.setGoldMode(true);
-          this.player.triggerInvincibility(12);
+          this.player.triggerInvincibility(4);
           this.stage.particleSystem.spawnSparkles(cassette.x, cassette.y, 24, 0xffea00);
           this.addScore(1000);
           this.timeLeft = Math.min(this.timeLeft + 5.0, 99);
@@ -1009,7 +1024,8 @@ class StreetBBoyGame {
         this.hud.showResult('clear', this.score);
       }
 
-      if (this.stateTimer > 4.5 && (input.startPressed || input.jumpPressed)) {
+      if (this.stateTimer > 3.8 && (input.startPressed || input.jumpPressed || input.spinPressed || input.anyActionPressed)) {
+        this.sound.init();
         this.startGame();
       }
     }
@@ -1018,13 +1034,15 @@ class StreetBBoyGame {
   // -------------------------------------------------------------
   // PLAYER DEATH & GAME OVER
   // -------------------------------------------------------------
-  private handlePlayerDeath(): void {
+  private handlePlayerDeath(skipHurtSound: boolean = false): void {
     if (!this.player || this.player.isDead) return;
 
     this.player.isDead = true;
     this.player.vy = 12; // Death bounce
-    this.sound.playHurt();
-    this.hud.showCenterBanner('dead');
+    if (!skipHurtSound) {
+      this.sound.playHurt();
+      this.hud.showCenterBanner('dead');
+    }
 
     this.lives -= 1;
     this.hud.updateLives(this.lives);
@@ -1059,7 +1077,8 @@ class StreetBBoyGame {
 
   private updateGameOver(dt: number, input: InputState): void {
     this.stateTimer += dt;
-    if (this.stateTimer > 1.5 && (input.startPressed || input.jumpPressed)) {
+    if (this.stateTimer > 0.2 && (input.startPressed || input.jumpPressed || input.spinPressed || input.anyActionPressed)) {
+      this.sound.init();
       this.startGame();
     }
     // Inactivity in Game Over triggers Attract loop after 12s

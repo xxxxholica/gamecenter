@@ -88,6 +88,8 @@ export class DriveHUD {
   private blockadePoints: THREE.Vector2[] = [];
   private bounds = { minX: -200, maxX: 200, minZ: -200, maxZ: 200 };
   private sectorBannerTimeout: number | null = null;
+  /** オンライン対戦: ミニマップに出す他プレイヤー。 */
+  private remoteMarkers: { x: number; z: number; color: number }[] = [];
 
   constructor(container: HTMLElement, events: DriveHUDEvents) {
     this.container = container;
@@ -549,10 +551,15 @@ export class DriveHUD {
     return null;
   }
 
+  /** 表示中のボタンだけ(オンライン対戦では一部を隠す)。 */
+  private menuButtons(modal: HTMLElement): HTMLButtonElement[] {
+    return [...modal.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.style.display !== 'none');
+  }
+
   private setPadFocus(index: number): void {
     const modal = this.openModal();
     if (!modal) return;
-    const buttons = modal.querySelectorAll<HTMLButtonElement>('button');
+    const buttons = this.menuButtons(modal);
     this.padFocus = (index + buttons.length) % buttons.length;
     buttons.forEach((b, i) => b.classList.toggle('pad-focus', i === this.padFocus));
   }
@@ -576,7 +583,7 @@ export class DriveHUD {
     if (!modal) return;
     if (p.up || p.left) this.setPadFocus(this.padFocus - 1);
     else if (p.down || p.right) this.setPadFocus(this.padFocus + 1);
-    else if (p.any(0, 9)) modal.querySelectorAll<HTMLButtonElement>('button')[this.padFocus]?.click();
+    else if (p.any(0, 9)) this.menuButtons(modal)[this.padFocus]?.click();
     else if (p.any(1) && modal === this.pauseModalEl) this.hidePauseModal();
   }
 
@@ -587,6 +594,25 @@ export class DriveHUD {
   // ==========================================
   // Minimap Rendering (Transparent Vector Overlay)
   // ==========================================
+
+  public setRemoteMarkers(markers: { x: number; z: number; color: number }[]): void {
+    this.remoteMarkers = markers;
+  }
+
+  /** オンライン対戦中は、リトライ・コース変更・車変更をポーズメニューから外し、「タイトルへ」を退出にする。 */
+  public setOnlineMode(on: boolean): void {
+    for (const id of ['pause-btn-retry', 'pause-btn-map', 'pause-btn-car', 'res-btn-retry']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = on ? 'none' : '';
+    }
+    for (const id of ['pause-btn-title', 'res-btn-title']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.dataset.label ??= el.textContent ?? '';
+      el.textContent = on ? 'ロビーへ戻る' : el.dataset.label;
+    }
+    if (!on) this.remoteMarkers = [];
+  }
 
   public updateCarPosition(
     carPos: THREE.Vector3,
@@ -677,6 +703,22 @@ export class DriveHUD {
       ctx.fill();
     }
     ctx.restore();
+
+    // 5b. Other players (online): coloured dots with a white ring
+    for (const m of this.remoteMarkers) {
+      const [mx, my] = toCanvas(m.x, m.z);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = '#' + m.color.toString(16).padStart(6, '0');
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mx, my, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // 6. Player Car (Glowing Cyan Arrow)
     const [px, py] = toCanvas(carPos.x, carPos.z);

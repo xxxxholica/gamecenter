@@ -105,8 +105,7 @@ function clamp(v: number, lo: number, hi: number): number {
 const KOSEN_MULT: { type: MathOpType; label: string; factor: number }[] = [
   { type: 'integral_double', label: '∬', factor: 2 },
   { type: 'tensor_prod', label: '⊗2', factor: 2 },
-  { type: 'eigen_boost', label: 'λ=2', factor: 2 },
-  { type: 'integral_triple', label: '∭', factor: 3 }
+  { type: 'eigen_boost', label: 'λ=2', factor: 2 }
 ];
 const KOSEN_ADD: { type: MathOpType; symbol: string }[] = [
   { type: 'integral_add', symbol: '∫' },
@@ -127,8 +126,7 @@ const KOSEN_SUB: { type: MathOpType; symbol: string }[] = [
 
 const KOSEN_POOL: GatePool = {
   makeMultiplier(rng) {
-    // ×3 は強いので出にくくする
-    const part = rng() < 0.22 ? KOSEN_MULT[3] : pick(KOSEN_MULT.slice(0, 3), rng);
+    const part = pick(KOSEN_MULT, rng);
     return { type: part.type, value: part.factor, label: part.label, isPositive: true };
   },
   makeAdder(amount, rng) {
@@ -248,11 +246,12 @@ export function generateGateConfigs(
   startCount: number = 4
 ): GateConfig[] {
   const pool = POOLS[level];
+  const isKosen = level === 'kosen';
   // 全員が片側を選び続けても届く余裕。レベルが上がるほど余裕を小さくする
   const minPure = Math.round(requirement * LEVELS[level].margin);
-  const maxSplit = requirement * 4;
+  const maxSplit = isKosen ? Math.round(requirement * 1.18) : requirement * 4;
 
-  for (let attempt = 0; attempt < 4000; attempt++) {
+  for (let attempt = 0; attempt < 8000; attempt++) {
     const configs: GateConfig[] = [];
     let pure = startCount; // 分割しない最善
     let split = startCount; // 分割も使う最善
@@ -271,33 +270,54 @@ export function generateGateConfigs(
       let b: GateInfo;
 
       if (roll < cutGoodBad || (isEdge && roll >= cutAddAdd)) {
-        // A: 良い vs 悪い。良い側は、序盤は足し算・終盤はかけ算が多い
-        const goodIsMult = rng() < 0.25 + 0.6 * (i / (zs.length - 1));
-        a = goodIsMult ? pool.makeMultiplier(rng, pure) : pool.makeAdder(clamp(Math.round(pure * (0.35 + rng() * 0.5)), 12, 90), rng, pure);
+        // A: 良い vs 悪い。高専生は終盤で人数が増えすぎないよう程よい足し算を多用
+        const goodIsMult = isKosen
+          ? (pure < 65 && rng() < 0.3 + 0.4 * (i / (zs.length - 1)))
+          : (rng() < 0.25 + 0.6 * (i / (zs.length - 1)));
+        const addAmount = isKosen
+          ? clamp(Math.round(pure * (0.2 + rng() * 0.3)), 8, 35)
+          : clamp(Math.round(pure * (0.35 + rng() * 0.5)), 12, 90);
+        a = goodIsMult ? pool.makeMultiplier(rng, pure) : pool.makeAdder(addAmount, rng, pure);
         b = makeBad(pool, pure, rng);
       } else if (roll < cutMultAdd) {
-        // B: かけ算 vs 足し算。足し算は「今の人数の 0.7〜1.4 倍」なので、×2 と拮抗する
+        // B: かけ算 vs 足し算
         a = pool.makeMultiplier(rng, pure);
         const factor = Math.max(0.5, multFactor(a) - 1);
-        b = pool.makeAdder(clamp(Math.round(pure * factor * (0.7 + rng() * 0.7)), 15, 220), rng, pure);
+        const addAmount = isKosen
+          ? clamp(Math.round(pure * factor * (0.6 + rng() * 0.5)), 10, 45)
+          : clamp(Math.round(pure * factor * (0.7 + rng() * 0.7)), 15, 220);
+        b = pool.makeAdder(addAmount, rng, pure);
       } else if (roll < cutAddAdd) {
-        // D: 足し算 vs 足し算。金額を違えて、どちらか一方を選ぶより両方を取りたくなる
-        const base = clamp(Math.round(pure * (0.4 + rng() * 0.5)), 12, 120);
+        // D: 足し算 vs 足し算
+        const base = isKosen
+          ? clamp(Math.round(pure * (0.3 + rng() * 0.3)), 8, 35)
+          : clamp(Math.round(pure * (0.4 + rng() * 0.5)), 12, 120);
         a = pool.makeAdder(base, rng, pure);
-        b = pool.makeAdder(clamp(Math.round(base * (0.6 + rng() * 0.8)), 10, 140), rng, pure);
+        const bAmount = isKosen
+          ? clamp(Math.round(base * (0.7 + rng() * 0.5)), 6, 40)
+          : clamp(Math.round(base * (0.6 + rng() * 0.8)), 10, 140);
+        b = pool.makeAdder(bAmount, rng, pure);
       } else {
         // C: 悪い vs 悪い。高専生では、割り算+引き算のほか、引き算同士・割り算同士も出る
         const variant = LEVELS[level].badPairVariants ? rng() : 0;
         if (variant < 0.5) {
           a = pool.makeDivision(rng);
-          b = pool.makeSubtractor(clamp(Math.round(pure * (0.3 + rng() * 0.25)), 3, 150), rng, pure);
+          const subAmount = isKosen
+            ? clamp(Math.round(pure * (0.25 + rng() * 0.25)), 3, 90)
+            : clamp(Math.round(pure * (0.3 + rng() * 0.25)), 3, 150);
+          b = pool.makeSubtractor(subAmount, rng, pure);
         } else if (variant < 0.8) {
-          // 引き算同士: 減る量が違う二つ
-          const base = clamp(Math.round(pure * (0.25 + rng() * 0.2)), 3, 120);
+          // 引き算同士
+          const base = isKosen
+            ? clamp(Math.round(pure * (0.2 + rng() * 0.2)), 3, 70)
+            : clamp(Math.round(pure * (0.25 + rng() * 0.2)), 3, 120);
           a = pool.makeSubtractor(base, rng, pure);
-          b = pool.makeSubtractor(clamp(Math.round(base * (1.3 + rng() * 0.8)), 4, 180), rng, pure);
+          const subAmountB = isKosen
+            ? clamp(Math.round(base * (1.2 + rng() * 0.5)), 4, 100)
+            : clamp(Math.round(base * (1.3 + rng() * 0.8)), 4, 180);
+          b = pool.makeSubtractor(subAmountB, rng, pure);
         } else {
-          // 割り算同士: ÷2 と ÷3 など、割る数が違う二つ
+          // 割り算同士: ÷2 と ÷3 など
           a = pool.makeDivision(rng);
           b = pool.makeDivision(rng);
           if (a.type === b.type && a.label === b.label) b = { ...b, type: 'diff_2nd', value: 3, label: 'd²/dx²' };
@@ -310,7 +330,7 @@ export function generateGateConfigs(
 
       pure = Math.max(gateResult(pure, left).survivors, gateResult(pure, right).survivors);
       split = bestSplitResult(split, left, right);
-      if (pure < 3 || split > maxSplit * 2) {
+      if (pure < 3 || split > maxSplit * 1.5) {
         valid = false;
         break;
       }
@@ -320,14 +340,30 @@ export function generateGateConfigs(
       return configs;
     }
   }
-  return fallbackGateConfigs(zs);
+  return fallbackGateConfigs(zs, level);
 }
 
-/** 生成に失敗したときの保険: 従来の固定コース */
-function fallbackGateConfigs(zs: number[]): GateConfig[] {
+/** 生成に失敗したときの保険: 固定コース */
+function fallbackGateConfigs(zs: number[], level: LevelId = 'kosen'): GateConfig[] {
   const T = true;
   const F = false;
   const g = (type: MathOpType, value: number, label: string, isPositive: boolean): GateInfo => ({ type, value, label, isPositive });
+
+  if (level === 'kosen') {
+    // 高専生用フォールバック: 最善手でちょうど 125 単位(要件124ギリギリ)
+    const fixedKosen: [GateInfo, GateInfo][] = [
+      [g('integral_double', 2, '∬', T), g('diff_partial', 2, '∂/∂x −2', F)], // -> 8
+      [g('tensor_prod', 2, '⊗2', T), g('diff_1st', 2, 'd/dx', F)], // -> 16
+      [g('integral_add', 16, '∫ +16', T), g('kernel', 10, 'ker −10', F)], // -> 32
+      [g('diff_1st', 2, 'd/dx', F), g('kernel', 8, 'ker −8', F)], // -> 24
+      [g('eigen_boost', 2, 'λ=2', T), g('coker', 12, 'coker −12', F)], // -> 48
+      [g('diff_2nd', 3, 'd²/dx²', F), g('divergence', 20, '∇・F −20', F)], // -> 28
+      [g('integral_double', 2, '∬', T), g('diff_1st', 2, 'd/dx', F)], // -> 56
+      [g('series_sum', 69, '∑ +69', T), g('divergence', 25, '∇・F −25', F)] // -> 125 (ギリギリ合格!)
+    ];
+    return zs.map((z, i) => ({ z, left: fixedKosen[i % fixedKosen.length][0], right: fixedKosen[i % fixedKosen.length][1] }));
+  }
+
   const fixed: [GateInfo, GateInfo][] = [
     [g('integral_double', 2, '∬', T), g('diff_partial', 10, '∂/∂x −10', F)],
     [g('kernel', 15, 'ker −15', F), g('series_sum', 20, '∑ +20', T)],

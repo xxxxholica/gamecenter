@@ -9,7 +9,8 @@ import {
   createCardboardBarricadeTexture,
   createWarningArrowTexture,
   createBasketBallTexture,
-  createConeStripeTexture,
+  createFlameTexture,
+  createCharredFloorTexture,
 } from '../graphics/Textures';
 import { Coin } from '../entities/Coin';
 
@@ -41,6 +42,11 @@ export interface Obstacle {
   ballY?: number;              // ボールの現在Y座標
   fallAngle?: number;          // 倒壊ロッカーの倒れ込み角度
   isFallen?: boolean;          // ロッカーが完全に倒れたか
+
+  // 炎（FIRE / 飛び越え不可火災）用
+  fireMeshes?: THREE.Mesh[];
+  fireLight?: THREE.PointLight;
+  fireEmbers?: THREE.Mesh[];
 }
 
 export class ObstacleManager {
@@ -69,7 +75,8 @@ export class ObstacleManager {
   private barricadeTexture: THREE.CanvasTexture;
   private warningArrowTexture: THREE.CanvasTexture;
   private basketBallTexture: THREE.CanvasTexture;
-  private coneStripeTexture: THREE.CanvasTexture;
+  private flameTexture: THREE.CanvasTexture;
+  private charredFloorTexture: THREE.CanvasTexture;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -80,7 +87,8 @@ export class ObstacleManager {
     this.barricadeTexture = createCardboardBarricadeTexture();
     this.warningArrowTexture = createWarningArrowTexture();
     this.basketBallTexture = createBasketBallTexture();
-    this.coneStripeTexture = createConeStripeTexture();
+    this.flameTexture = createFlameTexture();
+    this.charredFloorTexture = createCharredFloorTexture();
 
     for (let i = 1; i <= 6; i++) {
       this.vaultingTextures.push(createVaultingBoxTexture(i));
@@ -601,83 +609,133 @@ export class ObstacleManager {
   }
 
   /**
-   * 破壊不可・迂回必須: 立入禁止コーン＆水拭き床
+   * 破壊不可・飛び越え不能・迂回必須: 猛烈に燃え盛る火炎（火災）
    */
-  private createWetFloorConeObstacle(): THREE.Group {
+  private createFireObstacle(): {
+    group: THREE.Group;
+    fireMeshes: THREE.Mesh[];
+    fireLight: THREE.PointLight;
+    fireEmbers: THREE.Mesh[];
+  } {
     const group = new THREE.Group();
+    const fireMeshes: THREE.Mesh[] = [];
+    const fireEmbers: THREE.Mesh[] = [];
 
-    // 1. 水拭き濡れ床（反射する水たまり）
-    const wetFloorGeo = new THREE.PlaneGeometry(2.6, 2.4);
-    const wetFloorMat = new THREE.MeshStandardMaterial({
-      color: 0x81d4fa,
-      metalness: 0.85,
-      roughness: 0.08,
+    // 1. 焦げた床面（円形の焦土・ひび割れ残り火）
+    const charredGeo = new THREE.PlaneGeometry(2.6, 2.6);
+    const charredMat = new THREE.MeshStandardMaterial({
+      map: this.charredFloorTexture,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.92,
+      roughness: 0.9,
     });
-    const wetFloor = new THREE.Mesh(wetFloorGeo, wetFloorMat);
-    wetFloor.rotation.x = -Math.PI / 2;
-    wetFloor.position.y = 0.02;
-    group.add(wetFloor);
+    const charredFloor = new THREE.Mesh(charredGeo, charredMat);
+    charredFloor.rotation.x = -Math.PI / 2;
+    charredFloor.position.y = 0.02;
+    group.add(charredFloor);
 
-    // 2. 三角コーン（左右2本）
-    const coneGeo = new THREE.ConeGeometry(0.32, 1.05, 16);
-    const coneMat = new THREE.MeshStandardMaterial({
-      color: 0xff3d00,
-      roughness: 0.35,
-      metalness: 0.1,
+    // 2. 燃える木炭・瓦礫のベース（赤熱したエミッシブ塊）
+    const coalGeo = new THREE.BoxGeometry(0.35, 0.22, 0.35);
+    const coalMat = new THREE.MeshStandardMaterial({
+      color: 0x1a0500,
+      emissive: 0xff3300,
+      emissiveIntensity: 0.9,
+      roughness: 0.9,
     });
-    const baseGeo = new THREE.BoxGeometry(0.68, 0.08, 0.68);
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0x212121, roughness: 0.8 });
-
-    const tapeGeo = new THREE.CylinderGeometry(0.19, 0.23, 0.18, 16);
-    const tapeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-    for (const xOff of [-0.75, 0.75]) {
-      const coneUnit = new THREE.Group();
-
-      const base = new THREE.Mesh(baseGeo, baseMat);
-      base.position.y = 0.04;
-      base.castShadow = true;
-      coneUnit.add(base);
-
-      const cone = new THREE.Mesh(coneGeo, coneMat);
-      cone.position.y = 0.56;
-      cone.castShadow = true;
-      coneUnit.add(cone);
-
-      const tape = new THREE.Mesh(tapeGeo, tapeMat);
-      tape.position.y = 0.52;
-      coneUnit.add(tape);
-
-      coneUnit.position.x = xOff;
-      group.add(coneUnit);
+    const coalPositions = [
+      [-0.6, 0.1, -0.2],
+      [0.55, 0.1, 0.25],
+      [-0.2, 0.1, 0.35],
+      [0.3, 0.1, -0.3],
+      [0, 0.12, 0],
+    ];
+    for (const [cx, cy, cz] of coalPositions) {
+      const coal = new THREE.Mesh(coalGeo, coalMat);
+      coal.position.set(cx, cy, cz);
+      coal.rotation.set(Math.random() * 0.4, Math.random() * Math.PI, Math.random() * 0.4);
+      group.add(coal);
     }
 
-    // 3. 黄黒警戒コーンバー
-    const barGeo = new THREE.CylinderGeometry(0.045, 0.045, 1.7, 12);
-    const barMat = new THREE.MeshStandardMaterial({
-      map: this.coneStripeTexture,
-      roughness: 0.4,
+    // 3. 立ち上る巨大火炎ピラー群（飛び越え不可能な高さ 2.4m〜2.8m）
+    const flameMat = new THREE.MeshBasicMaterial({
+      map: this.flameTexture,
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
-    const bar = new THREE.Mesh(barGeo, barMat);
-    bar.rotation.z = Math.PI / 2;
-    bar.position.set(0, 0.78, 0);
-    bar.castShadow = true;
-    group.add(bar);
 
-    // 4. 立入禁止ミニプレート
-    const plateGeo = new THREE.BoxGeometry(0.75, 0.45, 0.04);
-    const plateMat = new THREE.MeshStandardMaterial({
-      map: this.coneStripeTexture,
-      roughness: 0.4,
+    // 3-1. 中央メイン大炎（直交する2枚のプレーン、高さ 2.7m）
+    const mainFlameGeo = new THREE.PlaneGeometry(1.6, 2.7);
+    mainFlameGeo.translate(0, 1.35, 0); // 下部をピボットにする
+
+    const flame1 = new THREE.Mesh(mainFlameGeo, flameMat);
+    flame1.position.set(0, 0, 0);
+    group.add(flame1);
+    fireMeshes.push(flame1);
+
+    const flame2 = new THREE.Mesh(mainFlameGeo, flameMat);
+    flame2.position.set(0, 0, 0);
+    flame2.rotation.y = Math.PI / 2;
+    group.add(flame2);
+    fireMeshes.push(flame2);
+
+    // 3-2. サブ炎（左右前後に配置、高さ 1.9m〜2.3m）
+    const subConfigs = [
+      { x: -0.55, z: 0.15, scale: 0.82, rot: Math.PI / 4 },
+      { x: 0.55, z: -0.15, scale: 0.85, rot: -Math.PI / 4 },
+      { x: 0.1, z: 0.45, scale: 0.75, rot: Math.PI / 6 },
+      { x: -0.2, z: -0.4, scale: 0.78, rot: -Math.PI / 3 },
+    ];
+
+    for (const cfg of subConfigs) {
+      const subFlame = new THREE.Mesh(mainFlameGeo, flameMat);
+      subFlame.position.set(cfg.x, 0, cfg.z);
+      subFlame.rotation.y = cfg.rot;
+      subFlame.scale.set(cfg.scale, cfg.scale, cfg.scale);
+      group.add(subFlame);
+      fireMeshes.push(subFlame);
+    }
+
+    // 4. 白熱インナーコアコーン（最も熱い中央の光）
+    const coreConeGeo = new THREE.ConeGeometry(0.55, 1.8, 12, 1, true);
+    coreConeGeo.translate(0, 0.9, 0);
+    const coreConeMat = new THREE.MeshBasicMaterial({
+      color: 0xffea00,
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
-    const plate = new THREE.Mesh(plateGeo, plateMat);
-    plate.position.set(0, 0.68, 0.04);
-    plate.castShadow = true;
-    group.add(plate);
+    const coreCone = new THREE.Mesh(coreConeGeo, coreConeMat);
+    group.add(coreCone);
+    fireMeshes.push(coreCone);
 
-    return group;
+    // 5. 舞い上がる火の粉（Embers）
+    const emberGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+    const emberMat = new THREE.MeshBasicMaterial({
+      color: 0xffcc00,
+      blending: THREE.AdditiveBlending,
+    });
+    for (let i = 0; i < 10; i++) {
+      const ember = new THREE.Mesh(emberGeo, emberMat);
+      ember.position.set(
+        (Math.random() - 0.5) * 1.4,
+        0.2 + Math.random() * 2.2,
+        (Math.random() - 0.5) * 1.4
+      );
+      group.add(ember);
+      fireEmbers.push(ember);
+    }
+
+    // 6. 周囲の廊下を赤く照らすフリッカー点光源
+    const fireLight = new THREE.PointLight(0xff6600, 2.6, 7.5);
+    fireLight.position.set(0, 1.3, 0);
+    group.add(fireLight);
+
+    return { group, fireMeshes, fireLight, fireEmbers };
   }
 
   /**
@@ -915,6 +973,33 @@ export class ObstacleManager {
         obs.boundingBox.min.set(curX - 0.8, 0, obs.z - 0.8);
         obs.boundingBox.max.set(curX + 0.8, 1.8, obs.z + 0.8);
       }
+
+      // 6. 猛烈な火炎（FIRE）のゆらめき・フリッカーアニメーション
+      if (obs.type === ObstacleType.FIRE) {
+        if (obs.fireLight) {
+          obs.fireLight.intensity = 2.4 + Math.sin(this.animClock * 18 + obs.z) * 0.7 + Math.cos(this.animClock * 29) * 0.4;
+        }
+        if (obs.fireMeshes) {
+          for (let i = 0; i < obs.fireMeshes.length; i++) {
+            const fm = obs.fireMeshes[i];
+            const wave = Math.sin(this.animClock * (9 + i * 1.5) + i * 1.2);
+            fm.scale.y = 1.0 + wave * 0.12;
+            fm.scale.x = 1.0 + Math.cos(this.animClock * (8 + i * 2) + i) * 0.08;
+          }
+        }
+        if (obs.fireEmbers) {
+          for (let i = 0; i < obs.fireEmbers.length; i++) {
+            const ember = obs.fireEmbers[i];
+            ember.position.y += dt * (1.4 + (i % 3) * 0.6);
+            ember.position.x += Math.sin(this.animClock * 6 + i) * 0.015;
+            if (ember.position.y > 2.7) {
+              ember.position.y = 0.2 + (i % 4) * 0.15;
+              ember.position.x = (Math.random() - 0.5) * 1.2;
+              ember.position.z = (Math.random() - 0.5) * 1.2;
+            }
+          }
+        }
+      }
     }
 
     this.animClock += dt;
@@ -1039,7 +1124,7 @@ export class ObstacleManager {
         if (obsTypeRand < 0.40) {
           obsType = ObstacleType.LOCKER_VAULT;
         } else if (obsTypeRand < 0.75) {
-          obsType = ObstacleType.WET_FLOOR_CONE; // 迂回必須コーン
+          obsType = ObstacleType.FIRE; // 飛び越え不可・迂回必須の猛火
         }
         this.createAndAddObstacle(obsType, bLane, z);
       }
@@ -1092,14 +1177,14 @@ export class ObstacleManager {
       return;
     }
 
-    // パターン3: 【立入禁止コーン＆水拭き床迂回パターン】（約18%）
+    // パターン3: 【火災・猛火迂回パターン】（約18%）
     if (patternRand < 0.78) {
-      // コーンを特に中央（1）または端に設置し、迂回レーンへゴールドを配置
-      const coneLane = Math.random() < 0.6 ? 1 : (Math.random() < 0.5 ? 0 : 2) as LaneIndex;
-      this.createAndAddObstacle(ObstacleType.WET_FLOOR_CONE, coneLane, z);
+      // 激しい火炎を特に中央（1）または端に設置し、迂回レーンへゴールドを配置
+      const fireLane = Math.random() < 0.6 ? 1 : (Math.random() < 0.5 ? 0 : 2) as LaneIndex;
+      this.createAndAddObstacle(ObstacleType.FIRE, fireLane, z);
 
-      // コーン以外のレーンにゴールドコインをスポーン
-      const freeLanes = ([0, 1, 2] as LaneIndex[]).filter(l => l !== coneLane);
+      // 炎以外のレーンにゴールドコインをスポーン
+      const freeLanes = ([0, 1, 2] as LaneIndex[]).filter(l => l !== fireLane);
       const targetLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
       this.spawnCoinLine(targetLane, z, 3, 2.8, 1.0);
 
@@ -1174,6 +1259,9 @@ export class ObstacleManager {
     let ballY: number | undefined;
     let actionState: number | undefined;
     let stateTimer: number | undefined;
+    let fireMeshes: THREE.Mesh[] | undefined;
+    let fireLight: THREE.PointLight | undefined;
+    let fireEmbers: THREE.Mesh[] | undefined;
 
     switch (type) {
       case ObstacleType.DESK_CHAIR:
@@ -1259,11 +1347,16 @@ export class ObstacleManager {
         break;
       }
 
-      case ObstacleType.WET_FLOOR_CONE:
-        group = this.createWetFloorConeObstacle();
-        boundingBox.min.set(x - 1.15, 0, z - 0.7);
-        boundingBox.max.set(x + 1.15, 2.6, z + 0.7);
+      case ObstacleType.FIRE: {
+        const fire = this.createFireObstacle();
+        group = fire.group;
+        fireMeshes = fire.fireMeshes;
+        fireLight = fire.fireLight;
+        fireEmbers = fire.fireEmbers;
+        boundingBox.min.set(x - 1.15, 0, z - 0.75);
+        boundingBox.max.set(x + 1.15, 2.8, z + 0.75);
         break;
+      }
 
       default:
         return;
@@ -1301,6 +1394,9 @@ export class ObstacleManager {
       stateTimer,
       fallAngle: 0,
       isFallen: false,
+      fireMeshes,
+      fireLight,
+      fireEmbers,
     });
   }
 

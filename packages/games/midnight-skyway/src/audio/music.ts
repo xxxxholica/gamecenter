@@ -22,16 +22,39 @@ export class Bgm {
   private run: Run | null = null;
   private lastId = '';
   private duckLevel = 1;
+  private shuffleQueues: { menu: Track[]; race: Track[] } = { menu: [], race: [] };
 
   constructor(private readonly eng: AudioEngine) {
     window.setInterval(() => this.tick(), 25);
   }
 
-  /** 指定したプールの曲を流す。すでにそのプールを再生中なら何もしない */
-  public play(pool: 'menu' | 'race'): void {
-    if (this.pool === pool) return;
+  private getNextTrack(pool: 'menu' | 'race'): Track | null {
+    let queue = this.shuffleQueues[pool];
+    if (!queue || queue.length === 0) {
+      const candidates = TRACKS.filter((t) => t.pool === pool);
+      if (candidates.length === 0) return null;
+      // フィッシャー・イェーツ シャッフルで完全ランダム順序を生成
+      const shuffled = [...candidates];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      // 直前に流れた曲と同じ曲が先頭になった場合は別の曲と入れ替え
+      if (shuffled.length > 1 && shuffled[0].id === this.lastId) {
+        const swapIdx = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+        [shuffled[0], shuffled[swapIdx]] = [shuffled[swapIdx], shuffled[0]];
+      }
+      queue = shuffled;
+      this.shuffleQueues[pool] = queue;
+    }
+    return queue.shift() ?? null;
+  }
+
+  /** 指定したプールの曲を流す。forceChangeがtrueの場合は同一プールでも即座に別曲へランダム切り替え */
+  public play(pool: 'menu' | 'race', forceChange: boolean = false): void {
+    if (this.pool === pool && !forceChange && this.run) return;
     this.pool = pool;
-    this.fadeOutRun(1.0);
+    this.fadeOutRun(0.6);
     this.eng.whenRunning(() => this.startNext());
   }
 
@@ -47,8 +70,7 @@ export class Bgm {
 
   private startNext(): void {
     if (this.run || !this.pool) return;
-    const list = TRACKS.filter((t) => t.pool === this.pool && t.id !== this.lastId);
-    const track = list[Math.floor(Math.random() * list.length)] ?? TRACKS.find((t) => t.pool === this.pool);
+    const track = this.getNextTrack(this.pool);
     if (!track) return;
     this.lastId = track.id;
 

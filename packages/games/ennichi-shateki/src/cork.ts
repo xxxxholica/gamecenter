@@ -44,6 +44,12 @@ export class CorkSystem {
   readonly NORMAL_MASS = 0.045;
   readonly EXPLOSIVE_MASS = 0.12;
   readonly CORK_SPEED = 36.0;
+  /**
+   * オンライン対戦: 空の高い所を飛ぶ共有の的を撃てるよう、屋台の奥の壁(z=-1.38)より上を飛ぶコルクは壁に当たらず抜けていく。
+   * オフラインでは false(従来どおり、奥の壁に当たる)。
+   */
+  public skyOpen = false;
+  private static readonly WALL_TOP = 2.7;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -185,7 +191,9 @@ export class CorkSystem {
         }
       }
       // UFO
-      if (!dynamicTargets.ufo.isHit && dynamicTargets.ufo.pos.distanceTo(center) <= BLAST_RADIUS) {
+      const ufo = dynamicTargets.ufo;
+      const ufoLive = ufo.external ? ufo.externalActive : !ufo.isHit;       // 共有の的は、出現中だけ爆風に当たる
+      if (ufoLive && ufo.pos.distanceTo(center) <= BLAST_RADIUS) {
         const hitPos = dynamicTargets.ufo.hit();
         dynamicTargets.spawnConfetti(hitPos);
         if (onBlastHit) onBlastHit('黄金UFO', dynamicTargets.ufo.points, hitPos);
@@ -361,7 +369,7 @@ export class CorkSystem {
           b.velocity.y = 1.2 + Math.random() * 0.8;
           b.velocity.x = (Math.random() - 0.5) * 2.0;
         }
-      } else if (b.pos.z < -1.38) {
+      } else if (b.pos.z < -1.38 && !(this.skyOpen && b.pos.y > CorkSystem.WALL_TOP)) {
         // Wall hit
         b.hasHit = true;
         b.pos.z = -1.38;

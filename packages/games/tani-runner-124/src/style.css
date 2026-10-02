@@ -242,7 +242,10 @@ html, body {
 }
 
 .level-change-btn {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   margin: 14px auto 0;
   padding: 8px 22px;
   font-family: inherit;
@@ -252,6 +255,22 @@ html, body {
   background: transparent;
   border: 2px solid #55617f;
   cursor: pointer;
+}
+.level-change-btn .arcade-btn-icon,
+.level-change-btn .arcade-pad-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arcade-card-hint {
+  margin-top: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #9aa4bf;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
 }
 
 /* ボーナス飛行の操作ヒント(加速の残り・リング成功数) */
@@ -333,17 +352,27 @@ html, body {
 
 /* ボタン: 「開始」 / 「再挑戦」 */
 .arcade-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   width: 100%;
-  padding: 22px 0;
-  font-size: 42px;
+  padding: 20px 0;
+  font-size: 38px;
   font-weight: 900;
-  letter-spacing: 10px;
+  letter-spacing: 6px;
   cursor: pointer;
   border: 5px solid #ffffff;
   outline: none;
   box-shadow: 0 10px 0 #000, 0 0 30px rgba(0, 0, 0, 0.9);
   transition: transform 0.05s, box-shadow 0.05s;
+}
+.arcade-btn .arcade-btn-icon,
+.arcade-btn .arcade-pad-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0;
 }
 
 .arcade-btn:active {

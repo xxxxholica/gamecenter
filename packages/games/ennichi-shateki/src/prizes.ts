@@ -678,6 +678,26 @@ export class PrizeEntity {
     }
   }
 
+  /**
+   * オンライン: 他の人の台の景品(レプリカ)に、持ち主から届いた状態を反映する。物理は動かさない(音も鳴らさない)。
+   * a/b は、落下中なら回転 x/z、そうでなければ pitch/roll。flags は online/snapshot.ts のFLAG_*。
+   */
+  public applyRemote(x: number, y: number, z: number, a: number, b: number, flags: number) {
+    const FALLING = 1, SPAWNING = 2, GROUNDED = 4, REST = 8;
+    if (flags & REST) {
+      this.reset();                                           // 棚の上で止まった: 元の位置・姿勢に戻す
+      return;
+    }
+    this.currentPos.set(x, y, z);
+    this.isFalling = !!(flags & FALLING);
+    this.isSpawning = !!(flags & SPAWNING);
+    this.isGrounded = !!(flags & GROUNDED);
+    this.mesh.visible = true;
+    this.mesh.position.set(x, y, z);
+    if (this.isFalling) this.mesh.rotation.set(a, 0, b);
+    else this.mesh.rotation.set(-a, 0, b);
+  }
+
   public getBoundingBox(): THREE.Box3 {
     const box = new THREE.Box3();
     box.setFromObject(this.mesh);
@@ -1086,7 +1106,8 @@ export function createAllPrizes(shelves: ShelfInfo[]): PrizeEntity[] {
  * 同じ段の景品の並びをランダムに入れ替える(段の間は動かさないので、高得点の景品は上段のまま)。
  * 位置(スロット)は変えず、どの景品がどのスロットに載るかだけを変える。
  */
-export function shuffleShelfLayout(prizes: PrizeEntity[]): void {
+/** rand を渡すと、同じ乱数の並びなら同じ並びになる(オンライン対戦: 全員が同じ景品の並びで始めるための共有シード)。 */
+export function shuffleShelfLayout(prizes: PrizeEntity[], rand: () => number = Math.random): void {
   const byShelf = new Map<number, PrizeEntity[]>();
   for (const p of prizes) {
     const list = byShelf.get(p.config.shelfIndex) ?? [];
@@ -1097,7 +1118,7 @@ export function shuffleShelfLayout(prizes: PrizeEntity[]): void {
     const ratios = list.map((p) => p.config.shelfOffsetRatio).sort((a, b) => a - b);
     // Fisher-Yates
     for (let i = ratios.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rand() * (i + 1));
       [ratios[i], ratios[j]] = [ratios[j], ratios[i]];
     }
     list.forEach((p, i) => p.setShelfOffsetRatio(ratios[i]));

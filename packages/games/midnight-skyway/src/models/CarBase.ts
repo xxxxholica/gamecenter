@@ -48,6 +48,10 @@ export abstract class CarBase {
   /** [meshes before, after] the draw-call merge in initSuspension(). */
   public meshStats: { body: [number, number]; wheels: [number, number][] } | null = null;
   public lightsEnabled: boolean = true;
+  /** コクピット視点時のカメラ位置オフセット [右+, 上+, 前+] */
+  public cockpitEyeOffset: THREE.Vector3 = new THREE.Vector3(-0.32, 1.20, -0.16);
+  /** コクピット視点時の注視オフセット [右+, 上+, 前+] */
+  public cockpitLookOffset: THREE.Vector3 = new THREE.Vector3(0, -0.04, 20.0);
 
   constructor() {
     this.group = new THREE.Group();
@@ -78,19 +82,19 @@ export abstract class CarBase {
       envMapIntensity: 1.5,
     });
 
-    // 3. Automotive High-Transmission Tinted Glass
+    // 3. Automotive High-Transmission Crystal Clear Glass
     this.glassMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xecf0f1,
-      metalness: 0.05,
-      roughness: 0.02,
-      transmission: 0.94,
-      thickness: 0.05,
-      ior: 1.52,
-      reflectivity: 0.9,
+      color: 0xffffff,
+      metalness: 0.0,
+      roughness: 0.0,
+      transmission: 0.98,
+      thickness: 0.02,
+      ior: 1.5,
+      reflectivity: 0.5,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.02,
+      clearcoatRoughness: 0.0,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.10, // 白く濁る問題を解消し、クリスタルクリアな高い透明度に調整
       depthWrite: false,
       side: THREE.DoubleSide,
     });

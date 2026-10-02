@@ -101,6 +101,48 @@ export const TRACKS: Track[] = [
     sections: STRUCTURE,
   },
   {
+    id: 'tokyo-phonk',
+    name: 'Tokyo Drift Phonk',
+    pool: 'race',
+    bpm: 160,
+    key: 48, // C
+    prog: [{ root: 0, minor: M }, { root: 3, minor: false }, { root: 6, minor: false }, { root: 5, minor: M }],
+    arp: [0, 2, 4, 2, 0, 2, 5, 2, 0, 2, 4, 2, 3, 2, 1, 0],
+    melody: [
+      [5, null, 5, null, 4, null, 3, null, 5, null, null, 4, 3, null, 2, null],
+      [5, null, 5, null, 4, null, 3, 4, 5, null, 4, null, 3, 2, 1, null],
+    ],
+    sections: STRUCTURE,
+  },
+  {
+    id: 'cyber-dnb',
+    name: 'Cyber Drum & Bass',
+    pool: 'race',
+    bpm: 172,
+    key: 43, // G
+    prog: [{ root: 0, minor: M }, { root: 5, minor: M }, { root: 8, minor: false }, { root: 10, minor: false }],
+    arp: [0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 4, 5, 4, 2, 1],
+    melody: [
+      [4, null, null, 3, 4, null, 5, null, null, 4, 3, null, 2, null, 3, null],
+      [5, null, 4, null, 3, null, null, 4, 5, null, 4, null, 3, 2, null, 1],
+    ],
+    sections: STRUCTURE,
+  },
+  {
+    id: 'overdrive-wave',
+    name: 'Overdrive Synthwave',
+    pool: 'race',
+    bpm: 135,
+    key: 41, // F
+    prog: [{ root: 0, minor: M }, { root: 8, minor: false }, { root: 3, minor: false }, { root: 10, minor: false }],
+    arp: [0, null, 1, null, 2, null, 3, null, 4, null, 3, null, 2, null, 1, null],
+    melody: [
+      [3, null, 4, null, 5, null, null, 4, 3, null, null, 2, 3, null, 4, null],
+      [5, null, null, 4, 3, null, 4, 5, null, null, 4, 3, null, 2, null, null],
+    ],
+    sections: STRUCTURE,
+  },
+  {
     id: 'afterglow',
     name: 'Afterglow',
     pool: 'menu',

@@ -108,6 +108,25 @@ export class CarController {
     this.updateCarTransforms();
   }
 
+  /**
+   * Applies an impulse and sudden destabilization when colliding with other traffic / obstacles.
+   */
+  public applyKnockback(pushX: number, pushZ: number, impact: number, isRearEnd: boolean = false): void {
+    this.position.x += pushX;
+    this.position.z += pushZ;
+
+    const sideSign = (pushX * Math.cos(this.rotationY) - pushZ * Math.sin(this.rotationY)) > 0 ? 1 : -1;
+    this.rotationY += sideSign * Math.min(0.22, impact * 0.18);
+    this.velocityHeading += sideSign * Math.min(0.32, impact * 0.25);
+    this.bodyRoll += sideSign * Math.min(0.18, impact * 0.16);
+    this.slipAngle += sideSign * Math.min(0.35, impact * 0.3);
+    if (isRearEnd) {
+      this.bodyPitch += Math.min(0.15, impact * 0.12);
+    } else {
+      this.bodyPitch -= Math.min(0.08, impact * 0.08);
+    }
+  }
+
   private bindInputs(): void {
     window.addEventListener('keydown', this.keydownHandler);
     window.addEventListener('keyup', this.keyupHandler);

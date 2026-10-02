@@ -267,7 +267,7 @@ export class Player {
     return true;
   }
 
-  public triggerInvincibility(duration: number = 12): void {
+  public triggerInvincibility(duration: number = 4): void {
     this.isInvincible = true;
     this.invincibilityTimer = duration;
   }

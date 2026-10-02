@@ -5,6 +5,11 @@ import { CrossJModel } from '../models/CrossJModel';
 import { TruckJModel } from '../models/TruckJModel';
 import { mergeMeshesByMaterial } from '../models/mergeMeshes';
 
+/** NPCの配置・塗装に使う乱数。オンライン対戦では全員同じシードの乱数に差し替える(未設定=Math.random)。 */
+let trafficRng: (() => number) | null = null;
+export function setTrafficRng(rng: (() => number) | null): void { trafficRng = rng; }
+const rand = (): number => (trafficRng ? trafficRng() : Math.random());
+
 /** Everyday paint colours (body) — chosen at random per car. */
 const PAINTS = [0xf4f4f2, 0xf4f4f2, 0x1b1c1f, 0x1b1c1f, 0xb9bcc0, 0x8a8d92, 0xb3202a, 0x1f4e9c, 0x2d6a4f, 0xe7b416, 0xd9641e, 0xd8c9a8, 0x5b3a29];
 const ROOFS = [null, null, 0x1b1c1f, 0xf4f4f2];   // null = same as the body
@@ -78,6 +83,14 @@ export class Traffic {
 
   private readonly showDistance = 450;
 
+  /**
+   * 共有時計(オンライン対戦): 設定すると dt を使わず、レース開始からの秒数(負=開始前)に合わせて固定刻みで進める。
+   * 全員の交通NPCがほぼ同じ位置・速度になる(フレームレートに依存しない)。
+   */
+  public sharedClock: (() => number) | null = null;
+  private simTime = 0;
+  private static readonly STEP = 1 / 60;
+
   constructor(roadWidth: number, options: TrafficOptions) {
     this.group.name = 'traffic';
     const kinds = ['trail', 'cross', 'truck'];
@@ -96,11 +109,11 @@ export class Traffic {
 
       for (let k = 0; k < count; k++) {
         const lane = k % 2;
-        const kind = kinds[Math.floor(Math.random() * kinds.length)];
+        const kind = kinds[Math.floor(rand() * kinds.length)];
         const car = this.spawn(prototype(kind));
         this.cars.push({
           obj: car,
-          s: ((k + Math.random() * 0.6) / count) * this.oppTotal,
+          s: ((k + rand() * 0.6) / count) * this.oppTotal,
           speed: laneSpeeds[lane],
           baseSpeed: laneSpeeds[lane],
           lateral: (lane === 0 ? 1 : -1) * roadWidth * 0.25,
@@ -132,52 +145,52 @@ export class Traffic {
 
         if (band === 0) {
           // Left Outer (Gutter / Slow cruising lane)
-          lateral = maxHalf * (0.62 + Math.random() * 0.26);
-          const isTruck = Math.random() < 0.6;
-          const kind = isTruck ? 'truck' : kinds[Math.floor(Math.random() * kinds.length)];
+          lateral = maxHalf * (0.62 + rand() * 0.26);
+          const isTruck = rand() < 0.6;
+          const kind = isTruck ? 'truck' : kinds[Math.floor(rand() * kinds.length)];
           const car = this.spawn(prototype(kind));
-          baseSpeed = isTruck ? 13.8 + Math.random() * 2.8 : 16.5 + Math.random() * 3.0; // 50~70 km/h
+          baseSpeed = isTruck ? 13.8 + rand() * 2.8 : 16.5 + rand() * 3.0; // 50~70 km/h
 
           // Staggered longitudinal position (No two cars side-by-side)
           const step = (this.fwdTotal - 60) / count;
-          const s = (60 + k * step + (Math.random() - 0.5) * step * 0.7) % this.fwdTotal;
+          const s = (60 + k * step + (rand() - 0.5) * step * 0.7) % this.fwdTotal;
 
           this.cars.push({ obj: car, s, speed: baseSpeed, baseSpeed, lateral, isForward: true, hazardTimer: 0 });
           this.group.add(car);
         } else if (band === 1) {
           // Left Inner (Mid-left cruising lane)
-          lateral = maxHalf * (0.16 + Math.random() * 0.28);
-          const kind = kinds[Math.floor(Math.random() * kinds.length)];
+          lateral = maxHalf * (0.16 + rand() * 0.28);
+          const kind = kinds[Math.floor(rand() * kinds.length)];
           const car = this.spawn(prototype(kind));
-          baseSpeed = 17.5 + Math.random() * 3.5; // 63~76 km/h
+          baseSpeed = 17.5 + rand() * 3.5; // 63~76 km/h
 
           const step = (this.fwdTotal - 60) / count;
-          const s = (60 + k * step + (Math.random() - 0.5) * step * 0.7) % this.fwdTotal;
+          const s = (60 + k * step + (rand() - 0.5) * step * 0.7) % this.fwdTotal;
 
           this.cars.push({ obj: car, s, speed: baseSpeed, baseSpeed, lateral, isForward: true, hazardTimer: 0 });
           this.group.add(car);
         } else if (band === 2) {
           // Right Inner (Mid-right passing lane)
-          lateral = -maxHalf * (0.16 + Math.random() * 0.28);
-          const kind = kinds[Math.floor(Math.random() * kinds.length)];
+          lateral = -maxHalf * (0.16 + rand() * 0.28);
+          const kind = kinds[Math.floor(rand() * kinds.length)];
           const car = this.spawn(prototype(kind));
-          baseSpeed = 21.0 + Math.random() * 4.5; // 75~92 km/h
+          baseSpeed = 21.0 + rand() * 4.5; // 75~92 km/h
 
           const step = (this.fwdTotal - 60) / count;
-          const s = (60 + k * step + (Math.random() - 0.5) * step * 0.7) % this.fwdTotal;
+          const s = (60 + k * step + (rand() - 0.5) * step * 0.7) % this.fwdTotal;
 
           this.cars.push({ obj: car, s, speed: baseSpeed, baseSpeed, lateral, isForward: true, hazardTimer: 0 });
           this.group.add(car);
         } else {
           // Right Outer (Fast lane / wall side)
-          lateral = -maxHalf * (0.62 + Math.random() * 0.26);
-          const isTruck = Math.random() < 0.15;
-          const kind = isTruck ? 'truck' : kinds[Math.floor(Math.random() * kinds.length)];
+          lateral = -maxHalf * (0.62 + rand() * 0.26);
+          const isTruck = rand() < 0.15;
+          const kind = isTruck ? 'truck' : kinds[Math.floor(rand() * kinds.length)];
           const car = this.spawn(prototype(kind));
-          baseSpeed = 24.0 + Math.random() * 4.5; // 86~102 km/h
+          baseSpeed = 24.0 + rand() * 4.5; // 86~102 km/h
 
           const step = (this.fwdTotal - 60) / count;
-          const s = (60 + k * step + (Math.random() - 0.5) * step * 0.7) % this.fwdTotal;
+          const s = (60 + k * step + (rand() - 0.5) * step * 0.7) % this.fwdTotal;
 
           this.cars.push({ obj: car, s, speed: baseSpeed, baseSpeed, lateral, isForward: true, hazardTimer: 0 });
           this.group.add(car);
@@ -190,7 +203,7 @@ export class Traffic {
   private spawn(proto: CarBase): THREE.Group {
     const obj = proto.group.clone(true);
     const body = proto.bodyMaterial.clone(), roof = proto.roofMaterial.clone();
-    const paint = PAINTS[Math.floor(Math.random() * PAINTS.length)], rf = ROOFS[Math.floor(Math.random() * ROOFS.length)];
+    const paint = PAINTS[Math.floor(rand() * PAINTS.length)], rf = ROOFS[Math.floor(rand() * ROOFS.length)];
     body.color.setHex(paint);
     roof.color.setHex(rf ?? paint);
     obj.traverse((o) => {
@@ -224,6 +237,23 @@ export class Traffic {
   private readonly p2 = new THREE.Vector3();
 
   public update(dt: number, player: THREE.Vector3): void {
+    if (this.sharedClock) {
+      const target = this.sharedClock();
+      let steps = 0;
+      while (this.simTime + Traffic.STEP <= target && steps < 180) {
+        this.advance(Traffic.STEP);
+        this.simTime += Traffic.STEP;
+        steps++;
+      }
+      if (steps === 180) this.simTime = target;   // タブ停止などで大きく遅れた時は追いかけずに時計だけ合わせる
+    } else {
+      this.advance(dt);
+    }
+    this.place(player);
+  }
+
+  /** NPCの速度調整と走行距離を dt だけ進める。 */
+  private advance(dt: number): void {
     const forwardCars = this.cars.filter((c) => c.isForward);
 
     // 1. Adaptive Cruise Control / Anti-pileup for diverse speed NPC traffic
@@ -266,12 +296,18 @@ export class Traffic {
       }
     }
 
-    // 2. Position and visual update
     for (const c of this.cars) {
       const total = c.isForward ? this.fwdTotal : this.oppTotal;
       if (total <= 0) continue;
-
       c.s = (c.s + c.speed * dt) % total;
+    }
+  }
+
+  /** 現在の走行距離からNPCの位置・向きを反映する(プレイヤーから遠いものは非表示)。 */
+  private place(player: THREE.Vector3): void {
+    for (const c of this.cars) {
+      const total = c.isForward ? this.fwdTotal : this.oppTotal;
+      if (total <= 0) continue;
 
       if (c.isForward) {
         this.sampleForward(c.s, this.p0);
@@ -367,6 +403,11 @@ export class Traffic {
           result.impact = Math.max(result.impact, 0.4);
           result.speedFactor = Math.min(result.speedFactor, 0.65);
         }
+
+        // Destabilize the hit NPC vehicle (knockback, stumble, speed drop)
+        c.speed = Math.max(6, c.speed * 0.7);
+        c.lateral += (localX > 0 ? -0.45 : 0.45) * result.impact;
+        c.obj.rotation.y += (localX > 0 ? -0.14 : 0.14) * result.impact;
       }
     }
 

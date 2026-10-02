@@ -223,25 +223,27 @@ export class WorldManager {
     const gateW = 4.4;
     const gateH = 3.2;
 
+    const isWhite = this.level === 'kosen';
+
     gateConfigs.forEach(cfg => {
       // Left Gate
-      const leftTex = TextureGenerator.createGateTexture(cfg.left);
+      const leftTex = TextureGenerator.createGateTexture(cfg.left, isWhite);
       const leftMat = new THREE.MeshBasicMaterial({ map: leftTex, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
       const leftMesh = new THREE.Mesh(new THREE.PlaneGeometry(gateW, gateH), leftMat);
       leftMesh.position.set(-2.4, gateH / 2 + 0.1, cfg.z);
 
       // Right Gate
-      const rightTex = TextureGenerator.createGateTexture(cfg.right);
+      const rightTex = TextureGenerator.createGateTexture(cfg.right, isWhite);
       const rightMat = new THREE.MeshBasicMaterial({ map: rightTex, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
       const rightMesh = new THREE.Mesh(new THREE.PlaneGeometry(gateW, gateH), rightMat);
       rightMesh.position.set(2.4, gateH / 2 + 0.1, cfg.z);
 
-      // Frame posts
-      this.addGatePosts(leftMesh, gateW, gateH, cfg.left.isPositive);
-      this.addGatePosts(rightMesh, gateW, gateH, cfg.right.isPositive);
+      // Frame posts (高専生は全て白フレーム)
+      this.addGatePosts(leftMesh, gateW, gateH, cfg.left.isPositive, isWhite);
+      this.addGatePosts(rightMesh, gateW, gateH, cfg.right.isPositive, isWhite);
 
-      // どちらも良いゲート: 間に金色の柱を立てる(隊列を分けて両方に通すと両取りできる合図)
-      if (cfg.left.isPositive && cfg.right.isPositive) {
+      // どちらも良いゲート: 間に金色の柱を立てる(隊列を分けて両方に通すと両取りできる合図)。高専生は色区別なしのため非表示
+      if (!isWhite && cfg.left.isPositive && cfg.right.isPositive) {
         const pillar = new THREE.Mesh(
           new THREE.BoxGeometry(0.25, gateH, 0.25),
           new THREE.MeshBasicMaterial({ color: 0xffd700 })
@@ -261,9 +263,9 @@ export class WorldManager {
     });
   }
 
-  private addGatePosts(parentMesh: THREE.Mesh, w: number, h: number, isPos: boolean): void {
+  private addGatePosts(parentMesh: THREE.Mesh, w: number, h: number, isPos: boolean, isWhite: boolean = false): void {
     const postGeo = new THREE.CylinderGeometry(0.12, 0.12, h, 8);
-    const postMat = new THREE.MeshLambertMaterial({ color: isPos ? 0x00d4ff : 0xff1744 });
+    const postMat = new THREE.MeshLambertMaterial({ color: isWhite ? 0xffffff : (isPos ? 0x00d4ff : 0xff1744) });
 
     const pL = new THREE.Mesh(postGeo, postMat);
     pL.position.set(-w / 2, 0, 0);

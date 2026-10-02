@@ -5,7 +5,7 @@ import { CarBodyGenerator } from './CarBodyGenerator';
 export class TruckJModel extends CarBase {
   public readonly specs: CarSpecs = {
     name: 'TRUCK J',
-    category: 'Kei Workhorse Truck (軽トラック)',
+    category: 'Kei Workhorse Truck',
     length: '3,395 mm',
     width: '1,475 mm',
     height: '1,780 mm',
@@ -21,6 +21,9 @@ export class TruckJModel extends CarBase {
     // Default truck body color: Commercial Pure White
     this.bodyMaterial.color.setHex(0xf5f6fa);
     this.roofMaterial.color.setHex(0xf5f6fa);
+    // Kei truck cab-over cockpit driver eye position (strictly inside cabin in front of rear wall)
+    this.cockpitEyeOffset.set(-0.35, 1.24, 0.62);
+    this.cockpitLookOffset.set(0, -0.05, 20.0);
     this.buildModel();
   }
 

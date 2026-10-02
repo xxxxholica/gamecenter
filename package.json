@@ -5,6 +5,7 @@
   "type": "module",
   "workspaces": [
     "packages/hub",
+    "packages/server",
     "packages/games/*"
   ],
   "scripts": {
@@ -12,7 +13,8 @@
     "dev:hub": "npm run dev -w packages/hub",
     "build": "node scripts/build.mjs",
     "preview": "npx serve dist",
-    "deploy": "npm run build && node scripts/deploy.mjs"
+    "deploy": "npm run build && node scripts/deploy.mjs",
+    "deploy:server": "node scripts/deploy-server.mjs"
   },
   "devDependencies": {
     "connect": "^3.7.0",

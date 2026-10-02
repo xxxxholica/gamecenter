@@ -596,13 +596,9 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
     if (this.traffic) {
       const tCol = this.traffic.checkPlayerCollision(p, car.rotationY, car.speed);
       if (tCol.hit) {
-        p.x += tCol.pushX;
-        p.z += tCol.pushZ;
+        car.applyKnockback(tCol.pushX, tCol.pushZ, tCol.impact, tCol.isRearEnd);
         car.speed *= tCol.speedFactor;
         audio.sfx.crash(tCol.impact);
-        if (tCol.isRearEnd) {
-          car.bodyPitch += 0.08;
-        }
       }
     }
   }

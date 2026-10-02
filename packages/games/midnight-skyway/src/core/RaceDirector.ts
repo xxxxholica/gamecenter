@@ -22,6 +22,8 @@ export class RaceDirector {
   private rivalCar: GhostCar | null = null;
   private rivalLabel = 'GHOST';
   private active = false;
+  /** オンライン対戦中: ゴースト/ペースボット/制限時間/ゴースト保存を使わない(相手は本物のプレイヤー)。 */
+  public online = false;
   private map: MapBase | null = null;
   private winningRun: AutoPilot | null = null;
   private mapId = '';
@@ -55,6 +57,13 @@ export class RaceDirector {
     if (!this.active) {
       this.ta.setRules(null);
       this.ta.setReferenceSectors(null);
+      return;
+    }
+
+    if (this.online) {
+      this.ta.setRules(null);
+      this.ta.setReferenceSectors(null);
+      this.hud.updateRemaining(null);
       return;
     }
 
@@ -146,7 +155,7 @@ export class RaceDirector {
     if (!result.timedOut && route && cc) this.winningRun = new AutoPilot(route, cc);
     if (!this.active) return;
     if (result.timedOut && this.scene.carController) this.scene.carController.canDrive = false;
-    if (result.isNewRecord && !result.timedOut) saveGhost(this.mapId, this.recorder.finish(result.totalTimeMs, this.carName));
+    if (result.isNewRecord && !result.timedOut && !this.online) saveGhost(this.mapId, this.recorder.finish(result.totalTimeMs, this.carName));
   }
 
   public dispose(): void {
