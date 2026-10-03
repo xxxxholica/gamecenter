@@ -1,4 +1,5 @@
 import { GameInputState } from '../types';
+import { MenuNav } from '../../../../shared/arcadeMenuNav';
 
 export class InputManager {
   private lastInputTime: number = Date.now();
@@ -6,6 +7,7 @@ export class InputManager {
   // キーボード状態
   private keysDown: Set<string> = new Set();
   private keysPressedThisFrame: Set<string> = new Set();
+  private menuNav = new MenuNav();
 
   // ゲームパッド軸の前回状態（エッジ検出用）
   private lastAxis0: number = 0;
@@ -19,10 +21,18 @@ export class InputManager {
   constructor() {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
+    window.addEventListener('blur', this.releaseAllKeys);
   }
+
+  /** 押下中のキーを全て離した扱いにする(次の keydown / repeat が新規押下として届く) */
+  private releaseAllKeys = (): void => {
+    this.keysDown.clear();
+    this.menuNav.clear();
+  };
 
   private handleKeyDown = (e: KeyboardEvent) => {
     this.lastInputTime = Date.now();
+    this.menuNav.pushKey(e);
     if (!this.keysDown.has(e.code)) {
       this.keysPressedThisFrame.add(e.code);
     }
@@ -55,6 +65,7 @@ export class InputManager {
       throwBomb: false,
       startOrRetry: false,
       anyKey: false,
+      menuNav: [],
     };
 
     // 1. キーボード判定
@@ -112,13 +123,20 @@ export class InputManager {
       this.attackCooldown = this.ATTACK_INTERVAL;
     }
 
-    // スタート / リトライ
+    // スタート / リトライ / 確定
     if (
       this.keysPressedThisFrame.has('Enter') ||
       this.keysPressedThisFrame.has('Space') ||
       this.keysPressedThisFrame.has('KeyR')
     ) {
       input.startOrRetry = true;
+    }
+
+    if (
+      this.keysPressedThisFrame.has('Escape') ||
+      this.keysPressedThisFrame.has('Backspace')
+    ) {
+      input.cancel = true;
     }
 
     if (this.keysPressedThisFrame.size > 0) {
@@ -136,6 +154,8 @@ export class InputManager {
       }
     }
 
+    let padNavX = 0;
+    let padNavY = 0;
     if (activePad) {
       const axes = activePad.axes;
       const buttons = activePad.buttons;
@@ -143,12 +163,18 @@ export class InputManager {
       const threshold = 0.5;
       const axis0 = axes[0] ?? 0;
       const axis1 = axes[1] ?? 0;
+      padNavX = axis0;
+      padNavY = axis1;
 
       // 十字キー
       const dpadUp = buttons[12]?.pressed ?? false;
       const dpadDown = buttons[13]?.pressed ?? false;
       const dpadLeft = buttons[14]?.pressed ?? false;
       const dpadRight = buttons[15]?.pressed ?? false;
+      if (dpadUp) padNavY = -1;
+      if (dpadDown) padNavY = 1;
+      if (dpadLeft) padNavX = -1;
+      if (dpadRight) padNavX = 1;
 
       // 軸0 (左右レバー) エッジ検出
       const justMovedLeft =
@@ -211,17 +237,27 @@ export class InputManager {
         this.lastInputTime = Date.now();
       }
 
-      // Startボタン (ボタン9)
-      const btnStart = buttons[9]?.pressed ?? false;
-      const wasStart = this.lastButtons[9] ?? false;
-      if (btnStart && !wasStart) {
+      // 確定: ボタン0 (アケコン Aボタン) の新規押下
+      const wasBtn0 = this.lastButtons[0] ?? false;
+      if (btn0Pressed && !wasBtn0) {
         input.startOrRetry = true;
+        input.anyKey = true;
+        this.lastInputTime = Date.now();
+      }
+
+      // 戻る / キャンセル: ボタン1 (アケコン Bボタン) の新規押下
+      const wasBtn1 = this.lastButtons[1] ?? false;
+      if (btn1Pressed && !wasBtn1) {
+        input.cancel = true;
         input.anyKey = true;
         this.lastInputTime = Date.now();
       }
 
       this.lastButtons = buttons.map(b => b.pressed);
     }
+
+    this.menuNav.updatePad(padNavX, padNavY);
+    input.menuNav = this.menuNav.take();
 
     // 今フレームの押下フラグをクリア
     this.keysPressedThisFrame.clear();
@@ -246,5 +282,6 @@ export class InputManager {
   public destroy(): void {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('blur', this.releaseAllKeys);
   }
 }

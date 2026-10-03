@@ -1,3 +1,4 @@
+import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import * as THREE from 'three';
 import { InputManager } from './input';
 import { EffectsManager } from './effects';
@@ -7,6 +8,7 @@ import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+watchResultAutoReturn(['btn-result-title']);
 
 mountArcadeGuide({
   buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],

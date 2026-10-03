@@ -107,6 +107,21 @@ function injectStyle(): void {
       text-shadow: none !important;
       -webkit-text-stroke: 0 !important;
     }
+    /* ボタン内・プロンプト脇のインラインアイコン: 背景が黄・緑・シアンなど明るくても暗くても読めるよう、
+       暗い塗り+白文字+白縁にする(ガイドパネル内の半透明バッジとは別) */
+    .agc-inline .agc-btn {
+      min-width: 24px;
+      height: 24px;
+      padding: 0 7px;
+      border-radius: 12px !important;
+      background: #10131a;
+      border: 2px solid #fff;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+    }
     .agc-label {
       color: #ddd;
       font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;

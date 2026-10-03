@@ -1,3 +1,5 @@
+import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
+import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
 import { FestivalStall } from './stall';
 import { CorkRifle } from './gun';
@@ -21,9 +23,12 @@ import { OFFLINE_ART, ONLINE_ART } from './online/modeArt';
 import { OnlineHud } from './online/OnlineHud';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { sumDefeated } from './online/snapshot';
+import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+watchResultAutoReturn(['res-btn-title']);
 
 mountArcadeGuide({
   moveLabel: 'ねらう',
@@ -75,6 +80,9 @@ class ArcadeCorkShooter {
   private ammo: number = 6;
   private reloadTimer: number = 0;
   private totalDefeatedCount: number = 0;
+  private isNameEntryOpen = false;
+  private resultFocus = 0; // 0: 再挑戦, 1: タイトルに戻る, 2: ゲームを終了
+  private resultArmTime = 0;
 
   // Explosive Bomb Cooldown
   private bombCooldown: number = 0;
@@ -225,16 +233,28 @@ class ArcadeCorkShooter {
       window.location.href = '../../';
     });
 
-    const handleScreenTouchOrClick = () => {
+    const handleScreenTouchOrClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (this.state === 'results') {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) return;
+        if (target?.closest('#res-btn-retry')) {
+          this.prizePileManager.cleanup(this.scene);
+          this.startGame();
+          return;
+        }
+        if (target?.closest('#res-btn-title')) {
+          this.enterTitle();
+          return;
+        }
+        if (target?.closest('#res-btn-exit')) {
+          window.location.href = '../../';
+          return;
+        }
+      }
+
       if (this.state === 'title') {
         if (this.stateTimer > 0.35) {
           void this.onStartPressed();
-        }
-        return;
-      }
-      if (this.state === 'results') {
-        if (this.stateTimer > 0.6 && !this.match) {           // 対戦の結果は、結果パネルのボタンで戻る
-          this.enterTitle();
         }
         return;
       }
@@ -264,6 +284,26 @@ class ArcadeCorkShooter {
     window.addEventListener('blur', () => {
       this.input.resetAll();
       sounds.pauseAll();
+    });
+  }
+
+  private updateResultFocus(): void {
+    const items: ResultMenuItem[] = [
+      { button: document.getElementById('res-btn-retry'), color: '#ff4d4f' },
+      { button: document.getElementById('res-btn-title'), color: '#39ff88' },
+      { button: document.getElementById('res-btn-exit'), color: '#00f0ff' },
+    ];
+    setupResultMenu(document.querySelector('.results-action-block'), items);
+    applyResultMenuFocus(items, this.resultFocus);
+
+    items.forEach(({ button }, idx) => {
+      if (!button) return;
+      button.onmouseenter = () => {
+        if (this.resultFocus === idx) return;
+        this.resultFocus = idx;
+        this.updateResultFocus();
+      };
+      button.onfocus = () => button.blur();
     });
   }
 
@@ -647,6 +687,35 @@ class ArcadeCorkShooter {
     const isNewRecord = this.score > this.highScore;
     if (isNewRecord) this.highScore = this.score;
     this.recordHighScore(this.score);
+
+    this.resultFocus = 0; // 再挑戦がデフォルト
+    this.resultArmTime = performance.now() + 600;
+    mountArcadeGuide({
+      moveLabel: '選択',
+      buttons: [
+        { indices: [0], label: '決定' },
+        { indices: [1], label: '終了' },
+      ],
+      showHomeHint: true,
+    });
+
+    const check = checkHighScore('ennichi-shateki', this.score);
+    if (check.isRankIn && this.score > 0) {
+      this.isNameEntryOpen = true;
+      mountNameEntryModal({
+        title: '番付 記名',
+        scoreDisplay: `${this.score.toLocaleString()} g`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-ennichi',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (katakanaName) => {
+          this.isNameEntryOpen = false;
+          this.resultArmTime = performance.now() + 800;
+          saveLeaderboardScore('ennichi-shateki', this.score, katakanaName);
+        },
+      });
+    }
+
     if (isNewRecord) {
       sounds.playGrandPrizeFanfare();
     } else {
@@ -663,6 +732,7 @@ class ArcadeCorkShooter {
     this.hud.setMode('results');
     this.hud.renderResults(this.score, this.totalDefeatedCount, isNewRecord, breakdown);
     this.hud.updateCrosshair(0, 0, false);
+    window.setTimeout(() => this.updateResultFocus(), 60);
   }
 
   private resetAllPrizes() {
@@ -1032,8 +1102,28 @@ class ArcadeCorkShooter {
     this.camera.position.z += (targetCamZ - this.camera.position.z) * 3.5 * dt;
     this.camera.lookAt(lookX, lookY, lookZ);
 
-    if (this.stateTimer > 1.0 && !this.match && (inputState.startJustPressed || inputState.shootNormalJustPressed)) {
-      this.enterTitle();
+    if (!this.isNameEntryOpen && !this.match) {
+      // 移動は受付待ちの間も効かせる(確定だけ誤爆防止で待たせる)
+      for (const dir of inputState.menuNav) {
+        this.resultFocus = (this.resultFocus + dir + 3) % 3;
+        this.updateResultFocus();
+        sounds.playTaiko();
+      }
+    }
+
+    if (!this.isNameEntryOpen && performance.now() >= this.resultArmTime && !this.match) {
+      if (inputState.startJustPressed || inputState.shootNormalJustPressed) {
+        if (this.resultFocus === 0) {
+          this.prizePileManager.cleanup(this.scene);
+          this.startGame();
+        } else if (this.resultFocus === 1) {
+          this.enterTitle();
+        } else {
+          window.location.href = '../../';
+        }
+      } else if (inputState.shootExplosiveJustPressed) {
+        window.location.href = '../../';
+      }
     }
   }
 

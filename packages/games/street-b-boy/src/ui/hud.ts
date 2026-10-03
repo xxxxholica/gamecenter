@@ -1,9 +1,18 @@
+import { countUpText } from '../../../../shared/arcadeScoreCountUp';
+import {
+  checkHighScore,
+  saveLeaderboardScore,
+  loadLeaderboard,
+} from '../../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
+
 export interface RankingRecord {
   name: string;
   score: number;
 }
 
 export class HudManager {
+  public isNameEntryOpen = false;
   private elScore: HTMLElement;
   private elTime: HTMLElement;
   private elLives: HTMLElement;
@@ -24,14 +33,6 @@ export class HudManager {
   private elComboText: HTMLElement;
   private comboTimerId: number | null = null;
 
-  private defaultRankings: RankingRecord[] = [
-    { name: 'DJ KOOL', score: 68500 },
-    { name: 'ROCK STEADY', score: 54200 },
-    { name: 'B-BOY CRAZY', score: 43900 },
-    { name: 'RED BEANIE', score: 32000 },
-    { name: 'STREET MASTER', score: 21500 }
-  ];
-
   constructor() {
     this.elScore = document.getElementById('val-score')!;
     this.elStage = document.getElementById('val-stage')!;
@@ -51,8 +52,6 @@ export class HudManager {
     this.elCombo = document.getElementById('hud-combo')!;
     this.elComboHits = document.getElementById('val-combo-hits')!;
     this.elComboText = document.getElementById('val-combo-text')!;
-
-    this.loadRankings();
   }
 
   public updateScore(score: number): void {
@@ -164,72 +163,82 @@ export class HudManager {
     this.elDemoBanner.style.display = show ? 'block' : 'none';
   }
 
-  public showRanking(show: boolean): void {
-    if (show) {
-      this.renderRankings();
-      this.elRankingOverlay.style.display = 'flex';
-    } else {
-      this.elRankingOverlay.style.display = 'none';
-    }
-  }
+  public onNameEntryClosed?: () => void;
 
   public showResult(status: 'clear' | 'gameover', score: number): void {
     this.elResultOverlay.style.display = 'flex';
     if (status === 'clear') {
-      this.elResultStatusTitle.textContent = 'CLEAR';
+      this.elResultStatusTitle.textContent = 'ALL CLEAR!';
       this.elResultStatusTitle.style.color = '#00f0ff';
     } else {
       this.elResultStatusTitle.textContent = 'GAME OVER';
       this.elResultStatusTitle.style.color = '#ff1a1a';
     }
-    this.elResultTotalScore.textContent = score.toString().padStart(6, '0');
-    this.recordScore(score);
+    countUpText(this.elResultTotalScore, score.toString().padStart(6, '0'));
+
+    const check = checkHighScore('street-b-boy', score);
+    if (check.isRankIn && score > 0) {
+      this.isNameEntryOpen = true;
+      mountNameEntryModal({
+        title: 'ダンス記録',
+        scoreDisplay: `${score.toLocaleString()} pts`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-street',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (katakanaName) => {
+          this.isNameEntryOpen = false;
+          saveLeaderboardScore('street-b-boy', score, katakanaName);
+          this.onNameEntryClosed?.();
+        },
+      });
+    }
   }
 
   public hideResult(): void {
     this.elResultOverlay.style.display = 'none';
   }
 
-  public getRankings(): RankingRecord[] {
-    return this.loadRankings();
-  }
-
-  private loadRankings(): RankingRecord[] {
-    try {
-      const saved = localStorage.getItem('street_bboy_highscores');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {
-      // ignore
-    }
-    return this.defaultRankings;
-  }
-
-  private recordScore(score: number): void {
-    if (score <= 0) return;
-    const list = this.loadRankings();
-    list.push({ name: 'YOU (PLAYER)', score });
-    list.sort((a, b) => b.score - a.score);
-    const top5 = list.slice(0, 5);
-    try {
-      localStorage.setItem('street_bboy_highscores', JSON.stringify(top5));
-    } catch {
-      // ignore
+  public showRanking(show: boolean, highlightRank?: number): void {
+    if (show) {
+      this.renderRankings(highlightRank);
+      this.elRankingOverlay.style.display = 'flex';
+    } else {
+      this.elRankingOverlay.style.display = 'none';
     }
   }
 
-  private renderRankings(): void {
-    const list = this.loadRankings();
+  public getRankings() {
+    return loadLeaderboard('street-b-boy');
+  }
+
+  private renderRankings(highlightRank?: number): void {
+    const list = loadLeaderboard('street-b-boy');
     this.elRankingList.innerHTML = '';
     list.forEach((rec, idx) => {
+      const isCurrent = highlightRank === (idx + 1);
       const row = document.createElement('div');
-      row.className = 'ranking-row';
-      row.innerHTML = `
-        <span class="rank-num">#${idx + 1}</span>
-        <span class="rank-name">${rec.name}</span>
-        <span class="rank-score">${rec.score.toString().padStart(6, '0')}</span>
-      `;
+      row.className = `ranking-row ${isCurrent ? 'highlight' : ''}`;
+      if (isCurrent) {
+        row.style.color = '#ffe600';
+        row.style.fontWeight = 'bold';
+      }
+
+      const numSpan = document.createElement('span');
+      numSpan.className = 'rank-num';
+      numSpan.textContent = `#${idx + 1}`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'rank-name';
+      nameSpan.textContent = rec.name;
+
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'rank-score';
+      scoreSpan.textContent = rec.score.toString().padStart(6, '0');
+
+      row.appendChild(numSpan);
+      row.appendChild(nameSpan);
+      row.appendChild(scoreSpan);
+
       this.elRankingList.appendChild(row);
     });
   }

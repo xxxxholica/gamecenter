@@ -1,3 +1,4 @@
+import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { GarageScene } from './core/GarageScene';
 import { TrailJModel } from './models/TrailJModel';
 import { CrossJModel } from './models/CrossJModel';
@@ -28,6 +29,8 @@ import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
 import { mulberry32 } from '../../../shared/online/seededRandom';
+import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { setTrafficRng } from './core/Traffic';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { ModeSelectScreen } from './ui/ModeSelectScreen';
@@ -44,13 +47,14 @@ const { bgm, sfx } = audio;
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+watchResultAutoReturn(['res-btn-title']);
 
 // 画面ごとのアケコンガイド(左下。呼ぶたびに前の画面のカードと入れ替わる)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
 const guideModeSelect = () => mountArcadeGuide({
   moveLabel: 'モード選択',
   buttons: [
-    { indices: [0, 9], label: '決定' },
+    { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
@@ -59,7 +63,7 @@ const guideCarSelect = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
   buttons: [
     { indices: [2, 3, 4, 5], label: 'カラー変更' },
-    { indices: [0, 9], label: '決定' },
+    { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
@@ -67,7 +71,7 @@ const guideCarSelect = () => mountArcadeGuide({
 const guideMapSelect = () => mountArcadeGuide({
   moveLabel: 'コース選択',
   buttons: [
-    { indices: [0, 9], label: '決定' },
+    { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
@@ -75,7 +79,7 @@ const guideMapSelect = () => mountArcadeGuide({
 const guideTimeSelect = () => mountArcadeGuide({
   moveLabel: '日中 / 夜間',
   buttons: [
-    { indices: [0, 9], label: 'レース開始' },
+    { indices: [0], label: 'レース開始' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
@@ -84,7 +88,7 @@ const guideLobby = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
   buttons: [
     { indices: [2, 3, 4, 5], label: 'カラー変更' },
-    { indices: [0, 9], label: 'コース希望へ' },
+    { indices: [0], label: 'コース希望へ' },
     { indices: [1], label: '退出' },
   ],
   showHomeHint: true,
@@ -92,7 +96,7 @@ const guideLobby = () => mountArcadeGuide({
 const guideOnlineCourse = () => mountArcadeGuide({
   moveLabel: 'コース希望',
   buttons: [
-    { indices: [0, 9], label: '待機画面へ' },
+    { indices: [0], label: '待機画面へ' },
     { indices: [1], label: 'マシン選択へ' },
   ],
   showHomeHint: true,
@@ -100,7 +104,7 @@ const guideOnlineCourse = () => mountArcadeGuide({
 const guideOnlineWait = () => mountArcadeGuide({
   moveLabel: 'ボタン選択',
   buttons: [
-    { indices: [0, 9], label: '決定' },
+    { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
@@ -287,6 +291,25 @@ window.addEventListener('DOMContentLoaded', () => {
     if (result.timedOut) sfx.timeUp();
     else sfx.goal();
     syncBestTimeDisplay();
+
+    if (!result.timedOut && result.totalTimeMs > 0) {
+      const check = checkHighScore('midnight-skyway', result.totalTimeMs, currentMapId);
+      if (check.isRankIn) {
+        driveHUD.isNameEntryOpen = true;
+        mountNameEntryModal({
+          title: '走行記録',
+          scoreDisplay: result.formattedTime,
+          rankDisplay: `第${check.rank}位`,
+          themeClass: 'theme-skyway',
+          delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+          onComplete: (katakanaName) => {
+            driveHUD.isNameEntryOpen = false;
+            saveLeaderboardScore('midnight-skyway', result.totalTimeMs, katakanaName, currentMapId, result.carName);
+            syncBestTimeDisplay();
+          },
+        });
+      }
+    }
   };
 
   const teardownOnlineRace = () => {

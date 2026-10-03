@@ -171,7 +171,7 @@ export class ModeSelect {
       if (!this.visible) return;
       if (p.left || p.up) this.step(-1);
       else if (p.right || p.down) this.step(1);
-      else if (p.any(0, 9)) this.confirm();
+      else if (p.any(0)) this.confirm();
       else if (p.any(1)) this.onBack();
     });
     if (!this.keyHandler) {

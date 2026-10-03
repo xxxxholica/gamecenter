@@ -3,6 +3,7 @@
 // Minimal UI text, humanoid crowd, 124 wall, and bonus flight track
 // ============================================================
 
+import { countUpText } from '../../../shared/arcadeScoreCountUp.ts';
 import * as THREE from 'three';
 import { inputManager } from './input.ts';
 import { sound } from './audio.ts';
@@ -16,8 +17,10 @@ import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
 import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
-import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide.ts';
+import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
+import { checkHighScore } from '../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 export type GameState =
   | 'TITLE'
@@ -154,42 +157,39 @@ export class Game {
       onBack: () => this.showTitleScreen(),
     });
 
-    // 結果画面から、難易度選択へ戻る
-    for (const id of ['level-change-fail-btn', 'level-change-success-btn']) {
+
+    // 再挑戦ボタン
+    for (const id of ['retry-fail-btn', 'retry-success-btn']) {
       const btn = document.getElementById(id);
       if (btn) {
-        btn.innerHTML = `${buttonIconHtml([1])} レベル選択`;
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.openLevelSelect();
+          this.startGame();
         });
       }
     }
 
-    const retryFailBtn = document.getElementById('retry-fail-btn');
-    if (retryFailBtn) {
-      retryFailBtn.innerHTML = `${buttonIconHtml([0, 9])} 再挑戦`;
-      retryFailBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.startGame();
-      });
+    // タイトルに戻るボタン
+    for (const id of ['title-fail-btn', 'title-success-btn']) {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showTitleScreen();
+        });
+      }
     }
 
-    const retrySuccessBtn = document.getElementById('retry-success-btn');
-    if (retrySuccessBtn) {
-      retrySuccessBtn.innerHTML = `${buttonIconHtml([0, 9])} 再挑戦`;
-      retrySuccessBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.startGame();
-      });
+    // ゲームを終了（ハブへ戻る）ボタン
+    for (const id of ['exit-fail-btn', 'exit-success-btn']) {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.location.href = '../../';
+        });
+      }
     }
-
-    this.failScreen?.addEventListener('click', () => {
-      if (this.state === 'GAME_OVER') this.startGame();
-    });
-    this.successScreen?.addEventListener('click', () => {
-      if (this.state === 'GAME_CLEAR') this.startGame();
-    });
   }
 
   private initArcadeTitleScreen(): void {
@@ -219,7 +219,7 @@ export class Game {
     mountArcadeGuide({
       moveLabel: 'レベル選択',
       buttons: [
-        { indices: [0, 9], label: '決定' },
+        { indices: [0], label: '決定' },
         { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
@@ -254,8 +254,8 @@ export class Game {
     mountArcadeGuide({
       moveLabel: '選択',
       buttons: [
-        { indices: [0, 9], label: '決定' },
-        { indices: [1], label: 'レベル選択' },
+        { indices: [0], label: '決定' },
+        { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
     });
@@ -720,7 +720,7 @@ export class Game {
     sound.playGameOverJingle();
 
     this.failScreen?.classList.remove('hidden');
-    this.openResultMenu('retry-fail-btn', 'level-change-fail-btn');
+    this.openResultMenu(['retry-fail-btn', 'title-fail-btn', 'exit-fail-btn']);
   }
 
   // Game Clear: 「卒業」 (Yellow bold text) + Final Multiplier
@@ -735,22 +735,40 @@ export class Game {
 
     // 取得単位 = 壁に着いた人数 × 到達倍率。余った人数が多いほど、遠くまで飛ぶほど増える
     const score = Math.round(this.creditsAtWall * this.maxAchievedMultiplier * (1 + 0.1 * this.ringsHit));
-    const rankIndex = RankingStore.add(score, this.level);
     if (this.finalRingElem) {
       this.finalRingElem.textContent = `${LEVELS[this.level].label}　リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
     }
     if (this.finalScoreElem) {
-      this.finalScoreElem.textContent = `${score} 単位`;
+      countUpText(this.finalScoreElem, `${score} 単位`);
     }
-    RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
 
     this.bonusHudElem?.classList.add('hidden');
     this.successScreen?.classList.remove('hidden');
-    this.openResultMenu('retry-success-btn', 'level-change-success-btn');
+    this.openResultMenu(['retry-success-btn', 'title-success-btn', 'exit-success-btn']);
+
+    const check = checkHighScore('tani-runner-124', score, this.level);
+    if (check.isRankIn) {
+      this.resultMenu.setLocked(true);
+      mountNameEntryModal({
+        title: '卒業名簿',
+        scoreDisplay: `${score} 単位`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-tani',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (katakanaName) => {
+          this.resultMenu.setLocked(false);
+          const rankIndex = RankingStore.add(score, this.level, katakanaName);
+          RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
+        },
+      });
+    } else {
+      const rankIndex = RankingStore.add(score, this.level);
+      RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
+    }
   }
 
-  private openResultMenu(retryId: string, levelId: string): void {
-    const buttons = [retryId, levelId].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => b !== null);
+  private openResultMenu(buttonIds: string[]): void {
+    const buttons = buttonIds.map((id) => document.getElementById(id)).filter((b): b is HTMLElement => b !== null);
     this.resultMenu.open(buttons);
     this.showResultGuide();
   }

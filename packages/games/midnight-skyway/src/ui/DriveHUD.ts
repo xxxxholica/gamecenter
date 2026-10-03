@@ -1,3 +1,5 @@
+import { countUpText } from '../../../../shared/arcadeScoreCountUp';
+import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
 import { MapBase } from '../maps/MapBase';
 import { CameraMode } from '../core/CarController';
@@ -29,6 +31,7 @@ const MAP_SIZE = 210;
 export class DriveHUD {
   private container: HTMLElement;
   private events: DriveHUDEvents;
+  public isNameEntryOpen = false;
 
   // DOM elements
   private speedEl!: HTMLElement;
@@ -82,6 +85,7 @@ export class DriveHUD {
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
   private padFocus = 0;
+  private modalArmTime = 0;
 
   private minimapPoints: THREE.Vector2[] = [];
   private extraRoutes: { points: THREE.Vector2[]; drivable: boolean }[] = [];
@@ -95,6 +99,7 @@ export class DriveHUD {
     this.container = container;
     this.events = events;
     this.createDOM();
+    window.addEventListener('keydown', (e) => this.handleMenuKey(e));
   }
 
   private createDOM(): void {
@@ -176,7 +181,7 @@ export class DriveHUD {
         <div class="hud-arcade-modal-box">
           <div class="arcade-modal-title">一時停止</div>
           <div class="arcade-modal-buttons">
-            <button id="pause-btn-resume" class="arcade-btn-primary">再開</button>
+            <button id="pause-btn-resume">再開</button>
             <button id="pause-btn-retry">リトライ</button>
             <button id="pause-btn-map">コース変更</button>
             <button id="pause-btn-car">マシン変更</button>
@@ -203,8 +208,9 @@ export class DriveHUD {
           </div>
 
           <div class="hud-arcade-result-buttons">
-            <button id="res-btn-retry" class="arcade-btn-primary">もう一度走る</button>
-            <button id="res-btn-title">タイトルへ戻る</button>
+            <button id="res-btn-retry">再挑戦</button>
+            <button id="res-btn-title">タイトルに戻る</button>
+            <button id="res-btn-exit">ゲームを終了</button>
           </div>
         </div>
       </div>
@@ -273,6 +279,9 @@ export class DriveHUD {
     });
 
     // Result modal buttons
+    document.getElementById('res-btn-exit')?.addEventListener('click', () => {
+      window.location.href = '../../';
+    });
     document.getElementById('res-btn-retry')?.addEventListener('click', () => {
       this.hideResultModal();
       this.events.onRetry();
@@ -281,6 +290,22 @@ export class DriveHUD {
       this.hideResultModal();
       this.events.onReturnToTitle();
     });
+
+    // モーダルボタンのマウスホバーとパッドフォーカスを同期
+    const bindHoverFocus = (modal: HTMLElement) => {
+      const btns = modal.querySelectorAll<HTMLButtonElement>('button');
+      btns.forEach((btn) => {
+        btn.addEventListener('mouseenter', () => {
+          const visible = this.menuButtons(modal);
+          const idx = visible.indexOf(btn);
+          if (idx !== -1) {
+            this.setPadFocus(idx);
+          }
+        });
+      });
+    };
+    bindHoverFocus(this.pauseModalEl);
+    bindHoverFocus(this.resultModalEl);
   }
 
   public updateCamBtnState(_mode: CameraMode): void {
@@ -488,7 +513,7 @@ export class DriveHUD {
     this.resProgressEl.textContent = `${Math.round((result.progress ?? 0) * 100)} %`;
     this.resDriftLineEl.style.display = result.driftScore === undefined ? 'none' : 'flex';
     this.resDriftEl.textContent = String(result.driftScore ?? 0);
-    this.resTotalTimeEl.textContent = result.formattedTime;
+    countUpText(this.resTotalTimeEl, result.formattedTime);
     this.resTopSpeedEl.textContent = `${result.topSpeedKmH} km/h`;
     this.resCarNameEl.textContent = result.carName;
     this.resNewRecordEl.style.display = result.isNewRecord ? 'block' : 'none';
@@ -500,7 +525,8 @@ export class DriveHUD {
 
     this.resultModalEl.style.display = 'flex';
     this.container.classList.add('result-open');    // the result sits beside the car (winning run): clear the other widgets
-    this.syncPadMenu();
+    this.modalArmTime = performance.now() + 600; // 走行中の連打で誤決定しない
+    this.syncPadMenu(0); // 再挑戦がデフォルト
   }
 
   public hideResultModal(): void {
@@ -529,7 +555,7 @@ export class DriveHUD {
   public showPauseModal(): void {
     this.isPauseOpen = true;
     this.pauseModalEl.style.display = 'flex';
-    this.syncPadMenu();
+    this.syncPadMenu(0);
     this.events.onPauseChange?.(true);
   }
 
@@ -562,14 +588,21 @@ export class DriveHUD {
     const buttons = this.menuButtons(modal);
     this.padFocus = (index + buttons.length) % buttons.length;
     buttons.forEach((b, i) => b.classList.toggle('pad-focus', i === this.padFocus));
+    // 選択中のボタンだけ色とAボタンのガイドを出し、それ以外はグレーにする
+    const colors = modal === this.resultModalEl ? ['#ffea00', '#39ff88', '#00f0ff'] : ['#00f0ff'];
+    const items = buttons.map((button, i) => ({ button, color: modal === this.resultModalEl ? (colors[i] ?? colors[0]) : colors[0] }));
+    setupResultMenu(buttons[0]?.parentElement ?? null, items);
+    applyResultMenuFocus(items, this.padFocus);
   }
 
   /** Starts/stops the pad loop to match whether a menu is open; a newly opened menu focuses its first button. */
-  private syncPadMenu(): void {
+  private syncPadMenu(initialFocus = 0): void {
     const open = this.openModal() !== null;
     if (open && !this.stopPad) {
       this.stopPad = startPadLoop(this.padEdge, (p) => this.handleMenuPad(p));
-      this.setPadFocus(0);
+      this.setPadFocus(initialFocus);
+    } else if (open && this.stopPad) {
+      this.setPadFocus(initialFocus);
     } else if (!open && this.stopPad) {
       this.stopPad();
       this.stopPad = null;
@@ -577,14 +610,48 @@ export class DriveHUD {
     }
   }
 
-  // Lever: move focus / A・START: confirm / B: resume (pause menu only)
+  // Lever: move focus / A: confirm / B: resume (pause) or exit (result)
   private handleMenuPad(p: PadPress): void {
+    if (this.isNameEntryOpen) return;
     const modal = this.openModal();
     if (!modal) return;
     if (p.up || p.left) this.setPadFocus(this.padFocus - 1);
     else if (p.down || p.right) this.setPadFocus(this.padFocus + 1);
-    else if (p.any(0, 9)) this.menuButtons(modal)[this.padFocus]?.click();
-    else if (p.any(1) && modal === this.pauseModalEl) this.hidePauseModal();
+    else if (performance.now() < this.modalArmTime) return;
+    else if (p.any(0)) this.menuButtons(modal)[this.padFocus]?.click();
+    else if (p.any(1)) {
+      if (modal === this.pauseModalEl) this.hidePauseModal();
+      else if (modal === this.resultModalEl) window.location.href = '../../';
+    }
+  }
+
+  // Keyboard: move focus (WASD / Arrows) / confirm (Enter / Space) / cancel (Escape / Backspace)
+  private handleMenuKey(e: KeyboardEvent): void {
+    if (!this.isMenuOpen() || this.isNameEntryOpen) return;
+    const modal = this.openModal();
+    if (!modal) return;
+
+    if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft' || e.code === 'KeyA') {
+      e.preventDefault();
+      this.setPadFocus(this.padFocus - 1);
+    } else if (e.code === 'ArrowDown' || e.code === 'KeyS' || e.code === 'ArrowRight' || e.code === 'KeyD') {
+      e.preventDefault();
+      this.setPadFocus(this.padFocus + 1);
+    } else if (performance.now() < this.modalArmTime) {
+      e.preventDefault();
+    } else if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      const buttons = this.menuButtons(modal);
+      buttons[this.padFocus]?.click();
+    } else if (e.code === 'Escape' || e.code === 'Backspace') {
+      if (modal === this.pauseModalEl) {
+        e.preventDefault();
+        this.hidePauseModal();
+      } else if (modal === this.resultModalEl) {
+        e.preventDefault();
+        window.location.href = '../../';
+      }
+    }
   }
 
   public isPauseModalOpen(): boolean {

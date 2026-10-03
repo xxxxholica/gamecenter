@@ -1,3 +1,5 @@
+import { MenuNav } from '../../../shared/arcadeMenuNav';
+
 export interface InputState {
   aimX: number;
   aimY: number;
@@ -6,6 +8,10 @@ export interface InputState {
   shootExplosiveJustPressed: boolean;
   startJustPressed: boolean;
   hasAnyInput: boolean;
+  left: boolean;
+  right: boolean;
+  /** メニュー移動(押した瞬間の積み上げ。上・左 = -1 / 下・右 = +1) */
+  menuNav: number[];
 }
 
 export class ArcadeInput {
@@ -36,6 +42,8 @@ export class ArcadeInput {
   private rapidFireTimer: number = 0;
   readonly RAPID_INTERVAL = 0.14; // ~7 shots per second when held
 
+  private menuNav = new MenuNav();
+
   public lastInputTime: number = performance.now();
 
   constructor() {
@@ -50,6 +58,7 @@ export class ArcadeInput {
 
   private setupKeyboard() {
     window.addEventListener('keydown', (e) => {
+      this.menuNav.pushKey(e);
       this.keys[e.code] = true;
       this.lastInputTime = performance.now();
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
@@ -130,6 +139,8 @@ export class ArcadeInput {
     let explosivePressed = false;
     let startPressed = false;
     let hasAnyInput = false;
+    let padNavX = 0;
+    let padNavY = 0;
 
     // 1. Keyboard Aim
     const isW = this.keys['KeyW'] || this.keys['ArrowUp'];
@@ -167,6 +178,8 @@ export class ArcadeInput {
       const ax0 = pad.axes[0] || 0;
       const ax1 = pad.axes[1] || 0;
       const DEADZONE = 0.18;
+      if (Math.abs(ax0) > DEADZONE) padNavX = ax0;
+      if (Math.abs(ax1) > DEADZONE) padNavY = ax1;
 
       if (Math.abs(ax0) > DEADZONE) {
         rawMoveX += (ax0 - Math.sign(ax0) * DEADZONE) / (1.0 - DEADZONE);
@@ -182,6 +195,10 @@ export class ArcadeInput {
       if (pad.buttons[13]?.pressed) { rawMoveY -= 1.0; hasAnyInput = true; }
       if (pad.buttons[14]?.pressed) { rawMoveX -= 1.0; hasAnyInput = true; }
       if (pad.buttons[15]?.pressed) { rawMoveX += 1.0; hasAnyInput = true; }
+      if (pad.buttons[12]?.pressed) padNavY = -1;
+      if (pad.buttons[13]?.pressed) padNavY = 1;
+      if (pad.buttons[14]?.pressed) padNavX = -1;
+      if (pad.buttons[15]?.pressed) padNavX = 1;
 
       // Button 0 (A/Cross): Normal Shoot & Start
       if (pad.buttons[0]?.pressed) {
@@ -200,6 +217,8 @@ export class ArcadeInput {
         if (pad.buttons[b]?.pressed) hasAnyInput = true;
       }
     }
+
+    this.menuNav.updatePad(padNavX, padNavY);
 
     // 3. Mouse / Touch
     if (this.mouseLeftPressed || this.touchJustTapped) {
@@ -275,6 +294,9 @@ export class ArcadeInput {
       shootExplosiveJustPressed,
       startJustPressed,
       hasAnyInput,
+      left: rawMoveX < -0.3,
+      right: rawMoveX > 0.3,
+      menuNav: this.menuNav.take(),
     };
   }
 
@@ -285,6 +307,7 @@ export class ArcadeInput {
 
   public resetAll() {
     this.keys = {};
+    this.menuNav.clear();
     this.mouseLeftPressed = false;
     this.mouseRightPressed = false;
     this.touchJustTapped = false;

@@ -1,3 +1,4 @@
+import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { getPrizeSvg, getPrizeShortName } from './prize_icons';
 import { PrizeBreakdownEntry } from './results_pile';
 
@@ -334,11 +335,14 @@ export class ArcadeHUD {
           <div class="breakdown-grid">${breakdownHtml}</div>
         </div>
 
-        <div class="results-action-block">
-          <div class="retry-btn blink">トップ画面へ</div>
-          <div class="retry-hint">画面タップまたはボタンでトップへ</div>
+        <div class="results-action-block rm-col" style="margin-top: 14px;">
+          <div id="res-btn-retry" class="retry-btn" tabindex="-1">再挑戦</div>
+          <div id="res-btn-title" class="retry-btn" tabindex="-1">タイトルに戻る</div>
+          <div id="res-btn-exit" class="retry-btn" tabindex="-1">ゲームを終了</div>
         </div>
       </div>
     `;
+    const scoreNum = this.resultsOverlay.querySelector<HTMLElement>('.results-score-num');
+    if (scoreNum) countUpText(scoreNum, finalScore.toLocaleString());
   }
 }

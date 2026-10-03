@@ -1,6 +1,12 @@
 import { games } from './games';
 import { createArcadeInput } from './arcadeInput';
 import { mountArcadeGuide } from '../../shared/arcadeGuide';
+import {
+  GAME_LEADERBOARD_DEFS,
+  loadLeaderboard,
+  LeaderboardEntry,
+  escapeHtml,
+} from '../../shared/arcadeLeaderboard';
 
 mountArcadeGuide({
   moveLabel: '選ぶ',
@@ -27,13 +33,82 @@ function rememberLastGame(slug: string) {
   }
 }
 
+// ===== ランキングHTML生成 =====
+function renderRowsHtml(entries: LeaderboardEntry[]): string {
+  const top3 = entries.slice(0, 3);
+  const posLabels = ['1ST', '2ND', '3RD'];
+  const posClasses = ['gold', 'silver', 'bronze'];
+
+  return top3
+    .map((e, idx) => {
+      const isEmpty = e.name === '記録なし';
+      const safeName = escapeHtml(e.name);
+      const safeScore = escapeHtml(e.formattedScore);
+      return `
+        <div class="ranking-row">
+          <span class="rank-pos ${posClasses[idx] ?? ''}">${posLabels[idx] ?? `${idx + 1}TH`}</span>
+          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}</span>
+          <span class="rank-score ${isEmpty ? 'is-empty' : ''}">${safeScore}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 // ===== 全ゲーム一覧 =====
 const list = document.querySelector<HTMLDivElement>('#game-list')!;
+
+// コース/難易度バリアントを持つカードのローテーション管理
+interface VariantRotator {
+  slug: string;
+  variantIndex: number;
+  tagEl: HTMLElement;
+  rowsEl: HTMLElement;
+}
+const rotators: VariantRotator[] = [];
 
 games.forEach((game) => {
   const card = document.createElement('div');
   card.className = 'card';
   card.style.setProperty('--accent', game.accent);
+
+  const def = GAME_LEADERBOARD_DEFS[game.slug];
+  let rankingHtml = '';
+
+  if (def && def.hasScore) {
+    const hasVariants = def.variants && def.variants.length > 0;
+    const initialVariant = hasVariants ? def.variants![0] : undefined;
+    const entries = loadLeaderboard(game.slug, initialVariant?.id);
+    const variantTagHtml = hasVariants
+      ? `<span class="ranking-variant-tag" id="tag-${game.slug}">${initialVariant!.label}</span>`
+      : '';
+
+    rankingHtml = `
+      <div class="card-ranking-container" data-slug="${game.slug}">
+        <div class="ranking-header">
+          <span class="ranking-title">ランキング</span>
+          ${variantTagHtml}
+        </div>
+        <div class="ranking-rows" id="rows-${game.slug}">
+          ${renderRowsHtml(entries)}
+        </div>
+      </div>
+    `;
+  } else {
+    // スコアリングなし(対戦専用): ランキングボードを表示しつつグレーアウト
+    const entries = loadLeaderboard(game.slug);
+    rankingHtml = `
+      <div class="card-ranking-container is-disabled" data-slug="${game.slug}">
+        <div class="ranking-header">
+          <span class="ranking-title">ランキング</span>
+        </div>
+        <div class="ranking-rows" id="rows-${game.slug}">
+          ${renderRowsHtml(entries)}
+        </div>
+      </div>
+    `;
+  }
+
   card.innerHTML = `
     <a class="card-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
     <img class="card-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
@@ -49,11 +124,74 @@ games.forEach((game) => {
         <span class="card-dev-name">@${game.developer.name}</span>
       </a>
       <p class="card-desc">${game.description}</p>
+      ${rankingHtml}
     </div>
   `;
   card.querySelector('.card-link')!.addEventListener('click', () => rememberLastGame(game.slug));
   list.appendChild(card);
+
+  // バリアント切り替え対象ならローテーターに登録
+  if (def && def.variants && def.variants.length > 1) {
+    const tagEl = card.querySelector<HTMLElement>(`#tag-${game.slug}`);
+    const rowsEl = card.querySelector<HTMLElement>(`#rows-${game.slug}`);
+    if (tagEl && rowsEl) {
+      rotators.push({
+        slug: game.slug,
+        variantIndex: 0,
+        tagEl,
+        rowsEl,
+      });
+    }
+  }
 });
+
+// ===== 時間経過でコース/難易度ランキングをローテーション切替 (4秒間隔) =====
+const ROTATION_INTERVAL_MS = 4000;
+let rotationTimer: number | null = null;
+
+function rotateVariants() {
+  rotators.forEach((rotator) => {
+    const def = GAME_LEADERBOARD_DEFS[rotator.slug];
+    if (!def || !def.variants || def.variants.length <= 1) return;
+
+    // フェードアウト
+    rotator.rowsEl.classList.add('fading');
+    rotator.tagEl.style.opacity = '0';
+
+    setTimeout(() => {
+      rotator.variantIndex = (rotator.variantIndex + 1) % def.variants!.length;
+      const curVariant = def.variants![rotator.variantIndex];
+      const entries = loadLeaderboard(rotator.slug, curVariant.id);
+
+      rotator.tagEl.textContent = curVariant.label;
+      rotator.rowsEl.innerHTML = renderRowsHtml(entries);
+
+      // フェードイン
+      rotator.rowsEl.classList.remove('fading');
+      rotator.tagEl.style.opacity = '1';
+    }, 220);
+  });
+}
+
+function startRotation() {
+  if (rotationTimer === null && rotators.length > 0) {
+    rotationTimer = window.setInterval(rotateVariants, ROTATION_INTERVAL_MS);
+  }
+}
+
+function stopRotation() {
+  if (rotationTimer !== null) {
+    clearInterval(rotationTimer);
+    rotationTimer = null;
+  }
+}
+
+// 画面がアクティブな時だけタイマーを動かす
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopRotation();
+  else startRotation();
+});
+startRotation();
 
 const cards = Array.from(list.querySelectorAll<HTMLDivElement>('.card'));
 

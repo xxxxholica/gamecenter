@@ -670,8 +670,10 @@ html, body {
   padding: 16px 20px;
   width: 440px;
   max-width: 92vw;
+  max-height: 96vh;
   box-sizing: border-box;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .results-header {

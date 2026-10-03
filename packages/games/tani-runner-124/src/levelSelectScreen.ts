@@ -60,7 +60,7 @@ export class LevelSelectScreen {
       <div class="lv-cards">${cards}</div>
       <div class="lv-action-bar">
         <button type="button" class="lv-btn-back">${buttonIconHtml([1])} タイトルへ</button>
-        <button type="button" class="lv-btn-start">${buttonIconHtml([0, 9])} 決定</button>
+        <button type="button" class="lv-btn-start">${buttonIconHtml([0])} 決定</button>
       </div>
     `;
 
@@ -105,19 +105,19 @@ export class LevelSelectScreen {
     this.container.classList.remove('hidden');
 
     this.stopPad?.();
-    // レバー左右: 選択 / A・START: 決定 / B: タイトルへ戻る
+    // レバー左右: 選択 / A: 決定 / B: タイトルへ戻る
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (!this.visible) return;
       if (p.left) this.step(-1);
       else if (p.right) this.step(1);
-      else if (p.any(0, 9)) this.events.onConfirm();
+      else if (p.any(0)) this.events.onConfirm();
       else if (p.any(1)) this.events.onBack();
     });
 
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.visible) return;
-        if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') {
+        if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
           this.events.onConfirm();
         } else if (e.code === 'Escape' || e.code === 'Backspace') {

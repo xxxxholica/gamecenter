@@ -172,7 +172,7 @@ export class WaitScreen {
       if (b.length === 0) return;
       if (p.left || p.up) { this.padFocus = (this.padFocus - 1 + b.length) % b.length; this.applyFocus(); }
       else if (p.right || p.down) { this.padFocus = (this.padFocus + 1) % b.length; this.applyFocus(); }
-      else if (p.any(0, 9)) b[this.padFocus]?.click();
+      else if (p.any(0)) b[this.padFocus]?.click();
       else if (p.any(1)) this.back();
     });
     this.keyHandler = (e: KeyboardEvent) => {

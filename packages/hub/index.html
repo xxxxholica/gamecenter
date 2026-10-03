@@ -67,16 +67,24 @@
       position: relative;
       z-index: 1;
       width: 100%;
-      max-width: 1040px;
+      max-width: 1080px;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 28px;
+    }
+
+    @media (max-width: 680px) {
+      #game-list {
+        grid-template-columns: 1fr;
+      }
     }
 
     .card {
       --accent: #ff2fd4;
       position: relative;
-      display: block;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
       background: linear-gradient(180deg, #1c1c26, #131319);
       border: 1px solid #2c2c3a;
       border-radius: 14px;
@@ -119,6 +127,9 @@
 
     .card-body {
       padding: 18px 20px 22px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
 
     .card-logo-wrap {
@@ -197,6 +208,172 @@
       color: #9a9ab0;
       font-size: 0.85rem;
       line-height: 1.7;
+      min-height: calc(0.85rem * 1.7 * 3);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    /* ===== ランキング表示 (絵文字不使用) ===== */
+    .card-ranking-container {
+      margin-top: auto;
+      height: 116px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 9px 14px 10px;
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+    }
+
+    .ranking-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .ranking-title {
+      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #9292a4;
+    }
+
+    .ranking-variant-tag {
+      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(146, 146, 164, 0.12);
+      color: #9292a4;
+      border: 1px solid rgba(146, 146, 164, 0.28);
+      transition: opacity 0.22s ease;
+    }
+
+    .ranking-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      transition: opacity 0.22s ease;
+    }
+
+    .ranking-rows.fading {
+      opacity: 0;
+    }
+
+    .ranking-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1.4;
+    }
+
+    .rank-pos {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 0.76rem;
+      width: 32px;
+      flex-shrink: 0;
+      letter-spacing: 0.04em;
+    }
+
+    .rank-pos.gold {
+      color: #ffd700;
+      text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+    }
+
+    .rank-pos.silver {
+      color: #d2d2dc;
+      text-shadow: 0 0 5px rgba(210, 210, 220, 0.3);
+    }
+
+    .rank-pos.bronze {
+      color: #df985f;
+      text-shadow: 0 0 5px rgba(223, 152, 95, 0.3);
+    }
+
+    .rank-name {
+      flex: 1;
+      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #e6e6f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .rank-name.is-empty {
+      color: #6d6d80;
+      font-weight: 500;
+    }
+
+    .rank-score {
+      font-family: 'Impact', 'Arial Black', monospace;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.84rem;
+      letter-spacing: 0.04em;
+      color: #9f9fb5;
+      flex-shrink: 0;
+    }
+
+    .rank-score.is-empty {
+      color: #646476;
+    }
+
+    /* グレーアウトされたランキング枠 (ストリートストライカー等: 枠は他と同じくはっきり表示し中身のみグレーアウト) */
+    .card-ranking-container.is-disabled {
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .card-ranking-container.is-disabled .ranking-title {
+      color: #555566;
+    }
+
+    .card-ranking-container.is-disabled .rank-pos {
+      color: #4e4e5e !important;
+      text-shadow: none !important;
+    }
+
+    .card-ranking-container.is-disabled .rank-name,
+    .card-ranking-container.is-disabled .rank-score {
+      color: #525262 !important;
+    }
+
+    /* 対戦専用枠 (スコアリングなしゲーム用) */
+    .card-vs-box {
+      margin-top: auto;
+      height: 126px;
+      box-sizing: border-box;
+      padding: 11px 14px;
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .vs-tag {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 0.74rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+    }
+
+    .vs-desc {
+      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-size: 0.74rem;
+      color: #8b8b9e;
     }
 
     /* ===== アケコン操作 ===== */

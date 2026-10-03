@@ -358,14 +358,17 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: safe center;
+      overflow-y: auto;
+      padding: 10px 0;
+      box-sizing: border-box;
       background: rgba(0, 0, 0, 0.7);
       z-index: 25;
       display: none;
       pointer-events: auto;
     }
     .result-score-block {
-      margin: 20px 0 32px 0;
+      margin: clamp(4px, 1.5vh, 20px) 0 clamp(8px, 3vh, 28px) 0;
       text-align: center;
     }
     .result-score-title {
@@ -379,7 +382,7 @@
          2px  2px 0 #000000;
     }
     .result-score-val {
-      font-size: clamp(48px, 8vw, 76px);
+      font-size: clamp(32px, min(8vw, 10vh), 76px);
       color: #ffffff;
       letter-spacing: 4px;
       text-shadow:
@@ -502,7 +505,6 @@
 
       <div style="display: flex; flex-direction: column; align-items: center;">
         <button id="btn-start" class="title-btn">開始</button>
-        <div class="arcade-insert-coin">PRESS BUTTON OR SPACE / W TO START</div>
       </div>
 
       <!-- 操作案内は全ゲーム共通のボタンガイドカード(main.tsのmountArcadeGuide)に一本化 -->
@@ -511,22 +513,24 @@
 
     <!-- RANKING OVERLAY -->
     <div id="ranking-overlay">
-      <h2 class="ranking-title">TOP 5 B-BOY KINGS</h2>
+      <h2 class="ranking-title">TOP 3 B-BOY KINGS</h2>
       <div class="ranking-table" id="ranking-list">
         <!-- populated dynamically -->
       </div>
-      <div class="ranking-prompt">PRESS ANY BUTTON TO PLAY</div>
     </div>
 
     <!-- RESULT OVERLAY -->
     <div id="result-overlay">
-      <div id="result-status-title" class="hud-text" style="position:static; font-size: 54px; margin-bottom: 12px; color: #ffe600;">CLEAR</div>
+      <div id="result-status-title" class="hud-text" style="position:static; font-size: clamp(30px, 7vh, 54px); margin-bottom: 8px; color: #ffe600;">CLEAR</div>
       <div class="result-score-block">
         <div class="result-score-title">TOTAL SCORE</div>
         <div class="result-score-val" id="result-total-score">000000</div>
       </div>
-      <button id="btn-restart" class="title-btn">再挑戦</button>
-      <div class="arcade-insert-coin" style="margin-top: 16px;">PRESS [0] BUTTON / SPACE / 画面クリック</div>
+      <div id="result-menu" style="z-index: 30;">
+        <button id="btn-restart" class="title-btn" tabindex="-1">再挑戦</button>
+        <button id="btn-result-title" class="title-btn" tabindex="-1">タイトルに戻る</button>
+        <button id="btn-result-exit" class="title-btn" tabindex="-1">ゲームを終了</button>
+      </div>
     </div>
   </div>
 

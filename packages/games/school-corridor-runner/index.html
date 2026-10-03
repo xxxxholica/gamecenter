@@ -609,9 +609,12 @@
       border: 3px solid #ffca28;
       border-radius: 6px;
       box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 8px 8px 0 #000, inset 0 0 16px rgba(255, 202, 40, 0.12);
-      padding: 28px 40px;
+      padding: clamp(10px, 3vh, 28px) clamp(14px, 4vw, 40px);
       max-width: 600px;
       width: 100%;
+      max-height: 100%;
+      overflow-y: auto;
+      box-sizing: border-box;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -620,10 +623,10 @@
     }
 
     .result-header {
-      font-size: 54px;
+      font-size: clamp(26px, 7vh, 54px);
       font-weight: 900;
       letter-spacing: 8px;
-      margin-bottom: 24px;
+      margin: 0 0 clamp(6px, 2vh, 24px);
       text-shadow: 4px 4px 0 #000;
     }
 
@@ -641,13 +644,14 @@
       background: rgba(22, 16, 32, 0.9);
       border: 3px solid #ffca28;
       border-radius: 4px;
-      padding: 28px 48px;
+      padding: clamp(8px, 2.5vh, 28px) clamp(14px, 4vw, 48px);
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: clamp(6px, 1.8vh, 18px);
       max-width: 520px;
       width: 100%;
-      margin-bottom: 28px;
+      box-sizing: border-box;
+      margin-bottom: clamp(8px, 2vh, 20px);
       box-shadow: 6px 6px 0 #000;
     }
 
@@ -667,7 +671,7 @@
     }
 
     .result-val {
-      font-size: 36px;
+      font-size: clamp(20px, 5vh, 36px);
       font-weight: 900;
       color: #ffffff;
       text-shadow: 2px 2px 0 #000;
@@ -681,7 +685,7 @@
     }
 
     .grade-badge {
-      font-size: 68px;
+      font-size: clamp(34px, 8vh, 68px);
       font-weight: 900;
       line-height: 1;
       padding: 0 16px;
@@ -760,27 +764,7 @@
       <h1 class="game-main-title">Tempale Run</h1>
       <h2 class="game-sub-title">テンパるラン - 廊下は走るな -</h2>
 
-      <div class="instruction-cards">
-        <div class="inst-card">
-          <h3>アケコン</h3>
-          <div class="inst-row"><span>移動</span><span class="key-badge">レバー左右</span></div>
-          <div class="inst-row"><span>跳躍</span><span class="key-badge">レバー上</span></div>
-          <div class="inst-row"><span>しゃがみ</span><span class="key-badge">レバー下</span></div>
-          <div class="inst-row"><span>攻撃</span><span class="key-badge">A / B / X / Y</span></div>
-          <div class="inst-sub">手裏剣・辞書投擲</div>
-        </div>
-
-        <div class="inst-card">
-          <h3>キーボード</h3>
-          <div class="inst-row"><span>移動</span><span class="key-badge">A / D</span></div>
-          <div class="inst-row"><span>跳躍</span><span class="key-badge">W</span></div>
-          <div class="inst-row"><span>しゃがみ</span><span class="key-badge">S</span></div>
-          <div class="inst-row"><span>攻撃</span><span class="key-badge">Enter</span></div>
-          <div class="inst-sub">手裏剣・辞書投擲</div>
-        </div>
-      </div>
-
-      <button id="btn-start" class="press-start-btn">学校から脱出する</button>
+      <button id="btn-start" class="press-start-btn" style="margin-top: 24px;">学校から脱出する</button>
       <div class="attract-notice">10秒無入力でデモ走行開始</div>
     </div>
 
@@ -804,8 +788,11 @@
           <div id="result-grade" class="grade-badge grade-S">S</div>
         </div>
       </div>
-      <button id="btn-retry" class="press-start-btn">再挑戦</button>
-      <div class="attract-notice">10秒無入力でタイトルへ復帰</div>
+      <div id="result-menu">
+        <button id="btn-retry" class="press-start-btn" tabindex="-1">再挑戦</button>
+        <button id="btn-result-title" class="press-start-btn" tabindex="-1">タイトルに戻る</button>
+        <button id="btn-result-exit" class="press-start-btn" tabindex="-1">ゲームを終了</button>
+      </div>
     </div>
   </div>
 

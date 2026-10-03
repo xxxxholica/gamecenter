@@ -50,9 +50,11 @@
   <div id="fail-screen" class="overlay-screen hidden">
     <div class="arcade-card fail-card">
       <div class="fail-text">留年</div>
-      <button id="retry-fail-btn" class="arcade-btn retry-btn">再挑戦</button>
-      <button id="level-change-fail-btn" class="level-change-btn">レベル選択</button>
-      <div class="arcade-card-hint">PRESS [0] 決定 / [1] レベル選択 / レバー移動</div>
+      <div class="result-menu">
+        <button type="button" tabindex="-1" id="retry-fail-btn" class="arcade-btn retry-btn">再挑戦</button>
+        <button type="button" tabindex="-1" id="title-fail-btn" class="level-change-btn">タイトルに戻る</button>
+        <button type="button" tabindex="-1" id="exit-fail-btn" class="level-change-btn">ゲームを終了</button>
+      </div>
     </div>
   </div>
 
@@ -64,9 +66,11 @@
       <div id="final-ring-display" class="final-sub-text">リング 0/3</div>
       <div id="final-score-display" class="final-score-text">0</div>
       <ol id="success-ranking" class="ranking-list"></ol>
-      <button id="retry-success-btn" class="arcade-btn success-btn">再挑戦</button>
-      <button id="level-change-success-btn" class="level-change-btn">レベル選択</button>
-      <div class="arcade-card-hint">PRESS [0] 決定 / [1] レベル選択 / レバー移動</div>
+      <div class="result-menu">
+        <button type="button" tabindex="-1" id="retry-success-btn" class="arcade-btn success-btn">再挑戦</button>
+        <button type="button" tabindex="-1" id="title-success-btn" class="level-change-btn">タイトルに戻る</button>
+        <button type="button" tabindex="-1" id="exit-success-btn" class="level-change-btn">ゲームを終了</button>
+      </div>
     </div>
   </div>
 

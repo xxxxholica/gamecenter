@@ -109,12 +109,12 @@ export class ModeSelectScreen {
     this.container.style.display = 'flex';
 
     this.stopPad?.();
-    // レバー左右: 選択 / A・START: 決定 / B: タイトルへ戻る
+    // レバー左右: 選択 / A: 決定 / B: タイトルへ戻る
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (!this.isVisible) return;
       if (p.left) this.step(-1);
       else if (p.right) this.step(1);
-      else if (p.any(0, 9)) this.events.onSelect(this.selected);
+      else if (p.any(0)) this.events.onSelect(this.selected);
       else if (p.any(1)) this.events.onBack();
     });
 
@@ -122,9 +122,9 @@ export class ModeSelectScreen {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.events.onSelect(this.selected); }
-        else if (e.code === 'Escape') { e.preventDefault(); this.events.onBack(); }
-        else if (e.code === 'ArrowLeft' || e.code === 'Digit1') this.step(-1);
-        else if (e.code === 'ArrowRight' || e.code === 'Digit2') this.step(1);
+        else if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
+        else if (e.code === 'ArrowLeft' || e.code === 'KeyA' || e.code === 'Digit1') this.step(-1);
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD' || e.code === 'Digit2') this.step(1);
       };
       window.addEventListener('keydown', this.keyHandler);
     }

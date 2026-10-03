@@ -1,3 +1,4 @@
+import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { GameScore, GameState } from '../types';
 
 export class UIManager {
@@ -301,8 +302,8 @@ export class UIManager {
         }
 
         if (scoreData) {
-          this.resultScoreEl.textContent = Math.floor(scoreData.score).toLocaleString();
-          this.resultDistanceEl.textContent = `${Math.floor(scoreData.distance)} m`;
+          countUpText(this.resultScoreEl, Math.floor(scoreData.score).toLocaleString());
+          countUpText(this.resultDistanceEl, `${Math.floor(scoreData.distance)} m`);
           this.resultGradeEl.textContent = scoreData.grade;
           this.resultGradeEl.className = `grade-badge grade-${scoreData.grade}`;
         }

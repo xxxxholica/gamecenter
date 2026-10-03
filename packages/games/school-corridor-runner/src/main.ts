@@ -1,3 +1,5 @@
+import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
+import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
 import { GameInputState, GameScore, GameState, LANE_COORDINATES, LaneIndex, ObstacleType } from './types';
 import { InputManager } from './input/InputManager';
@@ -14,11 +16,14 @@ import { PowerUp } from './entities/PowerUp';
 import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
-import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
+import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
+import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+watchResultAutoReturn(['btn-result-title']);
 
 mountArcadeGuide({
   moveLabel: '移動',
@@ -43,6 +48,9 @@ class Game {
   // 一人称クラッシュ（床倒れ込み）演出
   private isFallingDeath: boolean = false;
   private deathFallTimer: number = 0;
+  private isNameEntryOpen: boolean = false;
+  private resultFocus: number = 0; // 0: メニューに戻る, 1: もう一度走る
+  private resultArmTime: number = 0;
 
   // ゲーム世界
   private corridor!: Corridor;
@@ -218,8 +226,6 @@ class Game {
 
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
-      // 今押すボタンをアイコンで示す(いずれの攻撃ボタンでもスタートする)
-      btnStart.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${btnStart.textContent}`;
       btnStart.addEventListener('click', () => {
         this.startWithCountdown();
       });
@@ -227,11 +233,73 @@ class Game {
 
     const btnRetry = document.getElementById('btn-retry');
     if (btnRetry) {
-      btnRetry.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${btnRetry.textContent}`;
-      btnRetry.addEventListener('click', () => {
+      btnRetry.addEventListener('click', (e) => {
+        if (performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
         this.startWithCountdown();
       });
+      btnRetry.addEventListener('mouseenter', () => {
+        this.resultFocus = 0;
+        this.updateResultFocus();
+      });
+      btnRetry.addEventListener('focus', () => btnRetry.blur());
     }
+
+    const btnTitle = document.getElementById('btn-result-title');
+    if (btnTitle) {
+      btnTitle.addEventListener('click', (e) => {
+        if (performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
+        this.showTitle();
+      });
+      btnTitle.addEventListener('mouseenter', () => {
+        this.resultFocus = 1;
+        this.updateResultFocus();
+      });
+      btnTitle.addEventListener('focus', () => btnTitle.blur());
+    }
+
+    const btnExit = document.getElementById('btn-result-exit');
+    if (btnExit) {
+      btnExit.addEventListener('click', (e) => {
+        if (performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
+        window.location.href = '../../';
+      });
+      btnExit.addEventListener('mouseenter', () => {
+        this.resultFocus = 2;
+        this.updateResultFocus();
+      });
+      btnExit.addEventListener('focus', () => btnExit.blur());
+    }
+  }
+
+  private showTitle(): void {
+    this.state = GameState.TITLE;
+    this.uiManager.setGameState(GameState.TITLE);
+    this.arcadeTitleScreen?.show();
+    this.inputManager.resetIdleTimer();
+    this.fpArms.group.visible = false;
+    this.obstacleManager.reset();
+    this.obstacleManager.initTitleObstacles();
+    this.titleScrollZ = 0;
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+  }
+
+  private updateResultFocus(): void {
+    const items: ResultMenuItem[] = [
+      { button: document.getElementById('btn-retry'), color: '#ffb100' },
+      { button: document.getElementById('btn-result-title'), color: '#39ff88' },
+      { button: document.getElementById('btn-result-exit'), color: '#00f0ff' },
+    ];
+    setupResultMenu(document.getElementById('result-menu'), items);
+    applyResultMenuFocus(items, this.resultFocus);
   }
 
   private onResize = (): void => {
@@ -719,8 +787,26 @@ class Game {
     this.particleSystem.update(dt, this.player.group.position.z, 0);
     this.corridor.update(this.player.group.position.z, dt);
 
-    if (input.startOrRetry || input.attack || input.shootShuriken || input.throwBomb || input.jump) {
-      this.startWithCountdown();
+    if (this.isNameEntryOpen) return;
+
+    // 移動は受付待ちの間も効かせる(確定だけ誤爆防止で待たせる)
+    for (const dir of input.menuNav) {
+      this.resultFocus = (this.resultFocus + dir + 3) % 3;
+      this.updateResultFocus();
+      this.soundSystem.playCoin();
+    }
+    if (performance.now() < this.resultArmTime) return;
+
+    if (input.startOrRetry) {
+      if (this.resultFocus === 0) {
+        this.startWithCountdown();
+      } else if (this.resultFocus === 1) {
+        this.showTitle();
+      } else {
+        window.location.href = '../../';
+      }
+    } else if (input.cancel) {
+      window.location.href = '../../';
     }
   }
 
@@ -1937,7 +2023,35 @@ class Game {
     this.scoreData.grade = grade;
 
     this.uiManager.setGameState(state, this.scoreData);
-    this.inputManager.resetIdleTimer();
+    this.resultFocus = 0; // デフォルトは「再挑戦」
+    this.resultArmTime = performance.now() + 600;
+    this.updateResultFocus();
+
+    mountArcadeGuide({
+      moveLabel: '選択',
+      buttons: [
+        { indices: [0], label: '決定' },
+        { indices: [1], label: '終了' },
+      ],
+      showHomeHint: true,
+    });
+
+    const check = checkHighScore('school-corridor-runner', score);
+    if (check.isRankIn && score > 0) {
+      this.isNameEntryOpen = true;
+      mountNameEntryModal({
+        title: '脱出記録',
+        scoreDisplay: `${Math.floor(score).toLocaleString()} pts`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-corridor',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (katakanaName) => {
+          this.isNameEntryOpen = false;
+          this.resultArmTime = performance.now() + 800;
+          saveLeaderboardScore('school-corridor-runner', score, katakanaName);
+        },
+      });
+    }
   }
 }
 

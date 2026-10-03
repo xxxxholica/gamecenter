@@ -1,3 +1,5 @@
+import { MenuNav } from '../../../../shared/arcadeMenuNav';
+
 export interface InputState {
   left: boolean;
   right: boolean;
@@ -7,12 +9,17 @@ export interface InputState {
   jumpReleased: boolean;
   spinPressed: boolean;
   startPressed: boolean;
+  /** メニュー確定: Enter / Space / アケコンA (W・矢印上のジャンプでは確定しない) */
+  confirmPressed: boolean;
+  /** メニュー移動(押した瞬間。上・左 = -1 / 下・右 = +1) */
+  menuNav: number[];
   anyActionPressed: boolean;
   lastInputTime: number;
 }
 
 export class InputManager {
   private keysHeld = new Set<string>();
+  private menuNav = new MenuNav();
   private keysJustPressed = new Set<string>();
   private keysJustReleased = new Set<string>();
 
@@ -21,6 +28,7 @@ export class InputManager {
 
   constructor() {
     window.addEventListener('keydown', (e) => {
+      this.menuNav.pushKey(e);
       if (!this.keysHeld.has(e.code)) {
         this.keysJustPressed.add(e.code);
         this.lastInputTime = performance.now();
@@ -30,6 +38,12 @@ export class InputManager {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
+    });
+
+    // フォーカスが外れると keyup が届かず押しっぱなしになるので、入力を捨てる
+    window.addEventListener('blur', () => {
+      this.keysHeld.clear();
+      this.menuNav.clear();
     });
 
     window.addEventListener('keyup', (e) => {
@@ -76,6 +90,8 @@ export class InputManager {
     let gSpinPressed = false;
     let gStartPressed = false;
     let gAnyPressed = false;
+    let padNavX = 0;
+    let padNavY = 0;
 
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = gamepads.find((g) => g !== null && g.connected);
@@ -87,6 +103,8 @@ export class InputManager {
       if (ax0 < -0.3) gLeft = true;
       if (ax0 > 0.3) gRight = true;
       if (ax1 > 0.4) gDown = true;
+      padNavX = ax0;
+      padNavY = ax1;
 
       // Buttons (D-Pad & Face buttons)
       const bJump = gp.buttons[0]?.pressed || false; // Button 0 (A/Cross)
@@ -97,6 +115,10 @@ export class InputManager {
       if (gp.buttons[14]?.pressed) gLeft = true;
       if (gp.buttons[15]?.pressed) gRight = true;
       if (gp.buttons[13]?.pressed) gDown = true;
+      if (gp.buttons[12]?.pressed) padNavY = -1;
+      if (gp.buttons[13]?.pressed) padNavY = 1;
+      if (gp.buttons[14]?.pressed) padNavX = -1;
+      if (gp.buttons[15]?.pressed) padNavX = 1;
 
       const prevJump = this.prevGamepadButtons[0] || false;
       const prevSpin = this.prevGamepadButtons[1] || false;
@@ -125,6 +147,8 @@ export class InputManager {
       this.prevGamepadButtons = gp.buttons.map((b) => b.pressed);
     }
 
+    this.menuNav.updatePad(padNavX, padNavY);
+
     const anyKey = this.keysJustPressed.size > 0;
     const anyAction = anyKey || gAnyPressed || gJumpPressed || gSpinPressed || gStartPressed;
     if (anyAction) {
@@ -139,7 +163,9 @@ export class InputManager {
       jumpPressed: kJumpPressed || gJumpPressed,
       jumpReleased: kJumpReleased || gJumpReleased,
       spinPressed: kSpinPressed || gSpinPressed,
-      startPressed: kStartPressed || gStartPressed,
+      startPressed: kStartPressed,
+      confirmPressed: this.keysJustPressed.has('Enter') || this.keysJustPressed.has('Space') || gJumpPressed,
+      menuNav: this.menuNav.take(),
       anyActionPressed: anyAction,
       lastInputTime: this.lastInputTime
     };

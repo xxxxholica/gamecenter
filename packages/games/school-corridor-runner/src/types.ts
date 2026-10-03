@@ -44,6 +44,8 @@ export interface GameInputState {
   attack: boolean;        // 統合攻撃（Enter / ボタン1：手裏剣・辞書ランダム投擲）
   shootShuriken: boolean; // 後方互換
   throwBomb: boolean;     // 後方互換
-  startOrRetry: boolean;  // スタート / リトライ
+  startOrRetry: boolean;  // スタート / リトライ / 確定
+  menuNav: number[];      // メニュー移動(押した瞬間。上・左 = -1 / 下・右 = +1)
+  cancel?: boolean;       // キャンセル / 終了 (Bボタン / Escape)
   anyKey: boolean;        // デモからの復帰など
 }

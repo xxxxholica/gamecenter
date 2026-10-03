@@ -187,12 +187,12 @@ export class MapSelectScreen {
     this.container.style.display = 'flex';
 
     this.stopPad?.();
-    // レバー左右: コース選択 / A・START: 決定(時間帯選択へ) / B: マシン選択へ戻る
+    // レバー左右: コース選択 / A: 決定(時間帯選択へ) / B: マシン選択へ戻る
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (!this.isVisible) return;
       if (p.left) this.stepMap(-1);
       else if (p.right) this.stepMap(1);
-      else if (p.any(0, 9)) this.confirm();
+      else if (p.any(0)) this.confirm();
       else if (p.any(1)) this.events.onBack();
     });
 
@@ -202,15 +202,15 @@ export class MapSelectScreen {
         if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
           this.confirm();
-        } else if (e.code === 'Escape') {
+        } else if (e.code === 'Escape' || (!this.onlineMode && e.code === 'Backspace')) {
           e.preventDefault();
           this.events.onBack();
-        } else if (e.code === 'ArrowLeft') {
+        } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
           this.stepMap(-1);
         } else if ((e.code === 'Delete' || e.code === 'Backspace') && this.onlineMode) {
           e.preventDefault();
           this.clearPick();
-        } else if (e.code === 'ArrowRight') {
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
           this.stepMap(1);
         } else if (e.code.startsWith('Digit') && !this.locked && this.order()[Number(e.code.slice(5)) - 1]) {
           this.setSelectedMap(this.order()[Number(e.code.slice(5)) - 1]);

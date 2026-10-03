@@ -1,4 +1,5 @@
 // Gamepad API + Keyboard Input System
+import { MenuNav } from '../../../shared/arcadeMenuNav';
 
 export class InputManager {
   // Current states
@@ -8,6 +9,10 @@ export class InputManager {
   private prevBtn0 = false;
   private btn1 = false;
   private prevBtn1 = false;
+  private confirm = false;
+  private prevConfirm = false;
+  private cancel = false;
+  private prevCancel = false;
 
   private leverX = 0; // -1 to 1
   private leverY = 0; // -1 (up) to 1 (down)
@@ -15,8 +20,12 @@ export class InputManager {
 
   private gamepadConnected = false;
 
+  private menuNav = new MenuNav();
+  private frameNav: number[] = [];
+
   constructor() {
     window.addEventListener('keydown', (e) => {
+      this.menuNav.pushKey(e);
       // Prevent browser default scroll for game controls
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
@@ -26,6 +35,12 @@ export class InputManager {
 
     window.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
+    });
+
+    // フォーカスが外れると keyup が届かず押しっぱなしになるので、入力を捨てる
+    window.addEventListener('blur', () => {
+      this.keys = {};
+      this.menuNav.clear();
     });
 
     window.addEventListener('gamepadconnected', () => {
@@ -41,6 +56,8 @@ export class InputManager {
     // Save previous frame states
     this.prevBtn0 = this.btn0;
     this.prevBtn1 = this.btn1;
+    this.prevConfirm = this.confirm;
+    this.prevCancel = this.cancel;
 
     // Reset default
     let kbUp = this.keys['KeyW'] || this.keys['ArrowUp'] || false;
@@ -49,6 +66,8 @@ export class InputManager {
     let kbRight = this.keys['KeyD'] || this.keys['ArrowRight'] || false;
     let kbBtn0 = this.keys['Enter'] || this.keys['Space'] || this.keys['KeyZ'] || this.keys['KeyJ'] || false;
     let kbBtn1 = this.keys['KeyX'] || this.keys['KeyK'] || false;
+    let kbConfirm = this.keys['Enter'] || this.keys['Space'] || false;
+    let kbCancel = this.keys['Escape'] || this.keys['Backspace'] || false;
 
     // Smooth keyboard ramp for tilt mechanics (W, Up or Enter/Button0)
     if (kbUp || kbBtn0) {
@@ -59,6 +78,8 @@ export class InputManager {
 
     let gpBtn0 = false;
     let gpBtn1 = false;
+    let gpConfirm = false;
+    let gpCancel = false;
     let gpAxisX = 0;
     let gpAxisY = 0;
 
@@ -74,6 +95,10 @@ export class InputManager {
       if (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed) gpBtn0 = true;
       if (gp.buttons[1]?.pressed || gp.buttons[3]?.pressed) gpBtn1 = true;
 
+      // Strict confirm (Button 0 = A) and cancel (Button 1 = B)
+      if (gp.buttons[0]?.pressed) gpConfirm = true;
+      if (gp.buttons[1]?.pressed) gpCancel = true;
+
       // D-Pad (12: up, 13: down, 14: left, 15: right)
       if (gp.buttons[12]?.pressed) gpAxisY = -1;
       if (gp.buttons[13]?.pressed) gpAxisY = 1;
@@ -88,12 +113,17 @@ export class InputManager {
     // Combine (Gamepad takes priority if active, else keyboard)
     this.btn0 = gpBtn0 || kbBtn0;
     this.btn1 = gpBtn1 || kbBtn1;
+    this.confirm = gpConfirm || kbConfirm;
+    this.cancel = gpCancel || kbCancel;
 
     if (Math.abs(gpAxisX) > 0.15) {
       this.leverX = gpAxisX;
     } else {
       this.leverX = kbRight ? 1 : kbLeft ? -1 : 0;
     }
+
+    this.menuNav.updatePad(gpAxisX, gpAxisY);
+    this.frameNav = this.menuNav.take();
 
     if (Math.abs(gpAxisY) > 0.15) {
       this.leverY = gpAxisY;
@@ -150,9 +180,24 @@ export class InputManager {
     return this.leverY > 0.5;
   }
 
-  // Any key/button pressed (for Title start or Result retry)
+  // 確定ボタンが押された瞬間（アケコン: Aボタン, キーボード: Enter / Space）
+  isConfirmJustPressed(): boolean {
+    return this.confirm && !this.prevConfirm;
+  }
+
+  // キャンセルボタンが押された瞬間（アケコン: Bボタン, キーボード: Escape / Backspace）
+  isCancelJustPressed(): boolean {
+    return this.cancel && !this.prevCancel;
+  }
+
+  // タイトル/デモ復帰用: 確定ボタンが押された瞬間
   anyPressed(): boolean {
-    return this.wasButton0Pressed() || this.wasButton1Pressed() || this.keys['Enter'] === true || this.keys['Space'] === true;
+    return this.isConfirmJustPressed();
+  }
+
+  /** このフレームで起きたメニュー移動(上・左 = -1 / 下・右 = +1)。 */
+  takeMenuNav(): number[] {
+    return this.frameNav;
   }
 
   getLeverX(): number {

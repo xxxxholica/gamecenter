@@ -1,3 +1,5 @@
+import { countUpText } from '../../../shared/arcadeScoreCountUp';
+import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
 import { Stage, StageResult } from './types';
 import { InputManager } from './input';
@@ -12,6 +14,8 @@ import { Stage5Yakisoba } from './stages/stage5_yakisoba';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
 import { RankingManager } from './ranking';
+import { checkHighScore } from '../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 export type GameState =
   | 'TITLE'
@@ -54,6 +58,7 @@ export class GameManager {
   // Timers
   private stateTimer = 0.0;
   private currentJudgment: StageResult | null = null;
+  private isNameEntryOpen = false;
 
   // 各種目は、失敗(大惨事・足りなすぎ)しても1回だけやり直せる。成績は、その種目の挑戦のうち最も良いもの
   private static readonly MAX_ATTEMPTS = 2;
@@ -84,6 +89,10 @@ export class GameManager {
   private dangerVignette!: HTMLElement;
   private dangerFlash!: HTMLElement;
   private flashTimer = 0;
+
+  // Result navigation
+  private resultFocus = 0; // 0: 再挑戦, 1: タイトルに戻る, 2: ゲームを終了
+  private resultArmTime = 0;
 
   // Arcade input status icons
   private stickDot!: HTMLElement;
@@ -151,14 +160,54 @@ export class GameManager {
       this.startGame();
     });
 
-    // Retry button on result
-    const retryBtn = document.getElementById('btn-retry')!;
-    retryBtn.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${retryBtn.textContent}`;
-    retryBtn.addEventListener('click', () => {
-      if (this.state === 'RESULT') {
+    // Result screen button events
+    const retryBtn = document.getElementById('btn-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', (e) => {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
         this.startGame();
-      }
-    });
+      });
+      retryBtn.addEventListener('mouseenter', () => {
+        this.resultFocus = 0;
+        this.updateResultFocus();
+      });
+      retryBtn.addEventListener('focus', () => retryBtn.blur());
+    }
+
+    const titleBtn = document.getElementById('btn-result-title');
+    if (titleBtn) {
+      titleBtn.addEventListener('click', (e) => {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
+        this.showTitle();
+      });
+      titleBtn.addEventListener('mouseenter', () => {
+        this.resultFocus = 1;
+        this.updateResultFocus();
+      });
+      titleBtn.addEventListener('focus', () => titleBtn.blur());
+    }
+
+    const exitBtn = document.getElementById('btn-result-exit');
+    if (exitBtn) {
+      exitBtn.addEventListener('click', (e) => {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
+          e.preventDefault();
+          return;
+        }
+        window.location.href = '../../';
+      });
+      exitBtn.addEventListener('mouseenter', () => {
+        this.resultFocus = 2;
+        this.updateResultFocus();
+      });
+      exitBtn.addEventListener('focus', () => exitBtn.blur());
+    }
   }
 
   private showTitle() {
@@ -502,8 +551,27 @@ export class GameManager {
       }
 
       case 'RESULT': {
-        if (this.input.anyPressed()) {
-          this.startGame();
+        if (this.isNameEntryOpen) break;
+
+        // 移動は受付待ちの間も効かせる(確定だけ誤爆防止で待たせる)
+        for (const dir of this.input.takeMenuNav()) {
+          this.resultFocus = (this.resultFocus + dir + 3) % 3;
+          this.updateResultFocus();
+          sound.playClick(1000);
+        }
+        if (performance.now() < this.resultArmTime) break;
+
+        if (this.input.isConfirmJustPressed()) {
+          if (this.resultFocus === 0) {
+            this.startGame();
+          } else if (this.resultFocus === 1) {
+            this.showTitle();
+          } else {
+            window.location.href = '../../';
+          }
+          return;
+        } else if (this.input.isCancelJustPressed()) {
+          window.location.href = '../../';
           return;
         }
         break;
@@ -539,6 +607,20 @@ export class GameManager {
     }
   }
 
+  private getResultMenuItems(): ResultMenuItem[] {
+    return [
+      { button: document.getElementById('btn-retry'), color: '#ffe600' },
+      { button: document.getElementById('btn-result-title'), color: '#39ff88' },
+      { button: document.getElementById('btn-result-exit'), color: '#00f0ff' },
+    ];
+  }
+
+  private updateResultFocus() {
+    const items = this.getResultMenuItems();
+    setupResultMenu(document.getElementById('result-menu'), items);
+    applyResultMenuFocus(items, this.resultFocus);
+  }
+
   private enterResult() {
     this.state = 'RESULT';
     sound.stopBgm();
@@ -548,8 +630,16 @@ export class GameManager {
     }
     this.effects.clear();
 
+    this.resultFocus = 0; // 再挑戦がデフォルト
+    this.resultArmTime = performance.now() + 600;
+    this.updateResultFocus();
+
     mountArcadeGuide({
-      buttons: [{ indices: [0, 1, 2, 3, 9], label: '再挑戦' }],
+      moveLabel: '選択',
+      buttons: [
+        { indices: [0], label: '決定' },
+        { indices: [1], label: '終了' },
+      ],
       showHomeHint: true,
     });
 
@@ -605,14 +695,31 @@ export class GameManager {
     });
 
     const devEl = document.getElementById('deviation-val')!;
-    devEl.textContent = deviation.toFixed(1);
+    countUpText(devEl, deviation.toFixed(1));
 
     const rankEl = document.getElementById('rank-val')!;
     rankEl.textContent = rankText;
     rankEl.style.color = rankColor;
 
-    // Register high score into local ranking Top 5
-    RankingManager.addScore(deviation, rankText);
+    // Register high score into local ranking Top 3
+    const check = checkHighScore('extreme-edge-arcade', deviation);
+    if (check.isRankIn) {
+      this.isNameEntryOpen = true;
+      mountNameEntryModal({
+        title: '限界記録',
+        scoreDisplay: `${deviation.toFixed(1)} pt`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-extreme',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (katakanaName) => {
+          this.isNameEntryOpen = false;
+          this.resultArmTime = performance.now() + 800;
+          RankingManager.addScore(deviation, rankText, katakanaName);
+        },
+      });
+    } else {
+      RankingManager.addScore(deviation, rankText);
+    }
   }
 
   // --- Danger overlay: screen-edge vignette + flash, no numbers ---

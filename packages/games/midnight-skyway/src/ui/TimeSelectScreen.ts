@@ -77,12 +77,12 @@ export class TimeSelectScreen {
     this.container.style.display = 'flex';
 
     this.stopPad?.();
-    // レバー左右: 選択 / A・START: レース開始 / B: コース選択へ戻る
+    // レバー左右: 選択 / A: レース開始 / B: コース選択へ戻る
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (!this.isVisible) return;
       if (p.left) this.setSelected('day');
       else if (p.right) this.setSelected('night');
-      else if (p.any(0, 9)) this.events.onStartRace();
+      else if (p.any(0)) this.events.onStartRace();
       else if (p.any(1)) this.events.onBack();
     });
 
@@ -90,9 +90,9 @@ export class TimeSelectScreen {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.events.onStartRace(); }
-        else if (e.code === 'Escape') { e.preventDefault(); this.events.onBack(); }
-        else if (e.code === 'ArrowLeft' || e.code === 'Digit1') this.setSelected('day');
-        else if (e.code === 'ArrowRight' || e.code === 'Digit2') this.setSelected('night');
+        else if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
+        else if (e.code === 'ArrowLeft' || e.code === 'KeyA' || e.code === 'Digit1') this.setSelected('day');
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD' || e.code === 'Digit2') this.setSelected('night');
       };
       window.addEventListener('keydown', this.keyHandler);
     }

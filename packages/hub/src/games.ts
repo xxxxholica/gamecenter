@@ -67,6 +67,17 @@ const allGames: GameEntry[] = [
     developer: XXXXHOLICA,
   },
   {
+    slug: 'tani-runner-124',
+    title: '単位増殖ラン',
+    englishTitle: 'TANI RUNNER 124',
+    description:
+      '微積分・線形代数のゲートを潜り抜けて単位を増殖させ、卒業要件124単位を目指す群衆ランナー。青ゲートで爆増、赤ゲートで激減。最後は余剰単位を射出してボーナス倍率を稼げ。',
+    thumbnail: 'thumbnails/tani-runner-124.webp',
+    logo: 'logos/tani-runner-124.webp',
+    accent: '#ffe600',
+    developer: XXXXHOLICA,
+  },
+  {
     slug: 'ennichi-shateki',
     title: 'えんにち射的',
     englishTitle: 'ARCADE CORK SHOOTER',
@@ -86,17 +97,6 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
     logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',
-    developer: XXXXHOLICA,
-  },
-  {
-    slug: 'tani-runner-124',
-    title: '単位増殖ラン',
-    englishTitle: 'TANI RUNNER 124',
-    description:
-      '微積分・線形代数のゲートを潜り抜けて単位を増殖させ、卒業要件124単位を目指す群衆ランナー。青ゲートで爆増、赤ゲートで激減。最後は余剰単位を射出してボーナス倍率を稼げ。',
-    thumbnail: 'thumbnails/tani-runner-124.webp',
-    logo: 'logos/tani-runner-124.webp',
-    accent: '#ffe600',
     developer: XXXXHOLICA,
   },
   {

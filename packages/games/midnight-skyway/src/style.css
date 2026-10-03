@@ -904,7 +904,10 @@ html, body {
   border-radius: 4px;
   padding: 28px 40px;
   text-align: center;
-  min-width: 380px;
+  min-width: min(380px, 90vw);
+  max-height: 96vh;
+  overflow-y: auto;
+  box-sizing: border-box;
   transform: skewX(-4deg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 240, 255, 0.35);
 }
@@ -1199,9 +1202,12 @@ html, body {
 }
 .hud-result-side .hud-arcade-modal-box {
   pointer-events: auto;
-  min-width: 340px;
+  min-width: min(340px, 88vw);
   max-width: 380px;
-  padding: 22px 30px;
+  max-height: 96vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: clamp(10px, 2.5vh, 22px) clamp(14px, 3vw, 30px);
   background: linear-gradient(135deg, rgba(6, 12, 24, 0.66) 0%, rgba(6, 12, 24, 0.36) 100%);
   backdrop-filter: blur(4px);
   border: 1px solid rgba(0, 240, 255, 0.55);
@@ -1213,7 +1219,7 @@ html, body {
   from { opacity: 0; transform: skewX(-4deg) translateX(-40px); }
   to { opacity: 1; transform: skewX(-4deg) translateX(0); }
 }
-.hud-result-side .hud-result-time-big { font-size: 44px; margin: 4px 0 12px 0; }
+.hud-result-side .hud-result-time-big { font-size: clamp(26px, 6vh, 44px); margin: 2px 0 clamp(4px, 1.5vh, 12px) 0; }
 .hud-result-side .hud-result-stats-table { background: transparent; border-top: 1px solid rgba(255, 255, 255, 0.18); border-radius: 0; padding: 8px 2px 0; }
 .hud-result-side .stat-line { color: #cbd5e1; }
 .hud-result-side .hud-arcade-result-buttons { flex-direction: column; align-items: stretch; gap: 8px; }

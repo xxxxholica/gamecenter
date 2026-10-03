@@ -1,3 +1,5 @@
+import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
+import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
 import { InputManager, InputState } from './engine/input';
 import { SoundManager } from './engine/audio';
@@ -12,6 +14,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
+watchResultAutoReturn(['btn-result-title']);
 
 mountArcadeGuide({
   moveLabel: '移動',
@@ -56,6 +59,10 @@ class StreetBBoyGame {
   private score: number = 0;
   private timeLeft: number = 99;
   private lives: number = 3;
+
+  // Result Menu Navigation (0: 再挑戦, 1: タイトルに戻る, 2: ゲームを終了)
+  private resultMenuFocus: number = 0;
+  private resultArmTime: number = 0;
 
   // Camera Shake & Combo System
   private cameraShakeTimer: number = 0;
@@ -120,28 +127,27 @@ class StreetBBoyGame {
       });
     }
 
-    const btnRestart = document.getElementById('btn-restart');
-    if (btnRestart) {
-      btnRestart.innerHTML = `${buttonIconHtml([0])} ${btnRestart.textContent?.trim() || '再挑戦'}`;
-      const restartAction = (e: Event) => {
+    const bindResultBtn = (id: string, idx: number, action: () => void) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.sound.init();
-        this.startGame();
-      };
-      btnRestart.addEventListener('click', restartAction);
-      btnRestart.addEventListener('pointerdown', restartAction);
-    }
-
-    // Result overlay click/pointer anywhere to restart
-    const resultOverlay = document.getElementById('result-overlay');
-    if (resultOverlay) {
-      resultOverlay.addEventListener('click', () => {
-        if (this.state === 'game_over' || (this.state === 'clear' && this.stateTimer > 2.0)) {
-          this.sound.init();
-          this.startGame();
-        }
+        if (performance.now() < this.resultArmTime) return;
+        action();
       });
-    }
+      btn.addEventListener('mouseenter', () => {
+        this.resultMenuFocus = idx;
+        this.updateResultFocus();
+      });
+      btn.addEventListener('focus', () => btn.blur());
+    };
+    bindResultBtn('btn-restart', 0, () => this.retryFromResult());
+    bindResultBtn('btn-result-title', 1, () => this.setupTitleScene());
+    bindResultBtn('btn-result-exit', 2, () => { window.location.href = '../../'; });
+
+    this.hud.onNameEntryClosed = () => {
+      this.resultArmTime = performance.now() + 800;
+    };
 
     // Ranking screen click to play
     const rankingOverlay = document.getElementById('ranking-overlay');
@@ -158,6 +164,59 @@ class StreetBBoyGame {
         window.location.href = '../../';
       }
     });
+  }
+
+  private retryFromResult(): void {
+    this.sound.init();
+    this.startGame();
+  }
+
+  private updateResultFocus(): void {
+    const items: ResultMenuItem[] = [
+      { button: document.getElementById('btn-restart'), color: '#ffe600' },
+      { button: document.getElementById('btn-result-title'), color: '#39ff88' },
+      { button: document.getElementById('btn-result-exit'), color: '#00f0ff' },
+    ];
+    setupResultMenu(document.getElementById('result-menu'), items);
+    applyResultMenuFocus(items, this.resultMenuFocus);
+  }
+
+  private openResultScreen(status: 'clear' | 'gameover'): void {
+    this.resultMenuFocus = 0; // 再挑戦がデフォルト
+    this.resultArmTime = performance.now() + 600;
+    this.hud.showResult(status, this.score);
+    this.updateResultFocus();
+
+    mountArcadeGuide({
+      moveLabel: '選択',
+      buttons: [
+        { indices: [0], label: '決定' },
+        { indices: [1], label: '終了' },
+      ],
+      showHomeHint: true,
+    });
+  }
+
+  private handleResultInput(input: InputState): void {
+    if (this.hud.isNameEntryOpen) return;
+
+    // 移動は受付待ちの間も効かせる(確定だけ誤爆防止で待たせる)
+    for (const dir of input.menuNav) {
+      this.resultMenuFocus = (this.resultMenuFocus + dir + 3) % 3;
+      this.updateResultFocus();
+      this.sound.playCoin();
+    }
+    if (performance.now() < this.resultArmTime) return;
+
+    // 確定: アケコンAボタン または Enter/Space (W・矢印上のジャンプでは確定しない)
+    if (input.confirmPressed) {
+      if (this.resultMenuFocus === 0) this.retryFromResult();
+      else if (this.resultMenuFocus === 1) this.setupTitleScene();
+      else window.location.href = '../../';
+    } else if (input.spinPressed) {
+      // Bボタン: 終了
+      window.location.href = '../../';
+    }
   }
 
   private onResize = (): void => {
@@ -460,6 +519,8 @@ class StreetBBoyGame {
       spinPressed: false,
       startPressed: false,
       anyActionPressed: false,
+      confirmPressed: false,
+      menuNav: [],
       lastInputTime: 0
     };
 
@@ -1000,7 +1061,7 @@ class StreetBBoyGame {
       const dummyInput: InputState = {
         left: false, right: false, down: false, jump: false,
         jumpPressed: false, jumpReleased: false, spinPressed: false,
-        startPressed: false, anyActionPressed: false, lastInputTime: 0
+        startPressed: false, anyActionPressed: false, confirmPressed: false, menuNav: [], lastInputTime: 0
       };
       this.player.update(dt, dummyInput);
     }
@@ -1020,13 +1081,11 @@ class StreetBBoyGame {
       }
     } else {
       // Final Stage 4: All Clear result overlay
-      if (this.stateTimer >= 3.5) {
-        this.hud.showResult('clear', this.score);
+      if (this.stateTimer >= 3.5 && this.resultArmTime === 0) {
+        this.openResultScreen('clear');
       }
-
-      if (this.stateTimer > 3.8 && (input.startPressed || input.jumpPressed || input.spinPressed || input.anyActionPressed)) {
-        this.sound.init();
-        this.startGame();
+      if (this.stateTimer >= 3.5) {
+        this.handleResultInput(input);
       }
     }
   }
@@ -1070,21 +1129,14 @@ class StreetBBoyGame {
         this.state = 'game_over';
         this.stateTimer = 0;
         this.sound.stopBgm();
-        this.hud.showResult('gameover', this.score);
+        this.openResultScreen('gameover');
       }
     }, 1800);
   }
 
   private updateGameOver(dt: number, input: InputState): void {
     this.stateTimer += dt;
-    if (this.stateTimer > 0.2 && (input.startPressed || input.jumpPressed || input.spinPressed || input.anyActionPressed)) {
-      this.sound.init();
-      this.startGame();
-    }
-    // Inactivity in Game Over triggers Attract loop after 12s
-    if (this.input.getIdleDurationSeconds() >= 12) {
-      this.setupTitleScene();
-    }
+    this.handleResultInput(input);
   }
 
   // -------------------------------------------------------------

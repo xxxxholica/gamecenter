@@ -198,21 +198,6 @@ function injectTitleScreenStyle(): void {
       }
     }
 
-    .ats-prompt-blink {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
-      font-size: 0.84rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      color: #d8d8ee;
-      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
-      animation: ats-blink 1s steps(2, start) infinite;
-    }
-
-    @keyframes ats-blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
-    }
-
     /* レスポンシブ */
     @media (max-width: 720px) {
       .ats-action-row {
@@ -251,7 +236,6 @@ export class ArcadeTitleScreen {
       logoUrl,
       tagline,
       startButtonLabel = 'スタート',
-      promptLabel = 'PRESS BUTTON / SPACE / 画面クリック',
       customControlsHtml,
     } = this.options;
 
@@ -274,7 +258,6 @@ export class ArcadeTitleScreen {
               ${buttonIconHtml([0, 1, 2, 3, 9])}
               <span>${startButtonLabel}</span>
             </button>
-            <div class="ats-prompt-blink">${promptLabel}</div>
           </div>
         </div>
       </div>

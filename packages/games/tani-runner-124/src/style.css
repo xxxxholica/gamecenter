@@ -171,7 +171,10 @@ html, body {
   background: rgba(0, 0, 0, 0.85);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: safe center;
+  overflow-y: auto;
+  padding: 8px 0;
+  box-sizing: border-box;
   z-index: 50;
   pointer-events: auto;
 }
@@ -199,11 +202,11 @@ html, body {
 
 /* 失敗判定: 「留年」（赤の特大文字） */
 .fail-text {
-  font-size: 140px;
+  font-size: clamp(56px, 20vh, 140px);
   font-weight: 900;
   color: #ff0022;
   letter-spacing: 16px;
-  margin-bottom: 40px;
+  margin-bottom: clamp(10px, 4vh, 40px);
   text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
   -webkit-text-stroke: 4px #000;
   animation: red-rumble 0.6s infinite alternate;
@@ -216,11 +219,11 @@ html, body {
 
 /* クリア判定: 「卒業」（黄の特大文字） */
 .success-text {
-  font-size: 140px;
+  font-size: clamp(56px, 20vh, 140px);
   font-weight: 900;
   color: #ffe600;
   letter-spacing: 16px;
-  margin-bottom: 16px;
+  margin-bottom: clamp(4px, 1.5vh, 16px);
   text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
   -webkit-text-stroke: 4px #000;
   animation: gold-shine 0.8s infinite alternate;
@@ -285,16 +288,16 @@ html, body {
 
 /* 取得単位とランキング */
 .final-sub-text {
-  font-size: 30px;
+  font-size: clamp(16px, 3.6vh, 30px);
   font-weight: 800;
   color: #ffd700;
   letter-spacing: 3px;
-  margin: -24px 0 18px;
+  margin: clamp(-24px, -2vh, -8px) 0 clamp(6px, 2vh, 18px);
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 
 .final-score-text {
-  font-size: 44px;
+  font-size: clamp(24px, 6vh, 44px);
   font-weight: 900;
   color: #ffea00;
   letter-spacing: 3px;
@@ -306,11 +309,11 @@ html, body {
 .ranking-list {
   list-style: none;
   counter-reset: rank;
-  margin: 0 auto 28px;
+  margin: 0 auto clamp(8px, 2.5vh, 28px);
   padding: 0;
   max-width: 260px;
   color: #ffffff;
-  font-size: 22px;
+  font-size: clamp(14px, 2.6vh, 22px);
   font-weight: 800;
   text-align: left;
 }

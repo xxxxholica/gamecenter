@@ -280,7 +280,7 @@ export class CarSelectScreen {
     else if (p.down || p.right) this.selectNextCar();
 
     if (p.any(2, 3, 4, 5)) this.cycleColor();
-    if (p.any(0, 9)) this.events.onNext();
+    if (p.any(0)) this.events.onNext();
     else if (p.any(1)) this.events.onBack();
   }
 
