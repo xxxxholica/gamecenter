@@ -123,6 +123,17 @@ const allGames: GameEntry[] = [
     developer: XXXXHOLICA,
   },
   {
+    slug: 'survivor-score-battle',
+    title: 'サバイバー・スコアバトル',
+    englishTitle: 'SURVIVOR SCORE BATTLE',
+    description:
+      'プレイヤー1人 vs 7人のCPUによるエンドレス・サバイバル。周囲を回転するブレード武器と、フィールド上の剣を奪い合い、群がる敵とボスを倒してスコアを稼げ。',
+    thumbnail: 'thumbnails/survivor-score-battle.webp',
+    logo: 'logos/survivor-score-battle.webp',
+    accent: '#00e5ff',
+    developer: KURENAI_BEAT,
+  },
+  {
     slug: 'sumo-smash-3d',
     title: '剛体大相撲',
     englishTitle: 'SUMO SMASH 3D',
