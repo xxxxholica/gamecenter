@@ -336,13 +336,13 @@ export class GameManager {
     // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
     const stageGuideOptions = [
       // Stage 1 (ドリンクバー)
-      { moveLabel: '上: 長押しで注ぐ(離して確定)', showHomeHint: true },
+      { moveLabel: '上: ドリンクを注ぐ', showHomeHint: true },
       // Stage 2 (スマホ充電)
-      { moveLabel: '上: ケーブル挿入', showHomeHint: true },
+      { moveLabel: '上: ケーブルを挿す', showHomeHint: true },
       // Stage 3 (目覚まし時計)
-      { moveLabel: '上: 時計ストップ', showHomeHint: true },
+      { moveLabel: '上: 時計を止める', showHomeHint: true },
       // Stage 4 (焼きそば湯切り)
-      { moveLabel: '上: 傾けて湯切り', showHomeHint: true },
+      { moveLabel: '上: カップを傾ける', showHomeHint: true },
     ];
     if (stageGuideOptions[index]) {
       mountArcadeGuide(stageGuideOptions[index]);
@@ -391,6 +391,7 @@ export class GameManager {
     this.briefOverlay.innerHTML = `
       <div class="brief-card">
         <div class="brief-stage">${esc(stage.numberText)}　${esc(stage.title)}</div>
+        ${this.currentStageIndex === 0 ? '<div class="brief-row note">このゲームで使うのは「レバー上」だけ！</div>' : ''}
         <div class="brief-row"><span class="brief-key">${esc(b.key)}</span></div>
         <div class="brief-row ok"><span class="brief-mark">◎</span>${esc(b.ok)}</div>
         <div class="brief-row ng"><span class="brief-mark">×</span>${esc(b.ng)}</div>
@@ -663,21 +664,22 @@ export class GameManager {
     let deviation = 50 + ((avgScore - 60) / 40) * 25;
     deviation = Math.min(88.0, Math.max(15.0, deviation));
 
-    let rankText = '大惨事常習犯';
-    let rankColor = '#ff1a1a';
-    if (avgScore >= 95) {
-      rankText = '神のギリギリ';
-      rankColor = '#ffe600';
-    } else if (avgScore >= 80) {
-      rankText = '限界チャレンジャー';
-      rankColor = '#00ff66';
-    } else if (avgScore >= 60) {
-      rankText = '安全第一';
-      rankColor = '#ffffff';
-    } else if (avgScore >= 30) {
-      rankText = 'チキン野郎';
-      rankColor = '#ff8800';
-    }
+    // 総合評価の区分(平均スコア%の下限が高い順)。満点近くまで細かく分け、神は平均99%以上(偏差値約74.4)
+    const RANKS: { min: number; text: string; color: string }[] = [
+      { min: 99, text: '神のギリギリ', color: '#ffe600' },
+      { min: 97, text: 'ギリギリの超越者', color: '#ffc400' },
+      { min: 93, text: 'ギリギリ名人', color: '#ff9e2c' },
+      { min: 88, text: 'ギリギリマスター', color: '#7dffb0' },
+      { min: 80, text: '限界チャレンジャー', color: '#00ff66' },
+      { min: 70, text: 'そこそこギリギリ', color: '#8de8ff' },
+      { min: 60, text: '安全第一', color: '#ffffff' },
+      { min: 45, text: 'おっかなびっくり', color: '#ffd9a0' },
+      { min: 25, text: 'チキン野郎', color: '#ff8800' },
+      { min: -Infinity, text: '大惨事常習犯', color: '#ff1a1a' },
+    ];
+    const grade = RANKS.find((r) => avgScore >= r.min)!;
+    const rankText = grade.text;
+    const rankColor = grade.color;
 
     // Populate stage breakdown table
     const tbody = document.getElementById('result-tbody')!;

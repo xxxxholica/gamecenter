@@ -48,7 +48,6 @@ export class DriveHUD {
   private sectorBannerEl!: HTMLElement;
   private countdownEl!: HTMLElement;
   private resultModalEl!: HTMLElement;
-  private resNewRecordEl!: HTMLElement;
   private resTotalTimeEl!: HTMLElement;
   private resTopSpeedEl!: HTMLElement;
   private resCarNameEl!: HTMLElement;
@@ -194,7 +193,6 @@ export class DriveHUD {
       <div id="hud-result-modal" class="hud-result-modal hud-result-side" style="display: none;">
         <div class="hud-arcade-modal-box">
           <div class="arcade-modal-title gold" id="res-title">ゴール！</div>
-          <div class="hud-result-new-record" id="res-new-record" style="display: none;">★ 自己新記録更新！ ★</div>
           <div class="hud-result-time-big" id="res-total-time">00:00.000</div>
           
           <div class="hud-result-stats-table">
@@ -231,7 +229,6 @@ export class DriveHUD {
     this.sectorBannerEl = document.getElementById('hud-sector-banner')!;
     this.countdownEl = document.getElementById('hud-countdown')!;
     this.resultModalEl = document.getElementById('hud-result-modal')!;
-    this.resNewRecordEl = document.getElementById('res-new-record')!;
     this.resTotalTimeEl = document.getElementById('res-total-time')!;
     this.resTopSpeedEl = document.getElementById('res-top-speed')!;
     this.resCarNameEl = document.getElementById('res-car-name')!;
@@ -516,7 +513,6 @@ export class DriveHUD {
     countUpText(this.resTotalTimeEl, result.formattedTime);
     this.resTopSpeedEl.textContent = `${result.topSpeedKmH} km/h`;
     this.resCarNameEl.textContent = result.carName;
-    this.resNewRecordEl.style.display = result.isNewRecord ? 'block' : 'none';
 
     const fmtSec = (ms?: number) => (ms !== undefined ? `${(ms / 1000).toFixed(3)}s` : '--');
     this.resSec1El.textContent = fmtSec(result.sectors[0]?.timeMs);

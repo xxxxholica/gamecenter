@@ -144,7 +144,11 @@ function makeKmBoard(text: string, style: SignStyle): Board {
  * `road` = deck surface samples (game coordinates, ~2 m apart, driven in index order); lateral +ve = driver's right.
  * Steel is merged into one mesh; each board is two quads (front texture, back texture).
  */
-export function buildRoadSigns(road: THREE.Vector3[], roadWidth: number, specs: SignSpec[], style: SignStyle, scale = 1): THREE.Group {
+export function buildRoadSigns(
+  road: THREE.Vector3[], roadWidth: number, specs: SignSpec[], style: SignStyle, scale = 1,
+  /** 他の路面の中心線(分岐・対向車線など)。支柱がこれらの路面の上に立つ場所には標識を置かず、近くの空いた場所へずらす。 */
+  avoid: THREE.Vector3[][] = [],
+): THREE.Group {
   const n = road.length;
   const half = roadWidth / 2;
   const arc = [0];
@@ -170,6 +174,42 @@ export function buildRoadSigns(road: THREE.Vector3[], roadWidth: number, specs: 
     for (let d = -range; d <= range; d += 5) { const v = bend(s + d) + Math.abs(d) * 1e-5; if (v < bestV) { bestV = v; best = s + d; } }
     return ((best % total) + total) % total;
   };
+  /** 支柱の位置(横方向)。+ が運転者の右。 */
+  const postLats = (kind: SignSpec['kind']): number[] =>
+    kind === 'gantry' ? [-(half + 0.85) * scale, (half + 0.85) * scale] : kind === 'side' ? [(half + 0.9) * scale] : [(half + 0.25) * scale];
+  /** 点 (x,z) が、高さが近い(4m以内)別の路面の上にあるか。橋で立体交差している道路は除く。 */
+  const onOtherDeck = (x: number, y: number, z: number): boolean => {
+    for (const pts of avoid) {
+      for (let k = 0; k + 1 < pts.length; k++) {
+        const a = pts[k], b = pts[k + 1];
+        const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / l2));
+        if (Math.abs(a.y + (b.y - a.y) * t - y) > 4) continue;
+        if (Math.hypot(x - (a.x + t * dx), z - (a.z + t * dz)) < half + 0.1) return true;
+      }
+    }
+    return false;
+  };
+  /** 前後12mの範囲でも支柱が別の路面に乗らないこと(分岐の鼻先ぎりぎりに立たないよう余裕を持たせる)。 */
+  const postsClear = (kind: SignSpec['kind'], s: number): boolean => {
+    if (avoid.length === 0) return true;
+    for (const ds of [0, -6, 6, -12, 12]) {
+      const i = indexAt(s + ds), r = road[i], yaw = yawAt(i);
+      const nx = -Math.cos(yaw), nz = Math.sin(yaw);   // lateral (+ = driver's right)
+      if (postLats(kind).some((lat) => onOtherDeck(r.x + nx * lat, r.y, r.z + nz * lat))) return false;
+    }
+    return true;
+  };
+  /** 候補位置の支柱が別の路面に乗るなら、前後に少しずつずらして空いた場所を探す。見つからなければ null。 */
+  const clearSpot = (kind: SignSpec['kind'], s: number): number | null => {
+    for (let d = 0; d <= 90; d += 10) {
+      for (const sign of d === 0 ? [1] : [1, -1]) {
+        const cand = ((s + sign * d) % total + total) % total;
+        if (postsClear(kind, cand)) return cand;
+      }
+    }
+    return null;
+  };
   const arcDist = (a: number, b: number): number => { const d = Math.abs(a - b) % total; return Math.min(d, total - d); };
 
   // Each sign is independently snapped to the straightest nearby spot, so two signs whose nominal positions are up to
@@ -183,7 +223,10 @@ export function buildRoadSigns(road: THREE.Vector3[], roadWidth: number, specs: 
   const ordered = [...specs].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0));
   const resolved: { spec: SignSpec; at: number }[] = [];
   for (const spec of ordered) {
-    const at = snap(spec.at, spec.snap ?? (spec.kind === 'km' ? 40 : 120));
+    let at = snap(spec.at, spec.snap ?? (spec.kind === 'km' ? 40 : 120));
+    const open = clearSpot(spec.kind, at);
+    if (open === null) continue;
+    at = open;
     if (spec.kind !== 'km' && claimed.some((c) => arcDist(c, at) < MIN_SIGN_CLEAR)) continue;
     claimed.push(at);
     resolved.push({ spec, at });

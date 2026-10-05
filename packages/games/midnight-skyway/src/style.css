@@ -926,20 +926,6 @@ html, body {
   font-size: 34px;
 }
 
-.hud-result-new-record {
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  color: #ff0055;
-  text-shadow: 0 0 12px #ff0055;
-  animation: blink 0.7s infinite alternate;
-}
-
-@keyframes blink {
-  from { opacity: 0.5; }
-  to { opacity: 1; }
-}
-
 .hud-result-time-big {
   font-size: 52px;
   font-weight: 900;

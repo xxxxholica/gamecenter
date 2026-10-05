@@ -10,6 +10,8 @@ export interface InteriorConfig {
   frontSeatZ: number;
   rearSeatZ: number;
   steeringSide: 'right' | 'left'; // Default right hand drive for Japan Kei-car
+  /** ルームミラーの取り付け高さ(ルーフ前縁のフレームの下)。省略時は窓の上端付近 */
+  mirrorY?: number;
 }
 
 export class CarInterior {
@@ -180,8 +182,9 @@ export class CarInterior {
 
   private buildSteeringWheel(cfg: InteriorConfig): void {
     const steerX = cfg.steeringSide === 'right' ? -0.32 : 0.32;
-    const steerY = cfg.floorY + 0.42;
-    const steerZ = cfg.dashZ - 0.20;
+    // 一人称の視点(目の高さ約0.9m上)から、リムが視界の下側に入る高さ
+    const steerY = cfg.floorY + 0.66;
+    const steerZ = cfg.dashZ - 0.18;
 
     const steerGroup = new THREE.Group();
     steerGroup.position.set(steerX, steerY, steerZ);
@@ -215,14 +218,15 @@ export class CarInterior {
     // 3 Spokes
     const spokeAngles = [Math.PI, 0, -Math.PI / 2];
     spokeAngles.forEach((angle) => {
-      const spokeGeo = new THREE.BoxGeometry(0.028, 0.015, rimRadius * 0.85);
+      // 長辺を半径方向(X)にとり、角度ぶん回してハブからリムへ伸ばす
+      const spokeGeo = new THREE.BoxGeometry(rimRadius * 0.85, 0.024, 0.016);
       const spoke = new THREE.Mesh(spokeGeo, this.interiorPlasticMat);
       spoke.position.set(
-        Math.cos(angle) * (rimRadius * 0.45),
-        Math.sin(angle) * (rimRadius * 0.45),
+        Math.cos(angle) * (rimRadius * 0.55),
+        Math.sin(angle) * (rimRadius * 0.55),
         0
       );
-      spoke.rotation.z = angle - Math.PI / 2;
+      spoke.rotation.z = angle;
       steerGroup.add(spoke);
     });
 
@@ -352,7 +356,7 @@ export class CarInterior {
   private buildRearviewMirror(cfg: InteriorConfig): void {
     const mirrorGroup = new THREE.Group();
     // Positioned at top of windshield center
-    mirrorGroup.position.set(0, cfg.floorY + cfg.cabinHeight * 0.88, cfg.dashZ + 0.06);
+    mirrorGroup.position.set(0, cfg.mirrorY ?? cfg.floorY + cfg.cabinHeight * 0.88, cfg.dashZ + 0.06);
 
     // Stem attached to windshield
     const stemGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.06, 8);

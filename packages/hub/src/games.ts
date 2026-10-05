@@ -30,6 +30,11 @@ const XXXXHOLICA: Developer = {
   avatar: 'https://github.com/xxxxholica.png',
 };
 
+const KURENAI_BEAT: Developer = {
+  name: 'KURENAI-beat',
+  url: 'https://github.com/KURENAI-beat',
+  avatar: 'https://github.com/KURENAI-beat.png',
+};
 
 // この配列の順番がそのままピックアップの巡回順・一覧の表示順になる。
 const allGames: GameEntry[] = [
@@ -38,18 +43,18 @@ const allGames: GameEntry[] = [
     title: 'ストリートストライカー',
     englishTitle: 'STREET STRIKER',
     description:
-      'SF6スタイルの本格2D対戦格闘ゲーム。ドライブインパクト、パリィ、OD技、スーパーアーツを搭載。個性豊かな6人のファイターによる白熱の攻防！',
+      '本格2D対戦格闘ゲーム。弱・中・強の通常技と投げに加え、ブレイクショック、パリィ、強化技、超必殺技を駆使して戦う。個性豊かな6人のファイターから選び、CPU戦や2P対戦で白熱の攻防を繰り広げろ！',
     thumbnail: 'thumbnails/phaser-fighter.webp',
     logo: 'logos/phaser-fighter.webp',
     accent: '#00f0ff',
-    developer: XXXXHOLICA,
+    developer: KURENAI_BEAT,
   },
   {
     slug: 'school-corridor-runner',
     title: 'テンパレラン',
     englishTitle: 'TEMPALE RUN',
     description:
-      '放課後の校舎を全力疾走。追いかけてくる先生の目を盗み、手裏剣と辞書ボムで妨害物を破壁しながら校門突破を目指すエンドレスランナー。',
+      '放課後の校舎を全力疾走。追いかけてくる先生の目を盗み、手裏剣と辞書ボムで妨害物を破壁しながら校門突破を目指すエンドレスランナー。廊下に潜む罠や障害物をかわして距離を稼ぎ、パワーアップを拾ってハイスコアに挑め。',
     thumbnail: 'thumbnails/school-corridor-runner.webp',
     logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
@@ -93,7 +98,7 @@ const allGames: GameEntry[] = [
     title: '極限ギリギリ選手権',
     englishTitle: 'EXTREME GIRI-GIRI ARCADE',
     description:
-      'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜む「ギリギリ」を攻略する連続チャレンジ。絶妙なタイミングでハイスコアを狙え。',
+      'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜む「ギリギリ」を攻略する連続チャレンジ。レバー上だけのシンプルな操作で、あふれる寸前・止まる寸前の絶妙なタイミングを狙い、「ギリギリ度」の偏差値で競え。',
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
     logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',

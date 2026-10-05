@@ -31,7 +31,7 @@ export interface WorldRing {
   passCount: number;
 }
 
-/** ボーナス飛行のリング(縦長のゲート)の幅の半分。飛行の高さは連打の回数で大きく変わるので、高さは問わず左右位置だけで判定する */
+/** ボーナス飛行のリング(縦長のゲート)の幅の半分。飛行の高さはジャンプのタイミングで大きく変わるので、高さは問わず左右位置だけで判定する */
 export const RING_HALF_WIDTH = 2.6;
 
 export interface GatePair {

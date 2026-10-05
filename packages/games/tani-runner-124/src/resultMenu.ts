@@ -50,6 +50,8 @@ export class ResultMenu {
 
     // 画面表示直後の誤爆クリックをブロック
     this.blockClickHandler = (e: MouseEvent) => {
+      // 名前登録モーダル上のクリックは止めない(止めるとマウスで登録できない)
+      if ((e.target as Element | null)?.closest?.('.ane-overlay')) return;
       if (this.isLocked || performance.now() - this.openedAt < ARM_DELAY_MS) {
         e.stopPropagation();
         e.preventDefault();

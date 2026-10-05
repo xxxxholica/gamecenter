@@ -9,9 +9,9 @@ export class Stage4Clock implements Stage {
   numberText = 'STAGE 3';
   title = '目覚まし時計';
   mission = '07:00ジャスト鳴動直前に止めろ！';
-  instruction = '[レバー上]: 時計を止める';
+  instruction = 'レバー上で時計を止める';
   briefing: StageBriefing = {
-    key: '[レバー上]',
+    key: 'レバー上で時計を止める',
     ok: '07:00:00の直前で止める',
     ng: '鳴ってしまう・早すぎ',
   };

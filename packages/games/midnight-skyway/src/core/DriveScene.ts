@@ -1,3 +1,5 @@
+import { PostFX } from './PostFX';
+import { createSkyEnvironments, type SkyEnvironments } from './SkyEnvironment';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MapBase } from '../maps/MapBase';
@@ -15,6 +17,13 @@ export interface DriveSceneCallbacks {
   onBeforeConstrain?: (car: CarController, dt: number) => void;
 }
 
+/**
+ * 太陽の影マップ。dGPU搭載PC向けに 4096px とし、範囲を自車の周囲(約120m四方)に絞る。
+ * 1テクセル約3cm(以前は 2048px・160m四方で約8cm)になり、車や標識の影の輪郭がはっきりする。
+ */
+const SHADOW_MAP_SIZE = 4096;
+const SHADOW_HALF_EXTENT = 60;
+
 export class DriveScene {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
@@ -23,6 +32,8 @@ export class DriveScene {
 
   public currentMap: MapBase | null = null;
   public currentCar: CarBase | null = null;
+  private skyEnv: SkyEnvironments | null = null;
+  private postFx: PostFX;
   public carController: CarController | null = null;
   public tireSmoke: TireSmokeSystem;
 
@@ -82,6 +93,7 @@ export class DriveScene {
     // 4. Lighting & Sky
     this.setupLighting();
     this.setupSky();
+    this.postFx = new PostFX(this.renderer, this.scene, this.camera);
 
     // 4b. Tire Smoke Particle System
     this.tireSmoke = new TireSmokeSystem();
@@ -101,27 +113,28 @@ export class DriveScene {
     // Now that the city and road (StreamedCityMap / ViaductBuilder) are lit materials too, not just the car: less flat
     // ambient/hemi fill than before so cast shadows keep real contrast, and the sun trimmed a touch so concrete facades
     // don't clip white under ACES tonemapping.
-    this.hemiLight = new THREE.HemisphereLight(0xddeeff, 0x3d4840, 0.55);
+    this.hemiLight = new THREE.HemisphereLight(0xddeeff, 0x3d4840, 0.45);
     this.scene.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xfff7e6, 1.7);
+    this.sunLight = new THREE.DirectionalLight(0xfff7e6, 1.75);
     this.sunLight.position.set(200, 400, 150);
     this.sunLight.castShadow = true;
     // The ortho box below is only 160x160m, so 2048px already resolves to ~8cm/texel — 4096 measured indistinguishable
     // in practice and just doubles shadow-map fill/memory cost for no visible gain.
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.mapSize.width = SHADOW_MAP_SIZE;
+    this.sunLight.shadow.mapSize.height = SHADOW_MAP_SIZE;
     this.sunLight.shadow.camera.near = 10;
     this.sunLight.shadow.camera.far = 1000;
-    const shadowSize = 80;
+    const shadowSize = SHADOW_HALF_EXTENT;
     this.sunLight.shadow.camera.left = -shadowSize;
     this.sunLight.shadow.camera.right = shadowSize;
     this.sunLight.shadow.camera.top = shadowSize;
     this.sunLight.shadow.camera.bottom = -shadowSize;
-    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.bias = -0.0004;
+    this.sunLight.shadow.normalBias = 0.04;   // 解像度を上げた分の影のぎざぎざ(シャドウアクネ)を抑える
     this.scene.add(this.sunLight);
 
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     this.scene.add(this.ambientLight);
 
     // Headlights of the car (night only): one spot light that follows the car
@@ -135,16 +148,19 @@ export class DriveScene {
     this.timeOfDay = t;
     const night = t === 'night';
     this.skyUniforms.uNight.value = night ? 1 : 0;
+    this.postFx.setTimeOfDay(night ? 'night' : 'day');
     // Night is a deep blue dusk, not black: the city stays readable (moon, sky glow and lit windows do the work)
     if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.color.set(night ? 0x1a2646 : 0xcfe4ee);
     this.hemiLight.color.set(night ? 0x7d92d6 : 0xddeeff);
     this.hemiLight.groundColor.set(night ? 0x2c3550 : 0x3d4840);
-    this.hemiLight.intensity = night ? 1.0 : 0.55;
+    this.hemiLight.intensity = night ? 1.0 : 0.45;
     this.sunLight.color.set(night ? 0xb4c6ff : 0xfff7e6);
-    this.sunLight.intensity = night ? 1.0 : 1.7;
+    this.sunLight.intensity = night ? 1.0 : 1.75;
     this.ambientLight.color.set(night ? 0xa4b4e6 : 0xffffff);
-    this.ambientLight.intensity = night ? 0.5 : 0.18;
-    this.scene.environmentIntensity = night ? 0.35 : 1;         // reflections of the (daytime) sky on the paint
+    this.ambientLight.intensity = night ? 0.5 : 0.1;
+    if (this.skyEnv) this.scene.environment = night ? this.skyEnv.night : this.skyEnv.day;
+    this.scene.environmentIntensity = 1;
+    this.applyPaintEnvironment();
     this.headSpot.visible = night;
     this.currentMap?.setNight(night);
     this.currentCar?.setLights(night);
@@ -303,45 +319,9 @@ export class DriveScene {
     this.skyMesh.frustumCulled = false;
     this.scene.add(this.skyMesh);
 
-    // Environment map with high dynamic range horizon and sun highlight
-    // Gives the car's clearcoat paint, glass and chrome crisp, realistic outdoor sky and road reflections
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const envCanvas = document.createElement('canvas');
-    envCanvas.width = 512;
-    envCanvas.height = 256;
-    const envCtx = envCanvas.getContext('2d');
-    if (envCtx) {
-      // Sky gradient (natural realistic sky tone with soft cloud horizon)
-      const skyGrad = envCtx.createLinearGradient(0, 0, 0, 128);
-      skyGrad.addColorStop(0, '#1a3c68'); // Deeper rich sky
-      skyGrad.addColorStop(0.4, '#3e6a98');
-      skyGrad.addColorStop(0.8, '#8baecc'); // Soft cloud layer tone
-      skyGrad.addColorStop(1.0, '#cfe4ee'); // Horizon glow matching fog
-      envCtx.fillStyle = skyGrad;
-      envCtx.fillRect(0, 0, 512, 128);
-
-      // Bright sun reflection spot in sky
-      const sunSpot = envCtx.createRadialGradient(280, 50, 0, 280, 50, 45);
-      sunSpot.addColorStop(0, '#ffffff');
-      sunSpot.addColorStop(0.2, '#fff6d6');
-      sunSpot.addColorStop(1, 'rgba(255, 246, 214, 0)');
-      envCtx.fillStyle = sunSpot;
-      envCtx.fillRect(200, 0, 160, 100);
-
-      // Road / asphalt ground reflection
-      const groundGrad = envCtx.createLinearGradient(0, 128, 0, 256);
-      groundGrad.addColorStop(0, '#3a4454'); // Horizon ground tone
-      groundGrad.addColorStop(0.2, '#262a33');
-      groundGrad.addColorStop(1.0, '#14161a'); // Deep asphalt dark
-      envCtx.fillStyle = groundGrad;
-      envCtx.fillRect(0, 128, 512, 128);
-    }
-    const envSource = new THREE.CanvasTexture(envCanvas);
-    envSource.mapping = THREE.EquirectangularReflectionMapping;
-    envSource.colorSpace = THREE.SRGBColorSpace;
-    this.scene.environment = pmrem.fromEquirectangular(envSource).texture;
-    pmrem.dispose();
-    envSource.dispose();
+    // 車の塗装・ガラス・クロームに映る環境マップ(昼用・夜用)。明るさが1を超えるHDRで作り、鋭いハイライトを出す
+    this.skyEnv = createSkyEnvironments(this.renderer, new THREE.Vector3(0.3, 0.88, 0.22));
+    this.scene.environment = this.timeOfDay === 'night' ? this.skyEnv.night : this.skyEnv.day;
   }
 
   public loadMap(map: MapBase): void {
@@ -353,6 +333,7 @@ export class DriveScene {
     this.currentMap = map;
     map.attachRenderer(this.renderer);
     this.scene.add(map.group);
+    this.applyPaintEnvironment();                                  // NPC車の塗装にも環境マップを持たせる
     if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.density = map.fogDensity ?? 0.0035;
     this.camera.far = map.viewDistance ?? 2000;
     this.camera.updateProjectionMatrix();
@@ -362,6 +343,41 @@ export class DriveScene {
     if (this.carController) {
       this.respawnCar();
     }
+  }
+
+  /**
+   * 塗装・ガラス・クロームの素材に、環境マップを直接持たせる。three.js では、scene.environment を使う素材の
+   * envMapIntensity は無視される(scene.environmentIntensity が全体に効く)ため、素材ごとに強さを変えるには
+   * 素材自身の envMap を設定する必要がある。目印は material.userData.skyEnv(昼の強さ)。
+   * 車の選択画面(別シーン)に戻る時は clearPaintEnvironment() で外し、そちらの環境マップを使わせる。
+   */
+  public applyPaintEnvironment(): void {
+    if (!this.skyEnv) return;
+    const night = this.timeOfDay === 'night';
+    const tex = night ? this.skyEnv.night : this.skyEnv.day;
+    this.scene.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) {
+        const base = m.userData?.skyEnv as number | undefined;
+        if (base === undefined) continue;
+        const pm = m as THREE.MeshStandardMaterial;
+        if (pm.envMap !== tex) { const first = pm.envMap === null; pm.envMap = tex; if (first) pm.needsUpdate = true; }
+        pm.envMapIntensity = base * (night ? m.userData.skyEnvNight ?? 1 : 1);
+      }
+    });
+  }
+
+  public clearPaintEnvironment(car: CarBase): void {
+    car.group.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat) return;
+      for (const m of Array.isArray(mat) ? mat : [mat]) {
+        if (m.userData?.skyEnv === undefined) continue;
+        const pm = m as THREE.MeshStandardMaterial;
+        if (pm.envMap) { pm.envMap = null; pm.needsUpdate = true; }
+      }
+    });
   }
 
   public setCar(car: CarBase): void {
@@ -378,6 +394,7 @@ export class DriveScene {
       this.carController.setCar(car);
     }
 
+    this.applyPaintEnvironment();
     this.respawnCar();
   }
 
@@ -448,6 +465,12 @@ export class DriveScene {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+  }
+
+  /** 後処理(ブルーム・色調補正)を通して描画する。?fx=0 で無効。 */
+  private renderScene(): void {
+    if (this.postFx.enabled) this.postFx.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   private onResize(): void {
@@ -534,7 +557,7 @@ export class DriveScene {
   /** Advance simulation + camera by dt seconds and render one frame. */
   public step(dt: number, render: boolean = true): void {
     if (this.paused) {                                          // frozen: keep showing the last frame
-      if (render) this.renderer.render(this.scene, this.camera);
+      if (render) this.renderScene();
       return;
     }
     // 1. Update car physics & mechanics
@@ -632,6 +655,9 @@ export class DriveScene {
     // 2. Update Camera (mode-dependent FOV, wider view while a drift boost is on)
     if (this.carController) {
       const isCockpit = this.carController.cameraMode === 'cockpit';
+      // 一人称ではフロントガラスを消してフルクリアにする(三人称では車体として見せる)
+      const windshield = this.currentCar?.windshield;
+      if (windshield) windshield.visible = !isCockpit;
       const baseFov = isCockpit ? 62 : 54;
       const fovTarget = this.carController.boostTimer > 0 ? (baseFov + 6) : baseFov;
       if (Math.abs(this.camera.fov - fovTarget) > 0.05) {
@@ -647,6 +673,6 @@ export class DriveScene {
     }
 
     // 3. Render
-    if (render) this.renderer.render(this.scene, this.camera);
+    if (render) this.renderScene();
   }
 }

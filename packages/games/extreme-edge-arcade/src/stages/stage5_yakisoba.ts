@@ -9,9 +9,9 @@ export class Stage5Yakisoba implements Stage {
   numberText = 'STAGE 4';
   title = '焼きそば湯切り';
   mission = 'フタ崩壊寸前を攻めて湯を切り切れ！';
-  instruction = '[レバー上] カップを傾ける';
+  instruction = 'レバー上でカップを傾ける';
   briefing: StageBriefing = {
-    key: '[レバー上]',
+    key: 'レバー上でカップを傾ける',
     ok: 'フタが剥がれる寸前まで傾けて湯を切る',
     ng: 'フタが剥がれる',
   };

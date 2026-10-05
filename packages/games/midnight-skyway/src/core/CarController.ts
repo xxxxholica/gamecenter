@@ -31,6 +31,9 @@ export class CarController {
   // Body Dynamics (Roll, Pitch, Suspension)
   public bodyRoll: number = 0;
   public bodyPitch: number = 0;
+  /** 衝突で弾かれている速度(m/s, ワールドXZ)。毎フレーム減衰する */
+  private knockVelX = 0;
+  private knockVelZ = 0;
 
   // Drift Dynamics (Brake-initiated drift)
   public isDrifting: boolean = false;
@@ -96,6 +99,8 @@ export class CarController {
     this.currentSteerAngle = 0;
     this.bodyRoll = 0;
     this.bodyPitch = 0;
+    this.knockVelX = 0;
+    this.knockVelZ = 0;
     this.isDrifting = false;
     this.driftDirection = 0;
     this.driftFactor = 0;
@@ -109,22 +114,29 @@ export class CarController {
   }
 
   /**
-   * Applies an impulse and sudden destabilization when colliding with other traffic / obstacles.
+   * 他車との接触。めり込みの解消(押し戻し)は毎フレーム行い、弾き飛ばし・車体の揺れ・向きの乱れは
+   * 接触の初回(fresh)だけ与える。毎フレーム足すと車体が大きく傾いたり向きが回り続けるため。
    */
-  public applyKnockback(pushX: number, pushZ: number, impact: number, isRearEnd: boolean = false): void {
+  public applyKnockback(
+    pushX: number, pushZ: number, impact: number, isRearEnd: boolean = false,
+    knockX: number = 0, knockZ: number = 0, fresh: boolean = true, turn: number = impact,
+  ): void {
     this.position.x += pushX;
     this.position.z += pushZ;
+    if (!fresh) return;
+
+    // 弾かれる速度(横・後ろへ滑り、すぐ減衰する)
+    this.knockVelX += knockX;
+    this.knockVelZ += knockZ;
 
     const sideSign = (pushX * Math.cos(this.rotationY) - pushZ * Math.sin(this.rotationY)) > 0 ? 1 : -1;
-    this.rotationY += sideSign * Math.min(0.22, impact * 0.18);
-    this.velocityHeading += sideSign * Math.min(0.32, impact * 0.25);
-    this.bodyRoll += sideSign * Math.min(0.18, impact * 0.16);
-    this.slipAngle += sideSign * Math.min(0.35, impact * 0.3);
-    if (isRearEnd) {
-      this.bodyPitch += Math.min(0.15, impact * 0.12);
-    } else {
-      this.bodyPitch -= Math.min(0.08, impact * 0.08);
-    }
+    // 向きの乱れは turn の分だけ(横からの接触では0: 当たっても進行方向は変わらない)
+    this.rotationY += sideSign * Math.min(0.22, turn * 0.18);
+    this.velocityHeading += sideSign * Math.min(0.32, turn * 0.25);
+    this.bodyRoll = THREE.MathUtils.clamp(this.bodyRoll + sideSign * Math.min(0.18, impact * 0.16), -0.2, 0.2);
+    this.slipAngle += sideSign * Math.min(0.35, turn * 0.3);
+    const pitchAdd = isRearEnd ? Math.min(0.15, impact * 0.12) : -Math.min(0.08, impact * 0.08);
+    this.bodyPitch = THREE.MathUtils.clamp(this.bodyPitch + pitchAdd, -0.12, 0.12);
   }
 
   private bindInputs(): void {
@@ -347,6 +359,16 @@ export class CarController {
 
     this.position.x += forwardX * this.speed * dt;
     this.position.z += forwardZ * this.speed * dt;
+
+    // 衝突で弾かれた分(横・後ろへ滑って止まる)
+    if (this.knockVelX !== 0 || this.knockVelZ !== 0) {
+      this.position.x += this.knockVelX * dt;
+      this.position.z += this.knockVelZ * dt;
+      const decay = Math.exp(-5 * dt);
+      this.knockVelX *= decay;
+      this.knockVelZ *= decay;
+      if (Math.hypot(this.knockVelX, this.knockVelZ) < 0.05) { this.knockVelX = 0; this.knockVelZ = 0; }
+    }
 
     // 6. Suspension Dynamics (Body Roll on cornering/drift, Pitch on accel/brake)
     const lateralAcc = turnAngularVel * this.speed;

@@ -45,6 +45,7 @@ export class TrailJModel extends CarBase {
       frontSeatZ: -0.15,
       rearSeatZ: -0.92,
       steeringSide: 'right', // RHD
+      mirrorY: 1.40,          // ルーフ前縁(フレーム下端)から吊るす
     });
     carRoot.add(interior.group);
 
@@ -356,6 +357,7 @@ export class TrailJModel extends CarBase {
       this.glassMaterial
     );
     carRoot.add(windshield);
+    this.windshield = windshield;
 
     // Front wipers
     [-0.26, 0.26].forEach((x) => {
@@ -501,7 +503,7 @@ export class TrailJModel extends CarBase {
 
     // Front License Plate (Layer 5: at z=1.65)
     const frontPlate = this.createLicensePlate('TRAIL J', true);
-    frontPlate.position.set(0, 0.38, 1.65);
+    frontPlate.position.set(0, 0.40, 1.67);
     carRoot.add(frontPlate);
 
     // ===============================================================
@@ -647,5 +649,6 @@ export class TrailJModel extends CarBase {
     carRoot.add(exhaust);
 
     this.group.add(carRoot);
+    this.addContactShadow(2.5, 4.5);
   }
 }

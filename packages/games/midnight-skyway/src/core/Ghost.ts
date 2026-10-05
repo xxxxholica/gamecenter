@@ -149,24 +149,43 @@ export class GhostCar {
 
   constructor(source: THREE.Object3D, tint: number) {
     this.group = source.clone(true) as THREE.Group;
+    this.group.updateMatrixWorld(true);
     const lights: THREE.Object3D[] = [];
+    const tiny: THREE.Object3D[] = [];
+    const sphere = new THREE.Sphere();
+    const scale = new THREE.Vector3();
+    // 元の素材ごとに、半透明の素材を1つだけ作って共有する(メッシュごとに作ると素材が増える)
+    const ghostMats = new Map<THREE.Material, THREE.Material>();
+    const ghostOf = (m: THREE.Material): THREE.Material => {
+      let c = ghostMats.get(m);
+      if (!c) {
+        const g = m.clone() as THREE.MeshStandardMaterial;
+        g.transparent = true;
+        g.opacity = 0.42;
+        g.depthWrite = false;
+        g.side = THREE.FrontSide;           // 半透明の両面素材は2回描かれる。ゴーストの内側は見えなくてよいので片面にする
+        if ('emissive' in g) { g.emissive = new THREE.Color(tint); g.emissiveIntensity = 0.6; }
+        ghostMats.set(m, g);
+        c = g;
+      }
+      return c;
+    };
     this.group.traverse((o) => {
       if (o instanceof THREE.Light) lights.push(o);
       if (o instanceof THREE.Mesh) {
         o.castShadow = false;
         o.receiveShadow = false;
-        const mats = (Array.isArray(o.material) ? o.material : [o.material]).map((m: THREE.Material) => {
-          const c = m.clone() as THREE.MeshStandardMaterial;
-          c.transparent = true;
-          c.opacity = 0.42;
-          c.depthWrite = false;
-          if ('emissive' in c) { c.emissive = new THREE.Color(tint); c.emissiveIntensity = 0.6; }
-          return c;
-        });
-        o.material = Array.isArray(o.material) ? mats : mats[0];
+        // ナット・取っ手のような、ごく小さな部品は半透明のゴーストでは見えないので省く
+        const g = o.geometry;
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        sphere.copy(g.boundingSphere!);
+        o.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+        if (sphere.radius * Math.max(scale.x, scale.y, scale.z) < 0.05) { tiny.push(o); return; }
+        o.material = Array.isArray(o.material) ? o.material.map(ghostOf) : ghostOf(o.material);
       }
     });
     lights.forEach((l) => l.parent?.remove(l));
+    tiny.forEach((o) => o.parent?.remove(o));
   }
 
   public place(pos: THREE.Vector3, rotY: number): void {

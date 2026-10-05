@@ -1,3 +1,4 @@
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import * as THREE from 'three';
 import { CarBase, CarSpecs } from './CarBase';
 import { CarBodyGenerator } from './CarBodyGenerator';
@@ -13,7 +14,7 @@ export class TruckJModel extends CarBase {
     drivetrain: '4WD (Part-time) / 5MT',
     weight: '790 kg',
     description:
-      '3面図を極限まで忠実に立体化した本格軽トラック。剛健なラダーフレーム、キャブオーバー型運転席、三方開き高剛性アオリ付きロング荷台、キャブ下引き出し収納トランク、荷台保護鳥居フレーム、下部スペアタイヤ吊り下げマウントを備えたタフなワークホース。',
+      '3面図を極限まで忠実に立体化した本格軽トラック。剛健なラダーフレーム、キャブオーバー型運転席、三方開き高剛性アオリ付きロング荷台、キャブ下引き出し収納トランク、荷台保護鳥居フレームを備えたタフなワークホース。',
   };
 
   constructor() {
@@ -57,14 +58,15 @@ export class TruckJModel extends CarBase {
     carRoot.add(intake);
 
     // Front License Plate Mounting Bracket (Raised commercial plastic pedestal)
-    const fPlateBaseGeo = new THREE.BoxGeometry(0.35, 0.18, 0.02);
+    // 吸気スリット(前面 z=1.565)より手前までせり出させ、ナンバーと面が重ならないようにする(重なると角度でちらつく)
+    const fPlateBaseGeo = new THREE.BoxGeometry(0.35, 0.18, 0.04);
     const fPlateBase = new THREE.Mesh(fPlateBaseGeo, this.plasticMaterial);
-    fPlateBase.position.set(-0.24, 0.40, 1.545);
+    fPlateBase.position.set(-0.24, 0.40, 1.555);
     carRoot.add(fPlateBase);
 
     // Front License Plate ("TRUCK J", offset slightly to left side matching blueprint!)
     const frontPlate = this.createLicensePlate('TRUCK J', true);
-    frontPlate.position.set(-0.24, 0.40, 1.56);
+    frontPlate.position.set(-0.24, 0.40, 1.581);
     carRoot.add(frontPlate);
 
     // B. Nose Front Sheetmetal (Vertical Cab-Over Front Mask - zero horizontal hood shelf!)
@@ -278,6 +280,7 @@ export class TruckJModel extends CarBase {
       this.glassMaterial
     );
     carRoot.add(windshield);
+    this.windshield = windshield;
 
     // Front Wipers (nestled right at the windshield bottom cowl line)
     [-0.24, 0.24].forEach((x) => {
@@ -345,6 +348,19 @@ export class TruckJModel extends CarBase {
     const rimGeo = new THREE.TorusGeometry(0.14, 0.014, 8, 24);
     const sRim = new THREE.Mesh(rimGeo, this.plasticMaterial);
     wheelGroup.add(sRim);
+
+    // ハブとスポーク(一人称で、ただの輪ではなくハンドルに見えるように)
+    const sHubGeo = new THREE.CylinderGeometry(0.045, 0.05, 0.035, 16);
+    sHubGeo.rotateX(Math.PI / 2);
+    wheelGroup.add(new THREE.Mesh(sHubGeo, this.plasticMaterial));
+    [Math.PI, 0, -Math.PI / 2].forEach((angle) => {
+      // 長辺を半径方向(X)にとり、角度ぶん回してハブからリムへ伸ばす
+      const spokeGeo = new THREE.BoxGeometry(0.1, 0.022, 0.016);
+      const spoke = new THREE.Mesh(spokeGeo, this.plasticMaterial);
+      spoke.position.set(Math.cos(angle) * 0.09, Math.sin(angle) * 0.09, 0);
+      spoke.rotation.z = angle;
+      wheelGroup.add(spoke);
+    });
 
     const sColumnGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.25, 12);
     sColumnGeo.rotateX(Math.PI / 2);
@@ -538,7 +554,7 @@ export class TruckJModel extends CarBase {
     }
 
     // Front Gate / Bulkhead (Solid front wall under torii)
-    const fAoriGeo = new THREE.BoxGeometry(bedWidth, aoriHeight, 0.03);
+    const fAoriGeo = new RoundedBoxGeometry(bedWidth, aoriHeight, 0.03, 5, 0.013);   // 角を丸めて、塗装のハイライトが縁で走るようにする
     const fAori = new THREE.Mesh(fAoriGeo, this.bodyMaterial);
     fAori.position.set(0, bedFloorY + aoriHeight / 2 + 0.02, bedZStart);
     fAori.castShadow = true;
@@ -549,14 +565,14 @@ export class TruckJModel extends CarBase {
       const sAoriGroup = new THREE.Group();
 
       // Main Gate Panel
-      const sAoriGeo = new THREE.BoxGeometry(0.035, aoriHeight, bedLength);
+      const sAoriGeo = new RoundedBoxGeometry(0.035, aoriHeight, bedLength, 5, 0.016);
       const sAori = new THREE.Mesh(sAoriGeo, this.bodyMaterial);
       sAori.castShadow = true;
       sAoriGroup.add(sAori);
 
       // Horizontal Pressed Stiffener Beads (2 grooves across side gate)
       [-0.05, 0.05].forEach((yOff) => {
-        const beadGeo = new THREE.BoxGeometry(0.042, 0.02, bedLength * 0.99);
+        const beadGeo = new RoundedBoxGeometry(0.042, 0.02, bedLength * 0.99, 4, 0.009);
         const bead = new THREE.Mesh(beadGeo, this.bodyMaterial);
         bead.position.y = yOff;
         sAoriGroup.add(bead);
@@ -587,14 +603,14 @@ export class TruckJModel extends CarBase {
 
     // C. Rear Tailgate (後アオリ)
     const rAoriGroup = new THREE.Group();
-    const rAoriGeo = new THREE.BoxGeometry(bedWidth, aoriHeight, 0.035);
+    const rAoriGeo = new RoundedBoxGeometry(bedWidth, aoriHeight, 0.035, 5, 0.016);
     const rAori = new THREE.Mesh(rAoriGeo, this.bodyMaterial);
     rAori.castShadow = true;
     rAoriGroup.add(rAori);
 
     // Horizontal Pressed Beads on Rear Gate
     [-0.05, 0.05].forEach((yOff) => {
-      const beadGeo = new THREE.BoxGeometry(bedWidth * 0.98, 0.02, 0.042);
+      const beadGeo = new RoundedBoxGeometry(bedWidth * 0.98, 0.02, 0.042, 4, 0.009);
       const bead = new THREE.Mesh(beadGeo, this.bodyMaterial);
       bead.position.y = yOff;
       rAoriGroup.add(bead);
@@ -659,23 +675,6 @@ export class TruckJModel extends CarBase {
     const tank = new THREE.Mesh(tankGeo, this.plasticMaterial);
     tank.position.set(0.48, 0.44, -0.25);
     carRoot.add(tank);
-
-    // D. Under-Bed Suspended Spare Wheel (図面背面図にある荷台下水平吊り下げスペアタイヤ!)
-    const spareGroup = new THREE.Group();
-    // Spare wheel has NO brake disc (includeBrakes = false)
-    const spareTire = this.createSteelWheel(wheelRadius, wheelWidth, wheelRadius * 0.58, true, false);
-    // Suspended HORIZONTALLY under rear bed floor (横置き・水平吊り下げ)
-    spareTire.rotation.z = -Math.PI / 2;
-    spareGroup.add(spareTire);
-
-    // Spare Wheel Winch Bracket connecting to chassis crossmember
-    const sMountGeo = new THREE.BoxGeometry(0.14, 0.08, 0.14);
-    const sMount = new THREE.Mesh(sMountGeo, this.interiorMaterial);
-    sMount.position.y = 0.10;
-    spareGroup.add(sMount);
-
-    spareGroup.position.set(0, 0.38, -1.25);
-    carRoot.add(spareGroup);
 
     // E. Heavy-Duty Rear Rigid Axle & Leaf Springs
     const axleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.22, 16);
@@ -793,5 +792,6 @@ export class TruckJModel extends CarBase {
     });
 
     this.group.add(carRoot);
+    this.addContactShadow(2.3, 4.7, -0.15);
   }
 }

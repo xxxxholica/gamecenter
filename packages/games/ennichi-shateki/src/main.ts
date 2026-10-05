@@ -24,6 +24,7 @@ import { OnlineHud } from './online/OnlineHud';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { sumDefeated } from './online/snapshot';
 import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
@@ -64,6 +65,9 @@ class ArcadeCorkShooter {
 
   // Game state
   private state: GameState = 'title';
+  /** オフライン開始前の 3・2・1・GO! の間は true(時間が進まず、撃てない) */
+  private offlineCountdown = false;
+  private countdownHandle: ArcadeCountdownHandle | null = null;
   private score: number = 0;
   private highScore: number = 9800;
   private timeLeft: number = 30.0;
@@ -310,6 +314,8 @@ class ArcadeCorkShooter {
   // --- STATE TRANSITIONS ---
 
   private enterTitle() {
+    this.countdownHandle?.cancel();
+    this.offlineCountdown = false;
     this.leaveOnline();                                       // オンラインの途中だった場合の片付け(オフラインでは何もしない)
     sounds.stopBgm();
     this.prizePileManager.cleanup(this.scene);
@@ -387,7 +393,17 @@ class ArcadeCorkShooter {
 
     this.hud.setMode('playing');
     this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, 1.0, 0);
-    this.hud.showFlash('構エ', '大屋台 動く景品と風船 登場', 1.2);
+
+    // 開始ボタンを押した直後にいきなり始まらないよう、3・2・1・GO! を挟む
+    this.offlineCountdown = true;
+    this.countdownHandle?.cancel();
+    this.countdownHandle = startArcadeCountdown({
+      accentColor: '#ffd54a',
+      onGo: () => {
+        this.offlineCountdown = false;
+        this.hud.showFlash('構エ', '大屋台 動く景品と風船 登場', 1.2);
+      },
+    });
   }
 
   // --- ONLINE (オンライン対戦: モード選択 → 待機 → 対戦/協力 → 結果) ---
@@ -1001,7 +1017,7 @@ class ArcadeCorkShooter {
     // 1. Time countdown (オンライン: サーバー時刻で全員同時に終わる)
     if (this.match) {
       this.timeLeft = this.match.timeLeftSec();
-    } else {
+    } else if (!this.offlineCountdown) {
       this.timeLeft -= dt;
       if (this.timeLeft < 0) this.timeLeft = 0;
     }
@@ -1050,7 +1066,7 @@ class ArcadeCorkShooter {
     this.gun.update(dt, elapsed, this.camera, this.aimTargetWorld, true);
 
     // 4. Shooting Inputs (オンライン: カウントダウン中は撃てない)
-    if (!this.match || this.match.phase === 'playing') {
+    if ((!this.match && !this.offlineCountdown) || this.match?.phase === 'playing') {
       if (inputState.shootExplosiveJustPressed) {
         this.tryShootExplosive();
       } else if (inputState.shootNormalJustPressed) {

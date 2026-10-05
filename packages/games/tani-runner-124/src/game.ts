@@ -20,11 +20,19 @@ import { ResultMenu } from './resultMenu.ts';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { checkHighScore } from '../../../shared/arcadeLeaderboard';
+import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+
+/** 最後のジャンプのタイミングゲージ: 緑の帯の中心(0〜1)・半幅、カーソルの往復にかかる秒数、受付時間 */
+const LAUNCH_ZONE_CENTER = 0.8;
+const LAUNCH_ZONE_HALF = 0.07;
+const LAUNCH_SWEEP_SEC = 0.9;
+const LAUNCH_WINDOW_SEC = 1.8;
 
 export type GameState =
   | 'TITLE'
   | 'LEVEL_SELECT'
+  | 'COUNTDOWN'
   | 'RUNNING'
   | 'WALL_CRASH'
   | 'BONUS_LAUNCH'
@@ -38,6 +46,7 @@ export class Game {
   public renderer: THREE.WebGLRenderer;
 
   public state: GameState = 'TITLE';
+  private countdown: ArcadeCountdownHandle | null = null;
   public crowd: StudentCrowd;
   public world: WorldManager;
   public effects: EffectsManager;
@@ -50,7 +59,10 @@ export class Game {
 
   // Bonus Flight settings
   public flightBoost: number = 1.0;
-  public mashCount: number = 0;
+  /** 最後のジャンプのタイミング判定(0〜1)。ボタンを押した位置が緑の帯の中心に近いほど1 */
+  private launchQuality = 0;
+  private launchPressed = false;
+  private launchLockedAt = 0;
   public bonusTimer: number = 0;
   public maxAchievedMultiplier: number = 1.0;
   /** 壁に着いた時点の人数(124を消費する前)。取得単位 = これ × 到達倍率 */
@@ -228,6 +240,7 @@ export class Game {
 
   /** タイトル画面に戻る */
   public showTitleScreen(): void {
+    this.countdown?.cancel();
     this.state = 'TITLE';
     this.resultMenu.close();
     this.levelSelect.hide();
@@ -245,7 +258,7 @@ export class Game {
   private showRunGuide(): void {
     mountArcadeGuide({
       moveLabel: '←→ 隊列操作 / ↓ 隊列を絞る',
-      buttons: [{ indices: [0, 1, 7], label: 'カタパルト連打・加速' }],
+      buttons: [{ indices: [0, 1, 7], label: 'ジャンプのタイミング・加速' }],
       showHomeHint: true,
     });
   }
@@ -268,19 +281,29 @@ export class Game {
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');
     this.bonusHudElem?.classList.add('hidden');
+    this.showLaunchTiming(false);
     this.showRunGuide();
     if (this.hudElem) this.hudElem.style.display = 'block';
 
     sound.init();
     sound.playCoin();
     sound.playStartJingle();
-    sound.startRunningBgm();
 
-    this.state = 'RUNNING';
+    // 開始前に 3・2・1・GO! を挟む(レベル選択の決定直後にいきなり走り出さない)
+    this.state = 'COUNTDOWN';
+    this.countdown?.cancel();
+    this.countdown = startArcadeCountdown({
+      accentColor: '#00e676',
+      onGo: () => {
+        this.state = 'RUNNING';
+        sound.startRunningBgm();
+      },
+    });
     this.playerZ = 0;
     this.currentCredits = 4;
     this.flightBoost = 1.0;
-    this.mashCount = 0;
+    this.launchQuality = 0;
+    this.launchPressed = false;
     this.maxAchievedMultiplier = 1.0;
     this.lastDingMultiplier = 1.0;
     this.creditsAtWall = 0;
@@ -346,6 +369,10 @@ export class Game {
 
     // State machine
     switch (this.state) {
+      case 'COUNTDOWN':
+        // 走り出す前の待機。群衆を足踏みさせるだけで、前進・ゲート判定はしない
+        this.crowd.updateRunning(dt, 0);
+        break;
       case 'RUNNING':
         this.updateRunning(dt, input);
         break;
@@ -605,23 +632,35 @@ export class Game {
       this.world.hideBossWall();
       this.effects.spawnWallShatter(0, 3.4, this.world.bossWallZ, 10.8, 6.8);
 
-      // Transition to Wall Crash & Mash phase
+      // Transition to Wall Crash & ジャンプのタイミング判定
       this.state = 'WALL_CRASH';
       this.bonusTimer = 0;
-      this.mashCount = 0;
+      this.launchQuality = 0;
+      this.launchPressed = false;
+      this.launchLockedAt = 0;
+      this.showLaunchTiming(true);
     }
   }
 
-  // State: Brief slow-mo mash window before launching surplus students
+  // State: ジャンプ台の手前。ゲージの緑の帯でボタンを押すほど遠くへ飛ぶ(押した位置で1回だけ確定)
   private updateWallCrash(dt: number, input: ReturnType<typeof inputManager.poll>): void {
     this.bonusTimer += dt;
 
-    // Mash button 0 / Space / Z to boost launch velocity!
-    if (input.actionJustPressed) {
-      this.mashCount++;
-      sound.playShootRocket();
-      inputManager.rumble(50, 0.5, 0.5);
-      this.effects.shake(0.2, 0.1);
+    const pos = this.launchCursorPos(this.bonusTimer);
+    if (!this.launchPressed) {
+      this.setLaunchCursor(pos);
+      if (input.actionJustPressed) {
+        this.launchPressed = true;
+        this.launchLockedAt = this.bonusTimer;
+        const d = Math.abs(pos - LAUNCH_ZONE_CENTER);
+        this.launchQuality = d <= LAUNCH_ZONE_HALF ? 1 : Math.max(0, 1 - (d - LAUNCH_ZONE_HALF) / 0.5);
+        const label = this.launchQuality >= 1 ? 'PERFECT!!' : this.launchQuality >= 0.6 ? 'GOOD' : 'ミス';
+        const resultEl = document.getElementById('launch-timing-result');
+        if (resultEl) resultEl.textContent = label;
+        sound.playShootRocket();
+        inputManager.rumble(80, 0.5, 0.6);
+        this.effects.shake(0.2 + 0.3 * this.launchQuality, 0.15);
+      }
     }
 
     // Move slightly forward onto ramp
@@ -633,8 +672,38 @@ export class Game {
     this.camPos.lerp(new THREE.Vector3(7.0, 4.5, this.world.bossWallZ + 12.0), dt * 5.0);
     this.camLookAt.lerp(new THREE.Vector3(0, 2.0, this.world.bossWallZ - 20.0), dt * 5.0);
 
-    if (this.bonusTimer >= 0.6) {
+    // 押した場合は結果を少し見せてから、押さなかった場合は時間切れで飛ぶ
+    const done = this.launchPressed ? this.bonusTimer - this.launchLockedAt >= 0.6 : this.bonusTimer >= LAUNCH_WINDOW_SEC;
+    if (done) {
+      this.showLaunchTiming(false);
       this.state = 'BONUS_LAUNCH';
+    }
+  }
+
+  /** ゲージのカーソル位置(0〜1)。往復し続ける */
+  private launchCursorPos(t: number): number {
+    const phase = (t / LAUNCH_SWEEP_SEC) % 1;
+    return Math.abs(phase * 2 - 1);
+  }
+
+  private setLaunchCursor(pos: number): void {
+    const el = document.getElementById('launch-timing-cursor');
+    if (el) el.style.left = `${pos * 100}%`;
+  }
+
+  private showLaunchTiming(show: boolean): void {
+    const box = document.getElementById('launch-timing');
+    if (!box) return;
+    box.classList.toggle('hidden', !show);
+    if (show) {
+      const zone = document.getElementById('launch-timing-zone');
+      if (zone) {
+        zone.style.left = `${(LAUNCH_ZONE_CENTER - LAUNCH_ZONE_HALF) * 100}%`;
+        zone.style.width = `${LAUNCH_ZONE_HALF * 2 * 100}%`;
+      }
+      const resultEl = document.getElementById('launch-timing-result');
+      if (resultEl) resultEl.textContent = '';
+      this.setLaunchCursor(0);
     }
   }
 
@@ -642,8 +711,8 @@ export class Game {
   private updateBonusLaunch(): void {
     this.state = 'BONUS_FLIGHT';
 
-    // Calculate boost factor based on mash count (e.g. 1.0 up to 1.7)
-    this.flightBoost = 1.0 + Math.min(0.7, this.mashCount * 0.08);
+    // ジャンプのタイミングが良いほど遠くへ飛ぶ(1.0〜1.7)
+    this.flightBoost = 1.0 + 0.7 * this.launchQuality;
 
     sound.playCatapultLaunch();
     inputManager.rumble(600, 0.9, 0.9);
@@ -757,13 +826,11 @@ export class Game {
         delayMs: NAME_ENTRY_AFTER_RESULT_MS,
         onComplete: (katakanaName) => {
           this.resultMenu.setLocked(false);
-          const rankIndex = RankingStore.add(score, this.level, katakanaName);
-          RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
+          RankingStore.add(score, this.level, katakanaName);
         },
       });
     } else {
-      const rankIndex = RankingStore.add(score, this.level);
-      RankingStore.render(document.getElementById('success-ranking'), this.level, rankIndex);
+      RankingStore.add(score, this.level);
     }
   }
 

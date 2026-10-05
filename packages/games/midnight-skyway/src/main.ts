@@ -344,6 +344,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (driveScene.carController) {
       driveScene.scene.remove(currentCar.group);
     }
+    driveScene.clearPaintEnvironment(currentCar);          // 選択画面(別シーン)ではそちらの環境マップを使う
     // Reset wheel steering angles
     currentCar.wheels.forEach((w, i) => {
       w.rotation.x = 0;
@@ -669,7 +670,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   const flow = new GameFlowManager({
     onEnterTitle: () => {
-      bgm.play('menu');
+      bgm.play('menu', true);                                // タイトルに戻るたびに別の曲
       lobby.hide();
       modeSelectScreen.hide();
       carSelectScreen.hide();

@@ -167,70 +167,142 @@ export function createWallTexture(): THREE.CanvasTexture {
 }
 
 // 教室の窓側（左壁: 夕暮れの茜色の空と窓枠）
+/**
+ * 左壁(窓側): 窓枠と腰壁だけを描く。ガラスの部分は透明にして、窓の外の景色(Corridor の屋外シーン)を直接見せる。
+ * 1枚で壁の横9m分(3枚の窓)。Corridor 側で横に繰り返して使う。
+ */
 export function createWindowWallTexture(): THREE.CanvasTexture {
+  const W = 768, H = 640;
   const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 512;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, W, H);
 
+  const sillTop = 478; // これより下は腰壁(高さ約1.9m)
   // 下部腰壁
   ctx.fillStyle = '#6e3c1d';
-  ctx.fillRect(0, 380, 1024, 132);
+  ctx.fillRect(0, sillTop, W, H - sillTop);
   ctx.fillStyle = '#4a2510';
-  ctx.fillRect(0, 372, 1024, 12);
+  ctx.fillRect(0, sillTop - 8, W, 14);
+  // 腰壁の羽目板の溝
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let x = 0; x < W; x += 64) ctx.fillRect(x, sillTop + 6, 3, H - sillTop - 6);
 
-  // 窓枠の奥の夕暮れ空グラデーション（茜色〜橙色〜紫）
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, 380);
-  skyGrad.addColorStop(0, '#311b92');   // 夕闇の深い紫
-  skyGrad.addColorStop(0.35, '#c2185b'); // 茜色
-  skyGrad.addColorStop(0.7, '#ff7043');  // 燃えるような夕焼けオレンジ
-  skyGrad.addColorStop(1, '#ffe082');    // 地平線の黄金色
-  ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, 1024, 372);
-
-  // 遠景の夕日に染まる富士山/山並みと学校のフェンス・屋根シルエット
-  ctx.fillStyle = '#4a154b';
-  ctx.beginPath();
-  ctx.moveTo(0, 372);
-  ctx.lineTo(200, 310);
-  ctx.lineTo(350, 340);
-  ctx.lineTo(550, 280);
-  ctx.lineTo(750, 350);
-  ctx.lineTo(1024, 320);
-  ctx.lineTo(1024, 372);
-  ctx.closePath();
-  ctx.fill();
-
-  // 巨大な夕日
-  const sunGrad = ctx.createRadialGradient(650, 240, 20, 650, 240, 180);
-  sunGrad.addColorStop(0, '#ffffff');
-  sunGrad.addColorStop(0.3, '#fff59d');
-  sunGrad.addColorStop(0.6, 'rgba(255, 112, 67, 0.6)');
-  sunGrad.addColorStop(1, 'rgba(255, 112, 67, 0)');
-  ctx.fillStyle = sunGrad;
-  ctx.beginPath();
-  ctx.arc(650, 240, 180, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 窓枠グリッド（学校のサッシ枠）
+  // 窓枠(サッシ): 3枚の窓、縦の柱、中桟、上枠
   ctx.fillStyle = '#3e2723';
-  const numPanes = 4;
-  const paneWidth = 1024 / numPanes;
-
-  for (let i = 0; i < numPanes; i++) {
-    const px = i * paneWidth;
-    // 柱
-    ctx.fillRect(px, 0, 24, 380);
-    // 窓の中央桟
-    ctx.fillRect(px, 180, paneWidth, 16);
-    // 上枠
-    ctx.fillRect(px, 0, paneWidth, 18);
+  const panes = 3;
+  const paneW = W / panes;
+  for (let i = 0; i < panes; i++) {
+    const px = i * paneW;
+    ctx.fillRect(px, 0, 14, sillTop);            // 柱
+    ctx.fillRect(px, 215, paneW, 12);            // 中桟
+    ctx.fillRect(px, 0, paneW, 14);              // 上枠
+    // ガラスの縁のハイライト
+    ctx.fillStyle = 'rgba(255, 224, 178, 0.35)';
+    ctx.fillRect(px + 14, 14, 3, sillTop - 22);
+    ctx.fillStyle = '#3e2723';
   }
-  ctx.fillRect(1000, 0, 24, 380);
+  ctx.fillRect(W - 14, 0, 14, sillTop);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * 窓の外の空。夕焼けのグラデーション・巨大な夕日・雲・遠い山並み。
+ * 横は260m・縦は100mの板に貼る想定で、地平線は下から約20%の高さ。
+ */
+export function createOutsideSkyTexture(): THREE.CanvasTexture {
+  const W = 1024, H = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const horizon = Math.round(H * 0.8);
+
+  const sky = ctx.createLinearGradient(0, 0, 0, horizon);
+  sky.addColorStop(0, '#1d1048');
+  sky.addColorStop(0.3, '#6a1b6e');
+  sky.addColorStop(0.55, '#c2185b');
+  sky.addColorStop(0.8, '#ff7043');
+  sky.addColorStop(1, '#ffe082');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // 巨大な夕日(地平線の近くに半分沈む)
+  const sunX = 640, sunY = horizon - 40;
+  const glow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 260);
+  glow.addColorStop(0, 'rgba(255,255,255,1)');
+  glow.addColorStop(0.18, 'rgba(255,245,157,0.95)');
+  glow.addColorStop(0.5, 'rgba(255,112,67,0.45)');
+  glow.addColorStop(1, 'rgba(255,112,67,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // 横に長く伸びる雲(夕日に染まった帯)
+  for (let i = 0; i < 9; i++) {
+    const cy = 60 + i * 34 + (i % 3) * 10;
+    const cx = (i * 331) % W;
+    const cw = 260 + (i % 4) * 90;
+    const grad = ctx.createLinearGradient(cx, cy, cx + cw, cy);
+    grad.addColorStop(0, 'rgba(255,171,145,0)');
+    grad.addColorStop(0.5, i % 2 ? 'rgba(255,138,101,0.55)' : 'rgba(244,143,177,0.5)');
+    grad.addColorStop(1, 'rgba(255,171,145,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx + cw / 2, cy, cw / 2, 9 + (i % 3) * 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 遠い山並み(2層)
+  const ridge = (baseY: number, amp: number, seed: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, horizon + 4);
+    for (let x = 0; x <= W; x += 16) {
+      const y = baseY - amp * (0.5 + 0.5 * Math.sin(x * 0.011 + seed) * Math.sin(x * 0.0037 + seed * 2.3)) - amp * 0.25 * Math.sin(x * 0.043 + seed);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, horizon + 4);
+    ctx.closePath();
+    ctx.fill();
+  };
+  ridge(horizon - 8, 70, 1.2, '#5a1f5c');
+  ridge(horizon - 2, 42, 4.1, '#3a1448');
+
+  // 地平線より下は暗い地面色(屋外の地面板に隠れる部分)
+  ctx.fillStyle = '#2a1230';
+  ctx.fillRect(0, horizon + 2, W, H - horizon);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/** 遠景の校舎の窓(黄色く点灯した窓がまばらに並ぶ)。 */
+export function createBuildingWindowsTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#2c2038';
+  ctx.fillRect(0, 0, 256, 256);
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 12; y < 256; y += 40) {
+    for (let x = 10; x < 256; x += 32) {
+      ctx.fillStyle = rand() < 0.35 ? '#ffd27a' : '#41314f';
+      ctx.fillRect(x, y, 20, 24);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 

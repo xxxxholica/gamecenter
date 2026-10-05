@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export interface LowerBodySection {
   z: number;
@@ -274,12 +276,44 @@ export class CarBodyGenerator {
     frontCowlZ: number,
     rearTailgateZ: number,
     halfWidth: number,
-    material: THREE.Material
+    material: THREE.Material,
+    rounded = false,   // true: 角を丸めた部材にする(Cross J)
   ): THREE.Group {
     const group = new THREE.Group();
+    if (rounded) {
+      // 丸めた版: カウル・左右・後ろの4本をつなぎ目のないひと続きの輪(角丸の長方形)にする
+      // ボディの上縁(丸めた肩・後端)にまたがる位置に置いて、ボディとの間に溝ができないようにする
+      const x0 = halfWidth - 0.035, zf = frontCowlZ, zr = rearTailgateZ - 0.03, cr = 0.12, y0 = beltlineY - 0.02;
+      const pts: THREE.Vector3[] = [];
+      const line = (ax: number, az: number, bx: number, bz: number, n: number): void => {
+        for (let i = 0; i < n; i++) { const t = i / n; pts.push(new THREE.Vector3(ax + (bx - ax) * t, y0, az + (bz - az) * t)); }
+      };
+      const arc = (cx: number, cz: number, a0: number): void => {
+        for (let i = 0; i < 8; i++) { const a = a0 - (i / 8) * (Math.PI / 2); pts.push(new THREE.Vector3(cx + Math.cos(a) * cr, y0, cz + Math.sin(a) * cr)); }
+      };
+      arc(x0 - cr, zf - cr, Math.PI / 2);
+      line(x0, zf - cr, x0, zr + cr, 40);
+      arc(x0 - cr, zr + cr, 0);
+      line(x0 - cr, zr, -x0 + cr, zr, 24);
+      arc(-x0 + cr, zr + cr, -Math.PI / 2);
+      line(-x0, zr + cr, -x0, zf - cr, 40);
+      arc(-x0 + cr, zf - cr, Math.PI);
+      line(-x0 + cr, zf, x0 - cr, zf, 24);
+      const loop = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'centripetal'), 360, 0.055, 14, true),
+        material,
+      );
+      loop.scale.y = 0.45;                // 縦につぶして、ボディの上縁と面一(ほぼ平ら)になだらかにつなぐ
+      loop.position.y = y0 * (1 - 0.45);
+      loop.castShadow = true;
+      group.add(loop);
+      return group;
+    }
+    const box = (w: number, h: number, d: number): THREE.BufferGeometry =>
+      rounded ? new RoundedBoxGeometry(w, h, d, 4, 0.034) : new THREE.BoxGeometry(w, h, d);
 
     // 1. Front Cowl Top Crossmember (Windshield base & hood trailing edge)
-    const cowlGeo = new THREE.BoxGeometry(halfWidth * 2 - 0.04, 0.08, 0.12);
+    const cowlGeo = box(halfWidth * 2 - 0.04, 0.08, 0.12);
     const cowlMesh = new THREE.Mesh(cowlGeo, material);
     cowlMesh.position.set(0, beltlineY, frontCowlZ);
     cowlMesh.castShadow = true;
@@ -288,7 +322,7 @@ export class CarBodyGenerator {
     // 2. Left & Right Waistline Side Sills (Door shoulder rails connecting A to D pillars)
     const railLength = Math.abs(frontCowlZ - rearTailgateZ) + 0.04;
     const railCenterZ = (frontCowlZ + rearTailgateZ) * 0.5;
-    const sideRailGeo = new THREE.BoxGeometry(0.08, 0.08, railLength);
+    const sideRailGeo = box(0.08, 0.08, railLength);
 
     [-1, 1].forEach((side) => {
       const sideRail = new THREE.Mesh(sideRailGeo, material);
@@ -298,13 +332,323 @@ export class CarBodyGenerator {
     });
 
     // 3. Rear Hatch Lower Waist Rail (Windshield base on tailgate)
-    const rearRailGeo = new THREE.BoxGeometry(halfWidth * 2 - 0.06, 0.08, 0.10);
+    const rearRailGeo = box(halfWidth * 2 - 0.06, 0.08, 0.10);
     const rearRail = new THREE.Mesh(rearRailGeo, material);
     rearRail.position.set(0, beltlineY, rearTailgateZ);
     rearRail.castShadow = true;
     group.add(rearRail);
 
     return group;
+  }
+
+  /**
+   * ふっくらした丸みのある下半身(ボンネット・フェンダー・ドア・リア)を作る。
+   * generateLowerBodyMesh と同じ断面データ(sections)を使うが、次の点が違う。
+   *  - 断面を前後方向になめらかに補間する(単調な3次補間。折れ目・出っ張りを出さない)
+   *  - 肩から上の断面(フェンダー→ベルトライン→天面)を曲線にする
+   *  - 前端・後端は、上から見た角に半径 noseRadius / tailRadius の丸み、前後の上縁に roll の丸みを付ける
+   *  - 前後のキャップ面の頂点を側面と共有し、角のところまで滑らかに陰影が続く
+   */
+  public static generateSmoothLowerBodyMesh(
+    sections: LowerBodySection[],
+    isCabinZone: boolean[],
+    bodyMaterial: THREE.Material,
+    isWheelArchZone: boolean[],
+    opts: { noseRadius: number; tailRadius: number; roll: number; zStep?: number; edgeSub?: number; archCircles?: { z: number; y: number; r: number; xMin: number }[] },
+  ): THREE.Mesh {
+    const zStep = opts.zStep ?? 0.04;
+    const edgeSub = opts.edgeSub ?? 3;
+    const nSec = sections.length;
+
+    // 各断面の輪(11点)。順序は generateLowerBodyMesh と同じ。
+    const rings = sections.map((sec, i) => {
+      const cabin = isCabinZone[i];
+      const archX = sec.wheelArch ? sec.wheelArch[0] : (sec.sill[0] + sec.fender[0]) * 0.5;
+      const archY = sec.wheelArch ? sec.wheelArch[1] : (sec.sill[1] + sec.fender[1]) * 0.5;
+      const tx = cabin ? sec.beltline[0] * 0.92 : 0;
+      const ty = cabin ? sec.beltline[1] - 0.02 : sec.yTop;
+      return [
+        [0, sec.yBottom], [sec.sill[0], sec.sill[1]], [archX, archY], [sec.fender[0], sec.fender[1]], [sec.beltline[0], sec.beltline[1]],
+        [tx, ty], [-tx, ty],
+        [-sec.beltline[0], sec.beltline[1]], [-sec.fender[0], sec.fender[1]], [-archX, archY], [-sec.sill[0], sec.sill[1]],
+      ];
+    });
+    const RC = 11;
+
+    // z 方向: 各点の座標を、断面の z に対する単調3次補間(Fritsch–Carlson)で補間する
+    const zs = sections.map((s) => s.z);   // 降順(前→後)
+    const tangents: number[][][] = rings.map(() => Array.from({ length: RC }, () => [0, 0]));
+    for (let p = 0; p < RC; p++) {
+      for (let c = 0; c < 2; c++) {
+        const d: number[] = [];
+        for (let i = 0; i < nSec - 1; i++) d.push((rings[i + 1][p][c] - rings[i][p][c]) / (zs[i + 1] - zs[i]));
+        for (let i = 0; i < nSec; i++) {
+          let m: number;
+          if (i === 0) m = d[0];
+          else if (i === nSec - 1) m = d[nSec - 2];
+          else if (d[i - 1] * d[i] <= 0) m = 0;
+          else {
+            const h0 = zs[i] - zs[i - 1], h1 = zs[i + 1] - zs[i], w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+            m = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+          }
+          tangents[i][p][c] = m;
+        }
+      }
+    }
+    const ringAt = (z: number): { pts: number[][]; seg: number } => {
+      let i = 0;
+      while (i < nSec - 2 && z < zs[i + 1]) i++;
+      const h = zs[i + 1] - zs[i], t = (z - zs[i]) / h;
+      const t2 = t * t, t3 = t2 * t;
+      const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+      const pts: number[][] = [];
+      for (let p = 0; p < RC; p++) {
+        const pt: number[] = [];
+        for (let c = 0; c < 2; c++) {
+          pt.push(h00 * rings[i][p][c] + h10 * h * tangents[i][p][c] + h01 * rings[i + 1][p][c] + h11 * h * tangents[i + 1][p][c]);
+        }
+        pts.push(pt);
+      }
+      return { pts, seg: i };
+    };
+
+    // サンプルする z: 一定間隔 + 全断面の z(前後端は細かく)
+    const zFront = zs[0], zRear = zs[nSec - 1];
+    const zSet = new Set<number>(zs.map((z) => Math.round(z * 1e4) / 1e4));
+    for (let z = zFront; z > zRear; z -= zStep) zSet.add(Math.round(z * 1e4) / 1e4);
+    const fine = Math.max(opts.noseRadius, opts.tailRadius, opts.roll) + 0.02;
+    for (let d = 0; d <= fine; d += 0.015) { zSet.add(Math.round((zFront - d) * 1e4) / 1e4); zSet.add(Math.round((zRear + d) * 1e4) / 1e4); }
+    const zList = [...zSet].filter((z) => z <= zFront + 1e-6 && z >= zRear - 1e-6).sort((a, b) => b - a);
+
+    // 上の輪の曲線: 肩から天面までの辺(2→3,3→4,4→5 と 6→7,7→8,8→9)を Catmull-Rom で細分し、他の辺は直線
+    const smoothEdge = new Set([2, 3, 4, 6, 7, 8]);
+    const cr = (p0: number[], p1: number[], p2: number[], p3: number[], t: number): number[] => {
+      const t2 = t * t, t3 = t2 * t;
+      return [0, 1].map((c) => 0.5 * ((2 * p1[c]) + (-p0[c] + p2[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 + (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3));
+    };
+    const subdivide = (pts: number[][]): number[][] => {
+      const out: number[][] = [];
+      for (let e = 0; e < RC; e++) {
+        const a = pts[e], b = pts[(e + 1) % RC];
+        for (let k = 0; k < edgeSub; k++) {
+          const t = k / edgeSub;
+          if (smoothEdge.has(e)) out.push(cr(pts[(e + RC - 1) % RC], a, b, pts[(e + 2) % RC], t));
+          else out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+        }
+      }
+      return out;
+    };
+    const PC = RC * edgeSub;   // 輪1周の頂点数
+
+    const vertices: number[] = [];
+    const uvs: number[] = [];
+    const segOfSample: number[] = [];
+    const roundEnd = (x: number, y: number, d: number, r: number, W: number, yMid: number, yTopRef: number): [number, number] => {
+      // d: 端面からの距離。平面の角の丸み(xの引き込み)と、上縁の丸み(yの落ち込み)
+      let nx = x, ny = y;
+      if (d < r) {
+        const g = Math.sqrt(Math.max(0, 1 - (1 - d / r) * (1 - d / r)));
+        const xc = W - r, ax = Math.abs(x);
+        if (ax > xc) nx = Math.sign(x) * (xc + (ax - xc) * g);
+      }
+      const rr = opts.roll;
+      if (d < rr && y > yMid) {
+        const drop = rr * (1 - Math.sqrt(Math.max(0, 1 - (1 - d / rr) * (1 - d / rr))));
+        const wgt = Math.min(1, (y - yMid) / Math.max(1e-3, yTopRef - yMid));
+        ny = y - drop * wgt;
+      }
+      return [nx, ny];
+    };
+    const Wfront = Math.max(...rings[0].map((p) => Math.abs(p[0])));
+    const Wrear = Math.max(...rings[nSec - 1].map((p) => Math.abs(p[0])));
+    zList.forEach((z, zi) => {
+      const { pts, seg } = ringAt(z);
+      segOfSample.push(seg);
+      const sub = subdivide(pts);
+      const yMid = (pts[0][1] + pts[5][1]) * 0.5, yTopRef = Math.max(...pts.map((q) => q[1]));
+      const dN = zFront - z, dT = z - zRear;
+      sub.forEach((q, pi) => {
+        let [x, y] = [q[0], q[1]];
+        if (dN < opts.noseRadius || dN < opts.roll) [x, y] = roundEnd(x, y, dN, opts.noseRadius, Wfront, yMid, yTopRef);
+        if (dT < opts.tailRadius || dT < opts.roll) [x, y] = roundEnd(x, y, dT, opts.tailRadius, Wrear, yMid, yTopRef);
+        vertices.push(x, y, z);
+        uvs.push(pi / PC, zi / (zList.length - 1));
+      });
+    });
+
+    const indices: number[] = [];
+    for (let k = 0; k < zList.length - 1; k++) {
+      const seg = segOfSample[k];
+      const cabin = isCabinZone[seg] && isCabinZone[seg + 1];
+      const arch = isWheelArchZone[seg] && isWheelArchZone[seg + 1];
+      const r0 = k * PC, r1 = (k + 1) * PC;
+      for (let q = 0; q < PC; q++) {
+        const e = Math.floor(q / edgeSub);
+        if (cabin && e === 5) continue;                   // 室内側(上の辺 5→6)は開けておく
+        if (!opts.archCircles && arch && (e === 1 || e === 9)) continue;       // ホイールハウスの穴(シル→アーチ)
+        const nq = (q + 1) % PC;
+        if (opts.archCircles && e <= 2 || opts.archCircles && e >= 8) {
+          // 円形のホイールハウスの穴: 三角形の中心が円の中なら省く(穴の縁がなめらかな円弧になる)
+          const inHole = (a: number, b: number, c: number): boolean => {
+            const cx = (vertices[a * 3] + vertices[b * 3] + vertices[c * 3]) / 3;
+            const cy = (vertices[a * 3 + 1] + vertices[b * 3 + 1] + vertices[c * 3 + 1]) / 3;
+            const cz = (vertices[a * 3 + 2] + vertices[b * 3 + 2] + vertices[c * 3 + 2]) / 3;
+            return opts.archCircles!.some((ac) => Math.abs(cx) > ac.xMin && (cz - ac.z) ** 2 + (cy - ac.y) ** 2 < ac.r * ac.r);
+          };
+          const t1 = !inHole(r0 + q, r1 + q, r0 + nq), t2 = !inHole(r0 + nq, r1 + q, r1 + nq);
+          if (t1) indices.push(r0 + q, r1 + q, r0 + nq);
+          if (t2) indices.push(r0 + nq, r1 + q, r1 + nq);
+          continue;
+        }
+        indices.push(r0 + q, r1 + q, r0 + nq);
+        indices.push(r0 + nq, r1 + q, r1 + nq);
+      }
+    }
+
+    // 前後のキャップ面: 輪の頂点を共有して、中心から扇状に張る(側面となめらかにつながる)
+    const addCap = (ringIdx: number, front: boolean): void => {
+      const base = ringIdx * PC;
+      let cy = 0;
+      for (let q = 0; q < PC; q++) cy += vertices[(base + q) * 3 + 1];
+      cy /= PC;
+      const ci = vertices.length / 3;
+      vertices.push(0, cy, vertices[base * 3 + 2]);
+      uvs.push(0.5, 0.5);
+      for (let q = 0; q < PC; q++) {
+        const nq = (q + 1) % PC;
+        if (front) indices.push(ci, base + q, base + nq);
+        else indices.push(ci, base + nq, base + q);
+      }
+    };
+    addCap(0, true);
+    addCap(zList.length - 1, false);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, bodyMaterial);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  /**
+   * 角と縁を丸めたバンパー。正面から見た角の丸み(cornerR)、縁の面取り(bevel)、
+   * 上から見た左右の端の巻き込み(planR)を付ける。frontSign=+1 なら前面が +z、-1 なら前面が -z。
+   */
+  public static buildRoundedBumperGeometry(
+    width: number, height: number, depth: number, cornerR: number, bevel: number, planR: number, frontSign: 1 | -1,
+  ): THREE.BufferGeometry {
+    const w = width - 2 * bevel, h = height - 2 * bevel, r = Math.max(0.005, cornerR - bevel);
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2 + r, -h / 2);
+    shape.lineTo(w / 2 - r, -h / 2); shape.absarc(w / 2 - r, -h / 2 + r, r, -Math.PI / 2, 0, false);
+    shape.lineTo(w / 2, h / 2 - r); shape.absarc(w / 2 - r, h / 2 - r, r, 0, Math.PI / 2, false);
+    shape.lineTo(-w / 2 + r, h / 2); shape.absarc(-w / 2 + r, h / 2 - r, r, Math.PI / 2, Math.PI, false);
+    shape.lineTo(-w / 2, -h / 2 + r); shape.absarc(-w / 2 + r, -h / 2 + r, r, Math.PI, Math.PI * 1.5, false);
+    let g: THREE.BufferGeometry = new THREE.ExtrudeGeometry(shape, {
+      depth: depth - 2 * bevel, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 3, steps: 6, curveSegments: 6,
+    });
+    g.translate(0, 0, -(depth - 2 * bevel) / 2);
+    // 上から見た端の巻き込み: 前面に近いほど、左右の端を内側へ引き込む
+    const pos = g.getAttribute('position');
+    const halfW = width / 2, xc = halfW - planR;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const d = frontSign === 1 ? depth / 2 - z : z + depth / 2;
+      if (d < planR && Math.abs(x) > xc) {
+        const gk = Math.sqrt(Math.max(0, 1 - (1 - d / planR) * (1 - d / planR)));
+        pos.setX(i, Math.sign(x) * (xc + (Math.abs(x) - xc) * gk));
+      }
+    }
+    // 頂点を溶接して、法線をなめらかにする(面ごとの法線だとカクカクして見える)
+    g.deleteAttribute('normal');
+    g.deleteAttribute('uv');
+    g = mergeVertices(g, 1e-4);
+    g.computeVertexNormals();
+    if (frontSign === -1) g.rotateY(0);   // 前面の向きは上の d の取り方で決まる(向きの反転は不要)
+    return g;
+  }
+
+  /**
+   * 角を丸めた屋根板。上から見た角の半径 cornerR、中央に向かって盛り上がるキャンバー、縁の丸み(フィレット)付き。
+   * 平面は「角丸の長方形」を中心へ向かって縮めた輪の積み重ねで作るので、角の丸みが屋根全体になじむ。
+   */
+  public static buildRoundedRoof(
+    width: number, length: number, thickness: number, camberHeight: number,
+    centerZ: number, baseY: number, cornerR: number, material: THREE.Material,
+  ): THREE.Mesh {
+    const hw0 = width / 2, hl0 = length / 2;
+    const cornerSeg = 10, edgeSegX = 14, edgeSegZ = 18;
+    // 角丸長方形の輪郭(前から右辺・後・左辺の順)。点の並びは大きさによらず同じなので、輪を作る時に対応する点同士をつなげる
+    const outlineFor = (hw: number, hl: number, cr: number): [number, number][] => {
+      const out: [number, number][] = [];
+      const R = Math.max(cr, 0.001);
+      // 角は辺をたどる向き(前→右辺→後→左辺→前)と同じ向きに回る。向きが逆だと角が弦で切り取られて歪む
+      const corner = (cx: number, cz: number, a0: number): void => {
+        for (let i = 0; i <= cornerSeg; i++) { const a = a0 - (i / cornerSeg) * (Math.PI / 2); out.push([cx + Math.cos(a) * R, cz + Math.sin(a) * R]); }
+      };
+      // 前右の角(前辺→右辺)、右辺(前→後)、後右の角、後辺(右→左)、後左の角、左辺(後→前)、前左の角、前辺(左→右)
+      corner(hw - R, hl - R, Math.PI / 2);
+      for (let i = 1; i < edgeSegZ; i++) out.push([hw, hl - R - (i / edgeSegZ) * (2 * hl - 2 * R)]);
+      corner(hw - R, -hl + R, 0);
+      for (let i = 1; i < edgeSegX; i++) out.push([hw - R - (i / edgeSegX) * (2 * hw - 2 * R), -hl]);
+      corner(-hw + R, -hl + R, -Math.PI / 2);
+      for (let i = 1; i < edgeSegZ; i++) out.push([-hw, -hl + R + (i / edgeSegZ) * (2 * hl - 2 * R)]);
+      corner(-hw + R, hl - R, Math.PI);
+      for (let i = 1; i < edgeSegX; i++) out.push([-hw + R + (i / edgeSegX) * (2 * hw - 2 * R), hl]);
+      return out;
+    };
+    const outline = outlineFor(hw0, hl0, cornerR);
+    const N = outline.length;
+
+    // 縁から内側へ測った距離ごとの輪(縁の近くは細かく)。縦横どちらの縁も同じ距離で丸みが付く
+    const dMax = Math.min(hw0, hl0) - 0.04;
+    const ds = [0, 0.012, 0.028, 0.05, 0.08, 0.12, 0.17, 0.24, 0.33, 0.43, 0.54, 0.64, 0.71].filter((d) => d < dMax - 0.02);
+    ds.push(dMax);
+    const L = ds.length;
+    const vertices: number[] = [];
+    const uvs: number[] = [];
+    const indices: number[] = [];
+    const topY = (x: number, z: number, d: number): number => {
+      const nx = (2 * x) / width, nz = (2 * z) / length;
+      const camber = camberHeight * Math.max(0, 1 - nx * nx) * Math.max(0, 1 - 0.25 * nz * nz);
+      // 縁の丸み: 縁から7cmかけて屋根面に戻る
+      const edge = 0.55 * Math.pow(1 - Math.min(1, d / 0.07), 2);
+      return baseY + thickness * (1 - edge) + camber;
+    };
+    const push = (x: number, y: number, z: number): number => { vertices.push(x, y, centerZ + z); uvs.push(x / width + 0.5, z / length + 0.5); return vertices.length / 3 - 1; };
+    // 上面の輪 j=0(縁)〜L-1、最後に中心
+    for (let j = 0; j < L; j++) {
+      const ring = j === 0 ? outline : outlineFor(hw0 - ds[j], hl0 - ds[j], cornerR - ds[j]);
+      for (let i = 0; i < N; i++) { const x = ring[i][0], z = ring[i][1]; push(x, topY(x, z, ds[j]), z); }
+    }
+    const centerIdx = push(0, topY(0, 0, 1), 0);
+    for (let j = 0; j < L - 1; j++) {
+      for (let i = 0; i < N; i++) {
+        const n = (i + 1) % N, a = j * N + i, b = j * N + n, c = (j + 1) * N + i, d = (j + 1) * N + n;
+        indices.push(a, b, c, b, d, c);
+      }
+    }
+    for (let i = 0; i < N; i++) indices.push((L - 1) * N + i, (L - 1) * N + (i + 1) % N, centerIdx);
+    // 側面(縁の輪から下の輪へ)と下面
+    const sideStart = vertices.length / 3;
+    for (let i = 0; i < N; i++) push(outline[i][0], baseY, outline[i][1]);
+    for (let i = 0; i < N; i++) { const n = (i + 1) % N; indices.push(i, sideStart + i, n, n, sideStart + i, sideStart + n); }
+    const underCenter = push(0, baseY + camberHeight * 0.1, 0);
+    for (let i = 0; i < N; i++) { const n = (i + 1) % N; indices.push(sideStart + i, underCenter, sideStart + n); }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
   }
 
   /**
@@ -531,6 +875,35 @@ export class CarBodyGenerator {
    * Builds an automotive structural pillar with smooth rounded corners,
    * eliminating sharp 90-degree boxy edges.
    */
+  /**
+   * 柱の上端を屋根へなだらかに広げる「ラッパ」(柱と屋根の境目をぼかす用)。
+   * bottom→top の軸に沿って、半径が rBottom から rTop へ(根元ほどゆるやかに)広がる。
+   */
+  public static buildFlare(
+    bottom: THREE.Vector3, top: THREE.Vector3, rBottom: number, rTop: number, material: THREE.Material,
+  ): THREE.Mesh {
+    const dir = new THREE.Vector3().subVectors(top, bottom);
+    const len = dir.length();
+    const pts: THREE.Vector2[] = [];
+    const n = 16;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      pts.push(new THREE.Vector2(rBottom + (rTop - rBottom) * t * t * t, t * len));
+    }
+    const mesh = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), material);
+    mesh.position.copy(bottom);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    return mesh;
+  }
+
+  /** 点列をなめらかにつなぐ丸い管(ピラーとヘッダーをひと続きにして、フレームに膨らみを持たせる用)。 */
+  public static buildTubeFrame(points: THREE.Vector3[], radius: number, material: THREE.Material, segments = 96): THREE.Mesh {
+    const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, radius, 14, false), material);
+    mesh.castShadow = true;
+    return mesh;
+  }
+
   public static buildSmoothPillar(
     start: THREE.Vector3,
     end: THREE.Vector3,

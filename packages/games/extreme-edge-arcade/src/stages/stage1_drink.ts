@@ -9,11 +9,11 @@ export class Stage1Drink implements Stage {
   numberText = 'STAGE 1';
   title = 'ドリンクバー';
   mission = '泡を溢れさせずにフチ極限まで注げ！';
-  instruction = '[レバー上] 長押し: 注ぐ (離して確定)';
+  instruction = 'レバー上でドリンクを注ぐ (時間切れまで継続)';
   briefing: StageBriefing = {
-    key: '[レバー上] 長押し',
-    ok: 'フチ極限まで注いで離す',
-    ng: 'あふれる・足りなすぎ',
+    key: 'レバー上でドリンクを注ぐ',
+    ok: 'フチ極限まで注いで、時間切れまで保つ',
+    ng: 'あふれる(即終了)・足りなすぎ',
   };
   limitLabel = '液面・泡限界';
 
@@ -34,8 +34,6 @@ export class Stage1Drink implements Stage {
   private completed = false;
   private failed = false;
   private timeLeft = 12.0;
-  private settleTimer = 0.0;
-  private readonly settleWait = 1.0; // レバーを離して1秒静止で自動確定
   private active = false;
   // 毎回わずかに違う(±10%程度)。同じ手順の暗記だけでは通らないようにする
   private readonly pourSpeed = 0.7 * (0.9 + Math.random() * 0.2);
@@ -249,7 +247,6 @@ export class Stage1Drink implements Stage {
     // Check pouring input: Lever Up (or Button 0 / W / Enter for compatibility)
     if (!this.failed) {
       if (input.isLeverUp() || input.isButton0()) {
-        this.settleTimer = 0.0;
         if (!this.isPouring) {
           this.isPouring = true;
           this.hasReleased = true; // marked as has participated
@@ -307,11 +304,6 @@ export class Stage1Drink implements Stage {
         }
         this.foamMesh.position.x = 0;
         this.foamMesh.position.z = 0;
-
-        // 一度でも注いだ後は、レバーを離して静止すると自動確定タイマーが進む
-        if (this.hasReleased && !this.completed) {
-          this.settleTimer += dt;
-        }
       }
     }
 
@@ -332,9 +324,8 @@ export class Stage1Drink implements Stage {
       };
     }
 
-    // 2. Finalize stage when timeout occurs OR settled after pouring
-    const isSettled = this.hasReleased && !this.isPouring && this.settleTimer >= this.settleWait;
-    if ((this.timeLeft <= 0 || isSettled) && !this.failed && this.hasReleased) {
+    // 2. Finalize stage only when time runs out (離しても確定しない。あふれた場合は上で即終了)
+    if (this.timeLeft <= 0 && !this.failed && this.hasReleased) {
       this.completed = true;
       this.isPouring = false;
       sound.stopPourSound();
@@ -412,8 +403,7 @@ export class Stage1Drink implements Stage {
 
   getSubInfo(): string | null {
     if (this.hasReleased && !this.isPouring && !this.completed && !this.failed) {
-      const remain = Math.max(0, this.settleWait - this.settleTimer);
-      return `確定まで ${remain.toFixed(1)}s`;
+      return '時間切れまで保て！(注ぎ足しもOK)';
     }
     return null;
   }

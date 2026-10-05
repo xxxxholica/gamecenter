@@ -4,6 +4,7 @@ import { TrailJModel } from '../models/TrailJModel';
 import { CrossJModel } from '../models/CrossJModel';
 import { TruckJModel } from '../models/TruckJModel';
 import { mergeMeshesByMaterial } from '../models/mergeMeshes';
+import { buildFarVariant } from '../models/npcLod';
 
 /** NPCの配置・塗装に使う乱数。オンライン対戦では全員同じシードの乱数に差し替える(未設定=Math.random)。 */
 let trafficRng: (() => number) | null = null;
@@ -14,26 +15,49 @@ const rand = (): number => (trafficRng ? trafficRng() : Math.random());
 const PAINTS = [0xf4f4f2, 0xf4f4f2, 0x1b1c1f, 0x1b1c1f, 0xb9bcc0, 0x8a8d92, 0xb3202a, 0x1f4e9c, 0x2d6a4f, 0xe7b416, 0xd9641e, 0xd8c9a8, 0x5b3a29];
 const ROOFS = [null, null, 0x1b1c1f, 0xf4f4f2];   // null = same as the body
 
+/** この距離(m)より遠いNPC車は、ホイールなどを省いた簡易モデルで描く(THREE.LOD)。 */
+const LOD_FAR_DIST = 40;
+
+interface NpcPrototype {
+  /** 近距離用(従来のモデル)。 */
+  near: CarBase;
+  /** 遠距離用の簡易モデル(ホイール簡略・小部品なし・ガラスは不透明)。塗装の素材は far 側の別インスタンス。 */
+  far: CarBase;
+}
+
 /** One prototype per model, flattened into a few draw calls (wheels do not spin, so they are baked into the body meshes). */
-const prototypes = new Map<string, CarBase>();
-function prototype(kind: string): CarBase {
+const prototypes = new Map<string, NpcPrototype>();
+function makeModel(kind: string): CarBase {
+  return kind === 'trail' ? new TrailJModel() : kind === 'cross' ? new CrossJModel() : new TruckJModel();
+}
+function prototype(kind: string): NpcPrototype {
   let p = prototypes.get(kind);
   if (!p) {
-    p = kind === 'trail' ? new TrailJModel() : kind === 'cross' ? new CrossJModel() : new TruckJModel();
-    p.setLights(true);
-    mergeMeshesByMaterial(p.group);
+    const near = makeModel(kind);
+    near.setLights(true);
+    mergeMeshesByMaterial(near.group);
+    const far = makeModel(kind);
+    far.setLights(true);
+    buildFarVariant(far);
     // Each spawned NPC needs its own paint colour, so bodyMaterial/roofMaterial are cloned per car (spawn(), below) and
     // transparent parts (glass) are never merged by mergeMeshesByMaterial — a full traffic field still ends up as
     // ~1,900 individual meshes. Measured: giving them all castShadow cost ~2ms/frame (~35% of frame time) for shadow
     // patches under fast-moving cars that are barely visible, so it's reverted; the player's own car still casts one.
-    p.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
+    for (const m of [near, far]) {
+      m.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
+    }
+    p = { near, far };
     prototypes.set(kind, p);
   }
   return p;
 }
 
+/** この距離(m)より近いNPC車だけ、影を落とす。離れる時は少し遠くまで保つ。 */
+const SHADOW_ON_DIST = 55;
+const SHADOW_OFF_DIST = 70;
+
 interface NpcCar {
-  obj: THREE.Group;
+  obj: THREE.Object3D;
   s: number;
   speed: number;
   baseSpeed: number;
@@ -41,6 +65,16 @@ interface NpcCar {
   isForward: boolean;
   hazardTimer?: number;
   hazardBlink?: boolean;
+  /** 衝突でレーンから弾かれた時の復帰先(最初の衝突時に記録) */
+  baseLateral?: number;
+  /** 横方向に弾かれる速度(m/s)。指数的に減衰する */
+  lateralVel?: number;
+  /** 衝突で一瞬ふらつく向きのずれ(rad)。減衰する */
+  yawKick?: number;
+  /** 同じ接触で毎フレーム減速・ふらつきが重ならないための待ち時間(秒) */
+  hitCooldown?: number;
+  /** 今、影を落とす設定になっているか(近くの車だけ true) */
+  shadowOn?: boolean;
 }
 
 export interface TrafficCollisionResult {
@@ -50,6 +84,15 @@ export interface TrafficCollisionResult {
   speedFactor: number;
   impact: number;
   isRearEnd: boolean;
+  /** プレイヤーが弾かれる速度(m/s, ワールドXZ)。接触の初回だけ入る */
+  knockX: number;
+  knockZ: number;
+  /** 後ろから当てられた時の前方への押し出し(m/s, 速度に加算) */
+  speedAdd: number;
+  /** 進行方向(車の向き)を乱す量。横からの接触は0(まっすぐ走り続けられる)、追突は小さく入る。 */
+  turn: number;
+  /** この接触が新規(クールダウン明け)か。回転・ロール等の揺れは新規の時だけ与える */
+  fresh: boolean;
 }
 
 export interface TrafficOptions {
@@ -199,19 +242,26 @@ export class Traffic {
     }
   }
 
-  /** Clone of a prototype with its own randomly chosen paint. */
-  private spawn(proto: CarBase): THREE.Group {
-    const obj = proto.group.clone(true);
-    const body = proto.bodyMaterial.clone(), roof = proto.roofMaterial.clone();
+  /** Clone of a prototype with its own randomly chosen paint. 近距離用と遠距離用の2段階(THREE.LOD)。塗装の素材は両方で共有する。 */
+  private spawn(proto: NpcPrototype): THREE.Object3D {
+    const { near, far } = proto;
+    const body = near.bodyMaterial.clone(), roof = near.roofMaterial.clone();
     const paint = PAINTS[Math.floor(rand() * PAINTS.length)], rf = ROOFS[Math.floor(rand() * ROOFS.length)];
     body.color.setHex(paint);
     roof.color.setHex(rf ?? paint);
-    obj.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
-      if (o.material === proto.bodyMaterial) o.material = body;
-      else if (o.material === proto.roofMaterial) o.material = roof;
-    });
-    return obj;
+    const level = (src: CarBase): THREE.Object3D => {
+      const obj = src.group.clone(true);
+      obj.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        if (o.material === src.bodyMaterial) o.material = body;
+        else if (o.material === src.roofMaterial) o.material = roof;
+      });
+      return obj;
+    };
+    const lod = new THREE.LOD();
+    lod.addLevel(level(near), 0);
+    lod.addLevel(level(far), LOD_FAR_DIST, 0.1);
+    return lod;
   }
 
   private sampleOpposite(s: number, out: THREE.Vector3): void {
@@ -300,6 +350,20 @@ export class Traffic {
       const total = c.isForward ? this.fwdTotal : this.oppTotal;
       if (total <= 0) continue;
       c.s = (c.s + c.speed * dt) % total;
+      if (c.hitCooldown && c.hitCooldown > 0) c.hitCooldown -= dt;
+      // 弾かれた分を横に滑らせ、少しずつ元のレーンへ戻す
+      if (c.lateralVel) {
+        c.lateral += c.lateralVel * dt;
+        c.lateralVel *= Math.exp(-5 * dt);
+        if (Math.abs(c.lateralVel) < 0.02) c.lateralVel = 0;
+      }
+      if (c.baseLateral !== undefined && !c.lateralVel) {
+        c.lateral += (c.baseLateral - c.lateral) * Math.min(1, dt * 0.8);
+      }
+      if (c.yawKick) {
+        c.yawKick *= Math.exp(-3 * dt);
+        if (Math.abs(c.yawKick) < 0.005) c.yawKick = 0;
+      }
     }
   }
 
@@ -316,8 +380,15 @@ export class Traffic {
       }
 
       const dx = this.p0.x - player.x, dz = this.p0.z - player.z;
-      c.obj.visible = dx * dx + dz * dz < this.showDistance * this.showDistance;
+      const d2 = dx * dx + dz * dz;
+      c.obj.visible = d2 < this.showDistance * this.showDistance;
       if (!c.obj.visible) continue;
+      // 近くの車だけ影を落とす(全車だと負荷が大きい)。出入りで点滅しないよう、入る距離と出る距離をずらす
+      const wantShadow = c.shadowOn ? d2 < SHADOW_OFF_DIST * SHADOW_OFF_DIST : d2 < SHADOW_ON_DIST * SHADOW_ON_DIST;
+      if (wantShadow !== !!c.shadowOn) {
+        c.shadowOn = wantShadow;
+        c.obj.traverse((o) => { if (o instanceof THREE.Mesh && o.material && !(o.material as THREE.Material).transparent) o.castShadow = wantShadow; });
+      }
 
       if (c.isForward) {
         this.sampleForward(c.s - 3, this.p1);
@@ -331,7 +402,7 @@ export class Traffic {
       const yaw = Math.atan2(tx, tz), pitch = -Math.atan2(this.p2.y - this.p1.y, len);
       // lateral offset: + = driver's right (normal (-tz, tx))
       c.obj.position.set(this.p0.x - (tz / len) * c.lateral, this.p0.y + 0.1, this.p0.z + (tx / len) * c.lateral);
-      c.obj.rotation.set(pitch, yaw, 0, 'YXZ');
+      c.obj.rotation.set(pitch, yaw + (c.yawKick ?? 0), 0, 'YXZ');
     }
   }
 
@@ -351,6 +422,11 @@ export class Traffic {
       speedFactor: 1.0,
       impact: 0,
       isRearEnd: false,
+      knockX: 0,
+      knockZ: 0,
+      speedAdd: 0,
+      turn: 0,
+      fresh: false,
     };
 
     const CAR_HALF_W = 0.85;
@@ -392,6 +468,7 @@ export class Traffic {
           // Heavy deceleration penalty for rear-ending other traffic
           const relSpeed = Math.max(0, playerSpeed - c.speed);
           result.impact = Math.min(1.0, relSpeed / 15.0 + 0.3);
+          result.turn = Math.max(result.turn, result.impact * 0.3);
           result.speedFactor = Math.min(result.speedFactor, Math.max(0.3, c.speed / Math.max(1, playerSpeed) * 0.7));
         } else {
           // Side scrape
@@ -400,14 +477,41 @@ export class Traffic {
           result.pushX += npcRight.x * sign * pushDist;
           result.pushZ += npcRight.z * sign * pushDist;
 
+          // 横からの接触はこすっただけ: 速度は少し落ちるだけで、向きは変えない(横へ弾かれるだけ)
           result.impact = Math.max(result.impact, 0.4);
-          result.speedFactor = Math.min(result.speedFactor, 0.65);
+          result.speedFactor = Math.min(result.speedFactor, 0.93);
         }
 
-        // Destabilize the hit NPC vehicle (knockback, stumble, speed drop)
-        c.speed = Math.max(6, c.speed * 0.7);
-        c.lateral += (localX > 0 ? -0.45 : 0.45) * result.impact;
-        c.obj.rotation.y += (localX > 0 ? -0.14 : 0.14) * result.impact;
+        // 接触の初回だけ、はっきり弾く(毎フレーム減速・ふらつきを重ねない)
+        if (!c.hitCooldown || c.hitCooldown <= 0) {
+          c.hitCooldown = 0.4;
+          result.fresh = true;
+          const impact = result.impact;
+          const relSpeed = Math.abs(playerSpeed - c.speed);
+          const awaySign = localX > 0 ? -1 : 1;                   // NPC側から見て、プレイヤーと反対へ
+          if (overlapZ < overlapX) {
+            // 前後の衝突: 当てた側は止まり、当てられた側は押し出される
+            const sign = localZ < 0 ? -1 : 1;
+            result.knockX += npcFwd.x * sign * (2 + impact * 8);
+            result.knockZ += npcFwd.z * sign * (2 + impact * 8);
+            if (localZ < 0) {
+              // プレイヤーが後ろから追突: NPCは前へ押し出される
+              c.speed = Math.min(c.baseSpeed * 1.35, c.speed + relSpeed * 0.4);
+            } else {
+              // NPCが後ろから追突: プレイヤーが前へ押し出され、NPCは減速する
+              result.speedAdd += Math.min(8, relSpeed * 0.4 + 2);
+              c.speed = Math.max(6, c.speed * 0.6);
+            }
+          } else {
+            // 横からの接触: 双方が横へ弾かれる
+            result.knockX += npcRight.x * -awaySign * (3 + impact * 6);
+            result.knockZ += npcRight.z * -awaySign * (3 + impact * 6);
+            c.speed = Math.max(6, c.speed * 0.85);
+          }
+          c.baseLateral ??= c.lateral;
+          c.lateralVel = (c.lateralVel ?? 0) + awaySign * (2.5 + impact * 5);
+          c.yawKick = awaySign * Math.min(0.4, 0.15 + impact * 0.3);
+        }
       }
     }
 

@@ -235,13 +235,12 @@ html, body {
 }
 
 .final-multiplier-text {
-  font-size: 58px;
-  font-weight: 900;
+  font-size: clamp(16px, 3.4vh, 28px);
+  font-weight: 800;
   color: #00ff66;
-  letter-spacing: 4px;
-  margin-bottom: 40px;
-  text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
-  -webkit-text-stroke: 2px #000;
+  letter-spacing: 3px;
+  margin-bottom: 6px;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 
 .level-change-btn {
@@ -288,22 +287,23 @@ html, body {
 
 /* 取得単位とランキング */
 .final-sub-text {
-  font-size: clamp(16px, 3.6vh, 30px);
+  font-size: clamp(14px, 3vh, 24px);
   font-weight: 800;
   color: #ffd700;
   letter-spacing: 3px;
-  margin: clamp(-24px, -2vh, -8px) 0 clamp(6px, 2vh, 18px);
+  margin: 0 0 clamp(10px, 3vh, 28px);
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 
 .final-score-text {
-  font-size: clamp(24px, 6vh, 44px);
+  font-size: clamp(56px, 16vh, 140px);
   font-weight: 900;
   color: #ffea00;
   letter-spacing: 3px;
-  margin-bottom: 16px;
-  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
-  -webkit-text-stroke: 2px #000;
+  line-height: 1.05;
+  margin-bottom: clamp(4px, 1.5vh, 12px);
+  text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
+  -webkit-text-stroke: 3px #000;
 }
 
 .ranking-list {
@@ -418,9 +418,6 @@ html, body {
   .fail-text, .success-text {
     font-size: 96px;
     letter-spacing: 8px;
-  }
-  .final-multiplier-text {
-    font-size: 40px;
   }
   .hud-center-num {
     font-size: 50px;
@@ -630,4 +627,55 @@ html, body {
   outline: 4px solid #00e676;
   outline-offset: 4px;
   box-shadow: 0 0 26px rgba(0, 230, 118, 0.7);
+}
+
+/* 最後のジャンプのタイミングゲージ */
+.launch-timing {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  width: min(72vw, 640px);
+  text-align: center;
+  pointer-events: none;
+}
+.launch-timing.hidden { display: none; }
+.launch-timing-label {
+  font-size: clamp(18px, 3.4vh, 30px);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 3px;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+}
+.launch-timing-bar {
+  position: relative;
+  height: clamp(22px, 4vh, 36px);
+  margin-top: 10px;
+  border: 3px solid #fff;
+  background: linear-gradient(90deg, #4a1d1d 0%, #5c4a1a 60%, #1d4a2a 100%);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.6);
+}
+.launch-timing-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 255, 102, 0.75);
+  box-shadow: 0 0 14px #00ff66;
+}
+.launch-timing-cursor {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 6px;
+  margin-left: -3px;
+  background: #ffea00;
+  box-shadow: 0 0 10px #ffea00;
+}
+.launch-timing-result {
+  margin-top: 8px;
+  min-height: 1.3em;
+  font-size: clamp(20px, 4vh, 34px);
+  font-weight: 900;
+  color: #ffea00;
+  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }

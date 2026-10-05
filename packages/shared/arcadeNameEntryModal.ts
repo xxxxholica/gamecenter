@@ -2,6 +2,7 @@
 // 洗練されたアーケードキャビネット・ソフトキーボード式ネームエントリー
 // 見た目・配色・フォント・文言は各ゲームのテーマクラスで独自UI設計に完全準拠する（絵文字不使用）
 
+import { playArcadeFanfare } from './arcadeFanfare';
 import {
   MAX_NAME_LENGTH,
   KEYBOARD_GRID,
@@ -783,6 +784,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   const card = overlay.querySelector<HTMLElement>('.ane-card')!;
   const accent = getComputedStyle(card).getPropertyValue('--ane-accent').trim() || '#00f0ff';
   const confetti = spawnConfetti(overlay, accent);
+  playArcadeFanfare();
 
   const timerBarEl = document.getElementById('ane-timer-bar');
   const timerTextEl = document.getElementById('ane-timer-val');

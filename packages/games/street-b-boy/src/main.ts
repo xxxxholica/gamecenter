@@ -11,6 +11,7 @@ import { CassetteTape, StageBlock } from './entities/objects';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
+import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -58,6 +59,9 @@ class StreetBBoyGame {
   private currentStage: number = 1;
   private score: number = 0;
   private timeLeft: number = 99;
+  /** ステージ開始前の 3・2・1・GO! の間は true(時間が進まず、操作できない) */
+  private countingDown = false;
+  private countdownHandle: ArcadeCountdownHandle | null = null;
   private lives: number = 3;
 
   // Result Menu Navigation (0: 再挑戦, 1: タイトルに戻る, 2: ゲームを終了)
@@ -329,10 +333,7 @@ class StreetBBoyGame {
     } else {
       this.state = 'playing';
       this.hud.showDemoBanner(false);
-      this.hud.showCenterBanner('ready', `STAGE ${this.currentStage} READY`);
-      window.setTimeout(() => {
-        if (this.state === 'playing') this.hud.hideCenterBanner();
-      }, 1400);
+      this.beginStageCountdown();
       this.sound.startBgm();
       this.sound.setGoldMode(false);
     }
@@ -348,6 +349,8 @@ class StreetBBoyGame {
   }
 
   private cleanupGameplay(): void {
+    this.countdownHandle?.cancel();
+    this.countingDown = false;
     if (this.player) {
       this.scene.remove(this.player.mesh);
       this.player = null;
@@ -386,13 +389,25 @@ class StreetBBoyGame {
 
     this.state = 'playing';
     this.stateTimer = 0;
-    this.hud.showCenterBanner('ready', `STAGE ${this.currentStage} READY`);
-    window.setTimeout(() => {
-      if (this.state === 'playing') this.hud.hideCenterBanner();
-    }, 1400);
+    this.beginStageCountdown();
 
     this.sound.startBgm();
     this.sound.setGoldMode(false);
+  }
+
+  /** 「STAGE n READY」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
+  private beginStageCountdown(): void {
+    this.hud.showCenterBanner('ready', `STAGE ${this.currentStage} READY`);
+    this.countingDown = true;
+    this.countdownHandle?.cancel();
+    this.countdownHandle = startArcadeCountdown({
+      accentColor: '#ffea00',
+      offsetY: '24vh',
+      onGo: () => {
+        this.countingDown = false;
+        if (this.state === 'playing') this.hud.hideCenterBanner();
+      },
+    });
   }
 
   private getStageInitialTime(stage: number): number {
@@ -562,6 +577,13 @@ class StreetBBoyGame {
   // PLAYING UPDATE
   // -------------------------------------------------------------
   private updatePlaying(dt: number, time: number, input: InputState): void {
+    // カウントダウン中: 時間も操作も止め、ステージとカメラだけ動かす
+    if (this.countingDown) {
+      this.stage?.update(dt, time * 0.001, this.camera.position.x);
+      this.updateCamera(dt);
+      return;
+    }
+
     // Time countdown
     this.timeLeft -= dt;
     this.hud.updateTime(this.timeLeft);
@@ -1105,6 +1127,9 @@ class StreetBBoyGame {
 
     this.lives -= 1;
     this.hud.updateLives(this.lives);
+    // 残機が減るたびに得点が半分になる(ゲームオーバー時も含む)
+    this.score = Math.floor(this.score / 2);
+    this.hud.updateScore(this.score);
 
     window.setTimeout(() => {
       if (this.lives > 0) {

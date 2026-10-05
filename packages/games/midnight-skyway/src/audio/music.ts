@@ -1,7 +1,7 @@
 // BGMシーケンサー: 曲データ(tracks.ts)を先読みスケジューリングで合成再生する。
 // 曲が終わるとプールの中から別の曲をランダムに選んで続ける(同じ曲は連続させない)。
 import type { AudioEngine } from './engine';
-import { Section, TRACKS, Track, totalBars } from './tracks';
+import { LeadStyle, Section, TRACKS, Track, totalBars } from './tracks';
 
 const midiHz = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
 const LOOKAHEAD = 0.25;   // 秒: この先までの音を予約しておく
@@ -152,17 +152,40 @@ export class Bgm {
     const chord = track.prog[bar % track.prog.length];
     const barDur = stepDur * 16;
 
-    // ---- ドラム ----
-    if (s.kick && step % 4 === 0) {
-      // ビルドの最後の小節は、最後の拍でキックを抜く
-      if (!(s.roll && i === s.bars - 1 && step === 12)) {
-        this.kick(run, t);
-        this.pumpDip(run, t, stepDur * 4);
+    // ---- ドラム ----(曲ごとのノリ: 四つ打ち / ブロークン / ハーフタイム / DnB / フォンク)
+    const style = track.drums ?? 'four';
+    const KICKS: Record<string, number[]> = {
+      four: [0, 4, 8, 12],
+      broken: [0, 6, 10, 14],
+      halftime: [0, 10],
+      dnb: [0, 10],
+      phonk: [0, 3, 6, 10],
+    };
+    // ビルドの最後の小節は、最後の拍でキックを抜く
+    if (s.kick && KICKS[style].includes(step) && !(s.roll && i === s.bars - 1 && step >= 12)) {
+      this.kick(run, t);
+      this.pumpDip(run, t, stepDur * (style === 'four' ? 4 : 3));
+    }
+    if (s.clap) {
+      const backbeat = style === 'halftime' ? [8] : [4, 12];
+      if (backbeat.includes(step)) {
+        if (style === 'dnb') this.snare(run, t, 0.9);
+        else this.clap(run, t);
       }
     }
-    if (s.clap && (step === 4 || step === 12)) this.clap(run, t);
-    if (s.hat && step % 4 === 2) this.hat(run, t, true);
-    if (s.hat16 && step % 2 === 1) this.hat(run, t, false);
+    if (s.hat) {
+      if (style === 'four' || style === 'broken') {
+        if (step % 4 === 2) this.hat(run, t, true);
+      } else if (style === 'halftime') {
+        if (step % 4 === 0 || step % 4 === 2) this.hat(run, t, step % 8 === 6);
+      } else if (step % 2 === 0) {
+        this.hat(run, t, step % 8 === 6);
+      }
+    }
+    if (s.hat16) {
+      if (style === 'phonk') { if (step % 4 !== 2) this.hat(run, t, false); }
+      else if (step % 2 === 1) this.hat(run, t, false);
+    }
 
     // ---- ビルドアップ ----
     if (s.riser && step === 0) this.riser(run, t, barDur, i / s.bars, (i + 1) / s.bars);
@@ -180,13 +203,29 @@ export class Bgm {
       const base = track.key + 12 + chord.root;
       this.pad(run, t, barDur, [base, base + third, base + 7, base + 12], s.bright ? 3600 : 1700);
     }
-    if (s.bass && step % 4 === 2) this.bass(run, t, stepDur * 3, track.key + chord.root);
+    if (s.bass) {
+      const note = track.key + chord.root;
+      switch (track.bassStyle ?? 'offbeat') {
+        case 'rolling':
+          if (step % 2 === 1) this.bass(run, t, stepDur * 1.6, note + (step % 8 === 7 ? 12 : 0));
+          break;
+        case 'octave':
+          if (step % 4 === 0) this.bass(run, t, stepDur * 1.8, note);
+          else if (step % 4 === 2) this.bass(run, t, stepDur * 1.8, note + 12);
+          break;
+        case 'sparse':
+          if (step === 0 || step === 10) this.bass(run, t, stepDur * (step === 0 ? 8 : 5), note);
+          break;
+        default:
+          if (step % 4 === 2) this.bass(run, t, stepDur * 3, note);
+      }
+    }
     if (s.lead) {
       const phrase = s.lead === 1 ? track.arp : track.melody[bar % 2];
       const idx = phrase[step];
       if (idx !== null && idx !== undefined) {
         const note = track.key + 24 + chord.root + tones[idx % tones.length];
-        this.lead(run, t, stepDur * (s.lead === 1 ? 1.6 : 2.4), note, s.lead === 2 ? 0.15 : 0.1);
+        this.lead(run, t, stepDur * (s.lead === 1 ? 1.6 : 2.4), note, s.lead === 2 ? 0.15 : 0.1, track.leadStyle ?? 'saw');
       }
     }
   }
@@ -324,29 +363,39 @@ export class Bgm {
     sub.stop(t + dur + 0.02);
   }
 
-  private lead(run: Run, t: number, dur: number, note: number, vol: number): void {
+  private lead(run: Run, t: number, dur: number, note: number, vol: number, style: LeadStyle = 'saw'): void {
     const ctx = this.eng.ctx;
     const f = ctx.createBiquadFilter();
     const g = ctx.createGain();
     f.type = 'lowpass';
-    f.Q.value = 2;
-    f.frequency.setValueAtTime(4200, t);
-    f.frequency.exponentialRampToValueAtTime(1300, t + dur);
+    f.Q.value = style === 'square' ? 4 : 2;
+    f.frequency.setValueAtTime(style === 'pluck' ? 5200 : 4200, t);
+    f.frequency.exponentialRampToValueAtTime(style === 'pluck' ? 700 : 1300, t + (style === 'pluck' ? Math.min(dur, 0.22) : dur));
+    // 音の長さ: pluck は短く切る、bell は長く響かせる
+    const len = style === 'pluck' ? Math.min(dur, 0.24) : style === 'bell' ? dur * 1.5 : dur;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.linearRampToValueAtTime(style === 'bell' ? vol * 0.8 : vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
     f.connect(g);
     g.connect(run.pump);
     g.connect(run.leadSend);
     g.connect(this.eng.reverbSend);
-    for (const cents of [-9, 9]) {
+    const voices: { type: OscillatorType; mul: number; cents: number; gain: number }[] =
+      style === 'square' ? [{ type: 'square', mul: 1, cents: -7, gain: 0.7 }, { type: 'square', mul: 1, cents: 7, gain: 0.7 }]
+      : style === 'bell' ? [{ type: 'sine', mul: 1, cents: 0, gain: 1 }, { type: 'sine', mul: 2, cents: 3, gain: 0.45 }, { type: 'sine', mul: 3.01, cents: 0, gain: 0.2 }]
+      : style === 'pluck' ? [{ type: 'triangle', mul: 1, cents: -4, gain: 1 }, { type: 'sawtooth', mul: 1, cents: 4, gain: 0.5 }]
+      : [{ type: 'sawtooth', mul: 1, cents: -9, gain: 1 }, { type: 'sawtooth', mul: 1, cents: 9, gain: 1 }];
+    for (const v of voices) {
       const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = midiHz(note);
-      osc.detune.value = cents;
-      osc.connect(f);
+      const og = ctx.createGain();
+      osc.type = v.type;
+      osc.frequency.value = midiHz(note) * v.mul;
+      osc.detune.value = v.cents;
+      og.gain.value = v.gain;
+      osc.connect(og);
+      og.connect(f);
       osc.start(t);
-      osc.stop(t + dur + 0.02);
+      osc.stop(t + len + 0.02);
     }
   }
 

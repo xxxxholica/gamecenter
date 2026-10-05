@@ -36,6 +36,16 @@
       <div class="hud-corner-spacer"></div>
     </div>
 
+    <!-- 最後のジャンプ: ゲージの緑の帯でボタンを押すほど遠くへ飛ぶ -->
+    <div id="launch-timing" class="launch-timing hidden">
+      <div class="launch-timing-label">タイミングよくジャンプ！</div>
+      <div class="launch-timing-bar">
+        <div id="launch-timing-zone" class="launch-timing-zone"></div>
+        <div id="launch-timing-cursor" class="launch-timing-cursor"></div>
+      </div>
+      <div id="launch-timing-result" class="launch-timing-result"></div>
+    </div>
+
     <!-- ボーナス測定中倍率HUD (画面中央上部) -->
     <div id="bonus-multiplier-hud" class="bonus-multiplier-hud hidden">
       <div id="bonus-current-mult" class="bonus-mult-text">×1.0</div>
@@ -62,10 +72,9 @@
   <div id="success-screen" class="overlay-screen hidden">
     <div class="arcade-card success-card">
       <div class="success-text">卒業</div>
+      <div id="final-score-display" class="final-score-text">0</div>
       <div id="final-multiplier-display" class="final-multiplier-text">倍率 ×1.0</div>
       <div id="final-ring-display" class="final-sub-text">リング 0/3</div>
-      <div id="final-score-display" class="final-score-text">0</div>
-      <ol id="success-ranking" class="ranking-list"></ol>
       <div class="result-menu">
         <button type="button" tabindex="-1" id="retry-success-btn" class="arcade-btn success-btn">再挑戦</button>
         <button type="button" tabindex="-1" id="title-success-btn" class="level-change-btn">タイトルに戻る</button>

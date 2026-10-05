@@ -13,6 +13,34 @@ export interface CarSpecs {
   description: string;
 }
 
+const CONTACT_SHADOW_NAME = 'contact_shadow';
+let contactShadowMaterial: THREE.MeshBasicMaterial | null = null;
+
+/** 車の下に敷く、ぼかした黒い影(全車で1つの素材を共有する)。影マップとは別に、車が路面に接地している感じを出す。 */
+function getContactShadowMaterial(): THREE.MeshBasicMaterial {
+  if (contactShadowMaterial) return contactShadowMaterial;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.filter = 'blur(14px)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(30, 46, 68, 164, 26);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  contactShadowMaterial = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0.8,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+  return contactShadowMaterial;
+}
+
 export abstract class CarBase {
   public group: THREE.Group;
   public abstract readonly specs: CarSpecs;
@@ -35,6 +63,8 @@ export abstract class CarBase {
   public interiorMaterial!: THREE.MeshStandardMaterial;
 
   public wheels: THREE.Group[] = [];
+  /** フロントガラス。一人称視点では完全に消して、素通しで見えるようにする(DriveScene が切り替える) */
+  public windshield: THREE.Object3D | null = null;
   /**
    * Everything except the wheels, wrapped so pitch/roll can tilt the body around a pivot at body height while the
    * wheels stay planted on the road (created by initSuspension()).
@@ -62,24 +92,25 @@ export abstract class CarBase {
     // 1. High-end car paint (glossy deep clearcoat)
     this.bodyMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xf7b731,
-      metalness: 0.35,
-      roughness: 0.12,
+      metalness: 0.45,
+      roughness: 0.1,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      clearcoatRoughness: 0.015,
       ior: 1.52,
       reflectivity: 0.9,
-      envMapIntensity: 1.5,
+      // 昼の反射の強さ(DriveScene.applyPaintEnvironment が素材の envMap に反映する。envMapIntensity は素材に envMap が無いと効かない)
+      userData: { skyEnv: 1.7, skyEnvNight: 1.3 },
     });
 
     // 2. 2-tone roof paint (glossy contrast)
     this.roofMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x1e272e,
-      metalness: 0.2,
-      roughness: 0.14,
+      metalness: 0.3,
+      roughness: 0.12,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      clearcoatRoughness: 0.015,
       ior: 1.52,
-      envMapIntensity: 1.5,
+      userData: { skyEnv: 1.7, skyEnvNight: 1.3 },
     });
 
     // 3. Automotive High-Transmission Crystal Clear Glass
@@ -87,7 +118,9 @@ export abstract class CarBase {
       color: 0xffffff,
       metalness: 0.0,
       roughness: 0.0,
-      transmission: 0.98,
+      // transmission は 0 にする。0より大きいと、three.js は画面内の不透明な物をすべて、もう1回別の描画先へ描き直す
+      // (透過用の描画)。計測で、描画回数も三角形数も約4割減った。透け感は opacity で出す。
+      transmission: 0,
       thickness: 0.02,
       ior: 1.5,
       reflectivity: 0.5,
@@ -97,6 +130,7 @@ export abstract class CarBase {
       opacity: 0.10, // 白く濁る問題を解消し、クリスタルクリアな高い透明度に調整
       depthWrite: false,
       side: THREE.DoubleSide,
+      userData: { skyEnv: 1.5, skyEnvNight: 1.2 },
     });
 
     // 4. Matte black unpainted resin
@@ -110,14 +144,16 @@ export abstract class CarBase {
     this.chromeMaterial = new THREE.MeshStandardMaterial({
       color: 0xe0e0e0,
       metalness: 0.95,
-      roughness: 0.1,
+      roughness: 0.08,
+      userData: { skyEnv: 1.8, skyEnvNight: 1.3 },
     });
 
     // 6. Silver metallic (Skid plates, accents)
     this.silverMaterial = new THREE.MeshStandardMaterial({
       color: 0xd2d7df,
       metalness: 0.8,
-      roughness: 0.25,
+      roughness: 0.22,
+      userData: { skyEnv: 1.5, skyEnvNight: 1.2 },
     });
 
     // 7. Tire Rubber (Deep matte charcoal black)
@@ -219,7 +255,7 @@ export abstract class CarBase {
     this.group.add(pivot);
     const wheelSet = new Set<THREE.Object3D>(this.wheels);
     for (const child of [...this.group.children]) {
-      if (child === pivot || wheelSet.has(child)) continue;
+      if (child === pivot || wheelSet.has(child) || child.name === CONTACT_SHADOW_NAME) continue;   // 接地影は車体の傾きに合わせず、路面に置いたままにする
       if (this.wheels.some((w) => w.parent === child)) {
         // model root that holds the wheels next to the body parts: pull only the body parts out of it
         for (const part of [...child.children]) if (!wheelSet.has(part)) pivot.attach(part);
@@ -234,6 +270,16 @@ export abstract class CarBase {
 
     // hundreds of tiny meshes -> a few dozen (draw calls dominate the frame time)
     this.meshStats = { body: mergeMeshesByMaterial(pivot), wheels: this.wheels.map((w) => mergeMeshesByMaterial(w)) };
+  }
+
+  /** 車の下に接地影を置く(幅・長さは車体より少し大きく)。initSuspension() の前に呼ぶこと。 */
+  protected addContactShadow(width: number, length: number, centerZ = 0): void {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, length), getContactShadowMaterial());
+    mesh.name = CONTACT_SHADOW_NAME;
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(0, -0.04, centerZ);
+    mesh.renderOrder = 2;
+    this.group.add(mesh);
   }
 
   public setWireframe(enabled: boolean): void {
@@ -284,7 +330,7 @@ export abstract class CarBase {
 
     const innerWall = new THREE.Mesh(outerWallGeo, this.tireMaterial);
     innerWall.position.x = -width / 2;
-    innerWall.rotation.y = -Math.PI / 2;
+    innerWall.rotation.y = Math.PI;   // 外壁と同じ面(YZ平面)のまま内側へ向ける。-π/2 だと直角に立ってしまう
     wheelGroup.add(innerWall);
 
     // Rounded shoulder curves (Toruses on tread edges)
@@ -456,7 +502,7 @@ export abstract class CarBase {
 
     const innerWall = new THREE.Mesh(wallGeo, this.tireMaterial);
     innerWall.position.x = -width / 2;
-    innerWall.rotation.y = -Math.PI / 2;
+    innerWall.rotation.y = Math.PI;   // 外壁と同じ面(YZ平面)のまま内側へ向ける。-π/2 だと直角に立ってしまう
     wheelGroup.add(innerWall);
 
     // Rounded shoulders
@@ -596,6 +642,10 @@ export abstract class CarBase {
       map: plateTex,
       roughness: 0.4,
       metalness: 0.2,
+      // 近くの面と同じ深さになってもナンバーが勝つ(角度によるちらつき・めり込み見えの防止)
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
     const plate = new THREE.Mesh(plateGeo, plateMat);
     group.add(plate);
