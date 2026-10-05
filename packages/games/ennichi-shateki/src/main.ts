@@ -384,7 +384,6 @@ class ArcadeCorkShooter {
     this.extensionUsed = 0;
     this.extensionExhaustedNotified = false;
     this.comboBonusTier = 0;
-    this.hud.updateExtension(this.EXTENSION_BUDGET);
     this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
 
     this.camera.position.set(0, 1.48, 2.15);
@@ -392,7 +391,7 @@ class ArcadeCorkShooter {
     this.input.setAim(0, 0.05);
 
     this.hud.setMode('playing');
-    this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, 1.0, 0);
+    this.hud.updateInGame(this.shownScore(), this.timeLeft, 1.0, 0);
 
     // 開始ボタンを押した直後にいきなり始まらないよう、3・2・1・GO! を挟む
     this.offlineCountdown = true;
@@ -524,7 +523,6 @@ class ArcadeCorkShooter {
     this.reloadTimer = 0;
     this.extensionUsed = this.EXTENSION_BUDGET;                  // オンラインでは時間の延長は無い(全員が同時に終わる)
     this.comboBonusTier = 0;
-    this.hud.updateExtension(0);
     this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
 
     // 左右に他の人の台が見えるよう、画角を広げる。空の高い所を飛ぶ共有の的を撃てるよう、奥の壁の上は抜ける
@@ -537,7 +535,7 @@ class ArcadeCorkShooter {
     this.input.setAim(0, 0.05);
 
     this.hud.setMode('playing');
-    this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, 1.0, 0);
+    this.hud.updateInGame(this.shownScore(), this.timeLeft, 1.0, 0);
 
     this.match = new OnlineMatch(
       {
@@ -774,7 +772,7 @@ class ArcadeCorkShooter {
     this.match?.sendFire('n', fireData.origin, shootDir);
 
     const bombRatio = 1.0 - this.bombCooldown / this.BOMB_RECHARGE_TIME;
-    this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, bombRatio, this.comboCount);
+    this.hud.updateInGame(this.shownScore(), this.timeLeft, bombRatio, this.comboCount);
     return true;
   }
 
@@ -790,7 +788,7 @@ class ArcadeCorkShooter {
     this.corkSystem.spawn(fireData.origin, shootDir, 'explosive');
     this.match?.sendFire('b', fireData.origin, shootDir);
 
-    this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, 0.0, this.comboCount);
+    this.hud.updateInGame(this.shownScore(), this.timeLeft, 0.0, this.comboCount);
     return true;
   }
 
@@ -946,7 +944,6 @@ class ArcadeCorkShooter {
     const bonus = Math.min(Math.max(0.1, rawBonus), remaining);
     this.extensionUsed += bonus;
     this.timeLeft = Math.min(this.MAX_TIME_CAP, this.timeLeft + bonus);
-    this.hud.updateExtension(this.EXTENSION_BUDGET - this.extensionUsed);
     sounds.playTimeExtend();
     this.hud.showFlash(`延長 +${bonus.toFixed(1)}秒`, reason, 1.6, true);
   }
@@ -1076,7 +1073,7 @@ class ArcadeCorkShooter {
 
     // 5. Update HUD
     const bombRatio = 1.0 - this.bombCooldown / this.BOMB_RECHARGE_TIME;
-    this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, bombRatio, this.comboCount);
+    this.hud.updateInGame(this.shownScore(), this.timeLeft, bombRatio, this.comboCount);
 
     // 6. Game Over check
     if (this.match) {
@@ -1203,7 +1200,7 @@ class ArcadeCorkShooter {
         });
 
         const bombRatio = 1.0 - this.bombCooldown / this.BOMB_RECHARGE_TIME;
-        this.hud.updateInGame(this.shownScore(), this.timeLeft, this.highScore, bombRatio, this.comboCount);
+        this.hud.updateInGame(this.shownScore(), this.timeLeft, bombRatio, this.comboCount);
       }
     }
   }

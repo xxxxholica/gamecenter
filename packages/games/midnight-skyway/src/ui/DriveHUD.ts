@@ -1,6 +1,7 @@
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
+import { setText, setWidth, setDisplay } from '../../../../shared/hudDom';
 import { MapBase } from '../maps/MapBase';
 import { CameraMode } from '../core/CarController';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
@@ -28,12 +29,20 @@ const MAP_SIZE = 210;
  * - Transparent minimap with crisp vector drop shadows
  * - Fully localized to authentic Japanese Arcade presentation
  */
+/** [文字色, 文字グロー, 枠グロー] — 速度/回転の段階(通常/警戒/レッドゾーン)ごと */
+const SPEED_COLORS: ReadonlyArray<readonly [string, string, string]> = [
+  ['#00f0ff', 'rgba(0, 240, 255, 0.7)', 'rgba(0, 240, 255, 0.25)'],
+  ['#ffcc00', 'rgba(255, 204, 0, 0.8)', 'rgba(255, 204, 0, 0.35)'],
+  ['#ff0055', 'rgba(255, 0, 85, 0.85)', 'rgba(255, 0, 85, 0.45)'],
+];
+
 export class DriveHUD {
   private container: HTMLElement;
   private events: DriveHUDEvents;
   public isNameEntryOpen = false;
 
   // DOM elements
+  private speedLevel = -1;
   private speedEl!: HTMLElement;
   private gearEl!: HTMLElement;
   private tachoFillEl!: HTMLElement;
@@ -137,7 +146,7 @@ export class DriveHUD {
         <!-- Top: Lap Time & Target Best Time -->
         <div class="cluster-time-row">
           <div class="time-block">
-            <span class="time-tag">TIME</span>
+            <span class="time-tag">LAP</span>
             <span class="hud-time-main" id="hud-timer">00:00.000</span>
           </div>
           <div class="best-time-block">
@@ -162,9 +171,6 @@ export class DriveHUD {
         <div class="speedo-tacho-wrap">
           <div class="speedo-tacho">
             <div class="tacho-fill" id="hud-tacho-fill"></div>
-          </div>
-          <div class="tacho-scale-labels">
-            <span>0</span><span>40</span><span>80</span><span>120</span><span class="red-mark">160</span>
           </div>
         </div>
       </div>
@@ -344,45 +350,20 @@ export class DriveHUD {
     this.bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
   }
 
-  public updateTelemetry(speedKmH: number, rpm: number, gear: string, isDrifting: boolean = false): void {
-    this.speedEl.textContent = String(speedKmH);
-    this.gearEl.textContent = gear;
-
-    // Drift badge indicator
-    const gearTagEl = document.getElementById('hud-gear-tag');
-    if (gearTagEl) {
-      if (isDrifting) {
-        gearTagEl.textContent = 'DRIFT';
-        gearTagEl.classList.add('drift-active');
-      } else {
-        gearTagEl.textContent = 'GEAR';
-        gearTagEl.classList.remove('drift-active');
-      }
-    }
+  public updateTelemetry(speedKmH: number, rpm: number, gear: string): void {
+    setText(this.speedEl, String(speedKmH));
+    setText(this.gearEl, gear);
 
     // Tachometer gauge bar
     const revPct = rpm > 0 ? Math.min(100, (rpm / 7500) * 100) : Math.min(100, (speedKmH / 150) * 100);
-    this.tachoFillEl.style.width = `${revPct}%`;
+    setWidth(this.tachoFillEl, `${revPct}%`);
 
     // Synchronize cluster color with speed / tachometer gauge
-    let color = '#00f0ff';
-    let glow = 'rgba(0, 240, 255, 0.7)';
-    let boxGlow = 'rgba(0, 240, 255, 0.25)';
-
-    if (revPct > 85 || speedKmH >= 120) {
-      color = '#ff0055';
-      glow = 'rgba(255, 0, 85, 0.85)';
-      boxGlow = 'rgba(255, 0, 85, 0.45)';
-      this.tachoFillEl.classList.add('redline');
-    } else if (revPct >= 45 || speedKmH >= 70) {
-      color = '#ffcc00';
-      glow = 'rgba(255, 204, 0, 0.8)';
-      boxGlow = 'rgba(255, 204, 0, 0.35)';
-      this.tachoFillEl.classList.remove('redline');
-    } else {
-      this.tachoFillEl.classList.remove('redline');
-    }
-
+    const level = revPct > 85 || speedKmH >= 120 ? 2 : revPct >= 45 || speedKmH >= 70 ? 1 : 0;
+    this.tachoFillEl.classList.toggle('redline', level === 2);
+    if (level === this.speedLevel) return;
+    this.speedLevel = level;
+    const [color, glow, boxGlow] = SPEED_COLORS[level];
     this.speedEl.style.color = color;
     this.speedEl.style.textShadow = `0 0 20px ${glow}`;
     if (this.speedoClusterEl) {
@@ -397,7 +378,7 @@ export class DriveHUD {
   // ==========================================
 
   public updateTimer(formatted: string): void {
-    this.timerEl.textContent = formatted;
+    setText(this.timerEl, formatted);
   }
 
   public updateBestTime(formatted: string | null): void {
@@ -456,14 +437,14 @@ export class DriveHUD {
 
   /** Height above the start line (courses that climb). */
   public updateAltitude(metres: number): void {
-    this.altitudeNumEl.textContent = String(Math.max(0, Math.round(metres)));
+    setText(this.altitudeNumEl, String(Math.max(0, Math.round(metres))));
   }
 
   /** `ms` null hides the time-limit readout (no rules on this course). */
   public updateRemaining(ms: number | null): void {
-    this.remainingEl.style.display = ms === null ? 'none' : 'flex';
+    setDisplay(this.remainingEl, ms === null ? 'none' : 'flex');
     if (ms === null) return;
-    this.remainingNumEl.textContent = (ms / 1000).toFixed(1);
+    setText(this.remainingNumEl, (ms / 1000).toFixed(1));
     this.remainingEl.classList.toggle('low', ms < 10000);
   }
 
@@ -479,17 +460,18 @@ export class DriveHUD {
 
   /** gapMs: race time minus the rival's time at the same spot (negative = ahead). null = unknown. */
   public updateGhostGap(gapMs: number | null, label: string): void {
-    if (gapMs === null) { this.ghostGapEl.textContent = ''; return; }
+    if (gapMs === null) { setText(this.ghostGapEl, ''); return; }
     const ahead = gapMs <= 0;
-    this.ghostGapEl.textContent = `${label}  ${ahead ? '-' : '+'}${(Math.abs(gapMs) / 1000).toFixed(2)}s`;
-    this.ghostGapEl.className = 'hud-ghost-gap ' + (ahead ? 'ahead' : 'behind');
+    setText(this.ghostGapEl, `${label}  ${ahead ? '-' : '+'}${(Math.abs(gapMs) / 1000).toFixed(2)}s`);
+    const cls = 'hud-ghost-gap ' + (ahead ? 'ahead' : 'behind');
+    if (this.ghostGapEl.className !== cls) this.ghostGapEl.className = cls;
   }
 
   public updateDrift(score: number, chain: number, chainTime: number, boostLeft: number, boostMax: number): void {
-    this.driftScoreEl.textContent = String(score);
+    setText(this.driftScoreEl, String(score));
     const combo = 1 + Math.min(2, chainTime * 0.5);
-    this.driftChainEl.textContent = chain > 0 ? `  +${Math.round(chain)}  x${combo.toFixed(1)}` : '';
-    this.boostFillEl.style.width = `${Math.round(Math.min(1, boostLeft / Math.max(0.1, boostMax)) * 100)}%`;
+    setText(this.driftChainEl, chain > 0 ? `  +${Math.round(chain)}  x${combo.toFixed(1)}` : '');
+    setWidth(this.boostFillEl, `${Math.round(Math.min(1, boostLeft / Math.max(0.1, boostMax)) * 100)}%`);
     this.driftEl.classList.toggle('boosting', boostLeft > 0);
   }
 

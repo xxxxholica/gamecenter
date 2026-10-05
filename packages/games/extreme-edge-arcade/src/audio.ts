@@ -143,7 +143,8 @@ class SoundManager {
   }
 
   // Success Fanfare / Chime
-  playSuccessChime(scorePercent: number) {
+  /** volume: 音量倍率(1.0が標準)。種目ごとに大きさを調整したい時に使う */
+  playSuccessChime(scorePercent: number, volume = 1.0) {
     if (this.muted) return;
     const ctx = this.getContext();
     if (!ctx || !this.sfxGain) return;
@@ -158,7 +159,7 @@ class SoundManager {
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + i * 0.06);
-      gain.gain.setValueAtTime(0.14, now + i * 0.06);
+      gain.gain.setValueAtTime(0.14 * volume, now + i * 0.06);
       gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.5);
       osc.connect(gain);
       gain.connect(this.sfxGain!);

@@ -532,6 +532,11 @@ class SoundEngine {
       clearInterval(this.bgmInterval);
       this.bgmInterval = null;
     }
+    // BGMを切り替えるたびに音量ノードが繋がったまま残らないよう、外しておく
+    if (this.bgmGain) {
+      this.bgmGain.disconnect();
+      this.bgmGain = null;
+    }
   }
 }
 

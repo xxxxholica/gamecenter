@@ -129,6 +129,7 @@ const allGames: GameEntry[] = [
     description:
       '土俵の上で力士同士がぶつかり合う3D相撲アクション。張り手や掴みで相手を吹き飛ばし、土俵の外へ押し出せ。CPU戦と2人対戦に対応。',
     thumbnail: 'thumbnails/sumo-smash-3d.webp',
+    logo: 'logos/sumo-smash-3d.webp',
     accent: '#e63946',
     developer: THOUSANDL000,
   },

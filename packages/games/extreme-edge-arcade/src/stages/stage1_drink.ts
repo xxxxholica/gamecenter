@@ -9,11 +9,11 @@ export class Stage1Drink implements Stage {
   numberText = 'STAGE 1';
   title = 'ドリンクバー';
   mission = '泡を溢れさせずにフチ極限まで注げ！';
-  instruction = 'レバー上でドリンクを注ぐ (時間切れまで継続)';
+  instruction = 'レバー上でドリンクを注ぐ・時間切れまで継続';
   briefing: StageBriefing = {
-    key: 'レバー上でドリンクを注ぐ',
+    headline: 'ドリンクを注ぐ',
     ok: 'フチ極限まで注いで、時間切れまで保つ',
-    ng: 'あふれる(即終了)・足りなすぎ',
+    ng: 'あふれて即終了・足りなすぎ',
   };
   limitLabel = '液面・泡限界';
 
@@ -401,9 +401,9 @@ export class Stage1Drink implements Stage {
     return Math.max(0, this.timeLeft);
   }
 
-  getSubInfo(): string | null {
+  getCenterHint(): string | null {
     if (this.hasReleased && !this.isPouring && !this.completed && !this.failed) {
-      return '時間切れまで保て！(注ぎ足しもOK)';
+      return 'まだ注げるかも\nもう一度注いでフチまで攻めよう';
     }
     return null;
   }

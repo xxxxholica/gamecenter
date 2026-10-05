@@ -1,3 +1,4 @@
+import { setText, setWidth, setDisplay } from '../../../shared/hudDom';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { getPrizeSvg, getPrizeShortName } from './prize_icons';
 import { PrizeBreakdownEntry } from './results_pile';
@@ -24,6 +25,15 @@ export class ArcadeHUD {
 
   // Results elements
   private resultsOverlay!: HTMLDivElement;
+
+  // 毎フレーム更新する要素(getElementById を毎回引かないよう生成時に保持)
+  private scoreValEl!: HTMLElement;
+  private timeValEl!: HTMLElement;
+  private ammoPipsEl!: HTMLElement;
+  private bombFillEl!: HTMLElement;
+  private bombStatusEl!: HTMLElement;
+  private comboValEl!: HTMLElement;
+  private comboRateEl!: HTMLElement;
 
   // Bottom Center Consolidated Container (Combo + Flash)
   private bottomCenterEl!: HTMLDivElement;
@@ -55,24 +65,22 @@ export class ArcadeHUD {
     this.scoreEl.className = 'hud-text hud-tl';
     this.scoreEl.innerHTML = `
       <div class="hud-score-main">重さ <span class="num" id="hud-score-val">00000</span>g</div>
-      <div class="hud-score-sub">最高 <span class="num-sub" id="hud-hiscore-val">09800</span>g</div>
     `;
 
     // Top-Right: 時間
     this.timerEl = document.createElement('div');
     this.timerEl.className = 'hud-text hud-tr';
-    this.timerEl.innerHTML = `時間 <span class="num" id="hud-time-val">30.0</span>
-      <div class="ext-left">延長枠 <span id="hud-ext-val">15.0</span></div>`;
+    this.timerEl.innerHTML = `時間 <span class="num" id="hud-time-val">30.0</span>`;
 
     // Bottom-Right: 爆発弾
     this.ammoEl = document.createElement('div');
     this.ammoEl.className = 'hud-text hud-br';
     this.ammoEl.innerHTML = `
-      <div class="ammo-wrap"><span class="bomb-gauge-label">弾</span><span class="ammo-pips" id="hud-ammo-pips"></span></div>
+      <div class="ammo-wrap"><span class="bomb-gauge-label">通常弾</span><span class="ammo-pips" id="hud-ammo-pips"></span></div>
       <div class="bomb-gauge-wrap" id="hud-bomb-wrap">
         <span class="bomb-gauge-label">爆発弾</span>
         <div class="bomb-gauge-bar"><div class="bomb-gauge-fill" id="hud-bomb-fill"></div></div>
-        <span class="bomb-status" id="hud-bomb-status">装填中</span>
+        <span class="bomb-status" id="hud-bomb-status">チャージ中</span>
       </div>
     `;
 
@@ -117,24 +125,27 @@ export class ArcadeHUD {
     this.resultsOverlay.style.display = 'none';
     this.container.appendChild(this.resultsOverlay);
 
+    const byId = (id: string) => this.container.querySelector<HTMLElement>('#' + id)!;
+    this.scoreValEl = byId('hud-score-val');
+    this.timeValEl = byId('hud-time-val');
+    this.ammoPipsEl = byId('hud-ammo-pips');
+    this.bombFillEl = byId('hud-bomb-fill');
+    this.bombStatusEl = byId('hud-bomb-status');
+    this.comboValEl = byId('hud-combo-val');
+    this.comboRateEl = byId('hud-combo-rate');
   }
 
   // Update Crosshair on Screen
   public updateCrosshair(normX: number, normY: number, visible: boolean, isLocked = false) {
     if (!visible) {
-      this.crosshairEl.style.display = 'none';
+      setDisplay(this.crosshairEl, 'none');
       return;
     }
-    this.crosshairEl.style.display = 'block';
+    setDisplay(this.crosshairEl, 'block');
     const screenX = (normX + 1) * 0.5 * window.innerWidth;
     const screenY = (-normY + 1) * 0.5 * window.innerHeight;
     this.crosshairEl.style.transform = `translate(${screenX}px, ${screenY}px)`;
-
-    if (isLocked) {
-      this.crosshairEl.classList.add('locked');
-    } else {
-      this.crosshairEl.classList.remove('locked');
-    }
+    this.crosshairEl.classList.toggle('locked', isLocked);
   }
 
   // Flash big center message
@@ -163,82 +174,42 @@ export class ArcadeHUD {
 
   /** 通常弾の残数。0のときは再装填中の表示にする */
   public updateAmmo(ammo: number, max: number, reloading: boolean) {
-    const el = document.getElementById('hud-ammo-pips');
-    if (!el) return;
     const text = reloading ? '装填中' : '●'.repeat(ammo) + '○'.repeat(Math.max(0, max - ammo));
     if (text === this.lastAmmoText) return;
     this.lastAmmoText = text;
-    el.textContent = text;
-    el.classList.toggle('reloading', reloading);
-  }
-
-  /** 残りの延長枠(秒)。0になったらこれ以上延長されない */
-  public updateExtension(remaining: number) {
-    const el = document.getElementById('hud-ext-val');
-    if (el) el.textContent = Math.max(0, remaining).toFixed(1);
+    this.ammoPipsEl.textContent = text;
+    this.ammoPipsEl.classList.toggle('reloading', reloading);
   }
 
   public updateInGame(
     score: number,
     timeLeft: number,
-    highScore: number,
     bombCooldownRatio: number,
     combo: number
   ) {
-    const scoreVal = document.getElementById('hud-score-val');
-    if (scoreVal) {
-      scoreVal.textContent = String(score).padStart(5, '0');
-    }
-
-    const timeVal = document.getElementById('hud-time-val');
-    if (timeVal) {
-      const fixedTime = Math.max(0, timeLeft).toFixed(1);
-      timeVal.textContent = fixedTime;
-      if (timeLeft <= 5.0) {
-        this.timerEl.classList.add('danger-blink');
-      } else {
-        this.timerEl.classList.remove('danger-blink');
-      }
-    }
+    setText(this.scoreValEl, String(score).padStart(5, '0'));
+    setText(this.timeValEl, Math.max(0, timeLeft).toFixed(1));
+    this.timerEl.classList.toggle('danger-blink', timeLeft <= 5.0);
 
     // Bomb gauge
-    const fillEl = document.getElementById('hud-bomb-fill');
-    const statusEl = document.getElementById('hud-bomb-status');
     const pct = Math.min(100, Math.max(0, bombCooldownRatio * 100));
-
-    if (fillEl) {
-      fillEl.style.width = `${pct}%`;
-    }
-    if (statusEl) {
-      if (bombCooldownRatio >= 1.0) {
-        statusEl.textContent = '発射可能';
-        statusEl.classList.add('ready');
-      } else {
-        statusEl.textContent = '装填中';
-        statusEl.classList.remove('ready');
-      }
-    }
+    setWidth(this.bombFillEl, `${pct}%`);
+    const ready = bombCooldownRatio >= 1.0;
+    setText(this.bombStatusEl, ready ? '発射可能' : 'チャージ中');
+    this.bombStatusEl.classList.toggle('ready', ready);
 
     // Combo display
     if (combo >= 2) {
-      this.comboEl.style.display = 'flex';
-      const comboNum = document.getElementById('hud-combo-val');
-      if (comboNum) comboNum.textContent = String(combo);
-      const comboRate = document.getElementById('hud-combo-rate');
-      if (comboRate) {
-        const mult = 1.0 + Math.min(2.0, (combo - 1) * 0.2);
-        comboRate.textContent = `x${mult.toFixed(1)}`;
-      }
+      setDisplay(this.comboEl, 'flex');
+      setText(this.comboValEl, String(combo));
+      const mult = 1.0 + Math.min(2.0, (combo - 1) * 0.2);
+      setText(this.comboRateEl, `x${mult.toFixed(1)}`);
       this.comboEl.classList.add('pulse');
     } else {
-      this.comboEl.style.display = 'none';
+      setDisplay(this.comboEl, 'none');
       this.comboEl.classList.remove('pulse');
     }
 
-    const hiVal = document.getElementById('hud-hiscore-val');
-    if (hiVal) {
-      hiVal.textContent = String(highScore).padStart(5, '0');
-    }
   }
 
   // Show / Hide HUD elements based on game state

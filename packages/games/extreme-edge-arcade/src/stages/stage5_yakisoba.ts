@@ -11,7 +11,7 @@ export class Stage5Yakisoba implements Stage {
   mission = 'フタ崩壊寸前を攻めて湯を切り切れ！';
   instruction = 'レバー上でカップを傾ける';
   briefing: StageBriefing = {
-    key: 'レバー上でカップを傾ける',
+    headline: '焼きそばカップを傾ける',
     ok: 'フタが剥がれる寸前まで傾けて湯を切る',
     ng: 'フタが剥がれる',
   };
@@ -32,6 +32,9 @@ export class Stage5Yakisoba implements Stage {
   private readonly flowScale = 0.9 + Math.random() * 0.2;
   private readonly stressScale = 0.9 + Math.random() * 0.2;
   private active = false;
+  // 中央ヒント用: 今お湯が出ているか / 一度でも湯切りを始めたか
+  private isPouring = false;
+  private hasPoured = false;
 
   // Meshes
   private cupGroup = new THREE.Group();
@@ -249,7 +252,9 @@ export class Stage5Yakisoba implements Stage {
       const tiltDegrees = (this.currentTilt * 180) / Math.PI;
 
       // Water drainage logic
-      if (tiltDegrees > 18 && this.waterRemaining > 0) {
+      this.isPouring = tiltDegrees > 18 && this.waterRemaining > 0;
+      if (this.isPouring) this.hasPoured = true;
+      if (this.isPouring) {
         // Pour rate increases with tilt angle
         const flowRate = Math.pow((tiltDegrees - 18) / 45, 1.6) * 34 * this.flowScale;
         this.waterRemaining = Math.max(0, this.waterRemaining - flowRate * dt);
@@ -383,7 +388,7 @@ export class Stage5Yakisoba implements Stage {
         const courageBonus = this.lidStress * 4.9;
         const scorePercent = Number(Math.min(99.9, baseScore + courageBonus).toFixed(1));
 
-        sound.playSuccessChime(scorePercent);
+        sound.playSuccessChime(scorePercent, 0.4); // 湯切りは成功音が大きく感じるため控えめに
         return {
           completed: true,
           success: true,
@@ -403,7 +408,7 @@ export class Stage5Yakisoba implements Stage {
       const drained = 100 - this.waterRemaining;
       if (drained >= 80) {
         const scorePercent = Number(drained.toFixed(1));
-        sound.playSuccessChime(scorePercent);
+        sound.playSuccessChime(scorePercent, 0.4); // 湯切りは成功音が大きく感じるため控えめに
         return {
           completed: true,
           success: true,
@@ -454,10 +459,12 @@ export class Stage5Yakisoba implements Stage {
     return Math.max(0, this.timeLeft);
   }
 
-  getSubInfo(): string | null {
-    if (this.completed) return '湯切り完了 0.0%';
-    if (this.failed) return 'フタ崩壊 (大惨事)';
-    return `残り湯量 ${this.waterRemaining.toFixed(1)}%`;
+  // 右上の残り湯量表示は出さない。傾けるのをやめた時だけ、ドリンクバー同様に中央へヒントを出す
+  getCenterHint(): string | null {
+    if (this.hasPoured && !this.isPouring && !this.completed && !this.failed) {
+      return 'まだお湯が残ってる\nもう一度傾けて湯を切ろう';
+    }
+    return null;
   }
 
   cleanup(scene: THREE.Scene) {

@@ -309,7 +309,6 @@ class StreetBBoyGame {
     this.timeLeft = this.getStageInitialTime(this.currentStage);
     this.lives = 3;
     this.hud.updateScore(this.score);
-    this.hud.updateStage(this.currentStage);
     this.hud.updateTime(this.timeLeft);
     this.hud.updateLives(this.lives);
 
@@ -377,7 +376,6 @@ class StreetBBoyGame {
     }
 
     this.timeLeft = this.getStageInitialTime(this.currentStage);
-    this.hud.updateStage(this.currentStage);
     this.hud.updateTime(this.timeLeft);
 
     this.stage = new Stage(this.scene, this.currentStage);

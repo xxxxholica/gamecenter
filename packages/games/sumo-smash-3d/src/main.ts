@@ -40,13 +40,14 @@ const guideBattle = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
     { indices: [0], label: '張り手' },
-    { indices: [1], label: 'ぶちかまし(長押しでタメ)' },
+    { indices: [1], label: 'ぶちかまし・長押しでタメ' },
     { indices: [2], label: '四股' },
     { indices: [3, 4], label: 'つかみ' },
     { indices: [5], label: 'すり足' },
-    { indices: [6, 7], label: 'ガード' },
+    { indices: [6, 7], label: '防御' },
   ],
   showHomeHint: true,
+  position: 'top-left',
 });
 const guideResult = () => mountArcadeGuide({
   moveLabel: '選択',
@@ -97,7 +98,8 @@ class SumoGame {
   private gameMode: GameMode = 'pve';
 
   // 固定カメラの基本位置・注視点（クォータービュー）
-  private readonly cameraBasePos = new THREE.Vector3(0, 22.0, 23.5);
+  // 土俵が大きく見えるよう、真上寄りの斜め見下ろしを保ったまま近づけている
+  private readonly cameraBasePos = new THREE.Vector3(0, 17.2, 18.4);
   private readonly cameraLookAt = new THREE.Vector3(0, 0.5, 0);
 
   // タイトル画面カメラ周回用
@@ -105,6 +107,12 @@ class SumoGame {
 
   // カメラの正面・右ベクトル（移動ベクトル変換用）
   private camForward: THREE.Vector3 = new THREE.Vector3();
+  // 毎フレーム使い回す作業用ベクトル(力士側は受け取った値を保持しない)
+  private readonly p1PosTmp = new THREE.Vector3();
+  private readonly p2PosTmp = new THREE.Vector3();
+  private readonly hitTargetTmp = new THREE.Vector3();
+  private readonly hitSourceTmp = new THREE.Vector3();
+  private readonly worldMoveTmp = new THREE.Vector3();
   private camRight: THREE.Vector3 = new THREE.Vector3();
 
   // バトルラウンド管理
@@ -378,18 +386,17 @@ class SumoGame {
     // 柝の音（カチーン！）
     this.soundManager.playHyoshigi();
 
-    const opponentName = this.gameMode === 'pvp' ? '紅炎山(2P)' : '紅炎山(CPU)';
     let roundTitle = '初番勝負';
-    let subText = `蒼天龍 vs ${opponentName}（二本先取）`;
+    let subText = '蒼天龍 vs 紅炎山・二本先取';
 
     if (!isFirstRound) {
       if (this.player1.wins === 1 && this.player2.wins === 1) {
-        roundTitle = '結びの一番（決戦！）';
-        subText = '星取り五分（1 - 1）勝者が優勝！';
+        roundTitle = '結びの一番・決戦！';
+        subText = '星取り五分・1 - 1 勝者が優勝！';
       } else {
         roundTitle = '二番勝負';
         const leader = this.player1.wins > this.player2.wins ? '蒼天龍 王手！' : '紅炎山 王手！';
-        subText = `星取り（${this.player1.wins} - ${this.player2.wins}）${leader}`;
+        subText = `星取り・${this.player1.wins} - ${this.player2.wins} ${leader}`;
       }
     }
 
@@ -412,13 +419,13 @@ class SumoGame {
     guideTitle();
   }
 
-  /** モード選択(1P vs CPU / 二人対戦 / 相撲指南) */
+  /** モード選択(1P vs CPU / 相撲指南) */
   private openModeSelect() {
     this.gameState = 'menu';
     this.armInput();
     this.modeSelect.show([
       { id: 'pve', badge: '1P vs CPU', art: versusArt('CPU'), title: '幕内本割', sub: 'ひとりで遊ぶ', desc: 'CPUの力士と二本先取で勝負します。' },
-      { id: 'pvp', badge: '1P vs 2P', art: versusArt('2P'), title: '二人対戦', sub: 'ふたりで遊ぶ', desc: 'アケコン2台、またはキーボードで対戦します。二本先取。' },
+      // 二人対戦(pvp)は今後オンライン対戦として実装予定のため一旦非表示
       { id: 'guide', badge: 'HOW TO PLAY', art: GUIDE_ART, title: '相撲指南', sub: '遊び方・技', desc: '操作方法と技の効果を確認します。' },
     ]);
     guideModeSelect();
@@ -595,28 +602,8 @@ class SumoGame {
     // 1P 入力更新
     const rawP1Input = this.inputManager.getPlayer1Input();
 
-    const p1WorldMove = new THREE.Vector3();
-    if (rawP1Input.isMoving) {
-      p1WorldMove.addScaledVector(this.camRight, rawP1Input.moveX);
-      p1WorldMove.addScaledVector(this.camForward, -rawP1Input.moveZ);
-      p1WorldMove.normalize();
-    }
-
-    const p1MoveInput = {
-      x: p1WorldMove.x,
-      z: p1WorldMove.z,
-      isMoving: rawP1Input.isMoving,
-      dash: rawP1Input.dashTriggered,
-    };
-
-    const p1Actions = {
-      harite: rawP1Input.buttonAPressed,
-      buchikamashiCharge: rawP1Input.buttonB,
-      buchikamashiRelease: rawP1Input.buttonBReleased,
-      shiko: rawP1Input.buttonCPressed,
-      grab: rawP1Input.buttonGrabPressed,
-      guard: rawP1Input.guard,
-    };
+    const p1MoveInput = this.toWorldMoveInput(rawP1Input);
+    const p1Actions = this.toActions(rawP1Input);
 
     // 2P 入力（PvPなら2P操作、PvEならCPU AI）
     let p2MoveInput = { x: 0, z: 0, isMoving: false, dash: false };
@@ -631,26 +618,8 @@ class SumoGame {
 
     if (this.gameMode === 'pvp') {
       const rawP2Input = this.inputManager.getPlayer2Input();
-      const p2WorldMove = new THREE.Vector3();
-      if (rawP2Input.isMoving) {
-        p2WorldMove.addScaledVector(this.camRight, rawP2Input.moveX);
-        p2WorldMove.addScaledVector(this.camForward, -rawP2Input.moveZ);
-        p2WorldMove.normalize();
-      }
-      p2MoveInput = {
-        x: p2WorldMove.x,
-        z: p2WorldMove.z,
-        isMoving: rawP2Input.isMoving,
-        dash: rawP2Input.dashTriggered,
-      };
-      p2Actions = {
-        harite: rawP2Input.buttonAPressed,
-        buchikamashiCharge: rawP2Input.buttonB,
-        buchikamashiRelease: rawP2Input.buttonBReleased,
-        shiko: rawP2Input.buttonCPressed,
-        grab: rawP2Input.buttonGrabPressed,
-        guard: rawP2Input.guard,
-      };
+      p2MoveInput = this.toWorldMoveInput(rawP2Input);
+      p2Actions = this.toActions(rawP2Input);
     } else {
       const p2Plan = this.ai.update(dt, this.player1);
       p2MoveInput = {
@@ -670,8 +639,8 @@ class SumoGame {
     }
 
     // 力士の更新
-    const p1Pos = new THREE.Vector3(this.player1.body.position.x, this.player1.body.position.y, this.player1.body.position.z);
-    const p2Pos = new THREE.Vector3(this.player2.body.position.x, this.player2.body.position.y, this.player2.body.position.z);
+    const p1Pos = this.p1PosTmp.set(this.player1.body.position.x, this.player1.body.position.y, this.player1.body.position.z);
+    const p2Pos = this.p2PosTmp.set(this.player2.body.position.x, this.player2.body.position.y, this.player2.body.position.z);
 
     this.player1.update(dt, p1MoveInput, p1Actions, p2Pos);
     this.player2.update(dt, p2MoveInput, p2Actions, p1Pos);
@@ -714,11 +683,10 @@ class SumoGame {
       this.player2.state === 'stun',
       this.player1.guardGauge,
       this.player2.guardGauge,
-      this.player1.buchikamashiCooldown,
-      this.player2.buchikamashiCooldown,
-      this.player1.shikoCooldown,
-      this.player2.shikoCooldown,
-      this.inputManager.isGamepadConnected()
+      this.player1.buchikamashiCooldown / this.player1.buchikamashiMaxCooldown,
+      this.player2.buchikamashiCooldown / this.player2.buchikamashiMaxCooldown,
+      this.player1.shikoCooldown / this.player1.shikoMaxCooldown,
+      this.player2.shikoCooldown / this.player2.shikoMaxCooldown
     );
   }
 
@@ -726,63 +694,59 @@ class SumoGame {
    * 攻撃ヒット判定（ヒットボックス vs 相手の剛体）
    */
   private checkAttackHits() {
-    // 1P の攻撃判定 -> 2P へ
-    const p1Hitbox = this.player1.getHitbox();
-    if (p1Hitbox && !this.player1.attackHitRegistered) {
-      const p2Pos = new THREE.Vector3(
-        this.player2.body.position.x,
-        this.player2.body.position.y,
-        this.player2.body.position.z
-      );
-      const dist = p1Hitbox.position.distanceTo(p2Pos);
-      if (dist < p1Hitbox.radius + 0.85) {
-        // ヒット成立！
-        this.player1.attackHitRegistered = true;
-        if (this.player1.currentAttackType === 'grab') {
-          // つかみ成立！（ガード貫通）
-          if (this.player2.state !== 'fall' && this.player2.state !== 'grabbed' && this.player2.state !== 'throw') {
-            this.player1.onGrabSuccess(this.player2);
-            this.player2.onGrabbed(this.player1);
-            this.uiManager.showBanner('がっぷり四つ！', 'A:つかみ打撃！ B:上手投げ！ 移動:寄り切り！', 1800);
-          }
-        } else {
-          this.player2.receiveHit(
-            new THREE.Vector3(this.player1.body.position.x, this.player1.body.position.y, this.player1.body.position.z),
-            this.player1.currentAttackType!,
-            this.player1.chargeTimer / this.player1.maxChargeTime
-          );
-        }
-      }
-    }
+    this.resolveAttack(this.player1, this.player2, 'A:つかみ打撃！ B:上手投げ！ 移動:寄り切り！', 1800);
+    this.resolveAttack(this.player2, this.player1, '組まれた！2秒後にレバー連打で脱出！', 1600);
+  }
 
-    // 2P の攻撃判定 -> 1P へ
-    const p2Hitbox = this.player2.getHitbox();
-    if (p2Hitbox && !this.player2.attackHitRegistered) {
-      const p1Pos = new THREE.Vector3(
-        this.player1.body.position.x,
-        this.player1.body.position.y,
-        this.player1.body.position.z
-      );
-      const dist = p2Hitbox.position.distanceTo(p1Pos);
-      if (dist < p2Hitbox.radius + 0.85) {
-        // ヒット成立！
-        this.player2.attackHitRegistered = true;
-        if (this.player2.currentAttackType === 'grab') {
-          // つかみ成立！（ガード貫通）
-          if (this.player1.state !== 'fall' && this.player1.state !== 'grabbed' && this.player1.state !== 'throw') {
-            this.player2.onGrabSuccess(this.player1);
-            this.player1.onGrabbed(this.player2);
-            this.uiManager.showBanner('がっぷり四つ！', '組まれた！2秒後にレバー連打で脱出！', 1600);
-          }
-        } else {
-          this.player1.receiveHit(
-            new THREE.Vector3(this.player2.body.position.x, this.player2.body.position.y, this.player2.body.position.z),
-            this.player2.currentAttackType!,
-            this.player2.chargeTimer / this.player2.maxChargeTime
-          );
-        }
+  /** attacker のヒットボックスが defender に届いていればヒット処理を行う */
+  private resolveAttack(attacker: SumoFighter, defender: SumoFighter, grabHint: string, grabBannerMs: number) {
+    const hitbox = attacker.getHitbox();
+    if (!hitbox || attacker.attackHitRegistered) return;
+
+    const defPos = this.hitTargetTmp.set(defender.body.position.x, defender.body.position.y, defender.body.position.z);
+    if (hitbox.position.distanceTo(defPos) >= hitbox.radius + 0.85) return;
+
+    // ヒット成立！
+    attacker.attackHitRegistered = true;
+    if (attacker.currentAttackType === 'grab') {
+      // つかみ成立！（ガード貫通）
+      if (defender.state !== 'fall' && defender.state !== 'grabbed' && defender.state !== 'throw') {
+        attacker.onGrabSuccess(defender);
+        defender.onGrabbed(attacker);
+        this.uiManager.showBanner('がっぷり四つ！', grabHint, grabBannerMs);
       }
+    } else {
+      defender.receiveHit(
+        this.hitSourceTmp.set(attacker.body.position.x, attacker.body.position.y, attacker.body.position.z),
+        attacker.currentAttackType!,
+        attacker.chargeTimer / attacker.maxChargeTime
+      );
     }
+  }
+
+  /** カメラ基準の入力をワールド座標の移動入力に変換する */
+  private toWorldMoveInput(raw: { isMoving: boolean; moveX: number; moveZ: number; dashTriggered: boolean }) {
+    const move = this.worldMoveTmp.set(0, 0, 0);
+    if (raw.isMoving) {
+      move.addScaledVector(this.camRight, raw.moveX);
+      move.addScaledVector(this.camForward, -raw.moveZ);
+      move.normalize();
+    }
+    return { x: move.x, z: move.z, isMoving: raw.isMoving, dash: raw.dashTriggered };
+  }
+
+  private toActions(raw: {
+    buttonAPressed: boolean; buttonB: boolean; buttonBReleased: boolean;
+    buttonCPressed: boolean; buttonGrabPressed: boolean; guard: boolean;
+  }) {
+    return {
+      harite: raw.buttonAPressed,
+      buchikamashiCharge: raw.buttonB,
+      buchikamashiRelease: raw.buttonBReleased,
+      shiko: raw.buttonCPressed,
+      grab: raw.buttonGrabPressed,
+      guard: raw.guard,
+    };
   }
 
   /**
@@ -802,9 +766,9 @@ class SumoGame {
       this.soundManager.playHyoshigi();
 
       if (p1Fell && p2Fell) {
-        // 同体（取り直し）
+        // 同体・取り直し
         this.roundState = 'finished';
-        this.uiManager.showBanner('同体！（取り直し）', '物言いがつきました！取り直します', 2400);
+        this.uiManager.showBanner('同体！取り直し', '物言いがつきました！取り直します', 2400);
         return;
       }
 
@@ -819,8 +783,7 @@ class SumoGame {
       } else {
         // 2P 勝利！
         this.player2.wins++;
-        const p2Name = this.gameMode === 'pvp' ? '西方 紅炎山' : '西方 紅炎山 (CPU)';
-        winnerText = `${p2Name}の勝ち！`;
+        winnerText = '西方 紅炎山の勝ち！';
         kimarite = this.determineKimarite(this.player2, this.player1);
       }
 
@@ -832,10 +795,8 @@ class SumoGame {
         // 試合終了！自動で次ラウンドに進まないよう 'match_over' に移行
         this.roundState = 'match_over';
         setTimeout(() => {
-          const grandWinner = this.player1.wins >= 2
-            ? '東方 蒼天龍'
-            : (this.gameMode === 'pvp' ? '西方 紅炎山' : '西方 紅炎山 (CPU)');
-          const p2DisplayName = this.gameMode === 'pvp' ? '西方 紅炎山 (2P)' : '西方 紅炎山 (CPU)';
+          const grandWinner = this.player1.wins >= 2 ? '東方 蒼天龍' : '西方 紅炎山';
+          const p2DisplayName = '西方 紅炎山';
           if (this.gameState !== 'battle' || this.roundState !== 'match_over') return;
           this.soundManager.playTaiko();
           this.menuNav.clear();
@@ -861,13 +822,13 @@ class SumoGame {
       return '寄り切り';
     }
     if (winner.state === 'buchikamashi_rush') {
-      return 'ぶちかまし（突き出し）';
+      return '突き出し';
     }
     if (winner.state === 'harite') {
-      return '突っ張り（押し出し）';
+      return '押し出し';
     }
     if (winner.state === 'shiko') {
-      return '送り出し（四股崩し）';
+      return '送り出し';
     }
     if (loser.damagePercent > 120) {
       return '寄り倒し';

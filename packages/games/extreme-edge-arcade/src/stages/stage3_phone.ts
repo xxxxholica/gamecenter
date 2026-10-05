@@ -11,7 +11,7 @@ export class Stage3Phone implements Stage {
   mission = '残量0.000%ブラックアウト直前に挿入せよ！';
   instruction = 'レバー上でケーブルを挿す';
   briefing: StageBriefing = {
-    key: 'レバー上でケーブルを挿す',
+    headline: 'スマホに充電ケーブルを挿す',
     ok: '0%になる直前にケーブルを挿す',
     ng: '0%で電源が落ちる・早すぎ',
   };
@@ -268,10 +268,6 @@ export class Stage3Phone implements Stage {
       ctx.fillStyle = '#ffe600';
       ctx.font = 'bold 82px Impact, Arial Black, sans-serif';
       ctx.fillText(pctText, w / 2, h / 2 + 10);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px Impact, sans-serif';
-      ctx.fillText('0.000%で電源断', w / 2, h / 2 + 85);
     }
 
     ctx.restore();

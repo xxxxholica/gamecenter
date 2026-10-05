@@ -58,40 +58,46 @@
          0px  3px 0 #000000,
          4px  4px 0 #000000;
     }
-    #hud-score, #hud-stage, #hud-time, #hud-lives {
+    /* ストリート風HUD: 斜めに傾けたブロック、小さな英字タグ + 大きな数値 */
+    .hud-text.hud-block {
       display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      transform: skewX(-8deg);
+      min-width: 120px;
+    }
+    .hud-block .lbl {
+      font-size: 0.4em;
+      letter-spacing: 5px;
+      font-style: italic;
+    }
+    .hud-block .val {
+      color: #ffffff;
+      font-size: 1.15em;
+      letter-spacing: 3px;
     }
     #hud-score {
-      top: 24px;
+      top: 18px;
       left: 32px;
       color: #ffe600;
     }
-    #hud-score .val {
-      color: #ffffff;
-      margin-left: 8px;
-    }
     #hud-time {
-      top: 24px;
+      top: 18px;
       left: 50%;
-      transform: translateX(-50%);
+      margin-left: -60px;
       color: #00f0ff;
-    }
-    #hud-time .val {
-      color: #ffffff;
-      margin-left: 8px;
+      align-items: center;
     }
     #hud-time.warning .val {
       color: #ff1a1a;
       animation: blink-urgent 0.25s infinite alternate;
     }
     #hud-lives {
-      top: 24px;
+      top: 18px;
       right: 32px;
       color: #ff1a1a;
-    }
-    #hud-lives .val {
-      color: #ffffff;
-      margin-left: 8px;
+      align-items: flex-end;
     }
 
     /* CENTER FLASH TEXT */
@@ -481,10 +487,9 @@
 
   <div id="ui-layer">
     <!-- CONTAINERLESS HUD -->
-    <div id="hud-score" class="hud-text">得点<span class="val" id="val-score">000000</span></div>
-    <div id="hud-stage" class="hud-text" style="top: 24px; left: 260px; color: #ffe600;">STAGE<span class="val" id="val-stage" style="margin-left:8px; color:#ffffff;">1</span></div>
-    <div id="hud-time" class="hud-text">時間<span class="val" id="val-time">099</span></div>
-    <div id="hud-lives" class="hud-text">残機<span class="val" id="val-lives">03</span></div>
+    <div id="hud-score" class="hud-text hud-block"><span class="lbl">SCORE</span><span class="val" id="val-score">000000</span></div>
+    <div id="hud-time" class="hud-text hud-block"><span class="lbl">TIME</span><span class="val" id="val-time">099</span></div>
+    <div id="hud-lives" class="hud-text hud-block"><span class="lbl">LIVES</span><span class="val" id="val-lives">03</span></div>
 
     <!-- COMBO POPUP -->
     <div id="hud-combo" class="hud-text">

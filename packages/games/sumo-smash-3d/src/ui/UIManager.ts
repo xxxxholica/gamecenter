@@ -1,13 +1,42 @@
+import { setText, setWidth, setHeight } from '../../../../shared/hudDom';
+import { buttonIconHtml } from '../../../../shared/arcadeGuide';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 export type GameMode = 'pve' | 'pvp';
 
+/** 吹き飛び蓄積率の段階ごとの [文字色, 文字影] */
+const DAMAGE_LEVELS: ReadonlyArray<readonly [string, string]> = [
+  ['#f6efdc', '0 0 4px #000, 2px 2px 4px #000'],
+  ['#e8c15a', '0 0 4px #000, 2px 2px 4px #000'],
+  ['#e08a3c', '0 0 4px #000, 2px 2px 4px #000'],
+  ['#e0343a', '0 0 4px #000, 0 0 16px #b8272d, 2px 2px 4px #000'],
+];
+
+/** ガードは LT / RT のどちらでも操作できる。左上の LT と右下の RT を斜線で区切って1つにまとめる */
+const GUARD_ICON_HTML = `${buttonIconHtml([])}`.replace(
+  '</span>',
+  '<span class="agc-btn skill-guard-loop"><span class="loop-lt">LT</span><span class="loop-rt">RT</span></span></span>'
+);
+
+/**
+ * 技名を1文字ずつ縦に積む。writing-mode の縦書きはフォントによって字送りがずれるため使わず、
+ * 「ー」だけは回して縦棒にする。
+ */
+function verticalText(text: string): string {
+  const chars = [...text].map((c) => `<span class="skill-char${c === 'ー' ? ' skill-choon' : ''}">${c}</span>`);
+  return `<span class="skill-text">${chars.join('')}</span>`;
+}
+
 export class UIManager {
+  private readonly damageLevels = new WeakMap<HTMLElement, number>();
+  private readonly lastWins: [number, number] = [-1, -1];
+  private p1BuchiFillEl!: HTMLElement;
+  private p2BuchiFillEl!: HTMLElement;
+  private p1ShikoFillEl!: HTMLElement;
+  private p2ShikoFillEl!: HTMLElement;
   // バトルHUD要素
   private battleHudEl!: HTMLElement;
   private p1PercentEl!: HTMLElement;
   private p2PercentEl!: HTMLElement;
-  private p1KnockbackBar!: HTMLElement;
-  private p2KnockbackBar!: HTMLElement;
   private p1WinsEl!: HTMLElement;
   private p2WinsEl!: HTMLElement;
   private p1ChargeBar!: HTMLElement;
@@ -20,15 +49,12 @@ export class UIManager {
   private p2StunBadge!: HTMLElement;
   private p1GuardBar!: HTMLElement;
   private p2GuardBar!: HTMLElement;
-  private p1GuardValEl!: HTMLElement;
-  private p2GuardValEl!: HTMLElement;
   private p1BuchiCdEl!: HTMLElement;
   private p2BuchiCdEl!: HTMLElement;
   private p1ShikoCdEl!: HTMLElement;
   private p2ShikoCdEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private bannerSubEl!: HTMLElement;
-  private controllerNoticeEl!: HTMLElement;
 
   // タイトル画面要素
   public currentMode: GameMode = 'pve';
@@ -317,132 +343,149 @@ export class UIManager {
           opacity: 1;
         }
 
+        /* 上部中央の文字が観客に埋もれないよう、ぼかした暗がりを敷く(枠ではない) */
+        #battle-hud::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 50%;
+          width: 760px;
+          height: 200px;
+          transform: translateX(-50%);
+          background: radial-gradient(ellipse 380px 200px at 50% 0%, rgba(8, 6, 4, 0.88) 0%, rgba(8, 6, 4, 0.6) 45%, rgba(8, 6, 4, 0) 100%);
+          pointer-events: none;
+        }
+
         .hud-top {
           display: flex;
-          justify-content: space-between;
+          justify-content: center;
           align-items: flex-start;
-          padding: 12px 28px;
+          gap: 8px;
+          padding: 14px 28px;
           position: relative;
         }
 
-        /* 洗練された力士ステータスカード（和モダン・フロストガラス） */
+        /* 力士ステータスカード（和紙・墨・金の和テイスト） */
         .fighter-card {
-          background: linear-gradient(135deg, rgba(14, 18, 24, 0.85) 0%, rgba(8, 11, 16, 0.75) 100%);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-radius: 10px;
-          padding: 11px 16px 9px 16px;
-          width: 360px;
-          min-width: 360px;
+          --accent: #2b5d8a;
+          /* 枠や背景は付けず、文字の縁取りだけで読ませる(上部中央に両者を並べる) */
+          width: auto;
+          min-width: 200px;
           box-sizing: border-box;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15);
           position: relative;
-          transition: transform 0.2s ease;
           white-space: nowrap;
         }
 
-        /* 1P: 東方 蒼天龍（シアン・ゴールド基調、左シャープライン） */
+        /* 1P: 東方（藍） */
         .fighter-card.p1-card {
-          border-left: 4px solid #00d2ff;
-          border-top: 1px solid rgba(0, 210, 255, 0.35);
-          border-right: 1px solid rgba(255, 255, 255, 0.08);
-          border-bottom: 1px solid rgba(0, 210, 255, 0.2);
+          --accent: #2b5d8a;
+          text-align: center;
         }
 
-        /* 2P/CPU: 西方 紅炎山（クリムゾンレッド基調、右シャープライン、完全ミラー整列） */
+        /* 2P/CPU: 西方（朱） */
         .fighter-card.p2-card {
-          border-right: 4px solid #ff3366;
-          border-top: 1px solid rgba(255, 51, 102, 0.35);
-          border-left: 1px solid rgba(255, 255, 255, 0.08);
-          border-bottom: 1px solid rgba(255, 51, 102, 0.2);
-          text-align: right;
+          --accent: #b8272d;
+          text-align: center;
         }
 
         /* 力士情報ヘッダー */
         .fighter-header {
           display: flex;
           align-items: center;
-          gap: 6px;
-          margin-bottom: 4px;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 0;
           white-space: nowrap;
         }
 
+        /* 2P/CPU は名前の右側に角印(1Pと左右対称) */
         .p2-card .fighter-header {
-          flex-direction: row-reverse;
+          flex-direction: row;
         }
 
+        /* 1P / 2P は判子風の角印 */
         .player-badge {
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 900;
-          padding: 2px 7px;
-          border-radius: 4px;
+          padding: 2px 6px;
+          border-radius: 2px;
           letter-spacing: 1px;
-          text-transform: uppercase;
+          color: #fdf6e3;
+          background: var(--accent);
+          box-shadow: 0 0 0 1px rgba(253, 246, 227, 0.5) inset;
           white-space: nowrap;
         }
 
-        .p1-badge {
-          background: linear-gradient(135deg, #0072ff, #00d2ff);
-          color: #ffffff;
-          box-shadow: 0 0 8px rgba(0, 210, 255, 0.6);
-        }
-
+        .p1-badge,
         .p2-badge {
-          background: linear-gradient(135deg, #ff0844, #ff4e50);
-          color: #ffffff;
-          box-shadow: 0 0 8px rgba(255, 78, 80, 0.6);
+          background: var(--accent);
         }
 
         .fighter-name {
-          font-size: 19px;
+          font-size: 20px;
           font-weight: 900;
-          letter-spacing: 1.5px;
-          color: #ffffff;
-          text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+          letter-spacing: 3px;
+          color: #f6efdc;
+          text-shadow: 0 0 4px #000, 0 0 4px #000, 0 0 8px #000, 1px 1px 3px #000;
           white-space: nowrap;
         }
 
-        .p1-color {
-          color: #f0f9ff;
-          text-shadow: 0 0 10px rgba(0, 210, 255, 0.4), 0 2px 6px #000;
-        }
-
+        .p1-color,
         .p2-color {
-          color: #fff0f2;
-          text-shadow: 0 0 10px rgba(255, 51, 102, 0.4), 0 2px 6px #000;
-        }
-
-        .fighter-rank {
-          font-size: 10.5px;
-          color: #d4af37;
-          border: 1px solid rgba(212, 175, 55, 0.4);
-          background: rgba(35, 28, 20, 0.6);
-          padding: 1px 5px;
-          border-radius: 3px;
-          font-weight: bold;
-          letter-spacing: 1px;
-          white-space: nowrap;
+          color: #f6efdc;
         }
 
         /* 星取り（白星・黒星） */
         .stars-container {
           display: flex;
           align-items: center;
-          gap: 4px;
-          font-size: 16px;
-          margin-left: auto;
+          gap: 6px;
+          font-size: 22px;
+          line-height: 1;
           white-space: nowrap;
         }
 
         .p2-card .stars-container {
-          margin-left: 0;
-          margin-right: auto;
           flex-direction: row-reverse;
         }
 
+        /* 中央の星取り: 名前の行の高さにそろえる */
+        .hud-center-marks {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          height: 30px;
+          min-width: 0;
+          justify-content: center;
+        }
+
+        .marks-divider {
+          width: 1px;
+          height: 22px;
+          background: rgba(216, 180, 90, 0.7);
+        }
+
+        .hud-center-marks .stars-container {
+          min-width: 0;
+        }
+
+        .hud-center-marks .stars-container:first-child {
+          justify-content: flex-end;
+        }
+
+        .mark-win {
+          color: #ffffff;
+          text-shadow: 0 0 4px #000, 0 0 8px rgba(255, 255, 255, 0.6);
+        }
+
+        .mark-pending {
+          color: rgba(255, 255, 255, 0.55);
+          text-shadow: 0 0 4px #000, 0 0 4px #000;
+        }
+
         .star-win {
-          color: #ffd700;
-          text-shadow: 0 0 10px rgba(255, 215, 0, 0.9), 0 0 18px rgba(255, 215, 0, 0.5);
+          color: #e0b84a;
+          text-shadow: 0 0 8px rgba(224, 184, 74, 0.7);
           display: inline-block;
           animation: starGlow 1.5s infinite alternate ease-in-out;
           white-space: nowrap;
@@ -462,14 +505,15 @@ export class UIManager {
         /* ===== 主役！ダメージ蓄積（吹き飛び率）ヒーローセクション ===== */
         .knockback-wrap {
           display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          margin: 1px 0 3px 0;
+          flex-direction: column;
+          align-items: center;
+          gap: 0;
+          margin: 2px 0 0 0;
           white-space: nowrap;
         }
 
         .p2-card .knockback-wrap {
-          flex-direction: row-reverse;
+          align-items: center;
         }
 
         .knockback-label-box {
@@ -480,155 +524,194 @@ export class UIManager {
         }
 
         .p2-card .knockback-label-box {
-          align-items: flex-end;
-        }
-
-        .knockback-sub {
-          font-size: 9px;
-          font-weight: 900;
-          letter-spacing: 2px;
-          color: #7890a8;
-          text-transform: uppercase;
-          white-space: nowrap;
+          align-items: center;
         }
 
         .knockback-label {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: bold;
-          color: #e0d8cc;
-          letter-spacing: 1px;
+          color: #e6d9b4;
+          letter-spacing: 4px;
+          text-shadow: 0 0 4px #000, 0 0 4px #000, 1px 1px 2px #000;
           white-space: nowrap;
         }
 
         .damage-number-box {
+          color: #f6efdc;
           display: flex;
           align-items: flex-start;
-          font-family: 'Impact', 'Arial Black', -apple-system, sans-serif;
-          font-style: italic;
-          line-height: 0.92;
+          line-height: 0.95;
           white-space: nowrap;
         }
 
+        /* 110%を超えたら、数字がゆっくり脈打つ */
+        .damage-number-box.danger {
+          animation: damageBeat 0.9s ease-in-out infinite;
+          transform-origin: 50% 60%;
+        }
+
+        .p2-card .damage-number-box.danger {
+          transform-origin: 50% 60%;
+        }
+
+        @keyframes damageBeat {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.14); }
+        }
+
         .knockback-value {
-          font-size: 48px;
+          font-size: 76px;
           font-weight: 900;
-          letter-spacing: -1px;
-          color: #ffffff;
+          letter-spacing: 0;
+          color: inherit;
           transition: color 0.15s ease, text-shadow 0.15s ease;
           display: inline-block;
           white-space: nowrap;
         }
 
         .knockback-unit {
-          font-size: 20px;
+          font-size: 26px;
           font-weight: 900;
-          color: #90a4ae;
+          color: inherit;
+          opacity: 0.75;
           margin-left: 2px;
           margin-top: 4px;
           white-space: nowrap;
         }
 
-        /* 吹き飛び蓄積ゲージ（スリム＆スタイリッシュバー） */
-        .knockback-gauge-container {
-          width: 100%;
-          height: 6px;
-          background: rgba(0, 0, 0, 0.65);
-          border-radius: 3px;
-          margin-top: 2px;
-          margin-bottom: 7px;
-          overflow: hidden;
-          box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
-          position: relative;
-        }
-
-        .knockback-gauge-fill {
-          height: 100%;
-          width: 0%;
-          border-radius: 3px;
-          transition: width 0.12s cubic-bezier(0.1, 0.9, 0.2, 1), background 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .p2-card .knockback-gauge-fill {
-          float: right;
-        }
-
-        .knockback-gauge-fill.level-low {
-          background: linear-gradient(90deg, #00d2ff, #70e000);
-          box-shadow: 0 0 8px rgba(112, 224, 0, 0.7);
-        }
-
-        .knockback-gauge-fill.level-mid {
-          background: linear-gradient(90deg, #70e000, #ffea00, #ff9e00);
-          box-shadow: 0 0 10px rgba(255, 158, 0, 0.8);
-        }
-
-        .knockback-gauge-fill.level-high {
-          background: linear-gradient(90deg, #ff9e00, #ff4800, #ff0054);
-          box-shadow: 0 0 12px rgba(255, 0, 84, 0.9);
-        }
-
-        .knockback-gauge-fill.level-danger {
-          background: linear-gradient(90deg, #ff0054, #d00000, #9d4edd);
-          box-shadow: 0 0 16px #ff0054;
-          animation: dangerPulse 0.4s infinite alternate;
-        }
-
-        @keyframes dangerPulse {
-          0% { filter: brightness(1); }
-          100% { filter: brightness(1.5); }
-        }
-
-        /* ガード耐久ゲージ（スマート一行レイアウト） */
-        .guard-gauge-wrap {
-          margin-bottom: 8px;
-          white-space: nowrap;
-        }
-
-        .guard-gauge-label {
+        /* 技: ステータスの下に縦に並べる。クールタイムが回復するにつれて枠の中が満ちていく */
+        /* 技はカード(半透明の黒い枠)の外、すぐ下に置く。1つ1つが短冊型のボックス兼シークバー */
+        .skill-stack {
+          position: fixed;
+          bottom: 14px;
+          left: 28px;
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 11px;
-          color: #70b0d0;
-          margin-bottom: 3px;
-          font-weight: bold;
-          letter-spacing: 0.5px;
-          white-space: nowrap;
+          gap: 8px;
         }
 
-        .p2-card .guard-gauge-label {
+        .p2-card .skill-stack {
+          left: auto;
+          right: 28px;
           flex-direction: row-reverse;
         }
 
-        .guard-tag-name {
+        .skill-box {
+          position: relative;
+          width: 60px;
+          height: 180px;
+          box-sizing: border-box;
+          border: 1px solid #b8944a;
+          border-radius: 2px;
+          background: rgba(22, 17, 13, 0.88);
+          overflow: hidden;
+          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(22, 17, 13, 0.88), inset 0 0 0 3px rgba(184, 148, 74, 0.4);
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        /* 回復の進み具合(JSで height を更新)。回復した分だけ下から満ちる */
+        .skill-fill {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 100%;
+          background: linear-gradient(0deg, rgba(43, 93, 138, 0.8), rgba(127, 176, 214, 0.8));
+          transition: background 0.15s ease;
+        }
+
+        .skill-box.p2-side .skill-fill {
+          background: linear-gradient(0deg, rgba(184, 39, 45, 0.8), rgba(224, 138, 60, 0.8));
+        }
+
+        .skill-box.ready {
+          border-color: #e0b84a;
+          box-shadow: 0 0 10px rgba(224, 184, 74, 0.6), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
+        }
+
+        .skill-box.ready .skill-fill {
+          background: linear-gradient(0deg, rgba(176, 138, 52, 0.95), rgba(232, 193, 90, 0.95));
+        }
+
+        /* ボタンアイコンと技名(白い明朝体の縦書き)をボックスの中に重ねる */
+        .skill-label {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 4px;
+          padding-top: 6px;
+        }
+
+        /* LT / RT: 2つの丸を斜めにずらし、間に斜線を引く */
+        /* ボタンの丸は X / B / LT / RT すべて同じ直径にそろえる */
+        .skill-label .agc-btn {
+          box-sizing: border-box;
+          width: 30px;
+          min-width: 30px;
+          height: 30px;
+          padding: 0;
+          border-radius: 50% !important;
+          font-size: 13px;
+        }
+
+        /* LT / RT: 同じ丸の中で LT と RT を交互に切り替える */
+        .skill-label .agc-btn.skill-guard-loop {
+          position: relative;
+        }
+
+        .skill-guard-loop .loop-lt,
+        .skill-guard-loop .loop-rt {
+          position: absolute;
+          inset: 0;
           display: flex;
           align-items: center;
-          gap: 4px;
-          white-space: nowrap;
+          justify-content: center;
+          animation: guardLoop 2s steps(1, end) infinite;
         }
 
-        .guard-gauge-container {
-          width: 100%;
-          height: 4px;
-          background: rgba(0, 0, 0, 0.6);
-          border-radius: 2px;
-          overflow: hidden;
+        .skill-guard-loop .loop-rt {
+          animation-delay: -1s;
         }
 
-        .guard-gauge-fill {
-          height: 100%;
-          width: 100%;
-          background: linear-gradient(90deg, #0077b6, #00d2ff);
-          border-radius: 2px;
-          transition: width 0.08s linear, background 0.2s ease;
+        @keyframes guardLoop {
+          0% { opacity: 1; }
+          50% { opacity: 0; }
+          100% { opacity: 1; }
         }
 
-        .p2-card .guard-gauge-fill {
-          float: right;
+        .skill-text {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          font-size: 15px;
+          font-weight: bold;
+          line-height: 1.2;
+          color: #ffffff;
+          text-shadow: 0 0 3px #000, 1px 1px 2px #000;
         }
 
-        .guard-gauge-fill.warning {
-          background: linear-gradient(90deg, #d90429, #f77f00);
+        .skill-char {
+          display: block;
+          width: 1em;
+          height: 1.2em;
+          text-align: center;
+        }
+
+        /* 「ー」は縦棒にする */
+        .skill-choon {
+          transform: rotate(90deg);
+        }
+
+        /* ガード耐久: 受けるたびに下から減っていく。残りが少ないと朱色で点滅 */
+        .skill-fill.guard-fill {
+          background: linear-gradient(0deg, rgba(43, 93, 138, 0.85), rgba(127, 176, 214, 0.85));
+          transition: height 0.08s linear;
+        }
+
+        .skill-fill.guard-fill.warning {
+          background: linear-gradient(0deg, #b8272d, #e08a3c);
           animation: guardWarningPulse 0.4s infinite alternate;
         }
 
@@ -637,83 +720,29 @@ export class UIManager {
           100% { filter: brightness(1.4); }
         }
 
-        /* スキルクールダウン（洗練されたコンパクトチップ） */
-        .skills-cd-row {
-          display: flex;
-          gap: 6px;
-          white-space: nowrap;
-        }
-
-        .p2-card .skills-cd-row {
-          flex-direction: row-reverse;
-        }
-
-        .cd-badge {
-          flex: 1;
-          min-width: 0;
-          background: rgba(20, 24, 30, 0.65);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 5px;
-          padding: 4px 7px;
-          font-size: 10.5px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          color: #a0aab4;
-          transition: all 0.2s ease;
-          position: relative;
-          overflow: hidden;
-          white-space: nowrap;
-          box-sizing: border-box;
-        }
-
-        .cd-badge.ready {
-          border-color: rgba(46, 204, 113, 0.7);
-          color: #2ecc71;
-          background: rgba(46, 204, 113, 0.12);
-          font-weight: bold;
-          box-shadow: 0 0 10px rgba(46, 204, 113, 0.25);
-        }
-
-        .cd-badge.cooling {
-          border-color: rgba(230, 126, 34, 0.5);
-          color: #e67e22;
-          background: rgba(230, 126, 34, 0.08);
-        }
-
-        .buchi-badge-wrap {
-          flex-direction: column;
-          align-items: stretch !important;
-          padding: 3px 7px 4px 7px !important;
-          white-space: nowrap;
-        }
-
-        .buchi-badge-text {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 10.5px;
-          white-space: nowrap;
-        }
-
-        .buchi-badge-text span {
-          white-space: nowrap;
-        }
-
+        /* ぶちかましのタメ量(長押し中だけ伸びる細い縦線) */
         .charge-gauge-container {
-          width: 100%;
-          height: 2.5px;
-          background: rgba(255, 255, 255, 0.12);
-          border-radius: 2px;
-          margin-top: 3px;
-          overflow: hidden;
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          right: 0;
+          width: 4px;
+          background: rgba(0, 0, 0, 0.5);
+        }
+
+        .p2-card .charge-gauge-container {
+          right: auto;
+          left: 0;
         }
 
         .charge-gauge-fill {
-          height: 100%;
-          width: 0%;
-          background: linear-gradient(90deg, #ffd700, #ff3d00);
-          transition: width 0.05s linear;
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 0%;
+          background: linear-gradient(0deg, #e0b84a, #c1272d);
+          transition: height 0.05s linear;
         }
 
         /* 状態バッジ（アーマー・鉄壁・気絶） */
@@ -733,8 +762,8 @@ export class UIManager {
         .armor-badge {
           display: inline-block;
           font-size: 10px;
-          background: #ffaa00;
-          color: #000;
+          background: #d9a441;
+          color: #1a1208;
           font-weight: 900;
           padding: 1px 6px;
           border-radius: 3px;
@@ -753,8 +782,8 @@ export class UIManager {
         .guard-badge {
           display: inline-block;
           font-size: 10px;
-          background: #00b4d8;
-          color: #fff;
+          background: #2f6690;
+          color: #fdf6e3;
           font-weight: 900;
           padding: 1px 6px;
           border-radius: 3px;
@@ -773,8 +802,8 @@ export class UIManager {
         .stun-badge {
           display: inline-block;
           font-size: 10px;
-          background: #ff0054;
-          color: #fff;
+          background: #b8272d;
+          color: #fdf6e3;
           font-weight: 900;
           padding: 1px 7px;
           border-radius: 3px;
@@ -791,37 +820,6 @@ export class UIManager {
         @keyframes stunPulse {
           0% { transform: scale(1); filter: brightness(1); }
           100% { transform: scale(1.08); filter: brightness(1.4); }
-        }
-
-        /* 画面上部中央のスマートピルバー */
-        .top-nav-bar {
-          position: absolute;
-          top: 12px;
-          left: 50%;
-          transform: translateX(-50%);
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          z-index: 10;
-          white-space: nowrap;
-          max-width: 500px;
-        }
-
-        .top-pill {
-          font-size: 11px;
-          letter-spacing: 0.5px;
-          padding: 3px 10px;
-          border-radius: 12px;
-          background: rgba(12, 16, 22, 0.75);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-          white-space: nowrap;
-        }
-
-        .controller-status {
-          color: #55ff99;
-          border: 1px solid rgba(85, 255, 153, 0.35);
-          white-space: nowrap;
         }
 
         /* 中央の幕内タイトル & バナー */
@@ -885,43 +883,37 @@ export class UIManager {
                 <td>カメラ基準の直感移動。相手の間合いを詰める。</td>
               </tr>
               <tr>
-                <td><strong>すり足（ダッシュ）</strong></td>
+                <td><strong>すり足</strong></td>
                 <td><span class="guide-key-tag">レバー2回</span> / <span class="guide-key-tag">RB</span> / <span class="guide-key-tag">Shift</span></td>
                 <td>低姿勢で一気に踏み込む高速接近。</td>
               </tr>
               <tr>
-                <td><strong>張り手（弱攻撃）</strong></td>
+                <td><strong>張り手</strong></td>
                 <td><span class="guide-key-tag">Aボタン</span> / <span class="guide-key-tag">J</span></td>
                 <td>発生最速の突っ張り連打。ノックバック倍率を細かく加算。</td>
               </tr>
               <tr>
-                <td><strong>ぶちかまし（強攻撃）</strong></td>
-                <td><span class="guide-key-tag">Bボタン</span> / <span class="guide-key-tag">K (長押し)</span></td>
-                <td>長押しタメで威力・距離UP。大吹き飛ばし（CT 2.8秒）。</td>
+                <td><strong>ぶちかまし</strong></td>
+                <td><span class="guide-key-tag">Bボタン</span> / <span class="guide-key-tag">K</span></td>
+                <td>長押しタメで威力・距離UP。大吹き飛ばし・CT 2.8秒。</td>
               </tr>
               <tr>
-                <td><strong>四股（特殊）</strong></td>
+                <td><strong>四股</strong></td>
                 <td><span class="guide-key-tag">Xボタン</span> / <span class="guide-key-tag">L</span></td>
-                <td>一瞬の<strong>剛体アーマー</strong>＋相手に痛打を与え<strong>真上天高く打ち上げる</strong>衝撃波（CT 4.2秒）。</td>
+                <td>一瞬の<strong>剛体アーマー</strong>＋相手に痛打を与え<strong>真上天高く打ち上げる</strong>衝撃波・CT 4.2秒。</td>
               </tr>
               <tr>
-                <td><strong>つかみ（組み手）</strong></td>
+                <td><strong>つかみ</strong></td>
                 <td><span class="guide-key-tag">Yボタン / LB</span> / <span class="guide-key-tag">E / U</span></td>
-                <td>相手をがっぷり四つに掴む。<strong>ガード貫通＋確定2秒拘束！</strong>レバーで<strong>寄り切り</strong>、追加入力で<strong>上手投げ</strong>へ派生。</td>
+                <td>相手をがっぷり四つに掴む。<strong>防御貫通＋確定2秒拘束！</strong>レバーで<strong>寄り切り</strong>、追加入力で<strong>上手投げ</strong>へ派生。</td>
               </tr>
               <tr>
-                <td><strong>鉄壁ガード</strong></td>
+                <td><strong>鉄壁防御</strong></td>
                 <td><span class="guide-key-tag">RT / LT / A+B</span> / <span class="guide-key-tag">Space</span></td>
                 <td>相手の攻撃を受け止める。<strong>使いすぎ・耐久0で気絶！</strong></td>
               </tr>
             </tbody>
           </table>
-          <div style="margin-top: 10px; margin-bottom: 18px; font-size: 11.5px; color: #d4af37; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; border: 1px solid #554433; line-height: 1.6;">
-            <strong>【二人対戦（1P vs 2P）の操作について】</strong><br>
-            ・<strong>アケコン2台</strong>: 1台目＝1P、2台目＝2P に自動割り当てされます。<br>
-            ・<strong>1Pアケコン ＋ 2Pキーボード</strong>: 2Pは [矢印キー移動] ＋ [テンキー または B/N/M/O/Pキー] で操作できます。<br>
-            ・<strong>キーボード1台での2人対戦</strong>: 1P [WASD+JKL] と 2P [矢印キー+テンキー] で完全に分離されています。
-          </div>
           <button class="guide-close-btn" id="guide-close-btn">閉じる</button>
         </div>
       </div>
@@ -961,74 +953,51 @@ export class UIManager {
             <div class="fighter-header">
               <span class="player-badge p1-badge">1P</span>
               <span class="fighter-name p1-color">東方 蒼天龍</span>
-              <span class="fighter-rank">横綱</span>
-              <div class="stars-container" id="p1-stars"></div>
             </div>
 
             <!-- 主役：ダメージ蓄積率（吹き飛び率） -->
             <div class="knockback-wrap">
-              <div class="knockback-label-box">
-                <span class="knockback-sub">DAMAGE</span>
-                <span class="knockback-label">蓄積率</span>
-              </div>
               <div class="damage-number-box">
                 <span class="knockback-value" id="p1-knockback">0</span>
                 <span class="knockback-unit">%</span>
               </div>
             </div>
 
-            <!-- 吹き飛び蓄積ゲージ -->
-            <div class="knockback-gauge-container">
-              <div class="knockback-gauge-fill level-low" id="p1-knockback-bar"></div>
-            </div>
-
-            <!-- ガード耐久ゲージ -->
-            <div class="guard-gauge-wrap">
-              <div class="guard-gauge-label">
-                <span class="guard-tag-name">🛡️ GUARD</span>
-                <span id="p1-guard-val">100%</span>
+            <!-- 技: 回復に合わせて枠が満ちる -->
+            <div class="skill-stack">
+              <div class="skill-box ready" id="p1-buchi-cd">
+                <div class="skill-fill" id="p1-buchi-fill"></div>
+                <div class="skill-label">${buttonIconHtml([1])}${verticalText('ぶちかまし')}</div>
+                <div class="charge-gauge-container"><div class="charge-gauge-fill" id="p1-charge-bar"></div></div>
               </div>
-              <div class="guard-gauge-container">
-                <div class="guard-gauge-fill" id="p1-guard-bar"></div>
+              <div class="skill-box ready" id="p1-shiko-cd">
+                <div class="skill-fill" id="p1-shiko-fill"></div>
+                <div class="skill-label">${buttonIconHtml([2])}${verticalText('四股')}</div>
               </div>
-            </div>
-
-            <!-- スキルクールダウン（洗練チップ） -->
-            <div class="skills-cd-row">
-              <div class="cd-badge buchi-badge-wrap ready" id="p1-buchi-cd">
-                <div class="buchi-badge-text">
-                  <span>[B] ぶちかまし</span>
-                  <span id="p1-buchi-val">READY</span>
-                </div>
-                <div class="charge-gauge-container">
-                  <div class="charge-gauge-fill" id="p1-charge-bar"></div>
-                </div>
-              </div>
-              <div class="cd-badge ready" id="p1-shiko-cd">
-                <span>[X] 四股</span>
-                <span id="p1-shiko-val">READY</span>
+              <div class="skill-box" id="p1-guard-box">
+                <div class="skill-fill guard-fill" id="p1-guard-bar"></div>
+                <div class="skill-label">${GUARD_ICON_HTML}${verticalText('防御')}</div>
               </div>
             </div>
 
             <div class="badge-status-wrap">
               <span class="armor-badge" id="p1-armor-badge">剛体アーマー</span>
               <span class="guard-badge" id="p1-guard-badge">鉄壁防御</span>
-              <span class="stun-badge" id="p1-stun-badge">⚡ 体勢崩壊 ⚡</span>
+              <span class="stun-badge" id="p1-stun-badge">体勢崩壊</span>
             </div>
           </div>
 
-          <!-- 画面上部中央のスマートピルバー -->
-          <div class="top-nav-bar">
-            <div class="top-pill controller-status" id="controller-status">
-              ⌨️ キーボード / 🎮 アケコン対応
-            </div>
-          </div>
 
           <!-- プレイヤー2 / CPU（西方 紅炎山） -->
+          <!-- 中央: 両者の星取り(白い丸=勝ち、薄い輪=これから) -->
+          <div class="hud-center-marks">
+            <div class="stars-container" id="p1-stars"></div>
+            <span class="marks-divider"></span>
+            <div class="stars-container" id="p2-stars"></div>
+          </div>
+
           <div class="fighter-card p2-card">
             <div class="fighter-header">
-              <div class="stars-container" id="p2-stars"></div>
-              <span class="fighter-rank" id="p2-rank-label">大関 (CPU)</span>
               <span class="fighter-name p2-color">西方 紅炎山</span>
               <span class="player-badge p2-badge" id="p2-badge-tag">2P</span>
             </div>
@@ -1039,47 +1008,27 @@ export class UIManager {
                 <span class="knockback-value" id="p2-knockback">0</span>
                 <span class="knockback-unit">%</span>
               </div>
-              <div class="knockback-label-box">
-                <span class="knockback-sub">DAMAGE</span>
-                <span class="knockback-label">蓄積率</span>
-              </div>
             </div>
 
-            <!-- 吹き飛び蓄積ゲージ -->
-            <div class="knockback-gauge-container">
-              <div class="knockback-gauge-fill level-low" id="p2-knockback-bar"></div>
-            </div>
-
-            <!-- ガード耐久ゲージ -->
-            <div class="guard-gauge-wrap">
-              <div class="guard-gauge-label">
-                <span id="p2-guard-val">100%</span>
-                <span class="guard-tag-name">GUARD 🛡️</span>
+            <!-- 技: 回復に合わせて枠が満ちる -->
+            <div class="skill-stack">
+              <div class="skill-box p2-side ready" id="p2-buchi-cd">
+                <div class="skill-fill" id="p2-buchi-fill"></div>
+                <div class="skill-label">${buttonIconHtml([1])}${verticalText('ぶちかまし')}</div>
+                <div class="charge-gauge-container"><div class="charge-gauge-fill" id="p2-charge-bar"></div></div>
               </div>
-              <div class="guard-gauge-container">
-                <div class="guard-gauge-fill" id="p2-guard-bar"></div>
+              <div class="skill-box p2-side ready" id="p2-shiko-cd">
+                <div class="skill-fill" id="p2-shiko-fill"></div>
+                <div class="skill-label">${buttonIconHtml([2])}${verticalText('四股')}</div>
               </div>
-            </div>
-
-            <!-- スキルクールダウン（洗練チップ） -->
-            <div class="skills-cd-row">
-              <div class="cd-badge ready" id="p2-shiko-cd">
-                <span>[X] 四股</span>
-                <span id="p2-shiko-val">READY</span>
-              </div>
-              <div class="cd-badge buchi-badge-wrap ready" id="p2-buchi-cd">
-                <div class="buchi-badge-text">
-                  <span>[B] ぶちかまし</span>
-                  <span id="p2-buchi-val">READY</span>
-                </div>
-                <div class="charge-gauge-container">
-                  <div class="charge-gauge-fill" id="p2-charge-bar"></div>
-                </div>
+              <div class="skill-box p2-side" id="p2-guard-box">
+                <div class="skill-fill guard-fill" id="p2-guard-bar"></div>
+                <div class="skill-label">${GUARD_ICON_HTML}${verticalText('防御')}</div>
               </div>
             </div>
 
             <div class="badge-status-wrap">
-              <span class="stun-badge" id="p2-stun-badge">⚡ 体勢崩壊 ⚡</span>
+              <span class="stun-badge" id="p2-stun-badge">体勢崩壊</span>
               <span class="guard-badge" id="p2-guard-badge">鉄壁防御</span>
               <span class="armor-badge" id="p2-armor-badge">剛体アーマー</span>
             </div>
@@ -1104,8 +1053,6 @@ export class UIManager {
     this.battleHudEl = document.getElementById('battle-hud')!;
     this.p1PercentEl = document.getElementById('p1-knockback')!;
     this.p2PercentEl = document.getElementById('p2-knockback')!;
-    this.p1KnockbackBar = document.getElementById('p1-knockback-bar')!;
-    this.p2KnockbackBar = document.getElementById('p2-knockback-bar')!;
     this.p1WinsEl = document.getElementById('p1-stars')!;
     this.p2WinsEl = document.getElementById('p2-stars')!;
     this.p1ChargeBar = document.getElementById('p1-charge-bar')!;
@@ -1118,15 +1065,16 @@ export class UIManager {
     this.p2StunBadge = document.getElementById('p2-stun-badge')!;
     this.p1GuardBar = document.getElementById('p1-guard-bar')!;
     this.p2GuardBar = document.getElementById('p2-guard-bar')!;
-    this.p1GuardValEl = document.getElementById('p1-guard-val')!;
-    this.p2GuardValEl = document.getElementById('p2-guard-val')!;
     this.p1BuchiCdEl = document.getElementById('p1-buchi-cd')!;
     this.p2BuchiCdEl = document.getElementById('p2-buchi-cd')!;
     this.p1ShikoCdEl = document.getElementById('p1-shiko-cd')!;
     this.p2ShikoCdEl = document.getElementById('p2-shiko-cd')!;
+    this.p1BuchiFillEl = document.getElementById('p1-buchi-fill')!;
+    this.p2BuchiFillEl = document.getElementById('p2-buchi-fill')!;
+    this.p1ShikoFillEl = document.getElementById('p1-shiko-fill')!;
+    this.p2ShikoFillEl = document.getElementById('p2-shiko-fill')!;
     this.bannerEl = document.getElementById('center-announcement')!;
     this.bannerSubEl = document.getElementById('banner-sub')!;
-    this.controllerNoticeEl = document.getElementById('controller-status')!;
 
     // リザルト画面要素
     this.resultModalEl = document.getElementById('match-result-modal')!;
@@ -1183,7 +1131,7 @@ export class UIManager {
 
   public showVictoryModal(winnerName: string, p1Wins: number, p2Wins: number, p2Name: string) {
     this.resultWinnerTitleEl.textContent = `${winnerName} 優勝！！`;
-    this.resultSubTextEl.textContent = '幕内最高優勝・賜杯授与（二本先取達成）';
+    this.resultSubTextEl.textContent = '幕内最高優勝・賜杯授与';
     this.resultP1StarsEl.innerHTML = this.renderStars(p1Wins);
     this.resultP2StarsEl.innerHTML = this.renderStars(p2Wins);
     this.resultP2NameEl.textContent = p2Name;
@@ -1203,14 +1151,12 @@ export class UIManager {
   /** 対戦モードに合わせて西方(2P/CPU)の表示を切り替える */
   public setMode(mode: GameMode) {
     this.currentMode = mode;
-    this.documentP2Label(mode === 'pvp' ? '大関 (2P)' : '大関 (CPU)');
+    this.documentP2Label(mode === 'pvp' ? '2P' : 'CPU');
   }
 
   public documentP2Label(text: string) {
-    const el = document.getElementById('p2-rank-label');
-    if (el) el.textContent = text;
     const badge = document.getElementById('p2-badge-tag');
-    if (badge) badge.textContent = text.includes('2P') ? '2P' : 'CPU';
+    if (badge) badge.textContent = text;
   }
 
   public openHowToPlay() {
@@ -1259,117 +1205,87 @@ export class UIManager {
     p2Stunned: boolean,
     p1GuardGauge: number,
     p2GuardGauge: number,
-    p1BuchiCd: number,
-    p2BuchiCd: number,
-    p1ShikoCd: number,
-    p2ShikoCd: number,
-    hasGamepad: boolean
+    p1BuchiCdRatio: number,
+    p2BuchiCdRatio: number,
+    p1ShikoCdRatio: number,
+    p2ShikoCdRatio: number,
   ) {
     // 吹き飛び蓄積率（パーセント数値 ＆ ゲージ ＆ ダイナミックグロー）
-    this.updateDamageStyle(this.p1PercentEl, this.p1KnockbackBar, p1Percent);
-    this.updateDamageStyle(this.p2PercentEl, this.p2KnockbackBar, p2Percent);
+    this.updateDamageStyle(this.p1PercentEl, p1Percent);
+    this.updateDamageStyle(this.p2PercentEl, p2Percent);
 
-    // 白星・黒星マーク
-    this.p1WinsEl.innerHTML = this.renderStars(p1Wins);
-    this.p2WinsEl.innerHTML = this.renderStars(p2Wins);
+    // 白星・黒星マーク（勝ち数が変わったときだけ描き直す）
+    if (p1Wins !== this.lastWins[0]) {
+      this.lastWins[0] = p1Wins;
+      this.p1WinsEl.innerHTML = this.renderWinMarks(p1Wins);
+    }
+    if (p2Wins !== this.lastWins[1]) {
+      this.lastWins[1] = p2Wins;
+      this.p2WinsEl.innerHTML = this.renderWinMarks(p2Wins);
+    }
 
     // チャージバー（ぶちかましタメ）
-    this.p1ChargeBar.style.width = `${Math.min(100, p1Charge * 100)}%`;
-    this.p2ChargeBar.style.width = `${Math.min(100, p2Charge * 100)}%`;
+    setHeight(this.p1ChargeBar, `${Math.min(100, p1Charge * 100)}%`);
+    setHeight(this.p2ChargeBar, `${Math.min(100, p2Charge * 100)}%`);
 
     // ガード耐久ゲージ
-    const p1Gg = Math.max(0, Math.min(100, p1GuardGauge));
-    this.p1GuardBar.style.width = `${p1Gg}%`;
-    this.p1GuardValEl.textContent = `${Math.floor(p1Gg)}%`;
-    if (p1Gg < 30) this.p1GuardBar.classList.add('warning');
-    else this.p1GuardBar.classList.remove('warning');
+    this.updateGuardGauge(this.p1GuardBar, p1GuardGauge);
+    this.updateGuardGauge(this.p2GuardBar, p2GuardGauge);
 
-    const p2Gg = Math.max(0, Math.min(100, p2GuardGauge));
-    this.p2GuardBar.style.width = `${p2Gg}%`;
-    this.p2GuardValEl.textContent = `${Math.floor(p2Gg)}%`;
-    if (p2Gg < 30) this.p2GuardBar.classList.add('warning');
-    else this.p2GuardBar.classList.remove('warning');
+    // スーパーアーマー / ガード中 / スタン（体勢崩壊）表示
+    this.p1ArmorBadge.classList.toggle('active', p1SuperArmor);
+    this.p2ArmorBadge.classList.toggle('active', p2SuperArmor);
+    this.p1GuardBadge.classList.toggle('active', p1Guard);
+    this.p2GuardBadge.classList.toggle('active', p2Guard);
+    this.p1StunBadge.classList.toggle('active', p1Stunned);
+    this.p2StunBadge.classList.toggle('active', p2Stunned);
 
-    // スーパーアーマー表示
-    if (p1SuperArmor) this.p1ArmorBadge.classList.add('active');
-    else this.p1ArmorBadge.classList.remove('active');
-
-    if (p2SuperArmor) this.p2ArmorBadge.classList.add('active');
-    else this.p2ArmorBadge.classList.remove('active');
-
-    // ガード中表示
-    if (p1Guard) this.p1GuardBadge.classList.add('active');
-    else this.p1GuardBadge.classList.remove('active');
-
-    if (p2Guard) this.p2GuardBadge.classList.add('active');
-    else this.p2GuardBadge.classList.remove('active');
-
-    // スタン（体勢崩壊）表示
-    if (p1Stunned) this.p1StunBadge.classList.add('active');
-    else this.p1StunBadge.classList.remove('active');
-
-    if (p2Stunned) this.p2StunBadge.classList.add('active');
-    else this.p2StunBadge.classList.remove('active');
-
-    // ぶちかましクールタイム表示
-    this.updateCdBadge(this.p1BuchiCdEl, 'p1-buchi-val', p1BuchiCd);
-    this.updateCdBadge(this.p2BuchiCdEl, 'p2-buchi-val', p2BuchiCd);
-
-    // 四股クールタイム表示
-    this.updateCdBadge(this.p1ShikoCdEl, 'p1-shiko-val', p1ShikoCd);
-    this.updateCdBadge(this.p2ShikoCdEl, 'p2-shiko-val', p2ShikoCd);
+    // ぶちかまし / 四股クールタイム表示
+    this.updateSkillBox(this.p1BuchiCdEl, this.p1BuchiFillEl, p1BuchiCdRatio);
+    this.updateSkillBox(this.p2BuchiCdEl, this.p2BuchiFillEl, p2BuchiCdRatio);
+    this.updateSkillBox(this.p1ShikoCdEl, this.p1ShikoFillEl, p1ShikoCdRatio);
+    this.updateSkillBox(this.p2ShikoCdEl, this.p2ShikoFillEl, p2ShikoCdRatio);
 
     // コントローラー接続インジケーター
-    if (hasGamepad) {
-      this.controllerNoticeEl.textContent = '🎮 アケコン接続中';
-      this.controllerNoticeEl.style.color = '#55ff99';
-      this.controllerNoticeEl.style.borderColor = 'rgba(85, 255, 153, 0.4)';
-    } else {
-      this.controllerNoticeEl.textContent = '⌨️ キーボード / 🎮 アケコン対応';
-      this.controllerNoticeEl.style.color = '#e0c8a0';
-      this.controllerNoticeEl.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-    }
   }
 
   /**
    * 吹き飛び蓄積率のスタイリング（スマブラ風ダイナミックカラー＆グロー）
    */
-  private updateDamageStyle(el: HTMLElement, bar: HTMLElement, percent: number) {
-    el.textContent = Math.floor(percent).toString();
-    const kbWidth = Math.min(100, (percent / 120.0) * 100);
-    bar.style.width = `${kbWidth}%`;
+  private updateDamageStyle(el: HTMLElement, percent: number) {
+    setText(el, Math.floor(percent).toString());
 
-    bar.classList.remove('level-low', 'level-mid', 'level-high', 'level-danger');
-    if (percent < 35) {
-      el.style.color = '#f5faff';
-      el.style.textShadow = '0 0 10px rgba(0, 210, 255, 0.4), 2px 2px 4px #000';
-      bar.classList.add('level-low');
-    } else if (percent < 70) {
-      el.style.color = '#ffe600';
-      el.style.textShadow = '0 0 14px rgba(255, 230, 0, 0.7), 2px 2px 4px #000';
-      bar.classList.add('level-mid');
-    } else if (percent < 110) {
-      el.style.color = '#ff8c00';
-      el.style.textShadow = '0 0 18px rgba(255, 140, 0, 0.85), 2px 2px 4px #000';
-      bar.classList.add('level-high');
-    } else {
-      el.style.color = '#ff1744';
-      el.style.textShadow = '0 0 24px #ff1744, 0 0 38px #d50000, 2px 2px 4px #000';
-      bar.classList.add('level-danger');
-    }
+    // バーは使わず、蓄積率の数字そのものの色で危険度を表す
+    const level = percent < 35 ? 0 : percent < 70 ? 1 : percent < 110 ? 2 : 3;
+    if (this.damageLevels.get(el) === level) return;
+    this.damageLevels.set(el, level);
+    const [color, shadow] = DAMAGE_LEVELS[level];
+    const box = el.parentElement!;
+    box.style.color = color;
+    box.style.textShadow = shadow;
+    box.classList.toggle('danger', level === 3);
   }
 
-  private updateCdBadge(badgeEl: HTMLElement, valElId: string, cdSec: number) {
-    const valEl = document.getElementById(valElId);
-    if (!valEl) return;
+  private updateGuardGauge(bar: HTMLElement, gauge: number) {
+    const g = Math.max(0, Math.min(100, gauge));
+    setHeight(bar, `${g}%`);
+    bar.classList.toggle('warning', g < 30);
+  }
 
-    if (cdSec <= 0.05) {
-      badgeEl.className = badgeEl.id.includes('buchi') ? 'cd-badge buchi-badge-wrap ready' : 'cd-badge ready';
-      valEl.textContent = 'READY';
-    } else {
-      badgeEl.className = badgeEl.id.includes('buchi') ? 'cd-badge buchi-badge-wrap cooling' : 'cd-badge cooling';
-      valEl.textContent = `${cdSec.toFixed(1)}s`;
+  private updateSkillBox(boxEl: HTMLElement, fillEl: HTMLElement, remainingRatio: number) {
+    const ready = remainingRatio <= 0.02;
+    const cls = `skill-box${boxEl.classList.contains('p2-side') ? ' p2-side' : ''} ${ready ? 'ready' : 'cooling'}`;
+    if (boxEl.className !== cls) boxEl.className = cls;
+    setHeight(fillEl, `${Math.round((1 - Math.min(1, Math.max(0, remainingRatio))) * 100)}%`);
+  }
+
+  /** 対戦中の星取り: 勝ちは白い丸、まだの取組は薄い輪 */
+  private renderWinMarks(wins: number): string {
+    let s = '';
+    for (let i = 0; i < 2; i++) {
+      s += i < wins ? '<span class="mark-win">●</span>' : '<span class="mark-pending">○</span>';
     }
+    return s;
   }
 
   private renderStars(wins: number): string {

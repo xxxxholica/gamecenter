@@ -8,9 +8,9 @@ export interface StageResult {
   judgmentText: string; // "大惨事" or "成功"
 }
 
-/** 種目の始まる前に見せる説明。「使うボタン」「してよいこと」「してはいけないこと」を1行ずつだけ伝える */
+/** 種目の始まる前に見せる説明。見出し1行(何をする種目か)・してよいこと・してはいけないことを伝える */
 export interface StageBriefing {
-  key: string; // 使うボタン
+  headline: string; // 種目名と操作を1フレーズにまとめた見出し。例: 目覚まし時計を止める
   ok: string; // 何をすればよいか
   ng: string; // 何をすると駄目か(大惨事・失敗)
 }
@@ -30,5 +30,7 @@ export interface Stage {
   getLimitValue(): number; // 0 to 100
   getRemainingTime(): number;
   getSubInfo?(): string | null;
+  /** プレイ中、画面中央に出し続けたい一文(見逃されやすい重要な一言だけに使う) */
+  getCenterHint?(): string | null;
   triggerFailureEffects(): void;
 }

@@ -85,21 +85,6 @@ html, body {
   letter-spacing: 2px;
 }
 
-.hud-score-sub {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 14px;
-  color: #aaaaaa;
-}
-
-.hud-score-sub .num-sub {
-  font-family: "Impact", "Arial Black", sans-serif;
-  font-size: 20px;
-  color: #ffcc00;
-  letter-spacing: 1px;
-}
-
 /* Top-Right: Countdown Timer */
 .hud-tr {
   top: 20px;
@@ -143,12 +128,6 @@ html, body {
 .ammo-pips.reloading {
   color: #ff6b3d;
   animation: dangerFlash 0.3s steps(1) infinite;
-}
-.ext-left {
-  font-size: 14px;
-  color: #9ee7ff;
-  text-align: right;
-  letter-spacing: 1px;
 }
 
 /* Danger timer flashing */

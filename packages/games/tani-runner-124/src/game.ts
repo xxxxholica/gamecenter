@@ -78,6 +78,7 @@ export class Game {
   private flightBoostsLeft: number = 0;
   public ringsHit: number = 0;
   private reqTextElem: HTMLElement | null = null;
+  private launchCursorElem: HTMLElement | null = null;
   private bonusHintElem: HTMLElement | null = null;
   public lastDingMultiplier: number = 1.0;
 
@@ -600,7 +601,8 @@ export class Game {
 
   private updateBonusHint(): void {
     if (!this.bonusHintElem) return;
-    this.bonusHintElem.textContent = `加速 ${this.flightBoostsLeft} ・ リング ${this.ringsHit}/${this.world.rings.length}`;
+    const hint = `加速 ${this.flightBoostsLeft} ・ リング ${this.ringsHit}/${this.world.rings.length}`;
+    if (this.bonusHintElem.textContent !== hint) this.bonusHintElem.textContent = hint;
   }
 
   // Check 124 Wall Barrier Encounter
@@ -687,8 +689,8 @@ export class Game {
   }
 
   private setLaunchCursor(pos: number): void {
-    const el = document.getElementById('launch-timing-cursor');
-    if (el) el.style.left = `${pos * 100}%`;
+    this.launchCursorElem ??= document.getElementById('launch-timing-cursor');
+    if (this.launchCursorElem) this.launchCursorElem.style.left = `${pos * 100}%`;
   }
 
   private showLaunchTiming(show: boolean): void {

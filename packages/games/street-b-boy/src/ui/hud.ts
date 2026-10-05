@@ -1,3 +1,4 @@
+import { setText } from '../../../../shared/hudDom';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import {
   checkHighScore,
@@ -27,7 +28,6 @@ export class HudManager {
   private elResultTotalScore: HTMLElement;
   private elInvincibleBorder: HTMLElement;
 
-  private elStage: HTMLElement;
   private elCombo: HTMLElement;
   private elComboHits: HTMLElement;
   private elComboText: HTMLElement;
@@ -35,7 +35,6 @@ export class HudManager {
 
   constructor() {
     this.elScore = document.getElementById('val-score')!;
-    this.elStage = document.getElementById('val-stage')!;
     this.elTime = document.getElementById('val-time')!;
     this.elLives = document.getElementById('val-lives')!;
     this.elHudTimeWrap = document.getElementById('hud-time')!;
@@ -56,25 +55,17 @@ export class HudManager {
 
   public updateScore(score: number): void {
     const formatted = score.toString().padStart(6, '0');
-    this.elScore.textContent = formatted;
-  }
-
-  public updateStage(stage: number): void {
-    this.elStage.textContent = stage.toString();
+    setText(this.elScore, formatted);
   }
 
   public updateTime(time: number): void {
     const ceilTime = Math.max(0, Math.ceil(time));
-    this.elTime.textContent = ceilTime.toString().padStart(3, '0');
-    if (ceilTime <= 15) {
-      this.elHudTimeWrap.classList.add('warning');
-    } else {
-      this.elHudTimeWrap.classList.remove('warning');
-    }
+    setText(this.elTime, ceilTime.toString().padStart(3, '0'));
+    this.elHudTimeWrap.classList.toggle('warning', ceilTime <= 15);
   }
 
   public updateLives(lives: number): void {
-    this.elLives.textContent = Math.max(0, lives).toString().padStart(2, '0');
+    setText(this.elLives, Math.max(0, lives).toString().padStart(2, '0'));
   }
 
   public setInvincibleBorder(active: boolean): void {
@@ -144,13 +135,11 @@ export class HudManager {
   }
 
   public setGameplayHUDVisible(visible: boolean): void {
-    const display = visible ? 'block' : 'none';
+    const display = visible ? 'flex' : 'none';
     const scoreEl = document.getElementById('hud-score');
-    const stageEl = document.getElementById('hud-stage');
     const timeEl = document.getElementById('hud-time');
     const livesEl = document.getElementById('hud-lives');
     if (scoreEl) scoreEl.style.display = display;
-    if (stageEl) stageEl.style.display = display;
     if (timeEl) timeEl.style.display = display;
     if (livesEl) livesEl.style.display = display;
   }

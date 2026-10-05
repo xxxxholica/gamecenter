@@ -395,7 +395,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Telemetry & physics callbacks
   driveScene.callbacks.onSpeedUpdate = (speed, rpm, gear, isDrifting) => {
-    driveHUD.updateTelemetry(speed, rpm, gear, isDrifting);
+    driveHUD.updateTelemetry(speed, rpm, gear);
     sfx.updateEngine(rpm, speed, !!isDrifting);
   };
   driveScene.callbacks.onCameraModeChange = (mode) => {

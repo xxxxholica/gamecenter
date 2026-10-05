@@ -1,3 +1,4 @@
+import { setText, setDisplay } from '../../../shared/hudDom';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
@@ -59,6 +60,9 @@ export class GameManager {
   private stateTimer = 0.0;
   private currentJudgment: StageResult | null = null;
   private isNameEntryOpen = false;
+  // 判定表示は1画面に詰め込まず、ページ(html, 表示秒数)を順に切り替えて見せる
+  private judgmentPages: { html: string; seconds: number }[] = [];
+  private judgmentPageIndex = 0;
 
   // 各種目は、失敗(大惨事・足りなすぎ)しても1回だけやり直せる。成績は、その種目の挑戦のうち最も良いもの
   private static readonly MAX_ATTEMPTS = 2;
@@ -82,7 +86,6 @@ export class GameManager {
   private hudRoundText!: HTMLElement;
   private hudStageText!: HTMLElement;
   private hudTimeText!: HTMLElement;
-  private hudActionGuide!: HTMLElement;
   private hudSubInfo!: HTMLElement;
 
   // Danger vignette overlays
@@ -137,7 +140,6 @@ export class GameManager {
     this.hudRoundText = document.getElementById('hud-round')!;
     this.hudStageText = document.getElementById('hud-stage')!;
     this.hudTimeText = document.getElementById('hud-time')!;
-    this.hudActionGuide = document.getElementById('hud-action-guide')!;
     this.hudSubInfo = document.getElementById('hud-sub-info')!;
     this.dangerVignette = document.getElementById('danger-vignette')!;
     this.dangerFlash = document.getElementById('danger-flash')!;
@@ -242,7 +244,7 @@ export class GameManager {
       this.arcadeTitleScreen = new ArcadeTitleScreen({
         slug: 'extreme-edge-arcade',
         accentColor: '#ff2b4d',
-        tagline: '日常の「ギリギリ」連続チャレンジ',
+        tagline: '日常のギリギリ連続チャレンジ',
         startButtonLabel: '開始',
         promptLabel: 'PRESS START / ボタンで開始',
         onStart: () => {
@@ -330,7 +332,6 @@ export class GameManager {
     // Set HUD stage text & persistent operational guide
     this.updateRoundText(index);
     this.hudStageText.textContent = this.currentStage.title;
-    this.hudActionGuide.textContent = this.currentStage.instruction;
     this.hudTimeText.textContent = this.currentStage.getRemainingTime().toFixed(1);
 
     // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
@@ -353,7 +354,7 @@ export class GameManager {
       this.state = 'STAGE_INTRO';
       this.stateTimer = 0.5;
       this.centerBanner.style.display = 'flex';
-      this.centerBanner.innerHTML = `<div class="banner-title">もう一度！</div><div class="banner-action pulse-text">最後の挑戦</div>`;
+      this.centerBanner.innerHTML = `<div class="banner-action pulse-text">READY</div>`;
     } else {
       // 種目の説明カードを出し、ボタンが押されるまで待つ(何をすればよいか分からないまま始まらないようにする)
       this.state = 'STAGE_BRIEF';
@@ -371,8 +372,7 @@ export class GameManager {
   }
 
   private updateRoundText(index: number) {
-    const base = `${index + 1}/${this.stageFactories.length}`;
-    this.hudRoundText.textContent = `${base}  挑戦${this.attempt}/${GameManager.MAX_ATTEMPTS}`;
+    this.hudRoundText.textContent = `${index + 1}/${this.stageFactories.length}`;
   }
 
   /** その種目の挑戦のうち、最も良い結果(成功のうち最高点。成功がなければ最後の結果) */
@@ -390,9 +390,8 @@ export class GameManager {
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     this.briefOverlay.innerHTML = `
       <div class="brief-card">
-        <div class="brief-stage">${esc(stage.numberText)}　${esc(stage.title)}</div>
-        ${this.currentStageIndex === 0 ? '<div class="brief-row note">このゲームで使うのは「レバー上」だけ！</div>' : ''}
-        <div class="brief-row"><span class="brief-key">${esc(b.key)}</span></div>
+        <div class="brief-stage">${esc(stage.numberText)}</div>
+        <div class="brief-row"><span class="brief-key">${esc(b.headline)}</span></div>
         <div class="brief-row ok"><span class="brief-mark">◎</span>${esc(b.ok)}</div>
         <div class="brief-row ng"><span class="brief-mark">×</span>${esc(b.ng)}</div>
         <button type="button" class="brief-start-btn blink-1s" id="brief-proceed-btn">
@@ -475,15 +474,32 @@ export class GameManager {
 
         // Update time HUD
         const timeVal = this.currentStage.getRemainingTime().toFixed(1);
-        this.hudTimeText.textContent = timeVal;
+        setText(this.hudTimeText, timeVal);
 
         // Update sub-metric (e.g. remaining water, battery percentage)
         const subInfo = this.currentStage.getSubInfo?.();
-        if (subInfo) {
-          this.hudSubInfo.style.display = 'block';
-          this.hudSubInfo.textContent = subInfo;
+        setDisplay(this.hudSubInfo, subInfo ? 'block' : 'none');
+        if (subInfo) setText(this.hudSubInfo, subInfo);
+
+        // 見逃されやすい重要な一言は、画面中央に出し続ける
+        const centerHint = this.currentStage.getCenterHint?.();
+        if (centerHint) {
+          setDisplay(this.centerBanner, 'flex');
+          // 改行区切り: 1行目を大きな主文、2行目以降を補足として表示
+          const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+          const [mainLine, ...subLines] = centerHint.split('\n');
+          const hintHtml =
+            `<div class="banner-hint"><div class="banner-hint-main">${esc(mainLine)}</div>` +
+            subLines.map((l) => `<div class="banner-hint-sub">${esc(l)}</div>`).join('') +
+            `</div>`;
+          // 毎フレーム書き換えるとアニメーションが止まるので、変わった時だけ更新
+          if (this.centerBanner.dataset.hint !== centerHint) {
+            this.centerBanner.dataset.hint = centerHint;
+            this.centerBanner.innerHTML = hintHtml;
+          }
         } else {
-          this.hudSubInfo.style.display = 'none';
+          delete this.centerBanner.dataset.hint;
+          this.centerBanner.style.display = 'none';
         }
 
         // Drive danger vignette & BGM intensity from limit value — no number shown to player
@@ -507,6 +523,14 @@ export class GameManager {
 
         this.stateTimer -= dt;
         if (this.stateTimer <= 0) {
+          this.judgmentPageIndex++;
+          const next = this.judgmentPages[this.judgmentPageIndex];
+          if (next) {
+            // 次のページへ切り替え
+            this.centerBanner.innerHTML = next.html;
+            this.stateTimer = next.seconds;
+            break;
+          }
           this.state = 'STAGE_FADEOUT';
           this.stateTimer = 0.3; // 0.3s quick black fade
           this.fadeOverlay.style.opacity = '1';
@@ -582,7 +606,6 @@ export class GameManager {
 
   private enterJudgment() {
     this.state = 'STAGE_JUDGMENT';
-    this.stateTimer = 1.0; // 1.0s judgment display
     sound.stopBgm();
 
     // Immediately clear danger overlays & sub info
@@ -590,22 +613,25 @@ export class GameManager {
     this.dangerFlash.style.opacity = '0';
     this.hudSubInfo.style.display = 'none';
 
+    this.judgmentPages = [];
+    this.judgmentPageIndex = 0;
+    this.stateTimer = 1.0;
     if (!this.currentJudgment) return;
 
-    this.centerBanner.style.display = 'flex';
-
+    // 1画面に詰め込まず、伝えることを1つずつ順に切り替えて見せる(点数は各ページに出したまま)
+    const score = `<div class="judgment-score">${this.currentJudgment.scorePercent.toFixed(1)}%</div>`;
     if (this.currentJudgment.success) {
-      this.centerBanner.innerHTML = `
-        <div class="judgment-success">成功</div>
-        <div class="judgment-score">${this.currentJudgment.scorePercent.toFixed(1)}%</div>
-      `;
+      this.judgmentPages.push({ html: `<div class="judgment-success">成功</div>${score}`, seconds: 1.2 });
     } else {
-      this.centerBanner.innerHTML = `
-        <div class="judgment-fail">大惨事</div>
-        <div class="judgment-score">0.0%</div>
-        ${this.attempt < GameManager.MAX_ATTEMPTS ? '<div class="banner-title">もう一度挑戦できる</div>' : ''}
-      `;
+      this.judgmentPages.push({ html: `<div class="judgment-fail">大惨事</div>${score}`, seconds: 1.2 });
+      if (this.attempt < GameManager.MAX_ATTEMPTS) {
+        this.judgmentPages.push({ html: `<div class="judgment-retry">もう一回挑戦できる</div>${score}`, seconds: 1.2 });
+      }
     }
+
+    this.centerBanner.style.display = 'flex';
+    this.centerBanner.innerHTML = this.judgmentPages[0].html;
+    this.stateTimer = this.judgmentPages[0].seconds;
   }
 
   private getResultMenuItems(): ResultMenuItem[] {
@@ -687,7 +713,7 @@ export class GameManager {
     this.stageRecords.forEach((rec) => {
       const row = document.createElement('tr');
       const scoreColor = rec.success ? '#00ff66' : '#ff1a1a';
-      const statusText = rec.success ? `${rec.scorePercent.toFixed(1)}%` : '大惨事 (0%)';
+      const statusText = rec.success ? `${rec.scorePercent.toFixed(1)}%` : '大惨事・0%';
       row.innerHTML = `
         <td>${rec.stageNumber}</td>
         <td>${rec.stageTitle}</td>

@@ -6,7 +6,7 @@ import extremeEdgeLogo from './logos/extreme-edge-arcade.webp';
 import midnightSkywayLogo from './logos/midnight-skyway.webp';
 import schoolRunnerLogo from './logos/school-corridor-runner.webp';
 import streetBBoyLogo from './logos/street-b-boy.webp';
-import sumoSmashLogo from './logos/sumo-smash-3d.svg';
+import sumoSmashLogo from './logos/sumo-smash-3d.webp';
 import taniRunnerLogo from './logos/tani-runner-124.webp';
 
 export const GAME_LOGOS: Record<string, string> = {

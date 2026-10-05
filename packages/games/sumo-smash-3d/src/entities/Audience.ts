@@ -539,18 +539,31 @@ export class Audience {
    * 激突・大技時: 身を乗り出す熱狂
    * 勝負あり時: 拍手喝采・ざわめき
    */
+  /** 観客を何分割して、1フレームに1区画ずつ更新するか */
+  private static readonly UPDATE_SLICES = 3;
+  private updateSlice = 0;
+
   public update(dt: number, isRoundActive: boolean, shakeIntensity: number = 0) {
     this.animTimer += dt;
 
-    // パフォーマンスのため、数フレームに1回または小刻みに動かす
     // 激突時（shakeIntensity > 0）や決着時は全員が身を乗り出してどよめく
     const isExcited = shakeIntensity > 0.1 || !isRoundActive;
     const excitementMultiplier = isExcited ? 2.5 : 1.0;
 
-    let needsMatrixUpdate = false;
+    // 揺れは animTimer の関数なので、観客を3区画に分けて1フレームに1区画だけ更新しても動きは途切れない。
+    // 行列の計算と転送(instanceMatrix のアップロード)が毎フレームの約1/3で済む。
+    const slices = Audience.UPDATE_SLICES;
+    const size = Math.ceil(this.totalCount / slices);
+    const start = this.updateSlice * size;
+    const end = Math.min(this.totalCount, start + size);
+    this.updateSlice = (this.updateSlice + 1) % slices;
 
-    // 観客の1/3ずつ毎フレーム分散更新、または全更新（約800人なら極めて軽量）
-    for (let i = 0; i < this.totalCount; i++) {
+    const torsoArr = this.torsoInstanced.instanceMatrix.array as Float32Array;
+    const headArr = this.headInstanced.instanceMatrix.array as Float32Array;
+    const hairArr = this.hairInstanced.instanceMatrix.array as Float32Array;
+    let updated = false;
+
+    for (let i = start; i < end; i++) {
       const data = this.spectatorData[i];
       if (data.role === 'judge') continue; // 審判親方は微動だにせず威厳を保つ
 
@@ -566,20 +579,24 @@ export class Audience {
       this.tempObject.rotateX(nodLean + leanForward);
       this.tempObject.scale.copy(data.baseScale);
 
-      // 上半身（胴体・頭・髪）のみ前傾して動かすリアルな挙動
+      // 上半身（胴体・頭・髪）のみ前傾して動かす。3つとも同じ行列なので、1回の計算結果を書き込む
       this.tempObject.updateMatrix();
-
-      this.torsoInstanced.setMatrixAt(i, this.tempObject.matrix);
-      this.headInstanced.setMatrixAt(i, this.tempObject.matrix);
-      this.hairInstanced.setMatrixAt(i, this.tempObject.matrix);
-
-      needsMatrixUpdate = true;
+      const o = i * 16;
+      this.tempObject.matrix.toArray(torsoArr, o);
+      for (let k = 0; k < 16; k++) {
+        headArr[o + k] = torsoArr[o + k];
+        hairArr[o + k] = torsoArr[o + k];
+      }
+      updated = true;
     }
 
-    if (needsMatrixUpdate) {
-      this.torsoInstanced.instanceMatrix.needsUpdate = true;
-      this.headInstanced.instanceMatrix.needsUpdate = true;
-      this.hairInstanced.instanceMatrix.needsUpdate = true;
+    if (updated) {
+      // 更新した区画だけをGPUへ送る
+      for (const mesh of [this.torsoInstanced, this.headInstanced, this.hairInstanced]) {
+        const attr = mesh.instanceMatrix;
+        attr.clearUpdateRanges();
+        attr.addUpdateRange(start * 16, (end - start) * 16);
+        attr.needsUpdate = true;
+      }
     }
-  }
-}
+  }}

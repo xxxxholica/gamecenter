@@ -21,6 +21,26 @@ export class ParticleManager {
   public shakeIntensity: number = 0;
   public shakeDecay: number = 5.0;
 
+  /** 粒子ごとに作ると生成と破棄が頻発するので、使い終わったマテリアルを再利用する */
+  private materialPool: THREE.MeshBasicMaterial[] = [];
+  private static readonly MATERIAL_POOL_MAX = 160;
+
+  private acquireMaterial(params: THREE.MeshBasicMaterialParameters): THREE.MeshBasicMaterial {
+    const mat = this.materialPool.pop();
+    if (!mat) return new THREE.MeshBasicMaterial(params);
+    // 前回の設定を引きずらないよう、指定されうる項目を既定値に戻してから反映する
+    mat.side = THREE.FrontSide;
+    mat.depthWrite = true;
+    mat.transparent = false;
+    mat.setValues(params);
+    return mat;
+  }
+
+  private releaseMaterial(mat: THREE.MeshBasicMaterial) {
+    if (this.materialPool.length < ParticleManager.MATERIAL_POOL_MAX) this.materialPool.push(mat);
+    else mat.dispose();
+  }
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.sphereGeo = new THREE.SphereGeometry(1, 8, 8);
@@ -34,8 +54,8 @@ export class ParticleManager {
       p.life += dt;
       if (p.life >= p.maxLife) {
         this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
+        // ジオメトリは全粒子で共有しているので破棄しない(破棄すると次の粒子でGPUへ再転送される)
+        this.releaseMaterial(p.mesh.material as THREE.MeshBasicMaterial);
         this.particles.splice(i, 1);
         continue;
       }
@@ -73,7 +93,7 @@ export class ParticleManager {
    */
   public spawnDust(pos: THREE.Vector3, dir: THREE.Vector3) {
     for (let i = 0; i < 4; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xd4b886,
         transparent: true,
         opacity: 0.6,
@@ -110,7 +130,7 @@ export class ParticleManager {
    */
   public spawnHariteHit(pos: THREE.Vector3) {
     for (let i = 0; i < 12; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xffea00,
         transparent: true,
         opacity: 1,
@@ -146,7 +166,7 @@ export class ParticleManager {
    */
   public spawnHariteSwing(pos: THREE.Vector3, dir: THREE.Vector3) {
     // 掌の前方に発生する衝撃リング
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0xffffff,
       transparent: true,
       opacity: 0.85,
@@ -174,7 +194,7 @@ export class ParticleManager {
 
     // 突きの風切り粒子
     for (let i = 0; i < 3; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.85,
@@ -209,7 +229,7 @@ export class ParticleManager {
    */
   public spawnGuardSpark(pos: THREE.Vector3) {
     // 青白い防御リング
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0x66ccff,
       transparent: true,
       opacity: 0.9,
@@ -234,7 +254,7 @@ export class ParticleManager {
 
     // 散る火花
     for (let i = 0; i < 8; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0x88ddff,
         transparent: true,
         opacity: 0.9,
@@ -273,7 +293,7 @@ export class ParticleManager {
     this.triggerShake(0.8);
 
     // 巨大な粉砕リング
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0xff3366,
       transparent: true,
       opacity: 0.95,
@@ -298,7 +318,7 @@ export class ParticleManager {
 
     // 飛び散るクリスタル・シャード粒子
     for (let i = 0; i < 28; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0x66ccff,
         transparent: true,
         opacity: 1,
@@ -335,7 +355,7 @@ export class ParticleManager {
    */
   public spawnStunStars(pos: THREE.Vector3) {
     for (let i = 0; i < 2; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xffdd00,
         transparent: true,
         opacity: 0.9,
@@ -375,7 +395,7 @@ export class ParticleManager {
     this.triggerShake(0.7 * power);
 
     // 衝撃波リング
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0xffaa00,
       transparent: true,
       opacity: 0.9,
@@ -401,7 +421,7 @@ export class ParticleManager {
     // 放射状の爆発粒子
     const count = Math.floor(25 * power);
     for (let i = 0; i < count; i++) {
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 1,
@@ -440,7 +460,7 @@ export class ParticleManager {
     this.triggerShake(0.5);
 
     // 地面を這うリング波紋
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0xe0c080,
       transparent: true,
       opacity: 0.8,
@@ -466,7 +486,7 @@ export class ParticleManager {
     // 放射状の土煙
     for (let i = 0; i < 20; i++) {
       const angle = (i / 20) * Math.PI * 2;
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: 0xdeb887,
         transparent: true,
         opacity: 0.7,
@@ -503,7 +523,7 @@ export class ParticleManager {
     this.triggerShake(0.6);
 
     // 上昇する衝撃波リング
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = this.acquireMaterial({
       color: 0xffcc33,
       transparent: true,
       opacity: 0.95,
@@ -529,7 +549,7 @@ export class ParticleManager {
     // 噴き上がる土煙と黄金スパーク
     for (let i = 0; i < 24; i++) {
       const isGold = Math.random() < 0.4;
-      const mat = new THREE.MeshBasicMaterial({
+      const mat = this.acquireMaterial({
         color: isGold ? 0xffea00 : 0xdeb887,
         transparent: true,
         opacity: 0.9,
@@ -568,7 +588,7 @@ export class ParticleManager {
    * チャージ中のオーラ粒子
    */
   public spawnChargeParticle(centerPos: THREE.Vector3, progress: number) {
-    const mat = new THREE.MeshBasicMaterial({
+    const mat = this.acquireMaterial({
       color: 0xffd700,
       transparent: true,
       opacity: 0.8,

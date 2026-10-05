@@ -212,9 +212,22 @@
       color: #000000;
     }
 
-    /* Persistent Bottom-Center Action Guide: 左下のアケコンガイドに一本化するため非表示 */
+    /* 下部中央に常時表示する「レバー上だけ」の注意書き */
     #hud-action-guide {
-      display: none !important;
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      font-size: clamp(13px, 2vw, 16px);
+      font-weight: bold;
+      color: #ffe600;
+      background: rgba(6, 12, 10, 0.94);
+      border: 2px solid #ffe600;
+      border-radius: 999px;
+      padding: 6px 18px;
+      text-shadow: 2px 2px 0 #000;
+      white-space: nowrap;
     }
 
     /* 種目の説明カード */
@@ -223,14 +236,17 @@
       inset: 0;
       z-index: 45;
       display: none;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: clamp(10px, 1.8vw, 16px);
       background: rgba(0, 0, 0, 0.68);
       cursor: pointer;
     }
 
     .brief-card {
-      width: min(92vw, 820px);
+      width: fit-content;
+      max-width: 96vw;
       padding: clamp(16px, 3vw, 32px) clamp(18px, 4vw, 44px);
       border: 4px solid #00ff66;
       background: rgba(6, 12, 10, 0.94);
@@ -244,12 +260,14 @@
       letter-spacing: 3px;
     }
 
+    /* 説明文は1行に収める(折り返さない) */
     .brief-row {
       margin-top: clamp(10px, 2vw, 18px);
-      font-size: clamp(20px, 4vw, 34px);
+      font-size: clamp(16px, 3.4vw, 34px);
       color: #f1f1f1;
       line-height: 1.35;
       text-shadow: 3px 3px 0 #000;
+      white-space: nowrap;
     }
 
     .brief-key {
@@ -267,7 +285,6 @@
       font-weight: bold;
     }
 
-    .brief-row.note { color: #ffe600; font-weight: bold; }
     .brief-row.ok .brief-mark { color: #00ff66; }
     .brief-row.ng { color: #ff9a9a; }
     .brief-row.ng .brief-mark { color: #ff1a1a; }
@@ -362,6 +379,44 @@
       animation: arcade-pulse 0.25s infinite alternate;
     }
 
+    /* プレイ中に画面中央へ出し続けるヒント。1行目(主)を大きく、2行目以降(補足)を小さく、枠付きで強調する */
+    .banner-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(4px, 1vw, 10px);
+      padding: clamp(12px, 2vw, 20px) clamp(20px, 4vw, 44px);
+      background: rgba(0, 0, 0, 0.72);
+      border: 4px solid #ffe600;
+      border-radius: 12px;
+      box-shadow: 0 0 0 3px #000, 0 0 24px rgba(255, 230, 0, 0.75);
+      animation: hint-glow 0.6s ease-in-out infinite alternate;
+    }
+
+    .banner-hint-main {
+      font-size: clamp(30px, 5.5vw, 56px);
+      font-weight: bold;
+      color: #ffe600;
+      text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 0 0 18px #ff8800;
+      letter-spacing: 3px;
+      white-space: nowrap;
+      animation: arcade-pulse 0.4s ease-in-out infinite alternate;
+    }
+
+    .banner-hint-sub {
+      font-size: clamp(18px, 3vw, 30px);
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 3px 3px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
+      letter-spacing: 2px;
+      white-space: nowrap;
+    }
+
+    @keyframes hint-glow {
+      0% { box-shadow: 0 0 0 3px #000, 0 0 12px rgba(255, 230, 0, 0.5); }
+      100% { box-shadow: 0 0 0 3px #000, 0 0 32px rgba(255, 230, 0, 1); }
+    }
+
     @keyframes arcade-pulse {
       0% { transform: scale(1.0); }
       100% { transform: scale(1.06); }
@@ -376,7 +431,7 @@
     }
 
     .judgment-fail {
-      font-size: 100px;
+      font-size: min(100px, 9.5vw); /* 「もう一回挑戦できる」と同じ大きさ */
       color: #ff1a1a;
       text-shadow: 6px 6px 0 #000, -6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000;
       letter-spacing: 10px;
@@ -388,6 +443,16 @@
       color: #ffe600;
       text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000;
       margin-top: 6px;
+    }
+
+    /* 大惨事の後に切り替えて出す「もう一回挑戦できる」(判定文字と同じ位置・同じ勢いで) */
+    .judgment-retry {
+      font-size: min(100px, 9.5vw); /* 「大惨事」と同じ大きさ */
+      color: #00f0ff;
+      text-shadow: 6px 6px 0 #000, -6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000;
+      letter-spacing: 4px;
+      white-space: nowrap;
+      animation: judgment-slam 0.15s ease-out;
     }
 
     @keyframes judgment-slam {
@@ -629,7 +694,7 @@
     @media (max-width: 768px) {
       #hud-top-bar { padding: 12px 14px; }
       #arcade-inputs { bottom: 16px; right: 16px; }
-      .judgment-success, .judgment-fail { font-size: 64px; }
+      .judgment-success, .judgment-fail, .judgment-retry { font-size: 64px; }
       .result-table { min-width: 320px; font-size: 20px; }
     }
   </style>
@@ -654,7 +719,7 @@
         <div id="hud-sub-info" class="hud-text"></div>
       </div>
     </div>
-    <div id="hud-action-guide">操作</div>
+    <div id="hud-action-guide">このゲームで使うのはレバー上だけ！</div>
 
     <div id="arcade-inputs">
       <div class="stick-box" title="レバー">

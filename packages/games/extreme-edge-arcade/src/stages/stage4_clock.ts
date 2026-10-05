@@ -11,7 +11,7 @@ export class Stage4Clock implements Stage {
   mission = '07:00ジャスト鳴動直前に止めろ！';
   instruction = 'レバー上で時計を止める';
   briefing: StageBriefing = {
-    key: 'レバー上で時計を止める',
+    headline: '目覚まし時計を止める',
     ok: '07:00:00の直前で止める',
     ng: '鳴ってしまう・早すぎ',
   };
@@ -245,12 +245,6 @@ export class Stage4Clock implements Stage {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
-
-    // Target text in center top
-    ctx.fillStyle = '#ff1a1a';
-    ctx.font = 'bold 28px Impact, Arial Black, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('鳴動 07:00:00', cx, cy - 80);
 
     // Hour marks & Numbers
     for (let i = 1; i <= 12; i++) {

@@ -44,6 +44,8 @@ export interface ArcadeGuideOptions {
   buttons?: ArcadeGuideButton[];
   // SELECT長押しでホームへ戻る案内を出すか(ホーム画面自身では不要)。
   showHomeHint?: boolean;
+  // 表示位置。省略すると左下。画面下に別のHUDを置くゲームだけ 'top-left' を指定する。
+  position?: 'bottom-left' | 'top-left';
 }
 
 let styleInjected = false;
@@ -53,6 +55,10 @@ function injectStyle(): void {
   styleInjected = true;
   const style = document.createElement('style');
   style.textContent = `
+    .agc-root.agc-top-left {
+      bottom: auto;
+      top: 14px;
+    }
     .agc-root {
       position: fixed;
       bottom: 14px;
@@ -177,6 +183,7 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
   const root = document.createElement('div');
   root.id = 'agc-guide';
   root.className = 'agc-root';
+  if (options.position === 'top-left') root.classList.add('agc-top-left');
 
   if (options.moveLabel) {
     const row = document.createElement('div');

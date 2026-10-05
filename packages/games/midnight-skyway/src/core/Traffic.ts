@@ -444,12 +444,15 @@ export class Traffic {
       if (distSq > 5.5 * 5.5) continue;
 
       // NPC local coordinate transform
-      const npcFwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.obj.rotation.y);
-      const npcRight = new THREE.Vector3(npcFwd.z, 0, -npcFwd.x);
+      // (0,0,1) を Y軸まわりに回した向き。Vector3 を作らずに三角関数で直接求める
+      const fwdX = Math.sin(c.obj.rotation.y);
+      const fwdZ = Math.cos(c.obj.rotation.y);
+      const rightX = fwdZ;
+      const rightZ = -fwdX;
 
       // Vector from NPC to player in NPC's local space
-      const localZ = dx * npcFwd.x + dz * npcFwd.z;       // longitudinal: + = player in front, - = player behind
-      const localX = dx * npcRight.x + dz * npcRight.z;   // lateral: + = player to right, - = player to left
+      const localZ = dx * fwdX + dz * fwdZ;       // longitudinal: + = player in front, - = player behind
+      const localX = dx * rightX + dz * rightZ;   // lateral: + = player to right, - = player to left
 
       const overlapX = (CAR_HALF_W * 2) - Math.abs(localX);
       const overlapZ = (CAR_HALF_L * 2) - Math.abs(localZ);
@@ -462,8 +465,8 @@ export class Traffic {
           result.isRearEnd = localZ < 0; // Player is behind NPC (rear-ended the NPC)
           const pushDist = overlapZ + 0.15;
           const sign = localZ < 0 ? -1 : 1;
-          result.pushX += npcFwd.x * sign * pushDist;
-          result.pushZ += npcFwd.z * sign * pushDist;
+          result.pushX += fwdX * sign * pushDist;
+          result.pushZ += fwdZ * sign * pushDist;
 
           // Heavy deceleration penalty for rear-ending other traffic
           const relSpeed = Math.max(0, playerSpeed - c.speed);
@@ -474,8 +477,8 @@ export class Traffic {
           // Side scrape
           const pushDist = overlapX + 0.1;
           const sign = localX < 0 ? -1 : 1;
-          result.pushX += npcRight.x * sign * pushDist;
-          result.pushZ += npcRight.z * sign * pushDist;
+          result.pushX += rightX * sign * pushDist;
+          result.pushZ += rightZ * sign * pushDist;
 
           // 横からの接触はこすっただけ: 速度は少し落ちるだけで、向きは変えない(横へ弾かれるだけ)
           result.impact = Math.max(result.impact, 0.4);
@@ -492,8 +495,8 @@ export class Traffic {
           if (overlapZ < overlapX) {
             // 前後の衝突: 当てた側は止まり、当てられた側は押し出される
             const sign = localZ < 0 ? -1 : 1;
-            result.knockX += npcFwd.x * sign * (2 + impact * 8);
-            result.knockZ += npcFwd.z * sign * (2 + impact * 8);
+            result.knockX += fwdX * sign * (2 + impact * 8);
+            result.knockZ += fwdZ * sign * (2 + impact * 8);
             if (localZ < 0) {
               // プレイヤーが後ろから追突: NPCは前へ押し出される
               c.speed = Math.min(c.baseSpeed * 1.35, c.speed + relSpeed * 0.4);
@@ -504,8 +507,8 @@ export class Traffic {
             }
           } else {
             // 横からの接触: 双方が横へ弾かれる
-            result.knockX += npcRight.x * -awaySign * (3 + impact * 6);
-            result.knockZ += npcRight.z * -awaySign * (3 + impact * 6);
+            result.knockX += rightX * -awaySign * (3 + impact * 6);
+            result.knockZ += rightZ * -awaySign * (3 + impact * 6);
             c.speed = Math.max(6, c.speed * 0.85);
           }
           c.baseLateral ??= c.lateral;
