@@ -30,6 +30,13 @@ const XXXXHOLICA: Developer = {
   avatar: 'https://github.com/xxxxholica.png',
 };
 
+const THOUSANDL000: Developer = {
+  name: 'thousandl000',
+  url: 'https://github.com/thousandl000',
+  avatar: 'https://github.com/thousandl000.png',
+};
+
+
 const KURENAI_BEAT: Developer = {
   name: 'KURENAI-beat',
   url: 'https://github.com/KURENAI-beat',
@@ -114,6 +121,16 @@ const allGames: GameEntry[] = [
     logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
     developer: XXXXHOLICA,
+  },
+  {
+    slug: 'sumo-smash-3d',
+    title: '剛体大相撲',
+    englishTitle: 'SUMO SMASH 3D',
+    description:
+      '土俵の上で力士同士がぶつかり合う3D相撲アクション。張り手や掴みで相手を吹き飛ばし、土俵の外へ押し出せ。CPU戦と2人対戦に対応。',
+    thumbnail: 'thumbnails/sumo-smash-3d.webp',
+    accent: '#e63946',
+    developer: THOUSANDL000,
   },
 ];
 
