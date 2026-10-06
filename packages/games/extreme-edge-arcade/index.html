@@ -245,8 +245,8 @@
     }
 
     .brief-card {
-      width: fit-content;
-      max-width: 96vw;
+      box-sizing: border-box;
+      width: min(96vw, 900px);   /* 説明文の長さに関わらず、全ステージで同じ大きさにする */
       padding: clamp(16px, 3vw, 32px) clamp(18px, 4vw, 44px);
       border: 4px solid #00ff66;
       background: rgba(6, 12, 10, 0.94);
@@ -431,7 +431,7 @@
     }
 
     .judgment-fail {
-      font-size: min(100px, 9.5vw); /* 「もう一回挑戦できる」と同じ大きさ */
+      font-size: min(100px, 9.5vw); /* 「もう一度挑戦」と同じ大きさ */
       color: #ff1a1a;
       text-shadow: 6px 6px 0 #000, -6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000;
       letter-spacing: 10px;
@@ -445,7 +445,7 @@
       margin-top: 6px;
     }
 
-    /* 大惨事の後に切り替えて出す「もう一回挑戦できる」(判定文字と同じ位置・同じ勢いで) */
+    /* 大惨事の後に切り替えて出す「もう一度挑戦」(判定文字と同じ位置・同じ勢いで) */
     .judgment-retry {
       font-size: min(100px, 9.5vw); /* 「大惨事」と同じ大きさ */
       color: #00f0ff;

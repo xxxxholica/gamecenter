@@ -3,7 +3,16 @@ import { Player } from '../entities/Player';
 import { Boss } from '../entities/Boss';
 import { PickupItem } from '../items/ExpGem';
 
+/** SPECIAL が使える間、ランキング変動のバーと同じ場所に出すお知らせの周期(秒)と、1回に出しておく長さ(秒) */
+const SPECIAL_NOTICE_PERIOD = 12;
+const SPECIAL_NOTICE_SHOW = 3.5;
+/** SPECIAL を発動するアケコンのボタン名(ボタンガイドと同じ表記: Y / LB / RB / RT のどれでもよい) */
+const SPECIAL_BUTTONS = ['Y', 'LB', 'RB', 'RT'];
+
 export class HudRenderer {
+  /** SPECIAL が使える状態になってからの経過時間(秒)。使えない間は 0 */
+  private specialReadyClock: number = 0;
+  private specialReady: boolean = false;
   private rankChangeText: string | null = null;
   private rankChangeTimer: number = 0;
   private rankChangeIsUp: boolean = true;
@@ -22,13 +31,98 @@ export class HudRenderer {
     }
   }
 
-  public update(dt: number) {
+  /** specialReady: SPECIAL を今すぐ発動できる状態か。使える間だけ周期的にお知らせを出す */
+  public update(dt: number, specialReady: boolean = false) {
+    this.specialReady = specialReady;
+    this.specialReadyClock = specialReady ? this.specialReadyClock + dt : 0;
     if (this.rankChangeTimer > 0) {
       this.rankChangeTimer -= dt;
       if (this.rankChangeTimer <= 0) {
         this.rankChangeText = null;
       }
     }
+  }
+
+  /** 周期の最初の SPECIAL_NOTICE_SHOW 秒だけ出す(使えるようになった直後から。使うまで繰り返す) */
+  private isSpecialNoticeVisible(): boolean {
+    return this.specialReady && this.specialReadyClock % SPECIAL_NOTICE_PERIOD < SPECIAL_NOTICE_SHOW;
+  }
+
+  /** ボタンガイドと同じ見た目の丸いバッジ(暗い塗り+白縁+白文字)を描く。描いた幅を返す */
+  private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number): number {
+    ctx.save();
+    ctx.font = "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    const w = Math.max(30, ctx.measureText(label).width + 18);
+    const h = 30;
+    const r = h / 2;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(left + r, cy - r);
+    ctx.arcTo(left + w, cy - r, left + w, cy + r, r);
+    ctx.arcTo(left + w, cy + r, left, cy + r, r);
+    ctx.arcTo(left, cy + r, left, cy - r, r);
+    ctx.arcTo(left, cy - r, left + w, cy - r, r);
+    ctx.closePath();
+    ctx.fillStyle = '#10131a';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, left + w / 2, cy + 1);
+    ctx.restore();
+    return w;
+  }
+
+  /** 「(Y)(LB)(RB)(RT) で必殺技を発動」を1行で出す。ランキング変動のバーと同じ位置・同じ高さ */
+  private renderSpecialNotice(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const boxH = 75;
+    const boxY = height * 0.28;
+    const pulse = 0.65 + 0.35 * Math.sin(this.specialReadyClock * 6);
+
+    // 1行ぶんの幅を測る: ボタンのバッジ + 説明
+    const label = 'で必殺技を発動';
+    const badgeFont = "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    const labelFont = "700 24px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    ctx.save();
+    ctx.font = badgeFont;
+    const badgeW = SPECIAL_BUTTONS.map((b) => Math.max(30, ctx.measureText(b).width + 18));
+    ctx.font = labelFont;
+    const labelW = ctx.measureText(label).width;
+    ctx.restore();
+    const badgeGap = 8;
+    const badgesW = badgeW.reduce((a, b) => a + b, 0) + badgeGap * (SPECIAL_BUTTONS.length - 1);
+    const contentW = badgesW + 14 + labelW;
+    // 順位の上下のウィンドウ(RANK UP / RANK DOWN)と同じ大きさ。中身はこの幅に収まる
+    const boxW = Math.max(500, contentW + 64);
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(5, 10, 25, 0.92)';
+    ctx.strokeStyle = '#ff1133';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#ff1133';
+    ctx.shadowBlur = 18 + 14 * pulse;
+    ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
+    ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
+    ctx.shadowBlur = 0;
+
+    let x = (width - contentW) / 2;
+    ctx.textAlign = 'left';
+    SPECIAL_BUTTONS.forEach((b, i) => {
+      this.drawButtonBadge(ctx, b, x, boxY);
+      x += badgeW[i] + badgeGap;
+    });
+    x += 14 - badgeGap;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = "700 24px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, x, boxY + 1);
+    ctx.restore();
   }
 
   public render(
@@ -87,14 +181,17 @@ export class HudRenderer {
     // 3. Top-Right: Real-Time Ranking Leaderboard (Spectator Friendly!)
     this.renderLeaderboard(ctx, width, contenders);
 
-    // 4. Center: Rank Up / Rank Down / #1 Cut-in Banner
-    if (this.rankChangeText) {
+    // 4. Center: Rank Up / Rank Down / #1 Cut-in Banner。ランキング変動が無いときは、SPECIAL のお知らせを同じ場所に出す
+    // SPECIAL が使える間は、順位の変動(RANK UP / DOWN / #1)は出さない。お知らせだけを周期的に出す
+    if (this.specialReady) {
+      if (this.isSpecialNoticeVisible()) this.renderSpecialNotice(ctx, width, height);
+    } else if (this.rankChangeText) {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       const isTop = this.rankChangeText.includes('#1');
-      const boxW = isTop ? 620 : 500;
+      const boxW = 500;   // RANK UP / RANK DOWN / YOU ARE #1 / SPECIAL のお知らせは、すべて同じ大きさ
       const boxH = 75;
       const boxY = height * 0.28;
 

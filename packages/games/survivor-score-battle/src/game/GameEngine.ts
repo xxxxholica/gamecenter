@@ -451,51 +451,7 @@ export class GameEngine {
                 (c as CpuPlayer).addScore(enemy.scoreValue, true);
               }
 
-              this.pickupPool.spawn(enemy.x, enemy.y, enemy.expType);
-
-              // Generous sword drops & special items
-              if (enemy.type === 'BERSERKER') {
-                if (c.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
-                }
-                if (Math.random() < 0.6) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                }
-              } else if (enemy.type === 'WEAPON_MASTER') {
-                if (c.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
-                }
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
-              } else if (enemy.type === 'ELITE') {
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
-              } else if (enemy.type === 'TANK') {
-                if (Math.random() < 0.5) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                }
-              } else {
-                const roll = Math.random();
-                if (roll < 0.12) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                } else if (roll < 0.19) {
-                  const itemTypes: any[] = ['HEAL', 'MAGNET', 'SPECIAL_ORB'];
-                  this.pickupPool.spawn(
-                    enemy.x,
-                    enemy.y,
-                    itemTypes[Math.floor(Math.random() * itemTypes.length)]
-                  );
-                }
-              }
-
-              if (enemy instanceof Boss) {
-                this.sound.sfx.playBossDefeated();
-                this.sound.playTrack('NORMAL');
-                this.screenEffects.shake(25);
-                this.screenEffects.flash('#ffd700', 0.8);
-                this.particleSystem.emitRing(enemy.x, enemy.y, '#ffd700', 500, 1.0);
-                this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'BOSS DEFEATED!! +5000', '#ffd700', 36);
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 6);
-                this.waveDirector.activeBoss = null;
-              }
+              this.handleEnemyKilledDrops(enemy, c.isPlayer);
             }
           }
         }
@@ -693,53 +649,7 @@ export class GameEngine {
                 }
               }
 
-              // Drop EXP or items
-              this.pickupPool.spawn(enemy.x, enemy.y, enemy.expType);
-
-              // Generous sword drops & special items
-              if (enemy.type === 'BERSERKER') {
-                if (owner?.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
-                }
-                if (Math.random() < 0.6) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                }
-              } else if (enemy.type === 'WEAPON_MASTER') {
-                if (owner?.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
-                }
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
-              } else if (enemy.type === 'ELITE') {
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
-              } else if (enemy.type === 'TANK') {
-                if (Math.random() < 0.5) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                }
-              } else {
-                const roll = Math.random();
-                if (roll < 0.12) {
-                  this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
-                } else if (roll < 0.19) {
-                  const itemTypes: any[] = ['HEAL', 'MAGNET', 'SPECIAL_ORB'];
-                  this.pickupPool.spawn(
-                    enemy.x,
-                    enemy.y,
-                    itemTypes[Math.floor(Math.random() * itemTypes.length)]
-                  );
-                }
-              }
-
-              // If Boss killed
-              if (enemy instanceof Boss) {
-                this.sound.sfx.playBossDefeated();
-                this.sound.playTrack('NORMAL');
-                this.screenEffects.shake(25);
-                this.screenEffects.flash('#ffd700', 0.8);
-                this.particleSystem.emitRing(enemy.x, enemy.y, '#ffd700', 500, 1.0);
-                this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'BOSS DEFEATED!! +5000', '#ffd700', 36);
-                this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 6);
-                this.waveDirector.activeBoss = null;
-              }
+              this.handleEnemyKilledDrops(enemy, owner?.isPlayer === true);
             }
 
             // Bullet pierce check
@@ -764,7 +674,56 @@ export class GameEngine {
 
     // 10. Update Leaderboard & Rank changes
     this.updateLeaderboard();
-    this.hud.update(dt);
+    this.hud.update(dt, this.player.isSpecialReady && this.player.alive);
+  }
+
+  /** 敵撃破時のドロップ・ボス撃破演出（プレイヤー弾/剣・CPU 共通） */
+  private handleEnemyKilledDrops(enemy: Enemy, byPlayer: boolean) {
+    this.pickupPool.spawn(enemy.x, enemy.y, enemy.expType);
+
+    // Generous sword drops & special items
+    if (enemy.type === 'BERSERKER') {
+      if (byPlayer) {
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
+      }
+      if (Math.random() < 0.6) {
+        this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
+      }
+    } else if (enemy.type === 'WEAPON_MASTER') {
+      if (byPlayer) {
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
+      }
+      this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
+    } else if (enemy.type === 'ELITE') {
+      this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
+    } else if (enemy.type === 'TANK') {
+      if (Math.random() < 0.5) {
+        this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
+      }
+    } else {
+      const roll = Math.random();
+      if (roll < 0.12) {
+        this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
+      } else if (roll < 0.19) {
+        const itemTypes: any[] = ['HEAL', 'MAGNET', 'SPECIAL_ORB'];
+        this.pickupPool.spawn(
+          enemy.x,
+          enemy.y,
+          itemTypes[Math.floor(Math.random() * itemTypes.length)]
+        );
+      }
+    }
+
+    if (enemy instanceof Boss) {
+      this.sound.sfx.playBossDefeated();
+      this.sound.playTrack('NORMAL');
+      this.screenEffects.shake(25);
+      this.screenEffects.flash('#ffd700', 0.8);
+      this.particleSystem.emitRing(enemy.x, enemy.y, '#ffd700', 500, 1.0);
+      this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'BOSS DEFEATED!! +5000', '#ffd700', 36);
+      this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 6);
+      this.waveDirector.activeBoss = null;
+    }
   }
 
   private updateLeaderboard() {

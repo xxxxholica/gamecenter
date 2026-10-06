@@ -403,7 +403,7 @@ export class Stage1Drink implements Stage {
 
   getCenterHint(): string | null {
     if (this.hasReleased && !this.isPouring && !this.completed && !this.failed) {
-      return 'まだ注げるかも\nもう一度注いでフチまで攻めよう';
+      return 'まだ注げる\nもう一度注いでフチまで攻めよう';
     }
     return null;
   }

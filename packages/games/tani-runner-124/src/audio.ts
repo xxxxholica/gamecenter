@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 // ============================================================
 // Web Audio API Synthesized Arcade Sound Engine
 // Zero external assets needed, pure retro arcade sound effects
@@ -136,15 +137,9 @@ class SoundEngine {
   // Noise generator helper (for explosions, hits, screams)
   private playNoise(duration: number, volume: number): void {
     if (!this.ctx || !this.masterGain) return;
-    const bufferSize = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
 
     const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = createWhiteNoiseBuffer(this.ctx, duration);
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';

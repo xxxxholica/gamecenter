@@ -304,6 +304,20 @@ html, body {
   margin-bottom: clamp(4px, 1.5vh, 12px);
   text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
   -webkit-text-stroke: 3px #000;
+  white-space: nowrap;
+}
+
+/* 「単位」は数字の下の行に、数字より小さく添える */
+.final-score-unit {
+  font-size: clamp(20px, 5.5vh, 48px);
+  font-weight: 900;
+  color: #ffea00;
+  letter-spacing: 6px;
+  line-height: 1.1;
+  margin-bottom: clamp(8px, 2vh, 18px);
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
 }
 
 .ranking-list {

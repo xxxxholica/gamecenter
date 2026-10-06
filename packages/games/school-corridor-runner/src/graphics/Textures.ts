@@ -800,36 +800,6 @@ export function createBasketBallTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// カラーコーン・コーンバー用（黄色と黒の警戒ストライプ ＆ 清掃中サイン）
-export function createConeStripeTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-
-  // 鮮やかな黄色ベース
-  ctx.fillStyle = '#ffeb3b';
-  ctx.fillRect(0, 0, 256, 256);
-
-  // 黒の斜め警戒ストライプ
-  ctx.fillStyle = '#111111';
-  ctx.lineWidth = 32;
-  for (let i = -256; i < 512; i += 64) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + 48, 0);
-    ctx.lineTo(i + 48 + 256, 256);
-    ctx.lineTo(i + 256, 256);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  return texture;
-}
-
 // 激しく燃え盛る火炎（飛び越え不能・完全迂回必須）テクスチャ
 export function createFlameTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -1336,3 +1306,32 @@ export function createExplosionScorchTexture(): THREE.CanvasTexture {
 }
 
 
+
+/**
+ * 左の窓から床へ差し込む夕日の光だまり: 窓に近い側(v=0、画像の下端)が強く、遠ざかる(v=1)ほど消える。
+ * 窓の縁(u方向)もぼかして、光の帯の輪郭を柔らかくする。加算合成で使う。
+ */
+export function createSunPatchTexture(): THREE.CanvasTexture {
+  const W = 64, H = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    const fade = Math.pow(y / (H - 1), 1.3); // 画像の下端(y大)がv=0=窓側
+    for (let x = 0; x < W; x++) {
+      const edge = Math.min(1, Math.min(x, W - 1 - x) / 8);
+      const a = Math.round(255 * fade * edge);
+      const i = (y * W + x) * 4;
+      img.data[i] = 255;
+      img.data[i + 1] = 190;
+      img.data[i + 2] = 120;
+      img.data[i + 3] = a;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}

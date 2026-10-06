@@ -69,6 +69,9 @@ class Game {
   private powerUpClock: number = 0;
   private invincibleLight: THREE.PointLight | null = null;
   private wasInvincible: boolean = false;
+  // 「GOD」と入力するとON/OFFが切り替わる、無限無敵モード
+  private godMode: boolean = false;
+  private godKeyBuffer: string = '';
 
   // ゲームステート
   private state: GameState = GameState.TITLE;
@@ -129,8 +132,10 @@ class Game {
   private clearOutroTimer: number = 0;
   private clearGate: THREE.Group | null = null;
   private clearGatePassed: boolean = false;
-  private readonly CLEAR_OUTRO_DURATION = 2.8;
-  private readonly CLEAR_GATE_DISTANCE = 42;
+  private clearExit: THREE.Group | null = null; // 廊下の出口(玄関)とその先の校庭
+  private readonly CLEAR_OUTRO_DURATION = 4.2;
+  private readonly CLEAR_EXIT_DISTANCE = 32; // 廊下の出口までの距離
+  private readonly CLEAR_GATE_DISTANCE = 75; // 校門までの距離(出口より先の校庭に置く)
 
   // デモAI攻撃クールダウン
   private demoAttackTimer: number = 0;
@@ -183,6 +188,7 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true; // クリア演出で廊下を出口で切り落とすため
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     container.appendChild(this.renderer.domElement);
@@ -223,6 +229,7 @@ class Game {
 
   private setupEvents(): void {
     window.addEventListener('resize', this.onResize);
+    window.addEventListener('keydown', this.onGodCodeKey);
 
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
@@ -286,9 +293,18 @@ class Game {
     this.arcadeTitleScreen?.show();
     this.inputManager.resetIdleTimer();
     this.fpArms.group.visible = false;
+    // 長く遊んだあとは廊下の区画が遠くまで動いていて、そのままだとタイトルの背景が崩れるので、
+    // プレイヤー・廊下・障害物・飛び道具・クリア演出の校庭をすべて初期状態に作り直す
+    this.clearProjectiles();
+    this.particleSystem.clearAll();
+    this.player.reset();
     this.obstacleManager.reset();
     this.obstacleManager.initTitleObstacles();
-    this.titleScrollZ = 0;
+    this.corridor.reset();
+    this.camera.fov = 78;
+    this.camera.updateProjectionMatrix();
+    this.titleScrollZ = this.TITLE_START_Z;
+    this.corridor.update(this.titleScrollZ, 0);
     mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
   }
 
@@ -302,6 +318,22 @@ class Game {
     applyResultMenuFocus(items, this.resultFocus);
   }
 
+  /** 右のドアガラスの反射を描いてから、本番の画面を描く */
+  private renderFrame(): void {
+    this.corridor.renderGlassReflection(this.renderer, this.scene, this.camera);
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /** 「G」「O」「D」の順に押すと、無限無敵モードが切り替わる */
+  private onGodCodeKey = (e: KeyboardEvent): void => {
+    if (e.repeat || !/^Key[A-Z]$/.test(e.code)) return;
+    this.godKeyBuffer = (this.godKeyBuffer + e.code.slice(3)).slice(-3);
+    if (this.godKeyBuffer !== 'GOD') return;
+    this.godKeyBuffer = '';
+    this.godMode = !this.godMode;
+    if (!this.godMode) this.player.isInvincible = false;
+  };
+
   private onResize = (): void => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -313,7 +345,7 @@ class Game {
   /**
    * ゲーム開始エントリポイント。
    * ワールド・プレイヤー・スコアを完全リセットした上で、まず「先生に見つかって追われる」導入演出を再生し、
-   * その演出が終わり次第カウントダウン（3, 2, 1, 走れ！）へと繋げる。
+   * その演出が終わり次第カウントダウン（3, 2, 1, GO）へと繋げる。
    */
   private startWithCountdown(): void {
     if (this.isCountingDown || this.isPreChase) return;
@@ -472,7 +504,7 @@ class Game {
   }
 
   /**
-   * カウントダウン開始（最初の位置を完全ロード ＆ 3, 2, 1, 走れ！）
+   * カウントダウン開始（最初の位置を完全ロード ＆ 3, 2, 1, GO）
    */
   private beginCountdownSequence(): void {
     this.isCountingDown = true;
@@ -497,7 +529,7 @@ class Game {
     this.fpArms.update(0, 0, 0, false, false, this.bombStock);
 
     // 最初の位置で初期描画を実行（事前ロードされた障害物・コインが視界に描画される）
-    this.renderer.render(this.scene, this.camera);
+    this.renderFrame();
   }
 
   private updateCountdown(dt: number): void {
@@ -525,7 +557,7 @@ class Game {
       this.soundSystem.playCountdownBeep(false);
     } else if (this.countdownStep === 3 && this.countdownTimer >= 1.95) {
       this.countdownStep = 4;
-      this.uiManager.showCountdown('走れ！');
+      this.uiManager.showCountdown('GO');
       this.soundSystem.playCountdownBeep(true);
       this.uiManager.triggerWhiteFlash();
       this.triggerScreenShake(0.8, 0.4);
@@ -626,10 +658,20 @@ class Game {
     this.isClearOutro = false;
     this.clearOutroTimer = 0;
     this.clearGatePassed = false;
+    this.removeClearOutroProps();
+  }
+
+  /** クリア演出の校門・出口・校庭を片付け、廊下の切り落としを解除する */
+  private removeClearOutroProps(): void {
     if (this.clearGate) {
       this.scene.remove(this.clearGate);
       this.clearGate = null;
     }
+    if (this.clearExit) {
+      this.scene.remove(this.clearExit);
+      this.clearExit = null;
+    }
+    this.corridor.setExitClip(null);
   }
 
   private clearPowerUps(): void {
@@ -726,14 +768,14 @@ class Game {
     // カウントダウン前「追われる」導入演出の実行中
     if (this.isPreChase) {
       this.updatePreChase(rawDelta);
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
       return;
     }
 
     // カウントダウンシーケンス実行中
     if (this.isCountingDown) {
       this.updateCountdown(rawDelta);
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
       return;
     }
 
@@ -757,14 +799,16 @@ class Game {
     }
 
     this.updateCamera(rawDelta);
-    this.renderer.render(this.scene, this.camera);
+    this.renderFrame();
   };
 
   private checkAttractMode(_input: GameInputState): void {
     // ユーザー指定により無操作デモ遷移は撤廃。タイトル画面を常時維持する。
   }
 
-  private titleScrollZ: number = 0;
+  // タイトルのカメラは titleScrollZ+4 にいるので、最初の区画(z<=0)の手前に床の無い隙間ができないよう-4から始める
+  private readonly TITLE_START_Z = -4;
+  private titleScrollZ: number = this.TITLE_START_Z;
 
   private updateTitle(_dt: number, input: GameInputState): void {
     this.fpArms.group.visible = false;
@@ -818,6 +862,12 @@ class Game {
     if (this.isClearOutro) {
       this.updateClearOutro(dt);
       return;
+    }
+
+    // GODモード: 無敵が切れないよう残り時間を補充し続ける
+    if (this.godMode) {
+      if (!this.player.isInvincible) this.uiManager.triggerInvincibleStart();
+      if (this.player.getInvincibleRemaining() < 5.0 || !this.player.isInvincible) this.player.triggerInvincible(10.0);
     }
 
     // 激突・床倒れ込みシーケンス中（カメラが床へ倒れ込み、スローモーションで減速）
@@ -985,9 +1035,7 @@ class Game {
   private updateDemo(dt: number, input: GameInputState): void {
     // デモ走行中に何らかの入力があった場合は、そのままゲーム開始はせずタイトル画面へ戻す
     if (input.anyKey || input.startOrRetry || input.attack || input.shootShuriken || input.throwBomb || input.jump) {
-      this.state = GameState.TITLE;
-      this.uiManager.setGameState(GameState.TITLE);
-      this.inputManager.resetIdleTimer();
+      this.showTitle();
       return;
     }
 
@@ -1930,6 +1978,60 @@ class Game {
   }
 
   /**
+   * クリア演出用の廊下の出口(玄関)と、その先に広がる校庭を生成（原点=出口の位置、奥がマイナスZ）
+   */
+  private createClearExit(): THREE.Group {
+    const group = new THREE.Group();
+    const lambert = (color: number) => new THREE.MeshLambertMaterial({ color });
+
+    // 玄関の上の壁と柱（切り落とした廊下の断面を隠し、出口に見せる）
+    const wallMat = lambert(0xcfc3a8);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(10.4, 3.6, 0.5), wallMat);
+    lintel.position.set(0, 5.7, 0);
+    group.add(lintel);
+    for (const x of [-5.1, 5.1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 7.5, 0.5), wallMat);
+      post.position.set(x, 3.75, 0);
+      group.add(post);
+    }
+
+    // 校庭: 土のグラウンドを中央に、両脇は芝生
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 260), lambert(0xd9bd8a));
+    const grassMeshes: THREE.Mesh[] = [];
+    const trees: THREE.Object3D[] = [];
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, -0.01, -130);
+    group.add(ground);
+    const grassMat = lambert(0x6fae4a);
+    for (const side of [-1, 1]) {
+      const grass = new THREE.Mesh(new THREE.PlaneGeometry(40, 260), grassMat);
+      grass.rotation.x = -Math.PI / 2;
+      grass.position.set(side * 50, -0.02, -130);
+      group.add(grass);
+      grassMeshes.push(grass);
+    }
+
+    // 校庭の両脇に並ぶ木
+    const trunkMat = lambert(0x6b4a2e);
+    const leafMat = lambert(0x4f9a3a);
+    for (let i = 0; i < 12; i++) {
+      for (const side of [-1, 1]) {
+        const tree = new THREE.Group();
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.6, 8), trunkMat);
+        trunk.position.y = 1.3;
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(1.9, 10, 8), leafMat);
+        leaf.position.y = 3.8;
+        tree.add(trunk, leaf);
+        tree.position.set(side * (9 + (i % 3) * 1.5), 0, -14 - i * 18);
+        group.add(tree);
+        trees.push(tree);
+      }
+    }
+    group.userData = { ground, grass: grassMeshes, trees, treeSpan: 12 * 18 };
+    return group;
+  }
+
+  /**
    * クリア（校門突破）演出の開始。
    * 残存する障害物を一掃して安全なまっすぐな廊下を作り、少し先に校門を配置。
    * プレイヤーはラストスパートでそのまま校門を駆け抜け、演出後にリザルト画面へ。
@@ -1944,12 +2046,34 @@ class Game {
     this.clearOutroTimer = 0;
     this.clearGatePassed = false;
 
+    // 廊下を出口で切り落とし、その先に校庭を広げる
+    const exitZ = this.player.group.position.z - this.CLEAR_EXIT_DISTANCE;
+    this.clearExit = this.createClearExit();
+    this.clearExit.position.set(0, 0, exitZ);
+    this.scene.add(this.clearExit);
+    this.corridor.setExitClip(exitZ);
+
     const gateZ = this.player.group.position.z - this.CLEAR_GATE_DISTANCE;
     this.clearGate = this.createSchoolGate();
     this.clearGate.position.set(0, 0, gateZ);
     this.scene.add(this.clearGate);
 
     this.soundSystem.playClearFanfare();
+  }
+
+  /** 校庭がどこまで走っても続くように、地面をプレイヤーに追従させ、後ろへ抜けた木を前方へ送る */
+  private updateClearYard(): void {
+    if (!this.clearExit) return;
+    const { ground, grass, trees, treeSpan } = this.clearExit.userData as {
+      ground: THREE.Mesh; grass: THREE.Mesh[]; trees: THREE.Object3D[]; treeSpan: number;
+    };
+    const localZ = this.player.group.position.z - this.clearExit.position.z; // 出口からの位置(奥がマイナス)
+    const centerZ = Math.min(-130, localZ - 130);
+    ground.position.z = centerZ;
+    for (const g of grass) g.position.z = centerZ;
+    for (const t of trees) {
+      if (t.position.z > localZ + 30) t.position.z -= treeSpan;
+    }
   }
 
   /**
@@ -1966,11 +2090,13 @@ class Game {
 
     this.player.update(dt, this.currentSpeed, false);
     this.corridor.update(this.player.group.position.z, dt);
+    this.updateClearYard();
     this.particleSystem.update(dt, this.player.group.position.z, this.currentSpeed / this.START_SPEED);
     this.fpArms.update(dt, this.player.runCycle, this.currentSpeed, false, false, this.bombStock);
 
     // 校門を通過した瞬間、閉塞した廊下の夕焼けフォグから、抜け出た先の眩しい光へ切り替える
-    if (this.clearGate && !this.clearGatePassed && this.player.group.position.z < this.clearGate.position.z) {
+    // 廊下の出口を抜けて外へ飛び出した瞬間
+    if (this.clearExit && !this.clearGatePassed && this.player.group.position.z < this.clearExit.position.z) {
       this.clearGatePassed = true;
       this.uiManager.triggerWhiteFlash();
       this.triggerScreenShake(0.7, 0.45);
@@ -1990,11 +2116,8 @@ class Game {
     );
 
     if (this.clearOutroTimer >= this.CLEAR_OUTRO_DURATION) {
+      // 校庭と校門はそのまま残す(リザルトの背後で廊下に戻らないように)。片付けは再挑戦・タイトルに戻るとき
       this.isClearOutro = false;
-      if (this.clearGate) {
-        this.scene.remove(this.clearGate);
-        this.clearGate = null;
-      }
       this.finishGame(GameState.CLEARED);
     }
   }
@@ -2048,7 +2171,7 @@ class Game {
         onComplete: (katakanaName) => {
           this.isNameEntryOpen = false;
           this.resultArmTime = performance.now() + 800;
-          saveLeaderboardScore('school-corridor-runner', score, katakanaName);
+          saveLeaderboardScore('school-corridor-runner', score, katakanaName, undefined, undefined, { cleared: state === GameState.CLEARED });
         },
       });
     }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GlassReflection } from './GlassReflection';
 import {
   createFloorTexture,
   createWallTexture,
@@ -7,6 +8,7 @@ import {
   createPlainWallTexture,
   createOutsideSkyTexture,
   createBuildingWindowsTexture,
+  createSunPatchTexture,
 } from '../graphics/Textures';
 
 interface CorridorSegment {
@@ -40,6 +42,8 @@ export class Corridor {
   private leftWallMaterialPlain: THREE.MeshStandardMaterial;
   private ceilingMaterial: THREE.MeshStandardMaterial;
   private lightMaterial: THREE.MeshBasicMaterial;
+  private sunPatchMaterial: THREE.MeshBasicMaterial;       // 左の窓から床へ差す光だまり
+  private glassReflection: GlassReflection; // 右のドアガラスに映る廊下の中(平面反射)
 
   // 左壁: 窓なしチャンクを一定間隔で挟むためのカウンタ
   private leftWallChunkIndex = 0;
@@ -76,6 +80,18 @@ export class Corridor {
       roughness: 0.35,  // ワックスの反射感
       metalness: 0.15,
     });
+
+    const additive = (map: THREE.Texture, opacity: number) =>
+      new THREE.MeshBasicMaterial({
+        map,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+    this.sunPatchMaterial = additive(createSunPatchTexture(), 0.3);
+    this.glassReflection = new GlassReflection(this.CORRIDOR_WIDTH / 2);
 
     this.rightWallMaterial = new THREE.MeshStandardMaterial({
       map: rightWallTex,
@@ -182,6 +198,26 @@ export class Corridor {
     this.scene.add(floorLight);
   }
 
+  /**
+   * 左の窓(z0〜z1)から床へ差し込む夕日の光だまり。壁際が強く、右へ行くほど薄れる。
+   * 夕日は左・やや手前側から射すので、奥(-z)へ流れるように斜めに伸ばす。
+   */
+  private createSunPatchGeometry(hw: number, z0: number, z1: number): THREE.BufferGeometry {
+    const reach = 7;   // 壁から床へ光が届く幅(m)
+    const shift = -3;  // 届く先で奥へずれる量(m)
+    const y = 0.03;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      -hw, y, z0,
+      -hw, y, z1,
+      -hw + reach, y, z1 + shift,
+      -hw + reach, y, z0 + shift,
+    ], 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    geo.setIndex([0, 2, 1, 0, 3, 2]);
+    return geo;
+  }
+
   private createSegmentGroup(baseZ: number): THREE.Group {
     const group = new THREE.Group();
     group.position.z = baseZ;
@@ -207,6 +243,7 @@ export class Corridor {
     // 3. 左壁（教室窓側: 夕日の見える大窓。LEFT_WALL_CHUNK_LEN幅ごとに区切り、
     //    LEFT_WALL_PLAIN_INTERVALチャンクに1回だけ一定間隔・一定幅で窓なしの壁を挟む）
     const chunkLen = this.LEFT_WALL_CHUNK_LEN;
+    const sunPatches: THREE.BufferGeometry[] = [];
     const chunksPerSegment = len / chunkLen;
     for (let i = 0; i < chunksPerSegment; i++) {
       const isPlain = this.leftWallChunkIndex % this.LEFT_WALL_PLAIN_INTERVAL === 0;
@@ -217,6 +254,41 @@ export class Corridor {
       chunk.rotation.y = Math.PI / 2;
       chunk.position.set(-hw, this.CORRIDOR_HEIGHT / 2, -(i * chunkLen) - chunkLen / 2);
       group.add(chunk);
+
+      if (!isPlain) {
+        // 窓(3枚/チャンク)ごとに、床へ斜めに伸びる光だまりを置く。窓の幅は3m
+        const zNear = -(i * chunkLen);
+        for (let j = 0; j < 3; j++) {
+          const z1 = zNear - j * 3;
+          sunPatches.push(this.createSunPatchGeometry(hw, z1, z1 - 3));
+        }
+      }
+    }
+    if (sunPatches.length) {
+      const merged = mergeGeometries(sunPatches, false);
+      sunPatches.forEach((g) => g.dispose());
+      if (merged) {
+        const patchMesh = new THREE.Mesh(merged, this.sunPatchMaterial);
+        patchMesh.renderOrder = 1;
+        group.add(patchMesh);
+      }
+    }
+
+    // 右壁のドアガラス(2枚)に、廊下の中の反射を映す。位置は createWallTexture の窓の位置に合わせてある
+    const glassPanes: Array<[number, number]> = [[-14.9, -10.0], [-8.6, -3.7]];
+    const reflections = glassPanes.map(([za, zb]) => {
+      const g = new THREE.PlaneGeometry(zb - za, 3.5);
+      g.rotateY(-Math.PI / 2);
+      g.translate(hw - 0.04, 4.85, (za + zb) / 2);
+      return g;
+    });
+    const reflectionGeo = mergeGeometries(reflections, false);
+    reflections.forEach((g) => g.dispose());
+    if (reflectionGeo) {
+      const reflectionMesh = new THREE.Mesh(reflectionGeo, this.glassReflection.material);
+      reflectionMesh.renderOrder = 1;
+      this.glassReflection.addGlass(reflectionMesh);
+      group.add(reflectionMesh);
     }
 
     // 4. 右壁（教室側: ドア・掲示板・腰壁）
@@ -466,7 +538,9 @@ export class Corridor {
 
     // プレイヤーが前進（Zが負の方向へ移動）するにつれて、
     // プレイヤーよりも後方に十分離れたセグメントを最前線へ移動
-    const cutoffDistance = this.SEGMENT_LENGTH;
+    // 区画は[z-長さ, z]を覆う。カメラ(プレイヤーより後ろにいることがある)の足元まで床が続くよう、
+    // 区画が完全に後方へ抜けてから再配置する
+    const cutoffDistance = this.SEGMENT_LENGTH + 12;
 
     for (const seg of this.segments) {
       if (seg.group.position.z > playerZ + cutoffDistance) {
@@ -483,7 +557,35 @@ export class Corridor {
     }
   }
 
+  /**
+   * クリア演出用: 廊下をz=exitZで切り落とし、その先(z<exitZ)を描画しない。
+   * nullで解除。廊下の区画は使い回されるので、位置ではなくワールド空間のクリップ面で切る。
+   */
+  public setExitClip(exitZ: number | null): void {
+    const planes = exitZ === null ? null : [new THREE.Plane(new THREE.Vector3(0, 0, 1), -exitZ)];
+    const touched = new Set<THREE.Material>();
+    for (const seg of this.segments) {
+      seg.group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) {
+          if (touched.has(m)) continue;
+          touched.add(m);
+          m.clippingPlanes = planes;
+          m.needsUpdate = true;
+        }
+      });
+    }
+  }
+
+  /** 右のドアガラスの反射を描く。本番の描画の直前に毎フレーム呼ぶ */
+  public renderGlassReflection(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+    this.glassReflection.render(renderer, scene, camera);
+  }
+
   public reset(): void {
+    this.setExitClip(null);
     for (let i = 0; i < this.segments.length; i++) {
       this.segments[i].group.position.z = -i * this.SEGMENT_LENGTH;
     }

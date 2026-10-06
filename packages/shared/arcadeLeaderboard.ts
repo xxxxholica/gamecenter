@@ -8,6 +8,8 @@ export interface LeaderboardEntry {
   formattedScore: string; // 表示用文字列 (例: "0 pts", "0 単位", "00:00.000", "0 pt")
   date: string;      // YYYY/MM/DD
   extra?: string;    // 称号やマシン名など
+  /** ステージを最後までクリアした記録か。ホームのランキングで、名前の右に ★ を付けて表示する */
+  cleared?: boolean;
 }
 
 export interface LeaderboardVariant {
@@ -168,6 +170,7 @@ export function loadRawScores(slug: string, variantId?: string): LeaderboardEntr
                 : def.formatScore(item.score),
             date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
             extra: typeof item.extra === 'string' ? escapeHtml(item.extra.slice(0, 30)) : undefined,
+            cleared: item.cleared === true ? true : undefined,
           }));
       }
     }
@@ -252,14 +255,21 @@ export function checkHighScore(
   };
 }
 
+export interface SaveLeaderboardOptions {
+  /** ステージを最後までクリアした記録なら true。ホームのランキングで、名前の右に ★ が付く */
+  cleared?: boolean;
+  maxEntries?: number;
+}
+
 export function saveLeaderboardScore(
   slug: string,
   score: number,
   name: string,
   variantId?: string,
   extra?: string,
-  maxEntries = LEADERBOARD_MAX_ENTRIES,
+  options: SaveLeaderboardOptions = {},
 ): { rank: number; list: LeaderboardEntry[] } {
+  const maxEntries = options.maxEntries ?? LEADERBOARD_MAX_ENTRIES;
   const def = GAME_LEADERBOARD_DEFS[slug];
   if (!def || !def.hasScore || score <= 0) return { rank: -1, list: [] };
 
@@ -275,6 +285,7 @@ export function saveLeaderboardScore(
     formattedScore: def.formatScore(score),
     date: today,
     extra: typeof extra === 'string' ? escapeHtml(extra.slice(0, 30)) : undefined,
+    cleared: options.cleared === true ? true : undefined,
   };
 
   list.push(newEntry);

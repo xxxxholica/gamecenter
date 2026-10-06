@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { InputManager, InputState } from './engine/input';
 import { SoundManager } from './engine/audio';
 import { Player, BoundingBox2D } from './entities/player';
-import { Stage, STAGE_CONFIGS } from './world/stage';
+import { Stage, STAGE_CONFIGS, FINAL_STAGE, DEFAULT_BACKGROUND, DEFAULT_FOG_DENSITY } from './world/stage';
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock } from './entities/objects';
@@ -57,6 +57,7 @@ class StreetBBoyGame {
 
   // Gameplay metrics
   private currentStage: number = 1;
+  private hordeAlerted: boolean = false;
   private score: number = 0;
   private timeLeft: number = 99;
   /** ステージ開始前の 3・2・1・GO! の間は true(時間が進まず、操作できない) */
@@ -98,8 +99,8 @@ class StreetBBoyGame {
     this.renderer.shadowMap.enabled = false;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x05070c);
-    this.scene.fog = new THREE.FogExp2(0x05070c, 0.018);
+    this.scene.background = new THREE.Color(DEFAULT_BACKGROUND);
+    this.scene.fog = new THREE.FogExp2(DEFAULT_BACKGROUND, DEFAULT_FOG_DENSITY);
 
     this.camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 300);
 
@@ -315,6 +316,7 @@ class StreetBBoyGame {
     this.stage = new Stage(this.scene, this.currentStage);
     this.checkpoint = null;
     this.sound.setBaseTempo(this.stage.config.tempo);
+    this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     this.player = new Player();
     this.player.reset(1.5, 0.5);
     this.scene.add(this.player.mesh);
@@ -363,11 +365,12 @@ class StreetBBoyGame {
     this.cameraShakeTimer = 0;
     this.cameraShakeIntensity = 0;
     this.hud.hideCombo();
+    this.hud.setHordeWarning(0);
     this.sound.setGoldMode(false);
   }
 
   private advanceToNextStage(): void {
-    if (this.currentStage >= 4) return;
+    if (this.currentStage >= FINAL_STAGE) return;
     this.currentStage++;
 
     if (this.stage) {
@@ -381,6 +384,7 @@ class StreetBBoyGame {
     this.stage = new Stage(this.scene, this.currentStage);
     this.checkpoint = null;
     this.sound.setBaseTempo(this.stage.config.tempo);
+    this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     if (this.player) {
       this.player.reset(1.5, 0.5);
     }
@@ -395,7 +399,7 @@ class StreetBBoyGame {
 
   /** 「STAGE n」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
   private beginStageCountdown(): void {
-    this.hud.showCenterBanner('ready', `STAGE ${this.currentStage}`);
+    this.hud.showCenterBanner('ready', this.currentStage === FINAL_STAGE ? 'FINAL' : `STAGE ${this.currentStage}`);
     this.countingDown = true;
     this.countdownHandle?.cancel();
     this.countdownHandle = startArcadeCountdown({
@@ -897,7 +901,7 @@ class StreetBBoyGame {
           this.stage.scene.add(proj.mesh);
           this.sound.playShoot();
         }
-      });
+      }, this.player.y);
       if (enemy.isDead) continue;
 
       // Solid environment wall collision (platforms, stairs, blocks, street obstacles)
@@ -933,6 +937,18 @@ class StreetBBoyGame {
           return;
         }
       }
+    }
+
+    // 後ろから追ってくる犬の大群の出現と後片付け。迫ってくる圧力を画面の縁の警告で伝える
+    this.stage.updateEnemies(dt, this.player.x, this.player.y);
+    const pressure = this.stage.getHordePressure(this.player.x);
+    this.hud.setHordeWarning(pressure);
+    // 群れがすぐ後ろまで迫った瞬間に、警告音を一度鳴らす(離れたら、また鳴るようにする)
+    if (pressure > 0.65 && !this.hordeAlerted) {
+      this.hordeAlerted = true;
+      this.sound.playLaserWarning();
+    } else if (pressure < 0.3) {
+      this.hordeAlerted = false;
     }
 
     // Projectile Collisions (Deflection with Spin Attack, Damage on Player, Deflected hitting Enemies, Obstacle Blocking)
@@ -1042,6 +1058,7 @@ class StreetBBoyGame {
 
     this.state = 'clear';
     this.stateTimer = 0;
+    this.hud.setHordeWarning(0);
     this.sound.stopBgm();
     this.sound.playClear();
 
@@ -1053,10 +1070,10 @@ class StreetBBoyGame {
 
     // Time Bonus Calculation
     const timeBonus = Math.floor(this.timeLeft) * 100;
-    const stageBonus = (this.currentStage === 4) ? 10000 : 3000;
+    const stageBonus = (this.currentStage === FINAL_STAGE) ? 10000 : 3000;
     this.addScore(timeBonus + stageBonus);
 
-    if (this.currentStage === 4) {
+    if (this.currentStage === FINAL_STAGE) {
       this.hud.showCenterBanner('allclear');
     } else {
       this.hud.showCenterBanner('clear');
@@ -1095,12 +1112,12 @@ class StreetBBoyGame {
     }
 
     // Stage progression logic
-    if (this.currentStage < 4) {
+    if (this.currentStage < FINAL_STAGE) {
       if (this.stateTimer >= 3.2) {
         this.advanceToNextStage();
       }
     } else {
-      // Final Stage 4: All Clear result overlay
+      // FINAL STAGE: All Clear result overlay
       if (this.stateTimer >= 3.5 && this.resultArmTime === 0) {
         this.openResultScreen('clear');
       }
@@ -1117,6 +1134,7 @@ class StreetBBoyGame {
     if (!this.player || this.player.isDead) return;
 
     this.player.isDead = true;
+    this.hud.setHordeWarning(0);
     this.player.vy = 12; // Death bounce
     if (!skipHurtSound) {
       this.sound.playHurt();
@@ -1142,6 +1160,8 @@ class StreetBBoyGame {
             this.hud.updateTime(this.timeLeft);
           }
           this.player.reset(safePos.x, safePos.y, true);
+          // 追ってきていた犬の大群はいったん消し、少し猶予をおいてからやり直す
+          this.stage.resetHorde(4);
           // Snap camera immediately to respawn location to prevent camera disorientation
           this.camera.position.x = safePos.x;
           this.camera.position.y = Math.max(3.2, safePos.y + 2.0);

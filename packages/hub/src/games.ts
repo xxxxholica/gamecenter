@@ -57,6 +57,17 @@ const allGames: GameEntry[] = [
     developer: KURENAI_BEAT,
   },
   {
+    slug: 'sumo-smash-3d',
+    title: '剛体大相撲',
+    englishTitle: 'SUMO SMASH 3D',
+    description:
+      '土俵の上で力士同士がぶつかり合う3D相撲アクション。張り手や掴みで相手を吹き飛ばし、土俵の外へ押し出せ。CPU戦と2人対戦に対応。',
+    thumbnail: 'thumbnails/sumo-smash-3d.webp',
+    logo: 'logos/sumo-smash-3d.webp',
+    accent: '#e63946',
+    developer: THOUSANDL000,
+  },
+  {
     slug: 'school-corridor-runner',
     title: 'テンパレラン',
     englishTitle: 'TEMPALE RUN',
@@ -65,6 +76,17 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/school-corridor-runner.webp',
     logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
+    developer: XXXXHOLICA,
+  },
+  {
+    slug: 'street-b-boy',
+    title: 'ストリートビーボーイ',
+    englishTitle: 'STREET B-BOY',
+    description:
+      'ブレイクダンス少年が街を駆け抜けるアーケード2.5Dプラットフォーマー。スピン攻撃で段ボールやレーザーを蹴散らし、レールグラインドやサブウーファーのバウンドを駆使してゴールドカセットを狙え。',
+    thumbnail: 'thumbnails/street-b-boy.webp',
+    logo: 'logos/street-b-boy.webp',
+    accent: '#ffea00',
     developer: XXXXHOLICA,
   },
   {
@@ -112,17 +134,6 @@ const allGames: GameEntry[] = [
     developer: XXXXHOLICA,
   },
   {
-    slug: 'street-b-boy',
-    title: 'ストリートビーボーイ',
-    englishTitle: 'STREET B-BOY',
-    description:
-      'ブレイクダンス少年が街を駆け抜けるアーケード2.5Dプラットフォーマー。スピン攻撃で段ボールやレーザーを蹴散らし、レールグラインドやサブウーファーのバウンドを駆使してゴールドカセットを狙え。',
-    thumbnail: 'thumbnails/street-b-boy.webp',
-    logo: 'logos/street-b-boy.webp',
-    accent: '#ffea00',
-    developer: XXXXHOLICA,
-  },
-  {
     slug: 'survivor-score-battle',
     title: 'サバイバー・スコアバトル',
     englishTitle: 'SURVIVOR SCORE BATTLE',
@@ -132,17 +143,6 @@ const allGames: GameEntry[] = [
     logo: 'logos/survivor-score-battle.webp',
     accent: '#00e5ff',
     developer: KURENAI_BEAT,
-  },
-  {
-    slug: 'sumo-smash-3d',
-    title: '剛体大相撲',
-    englishTitle: 'SUMO SMASH 3D',
-    description:
-      '土俵の上で力士同士がぶつかり合う3D相撲アクション。張り手や掴みで相手を吹き飛ばし、土俵の外へ押し出せ。CPU戦と2人対戦に対応。',
-    thumbnail: 'thumbnails/sumo-smash-3d.webp',
-    logo: 'logos/sumo-smash-3d.webp',
-    accent: '#e63946',
-    developer: THOUSANDL000,
   },
 ];
 

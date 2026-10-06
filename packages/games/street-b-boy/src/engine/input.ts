@@ -1,4 +1,5 @@
 import { MenuNav } from '../../../../shared/arcadeMenuNav';
+import { KeyboardTracker, SCROLL_KEYS } from '../../../../shared/keyboardTracker';
 
 export interface InputState {
   left: boolean;
@@ -18,40 +19,29 @@ export interface InputState {
 }
 
 export class InputManager {
-  private keysHeld = new Set<string>();
   private menuNav = new MenuNav();
-  private keysJustPressed = new Set<string>();
-  private keysJustReleased = new Set<string>();
+  private keyboard = new KeyboardTracker({
+    trackEdges: true,
+    trackReleased: true,
+    // Prevent scrolling with arrow keys / space
+    preventDefaultKeys: SCROLL_KEYS,
+    onKeyDown: (e) => {
+      this.menuNav.pushKey(e);
+      if (!this.keysHeld.has(e.code)) this.lastInputTime = performance.now();
+    },
+    onKeyUp: () => {
+      this.lastInputTime = performance.now();
+    },
+    onBlur: () => this.menuNav.clear(),
+  });
+  private keysHeld = this.keyboard.down;
+  private keysJustPressed = this.keyboard.pressed;
+  private keysJustReleased = this.keyboard.released;
 
   private prevGamepadButtons: boolean[] = [];
   private lastInputTime: number = performance.now();
 
   constructor() {
-    window.addEventListener('keydown', (e) => {
-      this.menuNav.pushKey(e);
-      if (!this.keysHeld.has(e.code)) {
-        this.keysJustPressed.add(e.code);
-        this.lastInputTime = performance.now();
-      }
-      this.keysHeld.add(e.code);
-      // Prevent scrolling with arrow keys / space
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-    });
-
-    // フォーカスが外れると keyup が届かず押しっぱなしになるので、入力を捨てる
-    window.addEventListener('blur', () => {
-      this.keysHeld.clear();
-      this.menuNav.clear();
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keysHeld.delete(e.code);
-      this.keysJustReleased.add(e.code);
-      this.lastInputTime = performance.now();
-    });
-
     window.addEventListener('pointerdown', () => {
       this.lastInputTime = performance.now();
     });

@@ -1,4 +1,5 @@
 import { PostFX } from './PostFX';
+import { audio } from '../audio';
 import { createSkyEnvironments, type SkyEnvironments } from './SkyEnvironment';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -44,9 +45,13 @@ export class DriveScene {
   // Chase camera state: the camera follows the car at a fixed distance; only its heading lags a little behind the car's
   private cameraLookTarget = new THREE.Vector3();
   private currentCameraPos = new THREE.Vector3();
+  // 押している間だけ、車の前から車を映す視点(Vキー / アケコンのY)。離すと元の視点へ戻る
+  private frontKeyHeld = false;
+  private frontPadHeld = false;
+  private frontActive = false;         // 前方の視点が出ているか(視点はボタンで即座に切り替わる)
   private chaseHeading = 0;
-  private chaseDist = 4.8;
-  private chaseHeight = 2.1;
+  private chaseDist = 4.4;
+  private chaseHeight = 2.9;
 
   /** Frozen (pause menu): nothing moves, the last frame stays on screen. */
   public paused: boolean = false;
@@ -106,7 +111,12 @@ export class DriveScene {
     window.addEventListener('keydown', (e) => {
       if (!this.active) return;
       if (e.code === 'KeyC') this.cycleCameraMode();
+      if (e.code === 'KeyV') this.frontKeyHeld = true;
     });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyV') this.frontKeyHeld = false;
+    });
+    window.addEventListener('blur', () => { this.frontKeyHeld = false; });
   }
 
   private setupLighting(): void {
@@ -415,8 +425,8 @@ export class DriveScene {
 
     // Reset the chase camera behind the car
     this.chaseHeading = this.currentMap.startRotationY;
-    this.chaseDist = 4.8;
-    this.chaseHeight = 2.1;
+    this.chaseDist = 4.4;
+    this.chaseHeight = 2.9;
     const forwardX = Math.sin(this.currentMap.startRotationY);
     const forwardZ = Math.cos(this.currentMap.startRotationY);
     this.currentCameraPos.set(
@@ -444,6 +454,11 @@ export class DriveScene {
     }
   }
 
+  /** アケコンのYボタンの押下状態(メニュー表示中などは false を渡す) */
+  public setFrontViewPad(held: boolean): void {
+    this.frontPadHeld = held;
+  }
+
   public cycleCameraMode(): void {
     if (!this.carController) return;
     // 視点は一人称(cockpit)と三人称後方(chase)の2つに限定
@@ -451,6 +466,7 @@ export class DriveScene {
     const currentIdx = modes.indexOf(this.carController.cameraMode);
     const nextMode = modes[(currentIdx + 1) % modes.length];
     this.setCameraMode(nextMode);
+    audio.sfx.cameraSwitch('cycle');
   }
 
   public start(): void {
@@ -485,7 +501,24 @@ export class DriveScene {
 
     const carPos = this.carController.position;
     const rotY = this.carController.rotationY;
-    const mode = this.carController.cameraMode;
+    let mode = this.carController.cameraMode;
+
+    // 前方の視点: 押している間だけ。ボタンでの視点切り替えなのでアニメーションはつけず、効果音だけ鳴らす
+    const wantFront = mode !== 'orbit' && (this.frontKeyHeld || this.frontPadHeld);
+    if (wantFront !== this.frontActive) {
+      this.frontActive = wantFront;
+      audio.sfx.cameraSwitch(wantFront ? 'front' : 'back');
+      // 運転席視点との行き来でも、視野角はその場で切り替える
+      this.camera.fov = mode === 'cockpit' && !wantFront ? 62 : 54;
+      this.camera.updateProjectionMatrix();
+    }
+    // 運転席視点のときも、前方の視点の間は三人称のカメラを使う
+    if (mode === 'cockpit' && this.frontActive) {
+      mode = 'chase';
+    } else if (mode === 'cockpit') {
+      this.chaseHeading = rotY;
+    }
+    const front = this.frontActive ? 1 : 0;
 
     const forward = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
     const right = new THREE.Vector3(Math.cos(rotY), 0, -Math.sin(rotY));
@@ -496,20 +529,24 @@ export class DriveScene {
       // Frame-rate independent exponential smoothing. Only the distance / height / heading are smoothed, never the
       // absolute position: smoothing the position makes the camera trail the car by speed / rate metres (10 m at top speed).
       const k = (rate: number): number => 1 - Math.exp(-rate * dt);
-      this.chaseDist += (4.8 + speedFactor * 1.5 - this.chaseDist) * k(4);
-      this.chaseHeight += (2.1 - speedFactor * 0.3 - this.chaseHeight) * k(4);
+      this.chaseDist += (4.4 + speedFactor * 1.1 - this.chaseDist) * k(4);
+      this.chaseHeight += (2.9 - speedFactor * 0.25 - this.chaseHeight) * k(4);
       let dh = rotY - this.chaseHeading;
       while (dh > Math.PI) dh -= 2 * Math.PI;
       while (dh < -Math.PI) dh += 2 * Math.PI;
       this.chaseHeading += dh * k(7);                       // the view swings a little in corners, then settles
       const cf = new THREE.Vector3(Math.sin(this.chaseHeading), 0, Math.cos(this.chaseHeading));
+      // 前方の視点では、カメラを車の真正面(車の周りを180°回った位置)へ置く
+      const orbit = this.chaseHeading + front * Math.PI;
+      const camDir = new THREE.Vector3(Math.sin(orbit), 0, Math.cos(orbit));
 
       this.currentCameraPos.copy(carPos)
-        .sub(cf.clone().multiplyScalar(this.chaseDist))
+        .sub(camDir.multiplyScalar(this.chaseDist))
         .add(new THREE.Vector3(0, this.chaseHeight, 0));
       this.camera.position.copy(this.currentCameraPos);
 
-      const lookAhead = 4.0 + speedFactor * 4.0;
+      // 斜め上から見下ろす視点。注視点を車の近くに置いて、カメラを下へ向ける(俯角は低速で約16°、最高速で約12°)
+      const lookAhead = (2.4 + speedFactor * 2.0) * (1 - front);   // 前方の視点では車そのものを見る
       this.cameraLookTarget.copy(carPos).add(new THREE.Vector3(0, 0.9, 0)).add(cf.multiplyScalar(lookAhead));
       this.camera.lookAt(this.cameraLookTarget);
 
@@ -654,7 +691,7 @@ export class DriveScene {
 
     // 2. Update Camera (mode-dependent FOV, wider view while a drift boost is on)
     if (this.carController) {
-      const isCockpit = this.carController.cameraMode === 'cockpit';
+      const isCockpit = this.carController.cameraMode === 'cockpit' && !this.frontActive;
       // 一人称ではフロントガラスを消してフルクリアにする(三人称では車体として見せる)
       const windshield = this.currentCar?.windshield;
       if (windshield) windshield.visible = !isCockpit;

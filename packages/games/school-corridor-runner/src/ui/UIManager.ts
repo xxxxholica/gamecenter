@@ -240,7 +240,7 @@ export class UIManager {
   public showCountdown(text: string): void {
     this.countdownOverlay.classList.remove('hidden');
     this.countdownText.textContent = text;
-    if (text === '走れ！') {
+    if (text === 'GO') {
       this.countdownText.className = 'countdown-num go';
     } else {
       this.countdownText.className = 'countdown-num';

@@ -2,6 +2,8 @@
 // 短押しはゲームによって別用途(phaser-fighter の CPU 切替など)に使われているため、長押しで判定する。
 // 各ゲームのエントリで installHomeReturn() を1回呼ぶ。キーボードの Escape は従来どおり各ゲーム側で処理する。
 
+import { mountFullscreenKey } from './fullscreenKey';
+
 const SELECT_BUTTON = 8;
 const HOLD_MS = 1000;
 // 短押しでゲージが一瞬ちらつかないよう、この時間を超えて押し続けたときだけ表示する
@@ -51,6 +53,9 @@ function createOverlay(): { root: HTMLDivElement; fill: HTMLDivElement } {
 }
 
 export function installHomeReturn(): void {
+  // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
+  mountFullscreenKey();
+
   let overlay: { root: HTMLDivElement; fill: HTMLDivElement } | null = null;
   let holdStart: number | null = null;
   let leaving = false;

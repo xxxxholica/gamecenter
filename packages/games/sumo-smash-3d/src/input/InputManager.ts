@@ -1,3 +1,5 @@
+import { KeyboardTracker } from '../../../../shared/keyboardTracker';
+
 export interface PlayerInputState {
   moveX: number; // -1 to 1 (画面基準の左右)
   moveZ: number; // -1 to 1 (画面基準の奥/手前)
@@ -41,29 +43,16 @@ const PAD_STRIKE = [0, 2];
 const PAD_GRAB = [1, 3];
 
 export class InputManager {
-  private keysDown: Set<string> = new Set();
-  private keysPressed: Set<string> = new Set();
-  private keysReleased: Set<string> = new Set();
+  private keyboard = new KeyboardTracker({ trackEdges: true, trackReleased: true });
+  private keysDown: Set<string> = this.keyboard.down;
+  private keysPressed: Set<string> = this.keyboard.pressed;
+  private keysReleased: Set<string> = this.keyboard.released;
 
   // ゲームパッド前フレーム状態(プレイヤーごと)
   private prevPad: [{ strike: boolean; grab: boolean }, { strike: boolean; grab: boolean }] = [
     { strike: false, grab: false },
     { strike: false, grab: false },
   ];
-
-  constructor() {
-    window.addEventListener('keydown', (e) => {
-      if (!this.keysDown.has(e.code)) {
-        this.keysPressed.add(e.code);
-      }
-      this.keysDown.add(e.code);
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keysDown.delete(e.code);
-      this.keysReleased.add(e.code);
-    });
-  }
 
   /**
    * 毎フレーム末尾で呼び出して、単発キー入力バッファをクリア

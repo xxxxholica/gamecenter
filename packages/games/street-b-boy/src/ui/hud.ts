@@ -27,6 +27,7 @@ export class HudManager {
   private elResultStatusTitle: HTMLElement;
   private elResultTotalScore: HTMLElement;
   private elInvincibleBorder: HTMLElement;
+  private elHordeWarning: HTMLElement;
 
   private elCombo: HTMLElement;
   private elComboHits: HTMLElement;
@@ -47,6 +48,7 @@ export class HudManager {
     this.elResultStatusTitle = document.getElementById('result-status-title')!;
     this.elResultTotalScore = document.getElementById('result-total-score')!;
     this.elInvincibleBorder = document.getElementById('invincible-border')!;
+    this.elHordeWarning = document.getElementById('horde-warning')!;
 
     this.elCombo = document.getElementById('hud-combo')!;
     this.elComboHits = document.getElementById('val-combo-hits')!;
@@ -96,6 +98,12 @@ export class HudManager {
     this.comboTimerId = window.setTimeout(() => {
       this.hideCombo();
     }, 1500);
+  }
+
+  /** 後ろから犬の大群が迫っているときの、画面の左の縁の赤い警告。intensity は 0(なし)〜1(すぐ後ろ) */
+  public setHordeWarning(intensity: number): void {
+    const v = Math.min(1, Math.max(0, intensity));
+    this.elHordeWarning.style.opacity = v.toFixed(2);
   }
 
   public hideCombo(): void {
@@ -176,7 +184,7 @@ export class HudManager {
         delayMs: NAME_ENTRY_AFTER_RESULT_MS,
         onComplete: (katakanaName) => {
           this.isNameEntryOpen = false;
-          saveLeaderboardScore('street-b-boy', score, katakanaName);
+          saveLeaderboardScore('street-b-boy', score, katakanaName, undefined, undefined, { cleared: status === 'clear' });
           this.onNameEntryClosed?.();
         },
       });

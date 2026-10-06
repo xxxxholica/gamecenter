@@ -1,13 +1,25 @@
 import { GameInputState } from '../types';
 import { MenuNav } from '../../../../shared/arcadeMenuNav';
+import { KeyboardTracker } from '../../../../shared/keyboardTracker';
 
 export class InputManager {
   private lastInputTime: number = Date.now();
 
   // キーボード状態
-  private keysDown: Set<string> = new Set();
-  private keysPressedThisFrame: Set<string> = new Set();
   private menuNav = new MenuNav();
+  private keyboard = new KeyboardTracker({
+    trackEdges: true,
+    // スペースキーや矢印キー、Enterキーでのスクロール・既定動作防止
+    preventDefaultKeys: ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'],
+    onKeyDown: (e) => {
+      this.lastInputTime = Date.now();
+      this.menuNav.pushKey(e);
+    },
+    // 押下中のキーを全て離した扱いにする(次の keydown / repeat が新規押下として届く)
+    onBlur: () => this.menuNav.clear(),
+  });
+  private keysDown: Set<string> = this.keyboard.down;
+  private keysPressedThisFrame: Set<string> = this.keyboard.pressed;
 
   // ゲームパッド軸の前回状態（エッジ検出用）
   private lastAxis0: number = 0;
@@ -17,36 +29,6 @@ export class InputManager {
   // 投擲攻撃のクールダウンタイマー（手裏剣 / 辞書ボム共通）
   private attackCooldown: number = 0;
   private readonly ATTACK_INTERVAL: number = 0.16; // 秒
-
-  constructor() {
-    window.addEventListener('keydown', this.handleKeyDown);
-    window.addEventListener('keyup', this.handleKeyUp);
-    window.addEventListener('blur', this.releaseAllKeys);
-  }
-
-  /** 押下中のキーを全て離した扱いにする(次の keydown / repeat が新規押下として届く) */
-  private releaseAllKeys = (): void => {
-    this.keysDown.clear();
-    this.menuNav.clear();
-  };
-
-  private handleKeyDown = (e: KeyboardEvent) => {
-    this.lastInputTime = Date.now();
-    this.menuNav.pushKey(e);
-    if (!this.keysDown.has(e.code)) {
-      this.keysPressedThisFrame.add(e.code);
-    }
-    this.keysDown.add(e.code);
-
-    // スペースキーや矢印キー、Enterキーでのスクロール・既定動作防止
-    if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
-      e.preventDefault();
-    }
-  };
-
-  private handleKeyUp = (e: KeyboardEvent) => {
-    this.keysDown.delete(e.code);
-  };
 
   /**
    * 毎フレームの更新処理。入力状態をパースして返す。
@@ -280,8 +262,6 @@ export class InputManager {
   }
 
   public destroy(): void {
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('keyup', this.handleKeyUp);
-    window.removeEventListener('blur', this.releaseAllKeys);
+    this.keyboard.dispose();
   }
 }

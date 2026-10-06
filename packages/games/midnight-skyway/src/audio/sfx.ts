@@ -85,6 +85,19 @@ export class Sfx {
     }
   }
 
+  /** 視点の切り替え。front: 前方の視点へ(上がる音) / back: 戻る(下がる音) / cycle: 三人称⇔運転席(2音) */
+  public cameraSwitch(kind: 'front' | 'back' | 'cycle'): void {
+    const t = this.ctx.currentTime;
+    if (kind === 'cycle') {
+      this.tone('square', 760, 760, t, 0.04, 0.09);
+      this.tone('square', 1140, 1140, t + 0.045, 0.07, 0.09);
+      return;
+    }
+    const up = kind === 'front';
+    this.noiseHit(t, 0.12, 'bandpass', up ? 1400 : 4200, up ? 4200 : 1400, 0.14, 0.004);
+    this.tone('triangle', up ? 620 : 940, up ? 940 : 620, t, 0.09, 0.12);
+  }
+
   public gate(): void {
     const t = this.ctx.currentTime;
     this.tone('sine', midiHz(88), midiHz(88), t, 0.09, 0.16);

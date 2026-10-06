@@ -48,8 +48,7 @@ export class RaceDirector {
     const cc = this.scene.carController;
     if (cc) {
       cc.driftBoostEnabled = this.active;
-      cc.onDriftBanked = this.active ? (pts, sec) => {
-        this.hud.showDriftBanked(pts, sec);
+      cc.onDriftBanked = this.active ? () => {
         audio.sfx.driftBanked();
       } : null;
     }

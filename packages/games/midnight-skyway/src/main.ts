@@ -24,7 +24,7 @@ import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
-import { PadEdge, startPadLoop } from '../../../shared/arcadePad';
+import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
@@ -114,6 +114,7 @@ const guideRace = () => mountArcadeGuide({
   buttons: [
     { indices: [0], label: 'ハンドブレーキ' },
     { indices: [2], label: 'カメラ切替' },
+    { indices: [3], label: '前方確認' },
     { indices: [9], label: 'ポーズ' },
   ],
   showHomeHint: true,
@@ -890,7 +891,12 @@ window.addEventListener('DOMContentLoaded', () => {
     // The frame a menu closes, its confirming press must not also act as a race button
     const ignore = menuOpen || menuWasOpen;
     menuWasOpen = menuOpen;
-    if (ignore || flow.currentScreen !== 'RACE' || !driveScene.active) return;
+    if (ignore || flow.currentScreen !== 'RACE' || !driveScene.active) {
+      driveScene.setFrontViewPad(false);
+      return;
+    }
+    // Y: 押している間だけ車の前からの視点
+    driveScene.setFrontViewPad(!!readPad().buttons[3]);
     if (p.any(2)) driveScene.cycleCameraMode();
     else if (p.any(9)) driveHUD.togglePause(true);
   });

@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 // Arcade Sound Synthesizer using Web Audio API
 
 class SoundManager {
@@ -493,13 +494,7 @@ class SoundManager {
 
   private createNoiseBuffer(duration: number): AudioBuffer | null {
     if (!this.ctx) return null;
-    const bufferSize = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    return buffer;
+    return createWhiteNoiseBuffer(this.ctx, duration);
   }
 }
 

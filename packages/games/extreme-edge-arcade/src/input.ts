@@ -1,9 +1,14 @@
 // Gamepad API + Keyboard Input System
 import { MenuNav } from '../../../shared/arcadeMenuNav';
+import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
 
 export class InputManager {
   // Current states
-  private keys: Record<string, boolean> = {};
+  private keyboard = new KeyboardTracker({
+    preventDefaultKeys: SCROLL_KEYS,
+    onKeyDown: (e) => this.menuNav.pushKey(e),
+    onBlur: () => this.menuNav.clear(),
+  });
 
   private btn0 = false;
   private prevBtn0 = false;
@@ -24,25 +29,6 @@ export class InputManager {
   private frameNav: number[] = [];
 
   constructor() {
-    window.addEventListener('keydown', (e) => {
-      this.menuNav.pushKey(e);
-      // Prevent browser default scroll for game controls
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-      this.keys[e.code] = true;
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
-    });
-
-    // フォーカスが外れると keyup が届かず押しっぱなしになるので、入力を捨てる
-    window.addEventListener('blur', () => {
-      this.keys = {};
-      this.menuNav.clear();
-    });
-
     window.addEventListener('gamepadconnected', () => {
       this.gamepadConnected = true;
     });
@@ -60,14 +46,14 @@ export class InputManager {
     this.prevCancel = this.cancel;
 
     // Reset default
-    let kbUp = this.keys['KeyW'] || this.keys['ArrowUp'] || false;
-    let kbDown = this.keys['KeyS'] || this.keys['ArrowDown'] || false;
-    let kbLeft = this.keys['KeyA'] || this.keys['ArrowLeft'] || false;
-    let kbRight = this.keys['KeyD'] || this.keys['ArrowRight'] || false;
-    let kbBtn0 = this.keys['Enter'] || this.keys['Space'] || this.keys['KeyZ'] || this.keys['KeyJ'] || false;
-    let kbBtn1 = this.keys['KeyX'] || this.keys['KeyK'] || false;
-    let kbConfirm = this.keys['Enter'] || this.keys['Space'] || false;
-    let kbCancel = this.keys['Escape'] || this.keys['Backspace'] || false;
+    let kbUp = this.keyboard.isDown('KeyW') || this.keyboard.isDown('ArrowUp') || false;
+    let kbDown = this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown') || false;
+    let kbLeft = this.keyboard.isDown('KeyA') || this.keyboard.isDown('ArrowLeft') || false;
+    let kbRight = this.keyboard.isDown('KeyD') || this.keyboard.isDown('ArrowRight') || false;
+    let kbBtn0 = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('KeyJ') || false;
+    let kbBtn1 = this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyK') || false;
+    let kbConfirm = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || false;
+    let kbCancel = this.keyboard.isDown('Escape') || this.keyboard.isDown('Backspace') || false;
 
     // Smooth keyboard ramp for tilt mechanics (W, Up or Enter/Button0)
     if (kbUp || kbBtn0) {

@@ -390,12 +390,6 @@ export class Stage3Phone implements Stage {
     return Math.max(0, this.timeLeft);
   }
 
-  getSubInfo(): string | null {
-    if (this.pluggedIn) return `挿入時 ${this.insertedPercent.toFixed(3)}%`;
-    const pct = Math.max(0, (this.timeLeft / this.totalTime) * 1.0);
-    return `極限残量 ${pct.toFixed(3)}%`;
-  }
-
   cleanup(scene: THREE.Scene) {
     this.screenTexture.dispose();
     scene.remove(this.stageGroup);

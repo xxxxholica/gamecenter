@@ -1,4 +1,5 @@
 import { MenuNav } from '../../../shared/arcadeMenuNav';
+import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
 
 export interface InputState {
   aimX: number;
@@ -19,7 +20,14 @@ export class ArcadeInput {
   public aimY: number = 0;
 
   // Keyboard
-  private keys: Record<string, boolean> = {};
+  private keyboard = new KeyboardTracker({
+    preventDefaultKeys: SCROLL_KEYS,
+    onKeyDown: (e) => {
+      this.menuNav.pushKey(e);
+      this.lastInputTime = performance.now();
+    },
+    onBlur: () => this.resetAll(),
+  });
   private prevNormalKey: boolean = false;
   private prevExplosiveKey: boolean = false;
   private prevStartKey: boolean = false;
@@ -47,28 +55,8 @@ export class ArcadeInput {
   public lastInputTime: number = performance.now();
 
   constructor() {
-    this.setupKeyboard();
     this.setupMouse();
     this.setupTouch();
-
-    window.addEventListener('blur', () => {
-      this.resetAll();
-    });
-  }
-
-  private setupKeyboard() {
-    window.addEventListener('keydown', (e) => {
-      this.menuNav.pushKey(e);
-      this.keys[e.code] = true;
-      this.lastInputTime = performance.now();
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
-    });
   }
 
   private setupMouse() {
@@ -143,10 +131,10 @@ export class ArcadeInput {
     let padNavY = 0;
 
     // 1. Keyboard Aim
-    const isW = this.keys['KeyW'] || this.keys['ArrowUp'];
-    const isS = this.keys['KeyS'] || this.keys['ArrowDown'];
-    const isA = this.keys['KeyA'] || this.keys['ArrowLeft'];
-    const isD = this.keys['KeyD'] || this.keys['ArrowRight'];
+    const isW = this.keyboard.isDown('KeyW') || this.keyboard.isDown('ArrowUp');
+    const isS = this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown');
+    const isA = this.keyboard.isDown('KeyA') || this.keyboard.isDown('ArrowLeft');
+    const isD = this.keyboard.isDown('KeyD') || this.keyboard.isDown('ArrowRight');
 
     if (isW) { rawMoveY += 1.0; hasAnyInput = true; }
     if (isS) { rawMoveY -= 1.0; hasAnyInput = true; }
@@ -154,7 +142,7 @@ export class ArcadeInput {
     if (isD) { rawMoveX += 1.0; hasAnyInput = true; }
 
     // Normal fire: Space, Z, Enter
-    const isKeyNormal = this.keys['Space'] || this.keys['KeyZ'] || this.keys['Enter'];
+    const isKeyNormal = this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('Enter');
     if (isKeyNormal) {
       normalPressed = true;
       startPressed = true;
@@ -163,7 +151,7 @@ export class ArcadeInput {
 
     // Explosive fire: X, E, Shift, F
     const isKeyExplosive =
-      this.keys['KeyX'] || this.keys['KeyE'] || this.keys['ShiftLeft'] || this.keys['ShiftRight'] || this.keys['KeyF'];
+      this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyE') || this.keyboard.isDown('ShiftLeft') || this.keyboard.isDown('ShiftRight') || this.keyboard.isDown('KeyF');
     if (isKeyExplosive) {
       explosivePressed = true;
       hasAnyInput = true;
@@ -306,7 +294,7 @@ export class ArcadeInput {
   }
 
   public resetAll() {
-    this.keys = {};
+    this.keyboard.down.clear();
     this.menuNav.clear();
     this.mouseLeftPressed = false;
     this.mouseRightPressed = false;

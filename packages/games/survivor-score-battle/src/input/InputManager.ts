@@ -1,9 +1,14 @@
 import { InputState } from '../types';
+import { KeyboardTracker } from '../../../../shared/keyboardTracker';
 
 export class InputManager {
   private static instance: InputManager | null = null;
 
-  private keysDown: Set<string> = new Set();
+  // Prevent browser scroll and shortcuts for game controls
+  private keyboard = new KeyboardTracker({
+    preventDefaultKeys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'],
+  });
+  private keysDown: Set<string> = this.keyboard.down;
   private prevKeysDown: Set<string> = new Set();
 
   private prevGamepadButtons: boolean[] = [];
@@ -35,20 +40,6 @@ export class InputManager {
   }
 
   private setupEventListeners() {
-    window.addEventListener('keydown', (e) => {
-      // Prevent browser scroll and shortcuts for game controls
-      if (
-        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)
-      ) {
-        e.preventDefault();
-      }
-      this.keysDown.add(e.code);
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keysDown.delete(e.code);
-    });
-
     window.addEventListener('gamepadconnected', (e: GamepadEvent) => {
       console.log('Gamepad connected:', e.gamepad.id);
       this.gamepadIndex = e.gamepad.index;

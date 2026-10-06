@@ -1,8 +1,40 @@
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+
+const midiToHz = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
+
+/** 天国の曲: 8小節(1小節=16ステップ)でループする。ハ長調で、C → G → Am → F → C → G → F → G と昇っていく */
+const HEAVEN_LOOP_STEPS = 128;
+const HEAVEN_CHORDS: { bass: number; pad: number[] }[] = [
+  { bass: 36, pad: [55, 60, 64, 67] },   // C
+  { bass: 31, pad: [50, 55, 59, 62] },   // G
+  { bass: 33, pad: [52, 57, 60, 64] },   // Am
+  { bass: 29, pad: [53, 57, 60, 65] },   // F
+  { bass: 36, pad: [55, 60, 64, 67] },   // C
+  { bass: 31, pad: [50, 55, 59, 62] },   // G
+  { bass: 29, pad: [53, 57, 60, 65] },   // F
+  { bass: 31, pad: [50, 55, 59, 62] },   // G
+];
+/** コーラスの旋律: [開始ステップ, MIDIノート, 長さ(16分音符の数)] */
+const HEAVEN_MELODY: [number, number, number][] = [
+  [0, 79, 8], [8, 76, 4], [12, 79, 4],
+  [16, 74, 8], [24, 79, 4], [28, 83, 4],
+  [32, 81, 8], [40, 79, 4], [44, 76, 4],
+  [48, 77, 8], [56, 81, 4], [60, 84, 4],
+  [64, 84, 8], [72, 83, 4], [76, 79, 4],
+  [80, 79, 6], [86, 81, 2], [88, 83, 8],
+  [96, 81, 8], [104, 79, 4], [108, 77, 4],
+  [112, 74, 8], [120, 79, 4], [124, 83, 4],
+];
+
 export class SoundManager {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
   private isBgmPlaying: boolean = false;
   private isGoldMode: boolean = false;
+  /** BGMの種類。street=ブーンバップ / heaven=コーラスとハープの天国の曲(FINAL STAGE) */
+  private bgmStyle: 'street' | 'heaven' = 'street';
+  /** 天国の曲の音を通す出力(ドライ+リバーブ)。最初に使うときに作る */
+  private heavenBus: GainNode | null = null;
 
   private stepIndex: number = 0;
   private nextNoteTime: number = 0;
@@ -32,13 +64,7 @@ export class SoundManager {
 
   private createNoiseBuffer(): void {
     if (!this.ctx) return;
-    const bufferSize = this.ctx.sampleRate * 2;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    this.noiseBuffer = buffer;
+    this.noiseBuffer = createWhiteNoiseBuffer(this.ctx, 2);
   }
 
   public startBgm(): void {
@@ -71,13 +97,18 @@ export class SoundManager {
     this.tempo = this.isGoldMode ? bpm * 1.5 : bpm;
   }
 
+  /** BGMの種類を切り替える。次の startBgm から有効 */
+  public setBgmStyle(style: 'street' | 'heaven'): void {
+    this.bgmStyle = style;
+  }
+
   private scheduleLoop = (): void => {
     if (!this.isBgmPlaying || !this.ctx) return;
 
     const secondsPer16th = (60 / this.tempo) / 4;
     while (this.nextNoteTime < this.ctx.currentTime + 0.15) {
       this.playStep(this.stepIndex, this.nextNoteTime);
-      this.stepIndex = (this.stepIndex + 1) % 32; // 2 bars of 16 steps
+      this.stepIndex = (this.stepIndex + 1) % (this.bgmStyle === 'heaven' ? HEAVEN_LOOP_STEPS : 32); // street: 2 bars of 16 steps / heaven: 8 bars
       this.nextNoteTime += secondsPer16th;
     }
 
@@ -86,6 +117,10 @@ export class SoundManager {
 
   private playStep(step: number, time: number): void {
     if (!this.ctx || this.isMuted) return;
+    if (this.bgmStyle === 'heaven') {
+      this.playHeavenStep(step, time);
+      return;
+    }
 
     // Classic Boom-Bap / Breakbeat pattern
     // Kick on steps 0, 8, 10, 24, 26
@@ -143,6 +178,228 @@ export class SoundManager {
       // Warm chord stab
       this.triggerChords(time, step === 0 ? [174.61, 207.65, 261.63] : [155.56, 196.00, 233.08]);
     }
+  }
+
+  // --- HEAVEN BGM (FINAL STAGE): コーラスとハープの、天に昇るような曲 ---
+
+  /** 天国の曲の出力を作る: 音量を整え、そのまま(ドライ)と長い残響(リバーブ)の両方へ送る */
+  private getHeavenBus(): GainNode {
+    if (this.heavenBus || !this.ctx) return this.heavenBus as GainNode;
+    const ctx = this.ctx;
+    const bus = ctx.createGain();
+    bus.gain.value = 0.7;
+
+    // 残響: 減衰するノイズから作った約3秒のインパルス応答(大聖堂のような響き)
+    const seconds = 3.0;
+    const length = Math.floor(ctx.sampleRate * seconds);
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const data = impulse.getChannelData(c);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.4);
+      }
+    }
+    const convolver = ctx.createConvolver();
+    convolver.buffer = impulse;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.55;
+
+    bus.connect(ctx.destination);
+    bus.connect(convolver);
+    convolver.connect(wet);
+    wet.connect(ctx.destination);
+    this.heavenBus = bus;
+    return bus;
+  }
+
+  private playHeavenStep(step: number, time: number): void {
+    const bar = Math.floor(step / 16);
+    const inBar = step % 16;
+    const chord = HEAVEN_CHORDS[bar];
+    const gold = this.isGoldMode;
+
+    // 1. コーラスの和音: 小節のはじめに、全員で長く伸ばして歌う
+    if (inBar === 0) {
+      const dur = (60 / this.tempo) * 4 * 0.98;
+      chord.pad.forEach((m, i) => this.triggerChoirVoice(time, midiToHz(m), dur, 0.05, i * 0.012));
+    }
+
+    // 2. コーラスの旋律(高い声で、和音の上を歌う)
+    for (const [start, midi, len] of HEAVEN_MELODY) {
+      if (start === step) {
+        const dur = (60 / this.tempo / 4) * len * 0.96;
+        this.triggerChoirVoice(time, midiToHz(midi), dur, 0.075, 0);
+        this.triggerChoirVoice(time, midiToHz(midi - 12), dur, 0.035, 0.01);
+      }
+    }
+
+    // 3. ハープのアルペジオ: 8分音符ごとに、和音の音を上り下りする
+    if (inBar % 2 === 0) {
+      const tones = [chord.pad[0], chord.pad[1], chord.pad[2], chord.pad[3], chord.pad[1] + 12];
+      const order = [0, 1, 2, 3, 4, 3, 2, 1];
+      const note = tones[order[(inBar / 2) % order.length]] + 12;
+      this.triggerHarp(time, midiToHz(note), gold ? 0.2 : 0.16);
+    }
+
+    // 4. 深い低音と、やわらかいティンパニ(拍の頭を支える)
+    if (inBar === 0 || inBar === 8) {
+      this.triggerHeavenBass(time, midiToHz(chord.bass), (60 / this.tempo) * 2 * 0.95);
+    }
+    if (inBar % 4 === 0) {
+      this.triggerTimpani(time, inBar === 0 ? 0.42 : 0.26);
+    }
+
+    // 5. 鈴の輝き(2小節ごとの頭に、高い鐘が鳴る)と、ささやかなタンバリン
+    if (step % 32 === 0) {
+      this.triggerBell(time, midiToHz(HEAVEN_MELODY[0][1] + 24), 0.06);
+      this.triggerBell(time + 0.09, midiToHz(HEAVEN_MELODY[0][1] + 28), 0.04);
+    }
+    if (inBar % 4 === 2) {
+      this.triggerShimmer(time, 0.06);
+    }
+  }
+
+  /** 「あー」と歌うコーラスの1声: 2本の少しずれたのこぎり波を、母音(a)のフォルマントで響かせ、ゆるいビブラートをかける */
+  private triggerChoirVoice(time: number, freq: number, dur: number, volume: number, delay: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const out = this.getHeavenBus();
+    const start = time + delay;
+    const end = start + dur;
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, start);
+    env.gain.linearRampToValueAtTime(volume, start + Math.min(0.35, dur * 0.4));   // ゆっくり立ち上がる
+    env.gain.setValueAtTime(volume, Math.max(start + 0.4, end - 0.3));
+    env.gain.exponentialRampToValueAtTime(0.0001, end + 0.45);                     // 長い余韻
+    env.connect(out);
+
+    // 母音「あ」のフォルマント(口の共鳴): 700 / 1100 / 2500 Hz
+    const formants: [number, number, number][] = [[700, 5, 1.0], [1100, 6, 0.55], [2500, 8, 0.25]];
+    const sum = ctx.createGain();
+    for (const [hz, q, g] of formants) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = hz;
+      f.Q.value = q;
+      const fg = ctx.createGain();
+      fg.gain.value = g;
+      sum.connect(f);
+      f.connect(fg);
+      fg.connect(env);
+    }
+
+    // ビブラート(5.4Hz、ごく浅く)
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 5.4;
+    lfoGain.gain.value = 9;   // cent
+    lfo.connect(lfoGain);
+
+    for (const detune of [-7, 7]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      osc.detune.value = detune;
+      lfoGain.connect(osc.detune);
+      osc.connect(sum);
+      osc.start(start);
+      osc.stop(end + 0.5);
+    }
+    lfo.start(start);
+    lfo.stop(end + 0.5);
+  }
+
+  /** ハープの1音: 正弦波に倍音をひとつ重ね、はじいたあとすぐ減衰する */
+  private triggerHarp(time: number, freq: number, volume: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const out = this.getHeavenBus();
+    for (const [mult, g] of [[1, 1], [2, 0.35]] as [number, number][]) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = mult === 1 ? 'triangle' : 'sine';
+      osc.frequency.value = freq * mult;
+      gain.gain.setValueAtTime(volume * g, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 1.1);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(time);
+      osc.stop(time + 1.15);
+    }
+  }
+
+  /** 低音: やわらかい正弦波(重く響かせすぎない) */
+  private triggerHeavenBass(time: number, freq: number, dur: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(0.32, time + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(time);
+    osc.stop(time + dur + 0.05);
+  }
+
+  /** ティンパニ: 低い太鼓。拍の頭を支えて、追われている緊張感を保つ */
+  private triggerTimpani(time: number, volume: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const out = this.getHeavenBus();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, time);
+    osc.frequency.exponentialRampToValueAtTime(58, time + 0.18);
+    gain.gain.setValueAtTime(volume, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.45);
+    osc.connect(gain);
+    gain.connect(out);
+    osc.start(time);
+    osc.stop(time + 0.5);
+  }
+
+  /** 鐘: 高い正弦波の倍音を重ねて、長く響かせる */
+  private triggerBell(time: number, freq: number, volume: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const out = this.getHeavenBus();
+    for (const [mult, g] of [[1, 1], [2.76, 0.4], [5.4, 0.18]] as [number, number][]) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq * mult;
+      gain.gain.setValueAtTime(volume * g, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 2.2);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(time);
+      osc.stop(time + 2.3);
+    }
+  }
+
+  /** きらめき(タンバリンのような、短く細かい高音) */
+  private triggerShimmer(time: number, volume: number): void {
+    if (!this.ctx || !this.noiseBuffer) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 7500;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(volume, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.07);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getHeavenBus());
+    noise.start(time);
+    noise.stop(time + 0.08);
   }
 
   // --- INSTRUMENT SYNTHESIS ---

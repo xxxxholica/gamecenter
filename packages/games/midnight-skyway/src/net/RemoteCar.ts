@@ -4,11 +4,8 @@ import { TrailJModel } from '../models/TrailJModel';
 import { CrossJModel } from '../models/CrossJModel';
 import { TruckJModel } from '../models/TruckJModel';
 import type { CarSpec, CarState } from '../../../../shared/netProtocol';
+import { RemoteTrack } from './remoteTrack';
 
-/** 受信した姿勢を、この時間だけ遅らせて補間表示する(ネットワークの揺らぎを吸収する)。 */
-const INTERP_DELAY_MS = 120;
-/** 古いスナップショットは捨てる。 */
-const KEEP_MS = 1500;
 /** この時間以上更新が来ない車は「通信途絶」とみなして当たり判定から外す。 */
 export const STALE_MS = 1500;
 
@@ -16,11 +13,6 @@ export function createCarModel(type: string): CarBase {
   if (type === 'cross_j') return new CrossJModel();
   if (type === 'truck_j') return new TruckJModel();
   return new TrailJModel();
-}
-
-interface Snapshot {
-  t: number;
-  s: CarState;
 }
 
 /** 他のプレイヤーの車。受信した姿勢を補間して表示する(物理は持たない)。 */
@@ -38,8 +30,7 @@ export class RemoteCar {
   public progress = 0;
   public valid = false;
 
-  private snaps: Snapshot[] = [];
-  private lastRecv = 0;
+  private readonly track = new RemoteTrack();
 
   constructor(id: number, name: string, spec: CarSpec, night: boolean) {
     this.id = id;
@@ -56,44 +47,28 @@ export class RemoteCar {
   }
 
   public push(s: CarState, now = performance.now()): void {
-    this.snaps.push({ t: now, s });
-    this.lastRecv = now;
-    while (this.snaps.length > 2 && now - this.snaps[0].t > KEEP_MS) this.snaps.shift();
+    this.track.push(s, now);
   }
 
   public get stale(): boolean {
-    return performance.now() - this.lastRecv > STALE_MS;
+    return this.track.sinceLastRecv(performance.now()) > STALE_MS;
   }
 
   public update(now = performance.now()): void {
-    const sn = this.snaps;
-    if (sn.length === 0) return;
-    const rt = now - INTERP_DELAY_MS;
-    let a = sn[0], b = sn[0];
-    for (let i = 0; i < sn.length; i++) {
-      if (sn[i].t <= rt) a = sn[i];
-      if (sn[i].t >= rt) { b = sn[i]; break; }
-      b = sn[i];
-    }
-    const u = b.t > a.t ? Math.min(1, Math.max(0, (rt - a.t) / (b.t - a.t))) : 1;
-    const A = a.s, B = b.s;
-    const lerp = (i: number) => A[i] + (B[i] - A[i]) * u;
-    // 角度差を最短(-π..π)に直す。while ループだと巨大な値(1e300 など)で値が変わらず無限ループになり、ブラウザが固まるため剰余で正規化する
-    let d = (B[3] - A[3]) % (2 * Math.PI);
-    if (d > Math.PI) d -= 2 * Math.PI;
-    else if (d < -Math.PI) d += 2 * Math.PI;
-    this.pos.set(lerp(0), lerp(1), lerp(2));
-    this.rotY = A[3] + d * u;
-    this.speed = lerp(4);
-    this.progress = B[9];
+    if (!this.track.update(now)) return;
+    const p = this.track.pose;
+    this.pos.set(p.x, p.y, p.z);
+    this.rotY = p.yaw;
+    this.speed = p.speed;
+    this.progress = p.progress;
     this.valid = true;
 
     const g = this.car.group;
     g.visible = true;
     g.position.copy(this.pos);
-    g.rotation.set(lerp(7), this.rotY, 0, 'YXZ');        // 7: 路面の勾配
-    this.car.bodyPivot?.rotation.set(0, 0, lerp(6));       // 6: ボディのロール
-    const steer = lerp(5);
+    g.rotation.set(p.pitch, this.rotY, 0, 'YXZ');      // 路面の勾配
+    this.car.bodyPivot?.rotation.set(0, 0, p.roll);     // ボディのロール
+    const steer = p.steer;
     const wheels = this.car.wheels;
     if (wheels && wheels.length >= 4) {
       const base = this.car.wheelBaseYaw;

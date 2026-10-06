@@ -3,6 +3,8 @@
 // Arcade Stick (Sanwa/Seimitsu) priority with full keyboard fallback
 // ============================================================
 
+import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
+
 export interface InputState {
   moveX: number;           // -1 (left) to +1 (right)
   narrowFormation: boolean;// true when stick DOWN or 'S'/DownKey
@@ -13,7 +15,7 @@ export interface InputState {
 }
 
 export class InputManager {
-  private keys: Record<string, boolean> = {};
+  private keyboard = new KeyboardTracker({ preventDefaultKeys: SCROLL_KEYS }); // Prevent browser scroll with arrows/space
   private prevAction: boolean = false;
   private gamepadIndex: number | null = null;
   private gamepadName: string = '';
@@ -26,23 +28,8 @@ export class InputManager {
   private pointerStartY: number = 0;
 
   constructor() {
-    this.setupKeyboard();
     this.setupGamepadEvents();
     this.setupPointerEvents();
-  }
-
-  private setupKeyboard(): void {
-    window.addEventListener('keydown', (e) => {
-      this.keys[e.code] = true;
-      // Prevent browser scroll with arrows/space
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
-    });
   }
 
   private setupGamepadEvents(): void {
@@ -108,14 +95,14 @@ export class InputManager {
 
     // 1. Keyboard Polling
     // Left / Right
-    if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
+    if (this.keyboard.isDown('KeyA') || this.keyboard.isDown('ArrowLeft')) moveX -= 1;
+    if (this.keyboard.isDown('KeyD') || this.keyboard.isDown('ArrowRight')) moveX += 1;
 
     // Down (Narrow Formation)
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) narrow = true;
+    if (this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown')) narrow = true;
 
     // Action (Space / Z)
-    if (this.keys['Space'] || this.keys['KeyZ'] || this.keys['Enter']) action = true;
+    if (this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('Enter')) action = true;
 
     // 2. Gamepad API Polling
     let hasPad = false;

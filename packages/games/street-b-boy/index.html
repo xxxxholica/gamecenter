@@ -400,6 +400,24 @@
     }
 
     /* INVINCIBILITY VIGNETTE */
+    /* 後ろから犬の大群が迫っているときの警告(画面の左の縁が赤く脈打つ)。ファイナルステージだけで使う */
+    #horde-warning {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 38%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9;
+      opacity: 0;
+      background: linear-gradient(90deg, rgba(255, 20, 50, 0.55) 0%, rgba(255, 20, 50, 0.18) 45%, rgba(255, 20, 50, 0) 100%);
+      animation: horde-pulse 0.45s ease-in-out infinite alternate;
+    }
+    @keyframes horde-pulse {
+      from { filter: brightness(0.75); }
+      to { filter: brightness(1.35); }
+    }
+
     #invincible-border {
       position: absolute;
       top: 0;
@@ -483,6 +501,7 @@
 <body>
   <canvas id="game-canvas"></canvas>
   <div id="invincible-border"></div>
+  <div id="horde-warning"></div>
   <div id="crt-scanlines"></div>
 
   <div id="ui-layer">

@@ -81,9 +81,7 @@ export class DriveHUD {
   private driftScoreEl!: HTMLElement;
   private driftChainEl!: HTMLElement;
   private boostFillEl!: HTMLElement;
-  private driftPopupEl!: HTMLElement;
   private gateTimeout: number | null = null;
-  private popupTimeout: number | null = null;
 
   // Pause Modal DOM
   private pauseModalEl!: HTMLElement;
@@ -125,18 +123,19 @@ export class DriveHUD {
         </div>
         <div class="hud-gate-bonus" id="hud-gate-bonus" style="display: none;"></div>
         <div class="hud-ghost-gap" id="hud-ghost-gap"></div>
-        <div class="hud-altitude" id="hud-altitude" style="display: none;"><span class="hud-altitude-tag">HEIGHT</span> <span id="hud-altitude-num">0</span><span class="hud-altitude-unit"> m</span></div>
       </div>
       <div class="hud-drift" id="hud-drift" style="display: none;">
         <div class="hud-drift-line"><span class="hud-drift-tag">DRIFT</span> <span class="hud-drift-score" id="hud-drift-score">0</span><span class="hud-drift-chain" id="hud-drift-chain"></span></div>
         <div class="hud-boost-bar"><div class="hud-boost-fill" id="hud-boost-fill"></div></div>
-        <div class="hud-drift-popup" id="hud-drift-popup" style="display: none;"></div>
       </div>
 
       <!-- Top Left: Transparent Minimap -->
       <div class="hud-minimap-arcade">
         <canvas id="minimap-canvas" width="${MAP_SIZE}" height="${MAP_SIZE}"></canvas>
       </div>
+
+      <!-- Under the minimap: height above the start line (climbing courses) -->
+        <div class="hud-altitude" id="hud-altitude" style="display: none; top: ${18 + MAP_SIZE + 8}px;"><span class="hud-altitude-tag">HEIGHT</span> <span id="hud-altitude-num">0</span><span class="hud-altitude-unit"> m</span></div>
 
       <!-- Top Right: Course / Open Data Credit Notation (Plain White Text) -->
       <div id="hud-attribution" class="hud-attribution-plain" style="display: none;"></div>
@@ -257,7 +256,6 @@ export class DriveHUD {
     this.driftScoreEl = document.getElementById('hud-drift-score')!;
     this.driftChainEl = document.getElementById('hud-drift-chain')!;
     this.boostFillEl = document.getElementById('hud-boost-fill')!;
-    this.driftPopupEl = document.getElementById('hud-drift-popup')!;
 
     // Pause elements
     this.pauseModalEl = document.getElementById('hud-pause-modal')!;
@@ -431,7 +429,6 @@ export class DriveHUD {
     this.driftEl.style.display = on ? 'flex' : 'none';
     this.ghostGapEl.textContent = '';
     this.gateBonusEl.style.display = 'none';
-    this.driftPopupEl.style.display = 'none';
     this.updateDrift(0, 0, 0, 0, 1);
   }
 
@@ -473,16 +470,6 @@ export class DriveHUD {
     setText(this.driftChainEl, chain > 0 ? `  +${Math.round(chain)}  x${combo.toFixed(1)}` : '');
     setWidth(this.boostFillEl, `${Math.round(Math.min(1, boostLeft / Math.max(0.1, boostMax)) * 100)}%`);
     this.driftEl.classList.toggle('boosting', boostLeft > 0);
-  }
-
-  public showDriftBanked(points: number, boostSec: number): void {
-    if (this.popupTimeout) clearTimeout(this.popupTimeout);
-    this.driftPopupEl.textContent = `DRIFT +${points}  BOOST ${boostSec.toFixed(1)}s`;
-    this.driftPopupEl.style.display = 'block';
-    this.driftPopupEl.style.animation = 'none';
-    void this.driftPopupEl.offsetWidth;
-    this.driftPopupEl.style.animation = '';
-    this.popupTimeout = window.setTimeout(() => { this.driftPopupEl.style.display = 'none'; }, 1600);
   }
 
   public showResultModal(result: TimeAttackResult): void {

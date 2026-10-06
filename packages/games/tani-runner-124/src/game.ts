@@ -810,7 +810,7 @@ export class Game {
       this.finalRingElem.textContent = `${LEVELS[this.level].label}　リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
     }
     if (this.finalScoreElem) {
-      countUpText(this.finalScoreElem, `${score} 単位`);
+      countUpText(this.finalScoreElem, `${score}`);
     }
 
     this.bonusHudElem?.classList.add('hidden');

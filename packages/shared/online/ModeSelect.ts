@@ -58,6 +58,17 @@ const css = `
 @keyframes mselPulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
 `;
 
+/** モード選択・希望選択で共通のアクセント色(CSS 変数)を root に設定する。 */
+export function applyModeSelectAccent(root: HTMLElement, opts: ModeSelectOptions): void {
+  if (opts.accent) {
+    root.style.setProperty('--msel-accent', opts.accent);
+    const end = opts.accentEnd ?? `color-mix(in srgb, ${opts.accent} 70%, #ff8c00)`;
+    root.style.setProperty('--msel-accent-end', end);
+  } else if (opts.accentEnd) {
+    root.style.setProperty('--msel-accent-end', opts.accentEnd);
+  }
+}
+
 /** モード選択・希望選択(WishSelect)で共通の見た目を、1回だけ追加する。 */
 export function ensureModeSelectStyle(): void {
   if (document.getElementById('msel-style')) return;
@@ -89,13 +100,7 @@ export class ModeSelect {
     ensureModeSelectStyle();
     this.root = document.createElement('div');
     this.root.className = 'msel';
-    if (opts.accent) {
-      this.root.style.setProperty('--msel-accent', opts.accent);
-      const end = opts.accentEnd ?? `color-mix(in srgb, ${opts.accent} 70%, #ff8c00)`;
-      this.root.style.setProperty('--msel-accent-end', end);
-    } else if (opts.accentEnd) {
-      this.root.style.setProperty('--msel-accent-end', opts.accentEnd);
-    }
+    applyModeSelectAccent(this.root, opts);
     const titleBar = document.createElement('div');
     titleBar.className = 'msel-title';
     const titleMain = document.createElement('div');

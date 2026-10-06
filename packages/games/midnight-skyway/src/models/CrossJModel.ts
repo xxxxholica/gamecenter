@@ -10,7 +10,7 @@ export class CrossJModel extends CarBase {
     category: '軽クロスオーバー SUV',
     length: '3,395 mm',
     width: '1,475 mm',
-    height: '1,500 mm',
+    height: '1,440 mm',
     wheelbase: '2,460 mm',
     drivetrain: 'フルタイム4WD / ハイトワゴン',
     weight: '870 kg',
@@ -46,7 +46,7 @@ export class CrossJModel extends CarBase {
       frontSeatZ: -0.12,
       rearSeatZ: -0.96,
       steeringSide: 'right', // RHD
-      mirrorY: 1.38,          // ルーフ前縁(フレーム下端)から吊るす
+      mirrorY: 1.32,          // ルーフ前縁(フレーム下端)から吊るす
     });
     carRoot.add(interior.group);
 
@@ -203,7 +203,7 @@ export class CrossJModel extends CarBase {
       false, false,
       true, true, true,   // Front wheel arch zone (sections 2, 3, 4: z=0.84 to 1.43m)
       false, false, false, false, false,
-      true, true, true,   // Rear wheel arch zone (sections 10, 11, 12: z=-0.88 to -1.48m)
+      true, true, true,   // Rear wheel arch zone (sections 10, 11, 12: z=-0.88 to -1.42m)
       false
     ];
 
@@ -229,8 +229,8 @@ export class CrossJModel extends CarBase {
 
     // --- 2. BOLD & THICK Structural Pillars & Fully Integrated Cabin Base Frame ---
     const beltlineY = 0.86;
-    const roofBaseY = 1.48; // The strict baseline level where the roof begins!
-    const pillarTopY = 1.49; // フレームの上端は屋根板の中に少し食い込ませ、屋根との間に隙間を作らない
+    const roofBaseY = 1.42; // The strict baseline level where the roof begins!
+    const pillarTopY = 1.43; // フレームの上端は屋根板の中に少し食い込ませ、屋根との間に隙間を作らない
 
     // A. SOLID CABIN BASE FRAME (Hermetically connects lower body waistline to upper pillars & glass)
     const baseFrame = CarBodyGenerator.buildCabinBaseFrame(
@@ -247,13 +247,15 @@ export class CrossJModel extends CarBase {
     const roofFillet = (pts: THREE.Vector3[]): void => {
       const strip = CarBodyGenerator.buildTubeFrame(pts, 0.055, this.roofMaterial, 120);
       strip.scale.y = 0.45;
-      strip.position.y = 1.482 - 0.45 * 1.455;
+      strip.position.y = 1.422 - 0.45 * 1.395;
       carRoot.add(strip);
     };
     // 後ろのフレーム(D-Pillar + 後ろ上のヘッダー)の形。y→xの角丸のアーチ(縦はまっすぐ、角は半径 archR の円弧、上は水平)を
     // 密な点で定義し、奥行き(z)は高さと横位置から滑らかに決める。点を等間隔・密にして、管がねじれたりつぶれたりしないようにする
-    const archXp = 0.68, archR = 0.035, archTop = 1.455, archBase = 0.74;   // 柱の足元はボディの中に差し込み、切り口を隠す
-    const archZ = (_x: number, _y: number): number => -1.44;   // 屋根と車体をつなぐ柱は垂直、上の横材も一直線(曲げない)
+    const archTubeR = 0.062;   // 後ろのフレームの太さ(管の半径)
+    // 太くした分、柱の中心は内側へ寄せ(外面は従来と同じ約0.72m)、上端は下げて(管の頂点は従来と同じ高さ)、車体と屋根からはみ出さないようにする
+    const archXp = 0.66, archR = 0.07, archTop = 1.375, archBase = 0.74;   // 柱の足元はボディの中に差し込み、切り口を隠す
+    const archZ = (_x: number, _y: number): number => -1.43;   // 屋根と車体をつなぐ柱は垂直、上の横材も一直線(曲げない)
     const archPoints = (): THREE.Vector3[] => {
       const out: THREE.Vector3[] = [];
       const yv = archTop - archR, xv = archXp - archR;
@@ -275,18 +277,18 @@ export class CrossJModel extends CarBase {
     [-1, 1].forEach((side) => {
       // A-Pillars with Smooth Rounded Contours (positioned safely inside lower body x=0.65m -> x=0.59m)
       const aStart = new THREE.Vector3(side * 0.70, 0.78, 0.80);   // 足元はボンネット(カウル)の端寄りに立て、上へ向かって内側に傾ける
-      const aPillar = CarBodyGenerator.buildTubeFrame([aStart, new THREE.Vector3(side * 0.69, 1.455, 0.45)], 0.04, this.roofMaterial);
+      const aPillar = CarBodyGenerator.buildTubeFrame([aStart, new THREE.Vector3(side * 0.69, 1.395, 0.45)], 0.04, this.roofMaterial);
       carRoot.add(aPillar);
       // 継ぎ目(A-Pillarの上端): 屋根のレール・フロント上の横材と接する所を丸い球でつなぐ
       const aJoint = new THREE.Mesh(new THREE.SphereGeometry(0.058, 20, 14), this.roofMaterial);
-      aJoint.position.set(side * 0.69, 1.455, 0.45);
+      aJoint.position.set(side * 0.69, 1.395, 0.45);
       carRoot.add(aJoint);
       // 屋根の下面へ向けて柱をラッパ状に広げ、屋根との境目をぼかす
-      const aDir = new THREE.Vector3(side * 0.69, 1.455, 0.45).sub(aStart).normalize();
-      const aTop = new THREE.Vector3(side * 0.69, 1.455, 0.45).addScaledVector(aDir, 0.015);
+      const aDir = new THREE.Vector3(side * 0.69, 1.395, 0.45).sub(aStart).normalize();
+      const aTop = new THREE.Vector3(side * 0.69, 1.395, 0.45).addScaledVector(aDir, 0.015);
       carRoot.add(CarBodyGenerator.buildFlare(aTop.clone().addScaledVector(aDir, -0.16), aTop, 0.04, 0.05, this.roofMaterial));
       // 後ろの柱も同じ
-      carRoot.add(CarBodyGenerator.buildFlare(new THREE.Vector3(side * archXp, 1.33, -1.50), new THREE.Vector3(side * archXp, 1.49, -1.50), 0.042, 0.05, this.roofMaterial));
+      carRoot.add(CarBodyGenerator.buildFlare(new THREE.Vector3(side * archXp, 1.33, -1.50), new THREE.Vector3(side * archXp, 1.43, -1.50), 0.042, 0.05, this.roofMaterial));
 
       // B-Pillars with Smooth Rounded Contours (x=0.65m -> x=0.59m)
       const bStart = new THREE.Vector3(side * 0.70, beltlineY, -0.32);
@@ -317,9 +319,9 @@ export class CrossJModel extends CarBase {
       // Roof Side Rails with Smooth Contours (sits right under roofBaseY, x=0.59m)
       const sideRail = CarBodyGenerator.buildTubeFrame(
         [
-          new THREE.Vector3(side * 0.69, 1.455, 0.45),
-          new THREE.Vector3(side * 0.685, 1.45, -0.5),
-          new THREE.Vector3(side * 0.675, 1.425, -1.2),
+          new THREE.Vector3(side * 0.69, 1.395, 0.45),
+          new THREE.Vector3(side * 0.685, 1.39, -0.5),
+          new THREE.Vector3(side * 0.675, 1.365, -1.2),
           new THREE.Vector3(side * archJoin.x, archJoin.y, archJoin.z),   // 後ろのフレームの角と同じ点でつなぐ
         ],
         0.04,
@@ -327,12 +329,12 @@ export class CrossJModel extends CarBase {
       );
       carRoot.add(sideRail);
       roofFillet([
-        new THREE.Vector3(side * 0.69, 1.455, 0.45),
-        new THREE.Vector3(side * 0.685, 1.455, -0.5),
-        new THREE.Vector3(side * 0.675, 1.455, -1.2),
-        new THREE.Vector3(side * 0.68, 1.455, -1.44),
+        new THREE.Vector3(side * 0.69, 1.395, 0.45),
+        new THREE.Vector3(side * 0.685, 1.395, -0.5),
+        new THREE.Vector3(side * 0.675, 1.395, -1.2),
+        new THREE.Vector3(side * archXp, 1.395, -1.43),
       ]);
-      const dJoint = new THREE.Mesh(new THREE.SphereGeometry(0.046, 16, 12), this.roofMaterial);
+      const dJoint = new THREE.Mesh(new THREE.SphereGeometry(archTubeR + 0.004, 16, 12), this.roofMaterial);
       dJoint.position.set(side * archJoin.x, archJoin.y, archJoin.z);
       carRoot.add(dJoint);
 
@@ -340,7 +342,7 @@ export class CrossJModel extends CarBase {
       // 1. Door Window Sash - Top (runs along roof rail, cleanly under roof)
       const topSashGeo = new THREE.BoxGeometry(0.03, 0.03, 1.80);   // 後ろのフレームの曲線の手前で止める
       const topSash = new THREE.Mesh(topSashGeo, this.plasticMaterial);
-      topSash.position.set(side * 0.685, 1.42, -0.46);
+      topSash.position.set(side * 0.685, 1.36, -0.46);
       carRoot.add(topSash);
 
       // 2. Door Window Sash - Bottom (weatherstrip rail along beltline)
@@ -350,21 +352,21 @@ export class CrossJModel extends CarBase {
       carRoot.add(btmSash);
 
       // 3. A-Pillar Front Window Sash Post
-      const fPostGeo = new THREE.BoxGeometry(0.03, 0.54, 0.03);
+      const fPostGeo = new THREE.BoxGeometry(0.03, 0.48, 0.03);
       const fPost = new THREE.Mesh(fPostGeo, this.plasticMaterial);
-      fPost.position.set(side * 0.70, 1.15, 0.45);
+      fPost.position.set(side * 0.70, 1.12, 0.45);
       carRoot.add(fPost);
 
       // 4. B-Pillar Center Window Divider Post
-      const bPostGeo = new THREE.BoxGeometry(0.03, 0.54, 0.03);
+      const bPostGeo = new THREE.BoxGeometry(0.03, 0.48, 0.03);
       const bPost = new THREE.Mesh(bPostGeo, this.plasticMaterial);
-      bPost.position.set(side * 0.70, 1.15, -0.32);
+      bPost.position.set(side * 0.70, 1.12, -0.32);
       carRoot.add(bPost);
 
       // 5. C-Pillar Rear Window Divider Post
-      const cPostGeo = new THREE.BoxGeometry(0.03, 0.54, 0.03);
+      const cPostGeo = new THREE.BoxGeometry(0.03, 0.48, 0.03);
       const cPost = new THREE.Mesh(cPostGeo, this.plasticMaterial);
-      cPost.position.set(side * 0.70, 1.15, -0.85);
+      cPost.position.set(side * 0.70, 1.12, -0.85);
       carRoot.add(cPost);
 
       // 6. Crossover Side Body Cladding Moldings (Muscular bulging lower contour)
@@ -377,22 +379,22 @@ export class CrossJModel extends CarBase {
 
     // Windshield Upper Header (sits cleanly under roofBaseY)
     const wsHeader = CarBodyGenerator.buildTubeFrame(
-      [new THREE.Vector3(-0.69, 1.455, 0.45), new THREE.Vector3(0, 1.461, 0.46), new THREE.Vector3(0.69, 1.455, 0.45)],
+      [new THREE.Vector3(-0.69, 1.395, 0.45), new THREE.Vector3(0, 1.401, 0.46), new THREE.Vector3(0.69, 1.395, 0.45)],
       0.04,
       this.roofMaterial,
     );
     carRoot.add(wsHeader);
-    roofFillet([new THREE.Vector3(-0.69, 1.455, 0.45), new THREE.Vector3(0, 1.461, 0.46), new THREE.Vector3(0.69, 1.455, 0.45)]);
+    roofFillet([new THREE.Vector3(-0.69, 1.395, 0.45), new THREE.Vector3(0, 1.401, 0.46), new THREE.Vector3(0.69, 1.395, 0.45)]);
 
     // 後ろのフレーム: 左のD-Pillar → 後ろ上のヘッダー → 右のD-Pillar をひと続きの丸い管にする。
     // 下は後ろへ張り出し、上は内側へ絞って屋根の下に収める(屋根の後縁は角丸なので、角では内側に寄せる)
-    const rearFrame = CarBodyGenerator.buildTubeFrame(archPoints(), 0.042, this.roofMaterial, 400);
+    const rearFrame = CarBodyGenerator.buildTubeFrame(archPoints(), archTubeR, this.roofMaterial, 400);
     carRoot.add(rearFrame);
-    roofFillet([new THREE.Vector3(-0.68, 1.455, -1.44), new THREE.Vector3(0, 1.455, -1.44), new THREE.Vector3(0.68, 1.455, -1.44)]);
+    roofFillet([new THREE.Vector3(-archXp, 1.395, -1.43), new THREE.Vector3(0, 1.395, -1.43), new THREE.Vector3(archXp, 1.395, -1.43)]);
 
     // ===============================================================
     // --- TOPMOST LAYER: CAMBERED CURVED ROOF PANEL ---
-    // Sits directly on top of roofBaseY (1.48m) and spans wider (1.30m) & longer (2.02m)
+    // Sits directly on top of roofBaseY (1.42m) and spans wider (1.30m) & longer (2.02m)
     // than all frame members so NO frame member can EVER protrude!
     // ===============================================================
     const roofLength = 2.12;   // 前後のフレーム(後ろの膨らみを含む)を上から覆う長さ
@@ -403,7 +405,7 @@ export class CrossJModel extends CarBase {
       0.055,  // 屋根板の厚み(縁は丸めてある)
       0.075,  // 中央の盛り上がり(以前は4cm。ふっくら見える大きさ)
       -0.52,  // Center Z
-      roofBaseY, // Sits exactly on the 1.48m frame ceiling line
+      roofBaseY, // Sits exactly on the 1.42m frame ceiling line
       0.2,    // 上から見た角の丸み(半径)
       this.roofMaterial
     );
@@ -432,10 +434,10 @@ export class CrossJModel extends CarBase {
     // A. Curved Panoramic Windshield (Bulges forward gracefully, matches hood curvature!)
     const windshield = CarBodyGenerator.buildCurvedWindshield(
       1.36,
-      0.68,
+      0.62,
       0.045, // 4.5cm gentle outward curve
       -0.46, // Slant angle
-      new THREE.Vector3(0, 1.15, 0.585),
+      new THREE.Vector3(0, 1.12, 0.585),
       this.glassMaterial
     );
     carRoot.add(windshield);
@@ -456,28 +458,28 @@ export class CrossJModel extends CarBase {
       const rotY = side > 0 ? Math.PI / 2 : -Math.PI / 2;
 
       // Front door window with rounded corners
-      const fWin = CarBodyGenerator.buildRoundedWindow(0.70, 0.53, 0.05, this.glassMaterial);
+      const fWin = CarBodyGenerator.buildRoundedWindow(0.70, 0.47, 0.05, this.glassMaterial);
       fWin.rotation.y = rotY;
-      fWin.position.set(xPos, 1.15, 0.10);
+      fWin.position.set(xPos, 1.12, 0.10);
       carRoot.add(fWin);
 
       // Rear door window with rounded corners
-      const rWin = CarBodyGenerator.buildRoundedWindow(0.56, 0.53, 0.05, this.glassMaterial);
+      const rWin = CarBodyGenerator.buildRoundedWindow(0.56, 0.47, 0.05, this.glassMaterial);
       rWin.rotation.y = rotY;
-      rWin.position.set(xPos, 1.15, -0.62);
+      rWin.position.set(xPos, 1.12, -0.62);
       carRoot.add(rWin);
 
       // C/D Quarter glass with rounded corners
-      const qWin = CarBodyGenerator.buildRoundedWindow(0.44, 0.52, 0.06, this.glassMaterial);
+      const qWin = CarBodyGenerator.buildRoundedWindow(0.44, 0.46, 0.06, this.glassMaterial);
       qWin.rotation.y = rotY;
-      qWin.position.set(xPos, 1.145, -1.22);
+      qWin.position.set(xPos, 1.115, -1.22);
       carRoot.add(qWin);
     });
 
     // C. Rear Hatch Window with Rounded Corners (Clean vertical fit at z=-1.505m)
-    const rearWin = CarBodyGenerator.buildRoundedWindow(1.34, 0.53, 0.06, this.glassMaterial);
+    const rearWin = CarBodyGenerator.buildRoundedWindow(1.34, 0.47, 0.06, this.glassMaterial);
     rearWin.rotation.y = Math.PI;
-    rearWin.position.set(0, 1.15, -1.45);
+    rearWin.position.set(0, 1.12, -1.45);
     carRoot.add(rearWin);
 
     const rWiperGeo = new THREE.BoxGeometry(0.24, 0.012, 0.012);

@@ -625,7 +625,7 @@ export class GameManager {
     } else {
       this.judgmentPages.push({ html: `<div class="judgment-fail">大惨事</div>${score}`, seconds: 1.2 });
       if (this.attempt < GameManager.MAX_ATTEMPTS) {
-        this.judgmentPages.push({ html: `<div class="judgment-retry">もう一回挑戦できる</div>${score}`, seconds: 1.2 });
+        this.judgmentPages.push({ html: `<div class="judgment-retry">もう一度挑戦</div>${score}`, seconds: 1.2 });
       }
     }
 

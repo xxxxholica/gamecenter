@@ -299,11 +299,12 @@ export function buildRoadSigns(
     } else if (spec.kind === 'side') {
       const boards = spec.rows!.map((row) => makeBoard(row, style));
       const rad = 0.15, postLat = (half + 0.9) / S, gapV = 0.18, bh = BOARD_H, clear = CLEAR_REAL / S;
+      const minW = Math.min(...boards.map((b) => b.w));
       const stack = boards.length * bh + (boards.length - 1) * gapV;
       pole(postLat, 0, 0, clear + stack + 0.6, rad);
       boards.forEach((b, k) => {
         const yc = clear + bh / 2 + k * (bh + gapV);
-        const lc = postLat - 0.45 - b.w / 2, left = lc - b.w / 2 + 0.25;
+        const lc = postLat - 0.45 - b.w / 2, left = postLat - 0.45 - minW + 0.25;   // same rail length for every board
         board(b, lc, yc);
         for (const dy of [-(bh / 2 - 0.32), bh / 2 - 0.32]) {
           bar(postLat - left, 0.09, 0.1, (postLat + left) / 2, yc + dy, 0);   // rail from the pole across the back of the board

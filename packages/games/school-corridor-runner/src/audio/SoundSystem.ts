@@ -893,7 +893,7 @@ export class SoundSystem {
   };
 
   /**
-   * カウントダウン電子音（3, 2, 1 = ピッ、走れ！ = ポーン！）
+   * カウントダウン電子音（3, 2, 1 = ピッ、GO = ポーン！）
    */
   public playCountdownBeep(isGo: boolean): void {
     this.initContext();
@@ -918,7 +918,7 @@ export class SoundSystem {
       osc.start(t);
       osc.stop(t + 0.13);
     } else {
-      // 走れ！: 華やかな高音スタートチャイム・ファンファーレ
+      // GO: 華やかな高音スタートチャイム・ファンファーレ
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(880, t);
       osc.frequency.exponentialRampToValueAtTime(1760, t + 0.08);

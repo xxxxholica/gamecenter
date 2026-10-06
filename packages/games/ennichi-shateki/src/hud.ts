@@ -21,7 +21,6 @@ export class ArcadeHUD {
   private comboEl!: HTMLDivElement;
 
   private crosshairEl!: HTMLDivElement;
-  private flashMsgEl!: HTMLDivElement;
 
   // Results elements
   private resultsOverlay!: HTMLDivElement;
@@ -34,11 +33,8 @@ export class ArcadeHUD {
   private comboValEl!: HTMLElement;
   private comboRateEl!: HTMLElement;
 
-  // Bottom Center Consolidated Container (Combo + Flash)
+  // Bottom Center Consolidated Container (Combo + Multiplier)
   private bottomCenterEl!: HTMLDivElement;
-
-  // Flash message timer
-  private flashTimer: number = 0;
 
   // High scores list
   public highScores: HighScoreEntry[] = [
@@ -86,7 +82,7 @@ export class ArcadeHUD {
     this.container.appendChild(this.timerEl);
     this.container.appendChild(this.ammoEl);
 
-    // 2. Bottom-Center Consolidated HUD (Combo + Flash / Restock Notification)
+    // 2. Bottom-Center Consolidated HUD (Combo + Multiplier)
     this.bottomCenterEl = document.createElement('div');
     this.bottomCenterEl.className = 'bottom-center-hud';
 
@@ -99,11 +95,7 @@ export class ArcadeHUD {
     `;
     this.comboEl.style.display = 'none';
 
-    this.flashMsgEl = document.createElement('div');
-    this.flashMsgEl.className = 'flash-msg';
-
     this.bottomCenterEl.appendChild(this.comboEl);
-    this.bottomCenterEl.appendChild(this.flashMsgEl);
     this.container.appendChild(this.bottomCenterEl);
 
     // 3. Arcade Precision Crosshair
@@ -145,27 +137,6 @@ export class ArcadeHUD {
     this.crosshairEl.classList.toggle('locked', isLocked);
   }
 
-  // Flash big center message
-  public showFlash(text: string, subText = '', durationSec = 1.2, isCritical = false) {
-    this.flashMsgEl.innerHTML = `
-      <div class="flash-main ${isCritical ? 'crit' : ''}">${text}</div>
-      ${subText ? `<div class="flash-sub">${subText}</div>` : ''}
-    `;
-    this.flashMsgEl.classList.remove('active');
-    void this.flashMsgEl.offsetWidth;
-    this.flashMsgEl.classList.add('active');
-    this.flashTimer = durationSec;
-  }
-
-  public updateFlash(dt: number) {
-    if (this.flashTimer > 0) {
-      this.flashTimer -= dt;
-      if (this.flashTimer <= 0) {
-        this.flashMsgEl.classList.remove('active');
-      }
-    }
-  }
-
   // Update In-Game HUD elements
   private lastAmmoText: string = '';
 
@@ -182,7 +153,8 @@ export class ArcadeHUD {
     score: number,
     timeLeft: number,
     bombCooldownRatio: number,
-    combo: number
+    combo: number,
+    multiplier = 1.0
   ) {
     setText(this.scoreValEl, String(score).padStart(5, '0'));
     setText(this.timeValEl, Math.max(0, timeLeft).toFixed(1));
@@ -196,8 +168,7 @@ export class ArcadeHUD {
     if (combo >= 2) {
       setDisplay(this.comboEl, 'flex');
       setText(this.comboValEl, String(combo));
-      const mult = 1.0 + Math.min(2.0, (combo - 1) * 0.2);
-      setText(this.comboRateEl, `x${mult.toFixed(1)}`);
+      setText(this.comboRateEl, `x${multiplier.toFixed(1)}`);
       this.comboEl.classList.add('pulse');
     } else {
       setDisplay(this.comboEl, 'none');
@@ -219,7 +190,6 @@ export class ArcadeHUD {
     this.bottomCenterEl.style.display = showHud ? 'flex' : 'none';
     if (!showHud) {
       this.comboEl.style.display = 'none';
-      this.flashMsgEl.classList.remove('active');
     }
   }
 

@@ -1,7 +1,7 @@
-import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import type { ClientMsg, Mode, RoomMsg, ServerMsg } from '../../../../shared/ennichiProtocol';
 import { MAX_PLAYERS, MODES, MODE_LABELS } from '../../../../shared/ennichiProtocol';
 import { LobbyConnection } from '../../../../shared/online/LobbyConnection';
+import { ButtonCardNav, el } from '../../../../shared/online/buttonCardNav';
 import { WishSelect } from '../../../../shared/online/WishSelect';
 import type { ModeItem } from '../../../../shared/online/ModeSelect';
 import { COOP_ART, VERSUS_ART } from './modeArt';
@@ -36,14 +36,6 @@ const css = `
 .ewait button.pad-focus, .ewait button:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
 `;
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> & { cls?: string } = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
-  const { cls, ...rest } = props;
-  const e = Object.assign(document.createElement(tag), rest);
-  if (cls) e.className = cls;
-  for (const c of children) e.append(c);
-  return e;
-}
-
 /**
  * えんにち射的 オンライン対戦の待機。接続・自動参加は LobbyConnection(共通部品)。
  *  1) ゲームモードの希望の画面(midnight-skyway のコース選択と同じカード): 対戦 / 協力 を選ぶと、その場で希望として送られる。
@@ -58,16 +50,17 @@ export class WaitScreen {
   private readonly deps: WaitDeps;
   private readonly root: HTMLElement;
   private card: HTMLElement | null = null;
+  private readonly nav = new ButtonCardNav({
+    getCard: () => this.card,
+    isActive: () => this.visible && this.ownsInput(),
+    onBack: () => this.back(),
+  });
   private countEl: HTMLElement | null = null;
   private visible = false;
   /** wish=モードの希望(カード) / wait=待機画面 */
   private view: 'wish' | 'wait' = 'wish';
   private readonly wish: WishSelect;
   private ticker: number | null = null;
-  private padEdge = new PadEdge();
-  private stopPad: (() => void) | null = null;
-  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private padFocus = 0;
 
   constructor(client: EnnichiNet, deps: WaitDeps) {
     this.client = client;
@@ -81,7 +74,7 @@ export class WaitScreen {
         onWish: (id) => this.client.send({ t: 'pref', mode: id as Mode | null }),
         onConfirm: () => {
           this.view = 'wait';
-          this.padFocus = 0;
+          this.nav.resetFocus();
           this.render();
         },
         onBack: () => this.back(),
@@ -115,7 +108,7 @@ export class WaitScreen {
       if (this.countEl) this.countEl.textContent = label;
       this.wish.setLabel(label);                               // 希望の画面の決定ボタンの位置にも出す
     }, 250);
-    this.startInput();
+    this.nav.start();
     this.conn.start();
   }
 
@@ -126,7 +119,7 @@ export class WaitScreen {
     this.wish.hide();
     if (this.ticker !== null) clearInterval(this.ticker);
     this.ticker = null;
-    this.stopInput();
+    this.nav.stop();
     this.card?.remove();
     this.card = null;
     this.countEl = null;
@@ -149,60 +142,6 @@ export class WaitScreen {
       coop: { badge: 'CO-OP', art: COOP_ART, desc: '点数を合算して、みんなでチームのランクを目指す。巨大UFOは全員の命中で倒す。' },
     };
     return MODES.map((m) => ({ id: m, badge: info[m].badge, art: info[m].art, title: MODE_LABELS[m], sub: `希望 ${votes[m] ?? 0}人`, desc: info[m].desc }));
-  }
-
-  private buttons(): HTMLButtonElement[] {
-    const b = this.card ? [...this.card.querySelectorAll<HTMLButtonElement>('button')] : [];
-    b.forEach((x) => { x.tabIndex = -1; });
-    return b;
-  }
-
-  private applyFocus(): void {
-    const b = this.buttons();
-    if (b.length === 0) return;
-    this.padFocus = Math.min(Math.max(0, this.padFocus), b.length - 1);
-    b.forEach((x, i) => x.classList.toggle('pad-focus', i === this.padFocus));
-  }
-
-  private startInput(): void {
-    this.padFocus = 0;
-    this.stopPad = startPadLoop(this.padEdge, (p) => {
-      if (!this.visible || !this.ownsInput()) return;
-      const b = this.buttons();
-      if (b.length === 0) return;
-      if (p.left || p.up) { this.padFocus = (this.padFocus - 1 + b.length) % b.length; this.applyFocus(); }
-      else if (p.right || p.down) { this.padFocus = (this.padFocus + 1) % b.length; this.applyFocus(); }
-      else if (p.any(0)) b[this.padFocus]?.click();
-      else if (p.any(1)) this.back();
-    });
-    this.keyHandler = (e: KeyboardEvent) => {
-      if (!this.visible || !this.ownsInput()) return;
-      const b = this.buttons();
-      const move = (d: number) => {
-        e.preventDefault();
-        if (b.length === 0) return;
-        this.padFocus = (this.padFocus + d + b.length) % b.length;
-        this.applyFocus();
-      };
-      if (e.code === 'ArrowLeft' || e.code === 'ArrowUp' || e.code === 'KeyA' || e.code === 'KeyW') move(-1);
-      else if (e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'KeyD' || e.code === 'KeyS') move(1);
-      else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') {
-        e.preventDefault();
-        (document.activeElement as HTMLElement | null)?.blur();
-        b[this.padFocus]?.click();
-      } else if (e.code === 'Escape' || e.code === 'Backspace') {
-        e.preventDefault();
-        this.back();
-      }
-    };
-    window.addEventListener('keydown', this.keyHandler);
-  }
-
-  private stopInput(): void {
-    this.stopPad?.();
-    this.stopPad = null;
-    if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
-    this.keyHandler = null;
   }
 
   private render(): void {
@@ -263,6 +202,6 @@ export class WaitScreen {
     card.append(el('div', { cls: 'row' }, toWish, leave));
     this.card = card;
     this.root.append(card);
-    this.applyFocus();
+    this.nav.apply();
   }
 }

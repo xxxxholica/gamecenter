@@ -263,59 +263,6 @@ html, body {
   100% { transform: scale(1.0); }
 }
 
-.flash-msg {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: transform 0.08s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.08s ease;
-  white-space: nowrap;
-}
-
-.flash-msg.active {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.flash-main {
-  font-size: 26px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #ffcc00;
-  line-height: 1.15;
-  text-shadow:
-    2px 2px 0 #000000,
-    -2px -2px 0 #000000,
-    2px -2px 0 #000000,
-    -2px 2px 0 #000000;
-}
-
-.flash-main.crit {
-  font-size: 28px;
-  color: #d91414;
-  text-shadow:
-    2px 2px 0 #000000,
-    -2px -2px 0 #000000,
-    2px -2px 0 #000000,
-    -2px 2px 0 #000000;
-}
-
-.flash-sub {
-  font-size: 16px;
-  font-weight: 900;
-  color: #ffffff;
-  margin-top: 2px;
-  letter-spacing: 1px;
-  text-shadow:
-    2px 2px 0 #000000,
-    -2px -2px 0 #000000,
-    2px -2px 0 #000000,
-    -2px 2px 0 #000000;
-}
-
 /* =========================================
    TITLE SCREEN OVERLAY
    ========================================= */

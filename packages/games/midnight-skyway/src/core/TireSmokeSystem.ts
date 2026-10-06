@@ -162,13 +162,6 @@ export class TireSmokeSystem {
   }
 
   /**
-   * Legacy alias for emitSmoke
-   */
-  public emit(position: THREE.Vector3, carVelocity: THREE.Vector3, intensity: number = 1.0): void {
-    this.emitSmoke(position, carVelocity, intensity);
-  }
-
-  /**
    * Spawn bright friction sparks from tire when drifting (High impact arcade sparks)
    */
   public emitSpark(position: THREE.Vector3, carVelocity: THREE.Vector3, driftDirection: number = 0, intensity: number = 1.0): void {

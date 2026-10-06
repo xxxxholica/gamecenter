@@ -1,12 +1,26 @@
 import { games } from './games';
 import { createArcadeInput } from './arcadeInput';
 import { mountArcadeGuide } from '../../shared/arcadeGuide';
+import { mountFullscreenKey } from '../../shared/fullscreenKey';
+import {
+  initFramedHub,
+  isFramedHub,
+  isGameFrameOpen,
+  listenGameFrameMessages,
+  openGameFrame,
+  shouldOpenInFrame,
+} from './gameFrame';
 import {
   GAME_LEADERBOARD_DEFS,
   loadLeaderboard,
   LeaderboardEntry,
   escapeHtml,
 } from '../../shared/arcadeLeaderboard';
+
+// ゲームのiframeの中に読み込まれたハブは、親にゲームを閉じさせるだけで何もしない
+if (isFramedHub) initFramedHub();
+listenGameFrameMessages();
+mountFullscreenKey();
 
 mountArcadeGuide({
   moveLabel: '選ぶ',
@@ -34,6 +48,7 @@ function rememberLastGame(slug: string) {
 }
 
 // ===== ランキングHTML生成 =====
+/** クリアした記録は、名前のすぐ右に ★ を付けて表示する */
 function renderRowsHtml(entries: LeaderboardEntry[]): string {
   const top3 = entries.slice(0, 3);
   const posLabels = ['1ST', '2ND', '3RD'];
@@ -47,7 +62,7 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
       return `
         <div class="ranking-row">
           <span class="rank-pos ${posClasses[idx] ?? ''}">${posLabels[idx] ?? `${idx + 1}TH`}</span>
-          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}</span>
+          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}</span>
           <span class="rank-score ${isEmpty ? 'is-empty' : ''}">${safeScore}</span>
         </div>
       `;
@@ -79,6 +94,7 @@ games.forEach((game) => {
     const hasVariants = def.variants && def.variants.length > 0;
     const initialVariant = hasVariants ? def.variants![0] : undefined;
     const entries = loadLeaderboard(game.slug, initialVariant?.id);
+    // 見出しの右の小さなタグは、バリエーション(コース/難易度)の名前
     const variantTagHtml = hasVariants
       ? `<span class="ranking-variant-tag" id="tag-${game.slug}">${initialVariant!.label}</span>`
       : '';
@@ -127,7 +143,14 @@ games.forEach((game) => {
       ${rankingHtml}
     </div>
   `;
-  card.querySelector('.card-link')!.addEventListener('click', () => rememberLastGame(game.slug));
+  card.querySelector('.card-link')!.addEventListener('click', (e) => {
+    rememberLastGame(game.slug);
+    // 全画面中はページ移動で解除されないよう、iframeで開く
+    if (shouldOpenInFrame()) {
+      e.preventDefault();
+      launchSelected(game.slug);
+    }
+  });
   list.appendChild(card);
 
   // バリアント切り替え対象ならローテーターに登録
@@ -252,20 +275,32 @@ window.addEventListener('pageshow', (e) => {
   if (e.persisted) setPressed(false);
 });
 
-function launchSelected() {
-  const game = games[current];
-  rememberLastGame(game.slug);
-  window.location.href = `games/${game.slug}/`;
+function launchSelected(slug = games[current].slug) {
+  rememberLastGame(slug);
+  const url = `games/${slug}/`;
+  if (shouldOpenInFrame()) {
+    openGameFrame(url, () => setPressed(false));
+  } else {
+    window.location.href = url;
+  }
 }
 
-createArcadeInput({
-  onActivate() {
-    setPadMode(true);
-  },
-  onMove: moveSelection,
-  onConfirmDown() {
-    setPadMode(true);
-    setPressed(true);
-  },
-  onConfirmUp: launchSelected,
-});
+// ゲームをiframeで開いている間は、ゲーム側の操作(アケコン・キー)にハブが反応しないようにする
+if (!isFramedHub) {
+  createArcadeInput({
+    onActivate() {
+      if (!isGameFrameOpen()) setPadMode(true);
+    },
+    onMove(dx, dy) {
+      if (!isGameFrameOpen()) moveSelection(dx, dy);
+    },
+    onConfirmDown() {
+      if (isGameFrameOpen()) return;
+      setPadMode(true);
+      setPressed(true);
+    },
+    onConfirmUp() {
+      if (!isGameFrameOpen()) launchSelected();
+    },
+  });
+}

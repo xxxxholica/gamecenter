@@ -1127,7 +1127,8 @@ html, body {
   animation: hudPop 0.35s ease-out;
 }
 @keyframes hudPop { from { transform: skewX(-10deg) scale(1.5); opacity: 0; } to { transform: skewX(-10deg) scale(1); opacity: 1; } }
-.hud-ghost-gap { min-height: 24px; font-size: 20px; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
+.hud-ghost-gap:empty { display: none; }
+.hud-ghost-gap { font-size: 16px; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
 .hud-ghost-gap.ahead { color: #00ff88; }
 .hud-ghost-gap.behind { color: #ff5577; }
 .hud-drift {
@@ -1148,7 +1149,6 @@ html, body {
 .hud-boost-bar { width: 240px; height: 8px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); transform: skewX(-20deg); }
 .hud-boost-fill { height: 100%; width: 0; background: linear-gradient(90deg, #00f0ff, #ffffff); }
 .hud-drift.boosting .hud-boost-fill { box-shadow: 0 0 12px #00f0ff; }
-.hud-drift-popup { font-size: 22px; font-weight: 900; color: #00f0ff; text-shadow: 0 0 12px rgba(0, 240, 255, 0.9); animation: hudPop 0.3s ease-out; }
 
 /* ---------- Result panel: beside the car (winning run), not a full-screen dim ---------- */
 .hud-result-modal.hud-result-side {
@@ -1285,7 +1285,7 @@ html, body {
 .car-select-bottom .car-card-focus-bar { align-self: center; }
 
 /* Altitude readout (courses that climb) */
-.hud-altitude { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
+.hud-altitude { position: absolute; left: 20px; pointer-events: none; z-index: 30; font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
 .hud-altitude-tag { font-size: 11px; letter-spacing: 2px; color: #00f0ff; }
 .hud-altitude-unit { font-size: 13px; color: #94a3b8; }
 

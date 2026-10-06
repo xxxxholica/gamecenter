@@ -41,15 +41,6 @@ export function buildRoadNetwork(data: RoadData, road: THREE.Vector3[]): RoadNet
   return { opposite, oppositeGround, branches };
 }
 
-/** Minimap polylines for the opposite carriageway and the branches. */
-export function overviewRoutes(net: RoadNetwork): { points: THREE.Vector2[]; drivable: boolean }[] {
-  const line = (pts: THREE.Vector3[]): THREE.Vector2[] => pts.filter((_, i) => i % 4 === 0).map((p) => new THREE.Vector2(p.x, p.z));
-  return [
-    ...(net.opposite.length ? [{ points: line(net.opposite), drivable: false }] : []),
-    ...net.branches.map((b) => ({ points: line(b.road), drivable: true })),
-  ];
-}
-
 /**
  * Advance guide signs about `lead` metres before each fork: one board per route, the branch's arrow pointing to the side
  * it leaves to. `rows(i, side)` supplies the two destination rows of the i-th branch: [straight on, branch].

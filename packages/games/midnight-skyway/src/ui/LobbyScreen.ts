@@ -1,8 +1,8 @@
-import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import type { ClientMsg, PlayerInfo, ServerMsg } from '../../../../shared/netProtocol';
 import { MAX_PLAYERS } from '../../../../shared/netProtocol';
 import type { SkywayNet } from '../net/skywayNet';
 import { LobbyConnection } from '../../../../shared/online/LobbyConnection';
+import { ButtonCardNav, el } from '../../../../shared/online/buttonCardNav';
 import { STAGES } from './stages';
 
 type RoomMsg = Extract<ServerMsg, { t: 'room' }>;
@@ -49,14 +49,6 @@ const css = `
 .lobby-card button.pad-focus, .lobby-card button:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
 `;
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> & { cls?: string } = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
-  const { cls, ...rest } = props;
-  const e = Object.assign(document.createElement(tag), rest);
-  if (cls) e.className = cls;
-  for (const c of children) e.append(c);
-  return e;
-}
-
 const hex = (c: number): string => '#' + c.toString(16).padStart(6, '0');
 
 /**
@@ -76,11 +68,12 @@ export class LobbyScreen {
   private waiting = false;
   private ticker: number | null = null;
   private card: HTMLElement | null = null;
+  private readonly nav = new ButtonCardNav({
+    getCard: () => this.card,
+    isActive: () => this.visible && this.waiting,
+    onBack: () => this.back(),
+  });
   private countEl: HTMLElement | null = null;
-  private padEdge = new PadEdge();
-  private stopPad: (() => void) | null = null;
-  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private padFocus = 0;
 
   constructor(container: HTMLElement, client: SkywayNet, deps: LobbyDeps) {
     this.container = container;
@@ -124,8 +117,8 @@ export class LobbyScreen {
   /** 待機画面(参加者・開始までの残り)を出す/隠す。マシン選択・コース希望の間は隠す。 */
   public setWaitingVisible(on: boolean): void {
     this.waiting = on;
-    this.stopInput();
-    if (on && this.visible) this.startInput();
+    this.nav.stop();
+    if (on && this.visible) this.nav.start();
     this.render();
   }
 
@@ -137,7 +130,7 @@ export class LobbyScreen {
     this.visible = true;
     this.container.style.display = 'block';
     this.ticker = window.setInterval(() => this.tickCountdown(), 250);
-    if (this.waiting) this.startInput();
+    if (this.waiting) this.nav.start();
     this.conn.start();
   }
 
@@ -148,7 +141,7 @@ export class LobbyScreen {
     this.conn.stop();
     if (this.ticker !== null) clearInterval(this.ticker);
     this.ticker = null;
-    this.stopInput();
+    this.nav.stop();
     this.card?.remove();
     this.card = null;
     this.countEl = null;
@@ -158,62 +151,6 @@ export class LobbyScreen {
   private back(): void {
     if (this.conn.hasProblem) this.deps.onBack();
     else this.deps.onBackToCourse();
-  }
-
-  private buttons(): HTMLButtonElement[] {
-    const b = this.card ? [...this.card.querySelectorAll<HTMLButtonElement>('button')] : [];
-    b.forEach((x) => { x.tabIndex = -1; });                         // Tab ではなく上記の操作で選ぶ(マウスで押したあとのフォーカス残りも避ける)
-    return b;
-  }
-
-  private applyFocus(): void {
-    const b = this.buttons();
-    if (b.length === 0) return;
-    this.padFocus = Math.min(Math.max(0, this.padFocus), b.length - 1);
-    b.forEach((x, i) => x.classList.toggle('pad-focus', i === this.padFocus));
-  }
-
-  // 待機画面の操作: レバーでボタンを選ぶ / A・START で決定 / B・Esc で戻る
-  private startInput(): void {
-    this.padFocus = 0;
-    this.stopPad = startPadLoop(this.padEdge, (p) => {
-      if (!this.visible || !this.waiting) return;
-      const b = this.buttons();
-      if (b.length === 0) return;
-      if (p.left || p.up) { this.padFocus = (this.padFocus - 1 + b.length) % b.length; this.applyFocus(); }
-      else if (p.right || p.down) { this.padFocus = (this.padFocus + 1) % b.length; this.applyFocus(); }
-      else if (p.any(0)) b[this.padFocus]?.click();
-      else if (p.any(1)) this.back();
-    });
-    // キーボード: ←→↑↓・WASD でボタンを選ぶ / Enter・Space・Z で決定 / Esc・Backspace で戻る
-    this.keyHandler = (e: KeyboardEvent) => {
-      if (!this.visible || !this.waiting) return;
-      const b = this.buttons();
-      const move = (d: number) => {
-        e.preventDefault();
-        if (b.length === 0) return;
-        this.padFocus = (this.padFocus + d + b.length) % b.length;
-        this.applyFocus();
-      };
-      if (e.code === 'ArrowLeft' || e.code === 'ArrowUp' || e.code === 'KeyA' || e.code === 'KeyW') move(-1);
-      else if (e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'KeyD' || e.code === 'KeyS') move(1);
-      else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') {
-        e.preventDefault();
-        (document.activeElement as HTMLElement | null)?.blur();      // フォーカス中のボタンが標準動作でも反応して二重に押されないように
-        b[this.padFocus]?.click();
-      } else if (e.code === 'Escape' || e.code === 'Backspace') {
-        e.preventDefault();
-        this.back();
-      }
-    };
-    window.addEventListener('keydown', this.keyHandler);
-  }
-
-  private stopInput(): void {
-    this.stopPad?.();
-    this.stopPad = null;
-    if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
-    this.keyHandler = null;
   }
 
   private tickCountdown(): void {
@@ -274,6 +211,6 @@ export class LobbyScreen {
     card.append(el('div', { cls: 'lb-row' }, toCourse, leave));
     this.card = card;
     this.container.append(card);
-    this.applyFocus();
+    this.nav.apply();
   }
 }
