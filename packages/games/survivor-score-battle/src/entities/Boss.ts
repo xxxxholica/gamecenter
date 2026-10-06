@@ -22,34 +22,34 @@ export class Boss extends Enemy {
     switch (bossType) {
       case 'TITAN_MECH':
         this.bossName = 'TITAN MECH';
-        this.maxHp = 12000;
+        this.maxHp = 16000;
         this.radius = 55;
-        this.speed = 115;
-        this.scoreValue = 6000;
+        this.speed = 125;
+        this.scoreValue = 7000;
         this.color = '#ff3344';
         break;
       case 'VOID_WYRM':
         this.bossName = 'VOID WYRM';
-        this.maxHp = 25000;
+        this.maxHp = 32000;
         this.radius = 65;
-        this.speed = 130;
-        this.scoreValue = 10000;
+        this.speed = 140;
+        this.scoreValue = 12000;
         this.color = '#aa00ff';
         break;
       case 'APEX_BEHEMOTH':
         this.bossName = 'APEX BEHEMOTH';
-        this.maxHp = 60000;
+        this.maxHp = 75000;
         this.radius = 75;
-        this.speed = 125;
-        this.scoreValue = 16000;
+        this.speed = 135;
+        this.scoreValue = 18000;
         this.color = '#ffaa00';
         break;
       case 'OMEGA_OVERLORD':
         this.bossName = 'OMEGA OVERLORD';
-        this.maxHp = 120000;
+        this.maxHp = 140000;
         this.radius = 85;
-        this.speed = 145;
-        this.scoreValue = 30000;
+        this.speed = 155;
+        this.scoreValue = 35000;
         this.color = '#ff0055';
         break;
     }

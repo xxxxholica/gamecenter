@@ -5,29 +5,29 @@ export interface ArenaPillar {
 }
 
 export class Field {
-  public readonly width: number = 4000;
-  public readonly height: number = 4000;
-  public readonly minX: number = -2000;
-  public readonly maxX: number = 2000;
-  public readonly minY: number = -2000;
-  public readonly maxY: number = 2000;
+  public readonly width: number = 3600;
+  public readonly height: number = 3600;
+  public readonly minX: number = -1800;
+  public readonly maxX: number = 1800;
+  public readonly minY: number = -1800;
+  public readonly maxY: number = 1800;
 
   public readonly pillars: ArenaPillar[] = [];
 
   constructor() {
-    // Strategic cyber-energy pillars across the map
+    // 8 tactical cyber-energy pillars across the 3600x3600 arena
     const positions = [
-      { x: -800, y: -800 },
-      { x: 800, y: -800 },
-      { x: -800, y: 800 },
-      { x: 800, y: 800 },
-      { x: 0, y: -1200 },
-      { x: 0, y: 1200 },
-      { x: -1200, y: 0 },
-      { x: 1200, y: 0 },
+      { x: -700, y: -700 },
+      { x: 700, y: -700 },
+      { x: -700, y: 700 },
+      { x: 700, y: 700 },
+      { x: 0, y: -1100 },
+      { x: 0, y: 1100 },
+      { x: -1100, y: 0 },
+      { x: 1100, y: 0 },
     ];
     for (const pos of positions) {
-      this.pillars.push({ x: pos.x, y: pos.y, radius: 45 });
+      this.pillars.push({ x: pos.x, y: pos.y, radius: 42 });
     }
   }
 

@@ -86,14 +86,15 @@ export class GameEngine {
   }
 
   public initMatch() {
+    this.dyingTimer = 0;
     // 1. Create Player at arena center
     this.player = new Player(0, 0);
 
-    // 2. Create 7 CPUs positioned around arena
+    // 2. Create 7 CPUs positioned around arena (well-spaced in 3600x3600 arena)
     this.cpus = [];
     for (let i = 0; i < CPU_PROFILES.length; i++) {
       const angle = (i * Math.PI * 2) / CPU_PROFILES.length;
-      const dist = 1000;
+      const dist = 680;
       const x = Math.cos(angle) * dist;
       const y = Math.sin(angle) * dist;
       this.cpus.push(new CpuPlayer(CPU_PROFILES[i], x, y));
@@ -111,16 +112,16 @@ export class GameEngine {
     this.cameraX = 0;
     this.cameraY = 0;
 
-    // 4. Initial Field Swords (4 right next to player + 8 across arena)
-    this.swordSpawnTimer = 4.0;
+    // 4. Initial Field Swords
+    this.swordSpawnTimer = 3.5;
     for (let i = 0; i < 4; i++) {
       const angle = (i * Math.PI * 2) / 4 + Math.PI / 4;
-      const dist = 140 + (i % 2) * 40;
+      const dist = 140;
       this.pickupPool.spawn(this.player.x + Math.cos(angle) * dist, this.player.y + Math.sin(angle) * dist, 'SWORD_ITEM');
     }
-    for (let i = 0; i < 8; i++) {
-      const angle = (i * Math.PI * 2) / 8;
-      const dist = 300 + (i % 2) * 150;
+    for (let i = 0; i < 10; i++) {
+      const angle = (i * Math.PI * 2) / 10;
+      const dist = 280 + (i % 2) * 120;
       this.pickupPool.spawn(Math.cos(angle) * dist, Math.sin(angle) * dist, 'SWORD_ITEM');
     }
 
@@ -179,14 +180,14 @@ export class GameEngine {
       case 'PLAYING': {
         if (this.countingDown) break;
 
-        if (inputState.pause) {
+        if (inputState.pause && this.dyingTimer <= 0) {
           this.sound.sfx.playMenuConfirm();
           this.state = 'PAUSED';
           return;
         }
 
         // Special Attack Trigger
-        if (inputState.special && this.player.isSpecialReady) {
+        if (inputState.special && this.player.isSpecialReady && this.player.alive) {
           this.player.activateSpecial(
             this.enemyGrid,
             this.sound,
@@ -216,7 +217,29 @@ export class GameEngine {
     }
   }
 
+  // 負けたときの演出の残り時間(秒)。0より大きい間は、リザルトに進まず弾け飛ぶ演出を見せる。
+  private dyingTimer: number = 0;
+  private static readonly DEATH_SEQUENCE_SEC = 1.8;
+  private static readonly DEATH_SLOW_MOTION = 0.35;
+
   private updatePlaying(dt: number, inputState: InputState) {
+    if (this.dyingTimer > 0) {
+      this.dyingTimer -= dt;
+      if (this.dyingTimer <= 0) {
+        this.dyingTimer = 0;
+        this.showResult();
+        return;
+      }
+      // 演出中は、世界をスローモーションで動かし続ける。弾け飛ぶ粒子だけは通常の速さで進める
+      this.updatePlayingWorld(dt * GameEngine.DEATH_SLOW_MOTION, inputState);
+      this.particleSystem.update(dt * (1 - GameEngine.DEATH_SLOW_MOTION));
+      this.screenEffects.update(dt * (1 - GameEngine.DEATH_SLOW_MOTION));
+      return;
+    }
+    this.updatePlayingWorld(dt, inputState);
+  }
+
+  private updatePlayingWorld(dt: number, inputState: InputState) {
     // Screen Effects (Shake & Freeze frame)
     this.screenEffects.update(dt);
     if (this.screenEffects.freezeTimer > 0) return;
@@ -273,18 +296,17 @@ export class GameEngine {
       );
     }
 
-    // 4.5 Periodic Field Sword Spawner (ensures plenty of swords to compete for)
+    // 4.5 Periodic Field Sword Spawner (tight arena competition)
     this.swordSpawnTimer -= dt;
     if (this.swordSpawnTimer <= 0) {
-      this.swordSpawnTimer = 4.0 + Math.random() * 3.0;
+      this.swordSpawnTimer = 3.5 + Math.random() * 2.5;
       const count = Math.random() < 0.6 ? 2 : 1;
       for (let s = 0; s < count; s++) {
-        const ref = Math.random() < 0.75 ? this.player : (this.cpus.find((c) => c.alive) || this.player);
+        const ref = Math.random() < 0.6 ? this.player : (this.cpus.find((c) => c.alive) || this.player);
         const spawnAngle = Math.random() * Math.PI * 2;
-        const spawnDist = 120 + Math.random() * 240;
-        const sx = Math.max(-1300, Math.min(1300, ref.x + Math.cos(spawnAngle) * spawnDist));
-        const sy = Math.max(-1300, Math.min(1300, ref.y + Math.sin(spawnAngle) * spawnDist));
-        this.pickupPool.spawn(sx, sy, 'SWORD_ITEM');
+        const spawnDist = 120 + Math.random() * 280;
+        const clamped = this.field.clamp(ref.x + Math.cos(spawnAngle) * spawnDist, ref.y + Math.sin(spawnAngle) * spawnDist, 20);
+        this.pickupPool.spawn(clamped.x, clamped.y, 'SWORD_ITEM');
       }
     }
 
@@ -304,8 +326,11 @@ export class GameEngine {
 
     // Endless mode check: Game continues infinitely until player dies!
     if (!this.player.alive) {
-      this.endGame();
-      return;
+      // 倒された直後は、弾け飛ぶ演出を始める。演出中は世界を動かし続ける
+      if (this.dyingTimer <= 0) {
+        this.endGame();
+        if (this.state === 'TITLE') return;
+      }
     }
 
     // 5.5 Check 5-Minute Survival Milestone Clear
@@ -784,7 +809,7 @@ export class GameEngine {
     if (cpu.swordsDropped) return;
     cpu.swordsDropped = true;
     cpu.alive = false;
-    cpu.respawnTimer = 10.0; // 10s respawn timer
+    cpu.respawnTimer = 3.5; // 3.5s respawn timer (returns to fight quickly!)
 
     // Burst drop swords on the field (plunder mechanic!)
     const dropCount = cpu.getDroppedSwordsCount();
@@ -825,47 +850,70 @@ export class GameEngine {
     } else if (card.category === 'STAT_BOOST') {
       switch (card.statType) {
         case 'ATTACK_POWER':
-          this.player.weaponSystem.attackPowerMult += 0.25;
+          this.player.weaponSystem.attackPowerMult += 0.15;
           break;
         case 'ATTACK_SPEED':
-          this.player.weaponSystem.attackSpeedMult += 0.2;
+          this.player.weaponSystem.attackSpeedMult += 0.12;
           break;
         case 'MOVE_SPEED':
-          this.player.speed += 36;
+          this.player.speed += 20;
           break;
         case 'MAX_HP':
-          this.player.maxHp += 30;
-          this.player.hp = this.player.maxHp;
+          this.player.maxHp += 25;
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 25);
           break;
         case 'MAGNET_RADIUS':
-          this.player.magnetRadius += 65;
+          this.player.magnetRadius += 35;
           break;
         case 'CRIT_CHANCE':
-          this.player.weaponSystem.critChance += 0.12;
+          this.player.weaponSystem.critChance += 0.08;
           break;
         case 'SWORD_COUNT':
           this.player.swordSystem.addSword(1);
           this.sound.sfx.playSwordPickup();
           break;
         case 'SWORD_DAMAGE':
-          this.player.swordSystem.damageMult += 0.3;
+          this.player.swordSystem.damageMult += 0.15;
           break;
         case 'SWORD_SPEED':
-          this.player.swordSystem.speedMult += 0.25;
+          this.player.swordSystem.speedMult += 0.15;
           break;
         case 'SWORD_SIZE':
-          this.player.swordSystem.sizeMult += 0.25;
+          this.player.swordSystem.sizeMult += 0.15;
           break;
         case 'SWORD_RADIUS':
-          this.player.swordSystem.radiusMult += 0.25;
+          this.player.swordSystem.radiusMult += 0.15;
           break;
       }
     }
   }
 
+  /** 倒されたとき。いきなりリザルトに移らず、弾け飛ぶ演出を見せてから showResult に進む */
   private endGame() {
     // タイトルのデモ中は試合を終わらせない
     if (this.state === 'TITLE') return;
+    if (this.dyingTimer > 0) return;
+    this.dyingTimer = GameEngine.DEATH_SEQUENCE_SEC;
+
+    const { x, y, color } = this.player;
+    this.sound.stopBgm();
+    this.sound.sfx.playSwordStorm();
+    this.sound.sfx.playPlayerHurt();
+
+    // 体と剣が四方に弾け飛ぶ
+    this.particleSystem.emitBurst(x, y, color, 90, 1100, 9, 1.2);
+    this.particleSystem.emitBurst(x, y, '#ffffff', 60, 820, 6, 0.9);
+    this.particleSystem.emitBurst(x, y, '#ffd700', 50, 640, 8, 1.1);
+    this.particleSystem.emitRing(x, y, '#ffffff', 420, 0.5);
+    this.particleSystem.emitRing(x, y, color, 700, 0.8);
+    this.particleSystem.emitRing(x, y, '#ffd700', 1000, 1.1);
+    this.screenEffects.flash('#ffffff', 0.8);
+    this.screenEffects.shake(48, 0.93);
+    this.screenEffects.freeze(0.14);
+  }
+
+  /** 演出が終わったあと、リザルトを出す */
+  private showResult() {
     this.updateLeaderboard();
     this.sound.stopBgm();
     if (this.player.rank === 1) {

@@ -151,7 +151,7 @@ export class LevelUpScreen {
         category: 'STAT_BOOST',
         statType: 'MAX_HP',
         title: 'VITAL',
-        description: '最大HP +30 & 全回復',
+        description: '最大HP +25 & HP+25回復',
         rarity: 'COMMON',
       },
       {

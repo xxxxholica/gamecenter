@@ -54,7 +54,7 @@ export class PickupItem implements HasPosition {
         this.color = '#ffd700';
         break;
       case 'HEAL':
-        this.value = 40;
+        this.value = 25;
         this.radius = 14;
         this.color = '#00ff88';
         break;

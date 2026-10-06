@@ -99,12 +99,12 @@ export class CpuPlayer extends Entity {
   public weaponSystem: WeaponSystem;
   public swordSystem: SwordSystem;
 
-  public magnetRadius: number = 220;
+  public magnetRadius: number = 260;
   public score: number = 0;
   public kills: number = 0;
   public level: number = 1;
   public exp: number = 0;
-  public nextExp: number = 60;
+  public nextExp: number = 45;
 
   public specialGauge: number = 0;
   public rank: number = 2;
@@ -131,33 +131,36 @@ export class CpuPlayer extends Entity {
     this.preferredWeapons = profile.preferredWeapons;
 
     const baseHps: Partial<Record<AiArchetype, number>> = {
-      DEFENDER: 420,
-      ATTACKER: 300,
-      PVP_AGGRESSOR: 320,
-      BOSS_HUNTER: 320,
-      HUNTER: 300,
-      COLLECTOR: 280,
-      BALANCED: 310,
+      DEFENDER: 550,
+      ATTACKER: 420,
+      PVP_AGGRESSOR: 460,
+      BOSS_HUNTER: 430,
+      HUNTER: 410,
+      COLLECTOR: 380,
+      BALANCED: 430,
     };
-    const hp = baseHps[profile.archetype] || 310;
+    const hp = baseHps[profile.archetype] || 420;
     this.hp = hp;
     this.maxHp = hp;
     this.initialHp = hp;
-    this.speed = 235 * profile.speedFactor;
+    this.speed = 260 * profile.speedFactor;
 
     this.weaponSystem = new WeaponSystem(this.id, false);
-    const startSwords = profile.archetype === 'PVP_AGGRESSOR' ? 3 : 2;
+    const startSwords = profile.archetype === 'PVP_AGGRESSOR' ? 4 : 3;
     this.initialSwords = startSwords;
     this.swordSystem = new SwordSystem(this.id, false, startSwords);
 
-    // Give initial preferred weapon
+    // Give initial preferred weapons (NPC gets 2 weapons right away for competitive strength)
     if (this.preferredWeapons[0]) {
       this.weaponSystem.addOrUpgradeWeapon(this.preferredWeapons[0]);
+    }
+    if (this.preferredWeapons[1]) {
+      this.weaponSystem.addOrUpgradeWeapon(this.preferredWeapons[1]);
     }
   }
 
   public getDroppedSwordsCount(): number {
-    return Math.max(2, Math.min(16, Math.floor(this.swordSystem.swordCount * 0.6)));
+    return Math.max(1, Math.min(10, Math.floor(this.swordSystem.swordCount * 0.35)));
   }
 
   public addExp(amount: number) {
@@ -165,7 +168,7 @@ export class CpuPlayer extends Entity {
     if (this.exp >= this.nextExp) {
       this.exp -= this.nextExp;
       this.level += 1;
-      this.nextExp = Math.floor(this.nextExp * 1.35 + 25);
+      this.nextExp = Math.floor(this.nextExp * 1.30 + 15);
       this.autoLevelUp();
     }
   }
@@ -173,24 +176,24 @@ export class CpuPlayer extends Entity {
   private autoLevelUp() {
     // Pick an upgrade from preferred weapons or stat boosts
     const unmaxedWeapons = this.preferredWeapons.filter((w) => this.weaponSystem.getWeaponLevel(w) < 8);
-    if (unmaxedWeapons.length > 0 && Math.random() < 0.65) {
+    if (unmaxedWeapons.length > 0 && Math.random() < 0.80) {
       const pick = unmaxedWeapons[Math.floor(Math.random() * unmaxedWeapons.length)];
       this.weaponSystem.addOrUpgradeWeapon(pick);
     } else {
       // Stat boost
       const roll = Math.random();
-      if (roll < 0.35) this.weaponSystem.attackPowerMult += 0.15;
-      else if (roll < 0.65) this.weaponSystem.attackSpeedMult += 0.12;
-      else this.maxHp += 35;
+      if (roll < 0.35) this.weaponSystem.attackPowerMult += 0.22;
+      else if (roll < 0.65) this.weaponSystem.attackSpeedMult += 0.18;
+      else this.maxHp += 45;
     }
 
     // Swords also level up
-    if (Math.random() < 0.4 && this.swordSystem.swordCount < 24) {
+    if (Math.random() < 0.65 && this.swordSystem.swordCount < 30) {
       this.swordSystem.addSword(1);
     }
-    this.swordSystem.baseDamage += 2;
-    this.maxHp += 25;
-    this.heal(60);
+    this.swordSystem.baseDamage += 4;
+    this.maxHp += 30;
+    this.heal(80);
   }
 
   public respawn(field: Field, gameTime: number) {
@@ -202,7 +205,7 @@ export class CpuPlayer extends Entity {
 
     // Spawn at arena edge
     const angle = Math.random() * Math.PI * 2;
-    const dist = 600 + Math.random() * 400;
+    const dist = 600 + Math.random() * 500;
     const clamped = field.clamp(Math.cos(angle) * dist, Math.sin(angle) * dist, this.radius);
     this.x = clamped.x;
     this.y = clamped.y;
@@ -210,16 +213,16 @@ export class CpuPlayer extends Entity {
     this.vy = 0;
 
     // Scale HP with elapsed game time
-    this.maxHp = Math.floor(this.initialHp + gameTime * 1.5);
+    this.maxHp = Math.floor(this.initialHp + gameTime * 2.2);
     this.hp = this.maxHp;
 
     // Scale swords with elapsed game time
-    const swords = Math.min(24, Math.max(3, Math.floor(this.initialSwords + gameTime / 40)));
+    const swords = Math.min(28, Math.max(4, Math.floor(this.initialSwords + gameTime / 30)));
     this.swordSystem.swordCount = swords;
-    this.swordSystem.baseDamage = 45 + Math.floor(gameTime / 30) * 3;
+    this.swordSystem.baseDamage = 50 + Math.floor(gameTime / 25) * 4;
 
     // Auto level up to keep pace with player
-    const targetLvl = Math.max(this.level, Math.floor(1 + gameTime / 30));
+    const targetLvl = Math.max(this.level, Math.floor(1 + gameTime / 24));
     while (this.level < targetLvl) {
       this.level++;
       this.autoLevelUp();
@@ -283,20 +286,23 @@ export class CpuPlayer extends Entity {
     this.x = clamped.x;
     this.y = clamped.y;
 
-    // Collect Pickups (CPUs also snatch Sword Items and EXP!)
+    // Collect Pickups (CPUs snatch Sword Items with 420px magnet and heal/empower on pickup!)
     const pickups = pickupPool.getActiveItems();
     for (const item of pickups) {
       const dx = this.x - item.x;
       const dy = this.y - item.y;
       const distSq = dx * dx + dy * dy;
 
-      if (distSq <= this.magnetRadius * this.magnetRadius) {
+      const effectiveMagnet = item.type === 'SWORD_ITEM' ? 420 : this.magnetRadius;
+      if (distSq <= effectiveMagnet * effectiveMagnet) {
         item.target = this;
       }
       if (distSq <= (this.radius + item.radius) * (this.radius + item.radius)) {
         item.active = false;
         if (item.type === 'SWORD_ITEM') {
           this.swordSystem.addSword(1);
+          this.swordSystem.baseDamage += 2;
+          this.heal(40);
           particleSystem.emitBurst(this.x, this.y, this.color, 12, 160, 4, 0.3);
         } else if (item.type.startsWith('EXP')) {
           this.addExp(item.value);
@@ -348,16 +354,37 @@ export class CpuPlayer extends Entity {
     let desiredY = 0;
 
     const nearbyEnemies = enemyGrid.query(this.x, this.y, 600);
-    // Early game peace treaty: For the first 45s, CPUs focus on items and mobs, ignoring the player
-    const earlyGamePeace = gameTime < 45;
+    // Brief 5-second grace period on start, then all contenders actively battle!
+    const earlyGamePeace = gameTime < 5;
     const rivals = contenders.filter((c) => c.id !== this.id && c.alive && (!earlyGamePeace || !c.isPlayer));
     const items = pickupPool.getActiveItems();
     const swordItems = items.filter((it) => it.type === 'SWORD_ITEM');
 
+    // Universal Sword Prioritization: ALL archetypes value swords highly!
+    if (swordItems.length > 0) {
+      let closestSword: PickupItem | null = null;
+      let minSwordDistSq = Infinity;
+      for (const sw of swordItems) {
+        const dSq = (sw.x - this.x) ** 2 + (sw.y - this.y) ** 2;
+        if (dSq < minSwordDistSq) {
+          minSwordDistSq = dSq;
+          closestSword = sw;
+        }
+      }
+      if (closestSword && minSwordDistSq < 700 * 700 && (this.archetype === 'COLLECTOR' || Math.random() < 0.80)) {
+        desiredX = closestSword.x - this.x;
+        desiredY = closestSword.y - this.y;
+        const len = Math.hypot(desiredX, desiredY) || 1;
+        this.targetVx = (desiredX / len) * this.speed;
+        this.targetVy = (desiredY / len) * this.speed;
+        return;
+      }
+    }
+
     switch (this.archetype) {
       case 'ATTACKER': {
-        // Attack nearby rivals or dense enemy pack
-        if (rivals.length > 0 && Math.random() < 0.6) {
+        // Aggressively attack nearby rivals
+        if (rivals.length > 0 && Math.random() < 0.85) {
           // Target closest rival
           let closestRival = rivals[0];
           let minDistSq = Infinity;

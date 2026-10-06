@@ -24,12 +24,12 @@ export class Player extends Entity {
   public swordSystem: SwordSystem;
 
   // Stats
-  public magnetRadius: number = 240;
+  public magnetRadius: number = 180;
   public score: number = 0;
   public kills: number = 0;
   public level: number = 1;
   public exp: number = 0;
-  public nextExp: number = 60;
+  public nextExp: number = 120;
 
   // Special Gauge
   public specialGauge: number = 0;
@@ -47,12 +47,12 @@ export class Player extends Entity {
 
   constructor(x: number, y: number) {
     super(x, y, 22);
-    this.hp = 320;
-    this.maxHp = 320;
-    this.speed = 280;
+    this.hp = 150;
+    this.maxHp = 150;
+    this.speed = 275;
     this.invulnerableTimer = 2.5; // 2.5s startup invulnerability barrier
     this.weaponSystem = new WeaponSystem(this.id, true);
-    this.swordSystem = new SwordSystem(this.id, true, 3);
+    this.swordSystem = new SwordSystem(this.id, true, 2);
   }
 
   public addExp(amount: number, soundManager: SoundManager): boolean {
@@ -62,8 +62,8 @@ export class Player extends Entity {
     if (this.exp >= this.nextExp) {
       this.exp -= this.nextExp;
       this.level += 1;
-      this.heal(60);
-      this.nextExp = Math.floor(this.nextExp * 1.35 + 25);
+      this.heal(25);
+      this.nextExp = Math.floor(this.nextExp * 1.45 + 50);
       soundManager.sfx.playLevelUp();
       return true; // Leveled up!
     }
@@ -192,19 +192,19 @@ export class Player extends Entity {
       }
     }
 
-    // 2.5 Passive HP Regeneration
+    // 2.5 Passive HP Regeneration (0.8 HP/sec)
     if (this.hp < this.maxHp) {
-      this.hp = Math.min(this.maxHp, this.hp + 1.5 * dt);
+      this.hp = Math.min(this.maxHp, this.hp + 0.8 * dt);
     }
 
-    // 3. Magnetize Pickups (Ultra-wide 450px vacuum for SWORD_ITEM)
+    // 3. Magnetize Pickups
     const pickups = pickupPool.getActiveItems();
     for (const item of pickups) {
       const dx = this.x - item.x;
       const dy = this.y - item.y;
       const distSq = dx * dx + dy * dy;
 
-      const effectiveMagnet = item.type === 'SWORD_ITEM' ? 450 : this.magnetRadius;
+      const effectiveMagnet = item.type === 'SWORD_ITEM' ? 300 : this.magnetRadius;
       if (distSq <= effectiveMagnet * effectiveMagnet) {
         item.target = this;
       }

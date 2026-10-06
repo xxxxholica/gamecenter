@@ -34,83 +34,83 @@ export class Enemy extends Entity {
     switch (type) {
       case 'NORMAL':
         this.radius = 16;
-        this.maxHp = 25 * difficultyMult;
-        this.speed = 120 * Math.min(1.35, Math.sqrt(difficultyMult));
+        this.maxHp = 38 * difficultyMult;
+        this.speed = 135 * Math.min(1.4, Math.sqrt(difficultyMult));
         this.scoreValue = 15;
         this.color = '#ff3366';
-        this.attackDamage = 7;
+        this.attackDamage = 9;
         this.expType = 'EXP_SMALL';
-        this.maxChaseDuration = 12.0 + Math.random() * 8.0;
+        this.maxChaseDuration = 14.0 + Math.random() * 8.0;
         break;
       case 'FAST':
         this.radius = 14;
-        this.maxHp = 18 * difficultyMult;
-        this.speed = 185 * Math.min(1.35, Math.sqrt(difficultyMult));
+        this.maxHp = 26 * difficultyMult;
+        this.speed = 210 * Math.min(1.4, Math.sqrt(difficultyMult));
         this.scoreValue = 25;
         this.color = '#ff9900';
-        this.attackDamage = 6;
+        this.attackDamage = 8;
         this.expType = 'EXP_SMALL';
-        this.maxChaseDuration = 15.0 + Math.random() * 6.0;
+        this.maxChaseDuration = 18.0 + Math.random() * 6.0;
         break;
       case 'TANK':
         this.radius = 28;
-        this.maxHp = 100 * difficultyMult;
-        this.speed = 75 * Math.min(1.25, Math.sqrt(difficultyMult));
+        this.maxHp = 150 * difficultyMult;
+        this.speed = 88 * Math.min(1.3, Math.sqrt(difficultyMult));
         this.scoreValue = 120;
         this.color = '#aa22ff';
-        this.attackDamage = 16;
+        this.attackDamage = 20;
         this.expType = 'EXP_MEDIUM';
         this.maxChaseDuration = Infinity;
         break;
       case 'RANGED':
         this.radius = 18;
-        this.maxHp = 38 * difficultyMult;
-        this.speed = 95;
+        this.maxHp = 52 * difficultyMult;
+        this.speed = 110;
         this.scoreValue = 60;
         this.color = '#00ffaa';
-        this.attackDamage = 9;
+        this.attackDamage = 13;
         this.expType = 'EXP_SMALL';
-        this.shootCooldown = 2.0;
-        this.maxChaseDuration = 16.0;
+        this.shootCooldown = 1.6;
+        this.maxChaseDuration = 18.0;
         break;
       case 'BERSERKER':
         this.radius = 20;
-        this.maxHp = 50 * difficultyMult;
-        this.speed = 225 * Math.min(1.3, Math.sqrt(difficultyMult));
+        this.maxHp = 70 * difficultyMult;
+        this.speed = 240 * Math.min(1.35, Math.sqrt(difficultyMult));
         this.scoreValue = 150;
         this.color = '#ff0033';
-        this.attackDamage = 15;
+        this.attackDamage = 20;
         this.expType = 'EXP_MEDIUM';
         this.maxChaseDuration = Infinity; // 突撃兵: 追跡を絶対に諦めず執拗に追う！
         break;
       case 'WEAPON_MASTER':
         this.radius = 26;
-        this.maxHp = 110 * difficultyMult;
-        this.speed = 105;
+        this.maxHp = 150 * difficultyMult;
+        this.speed = 118;
         this.scoreValue = 300;
         this.color = '#e000ff';
-        this.attackDamage = 18;
+        this.attackDamage = 24;
         this.expType = 'EXP_LARGE';
-        this.shootCooldown = 1.9;
+        this.shootCooldown = 1.6;
         this.maxChaseDuration = Infinity;
         break;
       case 'ELITE':
         this.radius = 36;
-        this.maxHp = 420 * difficultyMult;
-        this.speed = 115 * Math.min(1.35, Math.sqrt(difficultyMult));
+        this.maxHp = 600 * difficultyMult;
+        this.speed = 128 * Math.min(1.4, Math.sqrt(difficultyMult));
         this.scoreValue = 600;
         this.color = '#ff0055';
-        this.attackDamage = 32;
+        this.attackDamage = 40;
         this.expType = 'EXP_LARGE';
         this.maxChaseDuration = Infinity;
         break;
       case 'BOSS':
         this.radius = 50;
-        this.maxHp = 2500 * difficultyMult;
-        this.speed = 85;
+        this.maxHp = 3500 * difficultyMult;
+        this.speed = 95;
         this.scoreValue = 5000;
         this.color = '#ff0033';
-        this.attackDamage = 45;
+        this.attackDamage = 55;
         this.expType = 'EXP_LARGE';
         this.maxChaseDuration = Infinity;
         break;
