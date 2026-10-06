@@ -105,7 +105,7 @@ const allGames: GameEntry[] = [
     title: '極限ギリギリ選手権',
     englishTitle: 'EXTREME GIRI-GIRI ARCADE',
     description:
-      'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜む「ギリギリ」を攻略する連続チャレンジ。レバー上だけのシンプルな操作で、あふれる寸前・止まる寸前の絶妙なタイミングを狙い、「ギリギリ度」の偏差値で競え。',
+      'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜むギリギリを攻略する連続チャレンジ。レバー上だけのシンプルな操作で、あふれる寸前・止まる寸前の絶妙なタイミングを狙い、ギリギリ度の偏差値で競え。',
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
     logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',

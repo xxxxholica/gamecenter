@@ -897,11 +897,9 @@ class ArcadeCorkShooter {
             this.addTimeBonus(1.5, '黄金UFO 撃墜');
           } else if (targetName === 'お祭り風船') {
             this.screenShake = 0.4;
-            this.hud.showFlash('風船破裂', `+${pts}g`, 0.8);
             this.prizePileManager.recordDefeated('balloon', 'お祭り風船');
           } else if (targetName === '射的アヒル') {
             this.screenShake = 0.35;
-            this.hud.showFlash('アヒル撃ち落とし', `+${pts}g`, 0.8);
             this.prizePileManager.recordDefeated('duck', '射的アヒル');
           }
 
@@ -972,10 +970,8 @@ class ArcadeCorkShooter {
       if (item.timer <= 0) {
         const prize = this.prizes.find((p) => p.config.slotId === item.slotId);
         if (prize) {
+          // 棚の演出(triggerSpawnEffect)だけで入荷が分かるので、下部中央のフラッシュ通知は出さない(コンボ表示との重複回避)
           prize.triggerSpawnEffect();
-          if (this.state === 'playing') {
-            this.hud.showFlash('新入荷', `${prize.config.name} 入荷`, 0.8);
-          }
         }
         this.restockQueue.splice(i, 1);
       }
@@ -1169,16 +1165,9 @@ class ArcadeCorkShooter {
 
         // Capped time bonus: ONLY Golden Daruma recovers time (+1.5 seconds)
         // All other prizes (treasure, lucky cat, tv, etc.) do not restore time.
+        // 通常の撃破はスコア加算と3Dの命中演出だけで十分伝わるため、下部中央へのフラッシュ通知は出さない
         if (prize.config.type === 'daruma') {
           this.addTimeBonus(1.5, `特賞 ${prize.config.name} 撃破`);
-        } else if (this.comboCount >= 3) {
-          this.hud.showFlash(
-            `${this.comboCount}連鎖 COMBO`,
-            `${prize.config.name} +${addedPoints}g`,
-            1.2
-          );
-        } else {
-          this.hud.showFlash('撃破', `${prize.config.name} +${addedPoints}g`, 1.0);
         }
 
         // 連鎖(5・10)と得点による時間延長(延長枠の範囲内)

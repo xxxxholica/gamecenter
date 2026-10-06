@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>サバイバー・スコアバトル｜SURVIVOR SCORE BATTLE</title>
+    <title>サバイバー・スコアバトル SURVIVOR SCORE BATTLE</title>
     <link rel="icon" type="image/png" href="./favicon.png" />
     <link rel="icon" href="./favicon.ico" />
     <style>
@@ -23,46 +23,24 @@
         background-color: #05070d;
         color: #fff;
         font-family: 'Impact', 'Arial Black', 'Helvetica Neue', sans-serif;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
 
       #game-wrapper {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-        max-width: 177.78vh; /* 16:9 ratio */
-        max-height: 56.25vw; /* 16:9 ratio */
-        aspect-ratio: 16 / 9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        position: fixed;
+        inset: 0;
         background: #080c14;
-        box-shadow: 0 0 50px rgba(0, 240, 255, 0.25), inset 0 0 20px rgba(0, 0, 0, 0.8);
       }
 
       canvas {
         width: 100%;
         height: 100%;
         display: block;
-        image-rendering: auto;
-      }
-
-      /* Arcade cabinet bezel effect */
-      #game-wrapper::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        border: 2px solid rgba(0, 255, 200, 0.3);
-        box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
       }
     </style>
   </head>
   <body>
     <div id="game-wrapper">
-      <canvas id="game-canvas" width="1920" height="1080"></canvas>
+      <canvas id="game-canvas"></canvas>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

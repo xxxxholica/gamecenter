@@ -4,6 +4,7 @@ import {
   createFloorTexture,
   createWallTexture,
   createWindowWallTexture,
+  createPlainWallTexture,
   createOutsideSkyTexture,
   createBuildingWindowsTexture,
 } from '../graphics/Textures';
@@ -36,14 +37,24 @@ export class Corridor {
   private floorMaterial: THREE.MeshStandardMaterial;
   private rightWallMaterial: THREE.MeshStandardMaterial;
   private leftWallMaterial: THREE.MeshStandardMaterial;
+  private leftWallMaterialPlain: THREE.MeshStandardMaterial;
   private ceilingMaterial: THREE.MeshStandardMaterial;
   private lightMaterial: THREE.MeshBasicMaterial;
+
+  // 左壁: 窓なしチャンクを一定間隔で挟むためのカウンタ
+  private leftWallChunkIndex = 0;
+  private readonly LEFT_WALL_CHUNK_LEN = 9; // createWindowWallTexture/createPlainWallTexture 1枚ぶんの幅(m)
+  private readonly LEFT_WALL_PLAIN_INTERVAL = 4; // このチャンク数に1回、窓なしにする(9m×4=36mごとに9m幅)
 
   // 窓の外の景色(屋外シーン): 空の板はプレイヤーに追従し、地面・木・校舎などは区画ごとに作る
   private sky: THREE.Mesh;
   private outsideMaterials: Record<'ground' | 'track' | 'line' | 'fence' | 'trunk' | 'leaf' | 'leaf2' | 'pole' | 'goal', THREE.MeshLambertMaterial>;
   private buildingMaterial: THREE.MeshBasicMaterial;
   private segmentCounter = 0;
+
+  // ドアの窓越しに見える教室の中(右壁の外側): 机・椅子・黒板
+  private classroomMaterials: Record<'wall' | 'deskTop' | 'deskLeg' | 'chair' | 'blackboard' | 'blackboardFrame', THREE.MeshBasicMaterial>;
+  private classroomCounter = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -55,8 +66,9 @@ export class Corridor {
     // テクスチャ
     const floorTex = createFloorTexture();
     const rightWallTex = createWallTexture();
+    // 左壁は9m幅のチャンク単位で窓あり/窓なしを切り替えるので、テクスチャは1チャンク分(repeat 1,1)のまま使う
     const windowTex = createWindowWallTexture();
-    windowTex.repeat.set(this.SEGMENT_LENGTH / 9, 1); // 窓3枚(横9m)を区画の長さぶん繰り返す
+    const plainTex = createPlainWallTexture();
 
     // マテリアル
     this.floorMaterial = new THREE.MeshStandardMaterial({
@@ -68,6 +80,8 @@ export class Corridor {
     this.rightWallMaterial = new THREE.MeshStandardMaterial({
       map: rightWallTex,
       roughness: 0.8,
+      alphaTest: 0.5,          // ドアの窓ガラス部分は透明にして、奥の教室(addClassroomInterior)を見せる
+      side: THREE.DoubleSide,
     });
 
     this.leftWallMaterial = new THREE.MeshStandardMaterial({
@@ -77,6 +91,14 @@ export class Corridor {
       emissiveIntensity: 0.15, // 夕日の反射発光
       alphaTest: 0.5,          // ガラスの部分は透明にして、外の景色を見せる
       side: THREE.DoubleSide,
+    });
+
+    // 左壁(窓なし版): 窓側と全く同じ色味(漆喰・腰壁の配色、夕日の反射発光)で統一し、一定間隔で挟んで単調な「ずっと窓」を崩す
+    this.leftWallMaterialPlain = new THREE.MeshStandardMaterial({
+      map: plainTex,
+      roughness: 0.7,
+      emissive: 0xff7043,
+      emissiveIntensity: 0.15,
     });
 
     // 窓の外: 空(円筒の内側に貼る)。フォグの影響を受けず、プレイヤーに追従する。
@@ -110,6 +132,18 @@ export class Corridor {
     const buildingTex = createBuildingWindowsTexture();
     buildingTex.repeat.set(10, 3);
     this.buildingMaterial = new THREE.MeshBasicMaterial({ map: buildingTex });
+
+    // ドアの窓越しに見える教室の中。廊下の光がほぼ届かない位置なので、陰影に頼るランバートだと
+    // どんな色を仕込んでも真っ黒になってしまう。照明計算をしない単色(MeshBasicMaterial)にして、
+    // 設定した色がそのまま確実に見えるようにする(屋外の夕焼けに対して室内は少し落ち着いた色味)。
+    this.classroomMaterials = {
+      wall: new THREE.MeshBasicMaterial({ color: 0x3d3348 }),
+      deskTop: new THREE.MeshBasicMaterial({ color: 0x9a7848 }),
+      deskLeg: new THREE.MeshBasicMaterial({ color: 0x5a4530 }),
+      chair: new THREE.MeshBasicMaterial({ color: 0x6a6a7a }),
+      blackboard: new THREE.MeshBasicMaterial({ color: 0x1f6b48 }),
+      blackboardFrame: new THREE.MeshBasicMaterial({ color: 0x7a5530 }),
+    };
 
     this.ceilingMaterial = new THREE.MeshStandardMaterial({
       color: 0xd7ccc8,
@@ -170,12 +204,20 @@ export class Corridor {
     ceiling.position.set(0, this.CORRIDOR_HEIGHT, -len / 2);
     group.add(ceiling);
 
-    // 3. 左壁（教室窓側: 夕日の見える大窓）
-    const leftWallGeo = new THREE.PlaneGeometry(len, this.CORRIDOR_HEIGHT);
-    const leftWall = new THREE.Mesh(leftWallGeo, this.leftWallMaterial);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-hw, this.CORRIDOR_HEIGHT / 2, -len / 2);
-    group.add(leftWall);
+    // 3. 左壁（教室窓側: 夕日の見える大窓。LEFT_WALL_CHUNK_LEN幅ごとに区切り、
+    //    LEFT_WALL_PLAIN_INTERVALチャンクに1回だけ一定間隔・一定幅で窓なしの壁を挟む）
+    const chunkLen = this.LEFT_WALL_CHUNK_LEN;
+    const chunksPerSegment = len / chunkLen;
+    for (let i = 0; i < chunksPerSegment; i++) {
+      const isPlain = this.leftWallChunkIndex % this.LEFT_WALL_PLAIN_INTERVAL === 0;
+      this.leftWallChunkIndex++;
+
+      const chunkGeo = new THREE.PlaneGeometry(chunkLen, this.CORRIDOR_HEIGHT);
+      const chunk = new THREE.Mesh(chunkGeo, isPlain ? this.leftWallMaterialPlain : this.leftWallMaterial);
+      chunk.rotation.y = Math.PI / 2;
+      chunk.position.set(-hw, this.CORRIDOR_HEIGHT / 2, -(i * chunkLen) - chunkLen / 2);
+      group.add(chunk);
+    }
 
     // 4. 右壁（教室側: ドア・掲示板・腰壁）
     const rightWallGeo = new THREE.PlaneGeometry(len, this.CORRIDOR_HEIGHT);
@@ -230,6 +272,7 @@ export class Corridor {
 
     this.mergeStaticFixtures(group);
     this.addOutsideScenery(group, len, hw);
+    this.addClassroomInterior(group, len, hw);
     return group;
   }
 
@@ -313,6 +356,54 @@ export class Corridor {
       z -= w + rand() * 8;
     }
     group.add(bld);
+
+    for (const [mat, list] of geos) {
+      const merged = mergeGeometries(list, false);
+      list.forEach((g) => g.dispose());
+      if (merged) group.add(new THREE.Mesh(merged, mat));
+    }
+  }
+
+  /**
+   * ドアの窓越しに見える教室の中: 机・椅子の簡易シルエットと黒板。
+   * 右壁(教室ドア)のガラス部分は実際に透過しているので、その奥(x > hw)に配置する。
+   * addOutsideSceneryと同じく区画ごとの決定的PRNGで配置を変え、マテリアルごとに1メッシュへ結合する。
+   */
+  private addClassroomInterior(group: THREE.Group, len: number, hw: number): void {
+    const seed = ++this.classroomCounter;
+    let state = seed * 104729 + 31; // 屋外の景色とは別の乗数で、独立したランダム列にする
+    const rand = () => ((state = (state * 16807) % 2147483647) / 2147483647);
+    const geos = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const add = (mat: THREE.Material, geo: THREE.BufferGeometry, x: number, y: number, z: number) => {
+      const g = geo.clone();
+      g.translate(x, y, z);
+      const list = geos.get(mat) ?? [];
+      list.push(g);
+      geos.set(mat, list);
+    };
+    const m = this.classroomMaterials;
+    const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+    const zMid = -len / 2;
+
+    // 奥の壁: 窓からどんな角度で覗いても外の空が突き抜けて見えないよう、上下左右にかなり余裕を持たせて覆う
+    add(m.wall, box(0.3, 40, len + 10), hw + 5.0, this.CORRIDOR_HEIGHT / 2, zMid);
+
+    // 黒板(奥の壁の手前、区画の全長にわたる帯)
+    add(m.blackboardFrame, box(0.15, 1.6, len - 1), hw + 4.6, 2.3, zMid);
+    add(m.blackboard, box(0.1, 1.4, len - 1.6), hw + 4.55, 2.3, zMid);
+
+    // 机・椅子の列(2列、たまに空席を挟んで単調にならないようにする)
+    const rowXs = [hw + 2.0, hw + 3.1];
+    for (const x of rowXs) {
+      for (let z = -1.5 - rand() * 1.5; z > -len; z -= 2.0 + rand() * 0.6) {
+        if (rand() < 0.15) continue;
+        add(m.deskTop, box(0.7, 0.08, 0.5), x, 1.1, z);
+        add(m.deskLeg, box(0.06, 1.05, 0.06), x - 0.28, 0.53, z - 0.18);
+        add(m.deskLeg, box(0.06, 1.05, 0.06), x + 0.28, 0.53, z - 0.18);
+        add(m.chair, box(0.4, 0.06, 0.4), x, 0.55, z + 0.35);
+        add(m.chair, box(0.4, 0.5, 0.06), x, 0.8, z + 0.52);
+      }
+    }
 
     for (const [mat, list] of geos) {
       const merged = mergeGeometries(list, false);

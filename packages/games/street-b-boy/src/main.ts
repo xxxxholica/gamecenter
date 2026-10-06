@@ -393,9 +393,9 @@ class StreetBBoyGame {
     this.sound.setGoldMode(false);
   }
 
-  /** 「STAGE n READY」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
+  /** 「STAGE n」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
   private beginStageCountdown(): void {
-    this.hud.showCenterBanner('ready', `STAGE ${this.currentStage} READY`);
+    this.hud.showCenterBanner('ready', `STAGE ${this.currentStage}`);
     this.countingDown = true;
     this.countdownHandle?.cancel();
     this.countdownHandle = startArcadeCountdown({
@@ -1059,7 +1059,7 @@ class StreetBBoyGame {
     if (this.currentStage === 4) {
       this.hud.showCenterBanner('allclear');
     } else {
-      this.hud.showCenterBanner('clear', `STAGE ${this.currentStage} CLEAR`);
+      this.hud.showCenterBanner('clear');
     }
   }
 

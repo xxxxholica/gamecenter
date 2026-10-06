@@ -14,7 +14,7 @@ import { ContenderState } from '../types';
 
 export class Player extends Entity {
   public id: string = 'player';
-  public name: string = 'YOU';
+  public name: string = 'あなた';
   public isPlayer: boolean = true;
   public color: string = '#00f0ff';
   public accentColor: string = '#ffd700';
@@ -80,27 +80,20 @@ export class Player extends Entity {
       }
 
       // Special gauge gain
-      if (this.specialGauge < 100) {
-        this.specialGauge = Math.min(100, this.specialGauge + 1.2);
-        if (this.specialGauge >= 100 && !this.isSpecialReady) {
-          this.isSpecialReady = true;
-          if (soundManager) soundManager.sfx.playSpecialReady();
-          if (damageNumbers) damageNumbers.addPopup(this.x, this.y - 50, 'SWORD STORM READY!', '#ff0055', 26);
-        }
-      }
+      this.addSpecialGauge(1.2, soundManager, damageNumbers);
 
       // Sound and milestone popups
       if (soundManager) soundManager.sfx.playKill(this.comboCount);
 
       if (damageNumbers) {
         if (this.comboCount === 10) {
-          damageNumbers.addPopup(this.x, this.y - 70, '🔥 GREAT! 10 KILLS', '#ffaa00', 24);
+          damageNumbers.addPopup(this.x, this.y - 70, 'GREAT! 10 KILLS', '#ffaa00', 24);
         } else if (this.comboCount === 25) {
-          damageNumbers.addPopup(this.x, this.y - 70, '⚡ SUPER! 25 KILLS', '#ffdd00', 26);
+          damageNumbers.addPopup(this.x, this.y - 70, 'SUPER! 25 KILLS', '#ffdd00', 26);
         } else if (this.comboCount === 50) {
-          damageNumbers.addPopup(this.x, this.y - 70, '💥 AMAZING!! 50 KILLS', '#ff2255', 30);
+          damageNumbers.addPopup(this.x, this.y - 70, 'AMAZING!! 50 KILLS', '#ff2255', 30);
         } else if (this.comboCount === 100) {
-          damageNumbers.addPopup(this.x, this.y - 70, '👑 MEGA KILL!! 100 KILLS', '#00f0ff', 36);
+          damageNumbers.addPopup(this.x, this.y - 70, 'MEGA KILL!! 100 KILLS', '#00f0ff', 36);
         }
       }
     }
@@ -113,6 +106,20 @@ export class Player extends Entity {
     else if (this.comboCount >= 10) mult = 1.2;
 
     this.score += Math.round(amount * mult);
+  }
+
+  public addSpecialGauge(
+    amount: number,
+    soundManager?: SoundManager,
+    damageNumbers?: DamageNumbers
+  ) {
+    if (this.isSpecialReady) return;
+    this.specialGauge = Math.min(100, this.specialGauge + amount);
+    if (this.specialGauge >= 100) {
+      this.isSpecialReady = true;
+      if (soundManager) soundManager.sfx.playSpecialReady();
+      if (damageNumbers) damageNumbers.addPopup(this.x, this.y - 50, 'SWORD STORM READY!', '#ff0055', 26);
+    }
   }
 
   public activateSpecial(
@@ -137,7 +144,7 @@ export class Player extends Entity {
 
     particleSystem.emitRing(this.x, this.y, '#ffd700', 1000, 0.8);
     particleSystem.emitBurst(this.x, this.y, '#ffd700', 40, 450, 8, 0.8);
-    damageNumbers.addPopup(this.x, this.y - 80, '⚔️ SWORD STORM!! ⚔️', '#ffd700', 42);
+    damageNumbers.addPopup(this.x, this.y - 80, 'SWORD STORM!!', '#ffd700', 42);
 
     // Initial shockwave clearing surrounding enemies
     const victims = enemyGrid.query(this.x, this.y, 800);
@@ -208,7 +215,7 @@ export class Player extends Entity {
         if (item.type === 'SWORD_ITEM') {
           this.swordSystem.addSword(1);
           soundManager.sfx.playSwordPickup();
-          damageNumbers.addPopup(this.x, this.y - 45, 'SWORD +1! 🗡️', '#ffd700', 26);
+          damageNumbers.addPopup(this.x, this.y - 45, 'SWORD +1!', '#ffd700', 26);
           particleSystem.emitBurst(this.x, this.y, '#ffd700', 22, 220, 5, 0.4);
           screenEffects.shake(5);
         } else if (item.type.startsWith('EXP')) {
@@ -223,8 +230,7 @@ export class Player extends Entity {
           soundManager.sfx.playSpecialReady();
           damageNumbers.addPopup(this.x, this.y - 30, 'MAGNET!', '#3388ff', 24);
         } else if (item.type === 'SPECIAL_ORB') {
-          this.specialGauge = Math.min(100, this.specialGauge + item.value);
-          soundManager.sfx.playSpecialReady();
+          this.addSpecialGauge(item.value, soundManager, damageNumbers);
           damageNumbers.addPopup(this.x, this.y - 30, '+25% SPECIAL', '#ff2255', 22);
         }
       }
@@ -266,8 +272,8 @@ export class Player extends Entity {
     ctx.shadowBlur = 15;
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4;
-    ctx.strokeText('▼ YOU ▼', 0, -this.radius - 28 + bounce);
-    ctx.fillText('▼ YOU ▼', 0, -this.radius - 28 + bounce);
+    ctx.strokeText('あなた', 0, -this.radius - 28 + bounce);
+    ctx.fillText('あなた', 0, -this.radius - 28 + bounce);
     ctx.shadowBlur = 0;
 
     // 2. Overhead HP Bar
@@ -282,11 +288,6 @@ export class Player extends Entity {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(-barW / 2, barY, barW, barH);
-
-    // Swords Count Icon Badge
-    ctx.font = '900 13px Impact, sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText(`🗡️ ${this.swordSystem.swordCount}`, 0, barY - 3);
 
     // 3. Outer Hero Aura
     ctx.strokeStyle = this.color;

@@ -2,6 +2,9 @@ import { SynthSfx } from './SynthSfx';
 import { SynthBgm, BgmTrack } from './SynthBgm';
 import { GameSettings } from '../types';
 
+// 音声の初期化前(ブラウザの操作待ち)でも sfx / bgm を呼べるよう、何もしない代役を置いておく。
+const NOOP = new Proxy({}, { get: () => () => {} }) as never;
+
 export class SoundManager {
   private static instance: SoundManager | null = null;
   private ctx: AudioContext | null = null;
@@ -9,8 +12,11 @@ export class SoundManager {
   private bgmGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
 
-  public sfx!: SynthSfx;
-  public bgm!: SynthBgm;
+  public sfx: SynthSfx = NOOP;
+  public bgm: SynthBgm = NOOP;
+
+  // タイトルのデモ中は効果音を鳴らさない
+  private silent: boolean = false;
 
   private isMuted: boolean = false;
   private masterVol: number = 0.8;
@@ -41,7 +47,7 @@ export class SoundManager {
 
       this.masterGain.gain.setValueAtTime(this.masterVol, this.ctx.currentTime);
       this.bgmGain.gain.setValueAtTime(this.bgmVol, this.ctx.currentTime);
-      this.sfxGain.gain.setValueAtTime(this.sfxVol, this.ctx.currentTime);
+      this.sfxGain.gain.setValueAtTime(this.silent ? 0 : this.sfxVol, this.ctx.currentTime);
 
       this.bgmGain.connect(this.masterGain);
       this.sfxGain.connect(this.masterGain);
@@ -96,10 +102,17 @@ export class SoundManager {
     }
   }
 
+  public setSilent(on: boolean) {
+    this.silent = on;
+    if (this.sfxGain && this.ctx) {
+      this.sfxGain.gain.setValueAtTime(on ? 0 : this.sfxVol, this.ctx.currentTime);
+    }
+  }
+
   public setSfxVolume(vol: number) {
     this.sfxVol = Math.max(0, Math.min(1, vol));
     if (this.sfxGain && this.ctx) {
-      this.sfxGain.gain.setValueAtTime(this.sfxVol, this.ctx.currentTime);
+      this.sfxGain.gain.setValueAtTime(this.silent ? 0 : this.sfxVol, this.ctx.currentTime);
     }
   }
 

@@ -81,7 +81,7 @@ export class Enemy extends Entity {
         this.color = '#ff0033';
         this.attackDamage = 15;
         this.expType = 'EXP_MEDIUM';
-        this.maxChaseDuration = Infinity; // 交戦厨: 追跡を絶対に諦めず執拗に追う！
+        this.maxChaseDuration = Infinity; // 突撃兵: 追跡を絶対に諦めず執拗に追う！
         break;
       case 'WEAPON_MASTER':
         this.radius = 26;
@@ -138,7 +138,7 @@ export class Enemy extends Entity {
         this.vx = (dx / dist) * this.speed;
         this.vy = (dy / dist) * this.speed;
       } else if (this.type === 'BERSERKER') {
-        // 交戦厨: 追跡を絶対に諦めず、回転刃を展開して猛スピード突進！
+        // 突撃兵: 追跡を絶対に諦めず、回転刃を展開して猛スピード突進！
         this.bladeAngle += dt * 9.0;
         let moveSpeed = this.speed;
 
@@ -377,7 +377,7 @@ export class Enemy extends Entity {
       ctx.closePath();
       ctx.fill();
     } else if (this.type === 'BERSERKER') {
-      // 交戦厨: 真紅のトゲドローン + 回転ブラッドブレード
+      // 突撃兵: 真紅のトゲドローン + 回転ブラッドブレード
       const angle = Math.atan2(this.vy, this.vx);
       ctx.rotate(angle);
 
@@ -408,7 +408,7 @@ export class Enemy extends Entity {
       ctx.font = '900 11px Impact, sans-serif';
       ctx.fillStyle = '#ff0033';
       ctx.textAlign = 'center';
-      ctx.fillText('⚔️ 交戦厨', 0, -this.radius - 16);
+      ctx.fillText('突撃兵', 0, -this.radius - 16);
     } else if (this.type === 'WEAPON_MASTER') {
       // 重火器兵: サイバー重装甲砲塔
       const angle = Math.atan2(this.vy, this.vx);
@@ -451,7 +451,7 @@ export class Enemy extends Entity {
       ctx.font = '900 11px Impact, sans-serif';
       ctx.fillStyle = this.weaponMode === 'LASER' ? '#e000ff' : '#ffaa00';
       ctx.textAlign = 'center';
-      ctx.fillText(this.weaponMode === 'LASER' ? '⚡ 重レーザー' : '🚀 追尾ミサイル', 0, -this.radius - 16);
+      ctx.fillText(this.weaponMode === 'LASER' ? '重レーザー' : '追尾ミサイル', 0, -this.radius - 16);
     }
 
     // Overhead Health Bar for any damaged enemy

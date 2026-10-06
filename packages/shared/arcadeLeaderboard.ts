@@ -122,6 +122,13 @@ export const GAME_LEADERBOARD_DEFS: Record<string, GameLeaderboardDef> = {
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
   },
+  'survivor-score-battle': {
+    slug: 'survivor-score-battle',
+    hasScore: true,
+    scoreOrder: 'desc',
+    unit: 'pts',
+    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
+  },
   'phaser-fighter': {
     slug: 'phaser-fighter',
     hasScore: false,

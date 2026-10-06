@@ -16,9 +16,29 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Set internal render resolution
-  canvas.width = 1920;
-  canvas.height = 1080;
+  // canvasはウィンドウ全体に広げ、論理サイズはウィンドウ比率にそのまま追従する。
+  // UIが潰れないよう、論理サイズの下限を幅1280 x 高さ1080とする。
+  const MIN_W = 1280;
+  const BASE_H = 1080;
+  let viewW = 1920;
+  let viewH = BASE_H;
+  let scale = 1;
+
+  const resize = () => {
+    const cw = Math.max(1, window.innerWidth);
+    const ch = Math.max(1, window.innerHeight);
+    const dpr = window.devicePixelRatio || 1;
+    const uiScale = Math.min(ch / BASE_H, cw / MIN_W);
+    viewW = cw / uiScale;
+    viewH = ch / uiScale;
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+    canvas.style.width = `${cw}px`;
+    canvas.style.height = `${ch}px`;
+    scale = uiScale * dpr;
+  };
+  resize();
+  window.addEventListener('resize', resize);
 
   // Initialize Game Engine
   const engine = new GameEngine();
@@ -55,7 +75,8 @@ window.addEventListener('DOMContentLoaded', () => {
     engine.update(dt);
 
     // Render
-    engine.render(ctx!, 1920, 1080);
+    ctx!.setTransform(scale, 0, 0, scale, 0, 0);
+    engine.render(ctx!, viewW, viewH);
 
     requestAnimationFrame(gameLoop);
   }

@@ -41,7 +41,6 @@ export interface WeaponLevelConfig {
 export interface WeaponMeta {
   type: WeaponType;
   name: string;
-  icon: string;
   color: string;
   maxLevel: number;
   levels: WeaponLevelConfig[];
@@ -67,7 +66,6 @@ export interface UpgradeCard {
   statType?: StatBoostType;
   title: string;
   description: string;
-  icon: string;
   rarity: 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 }
 

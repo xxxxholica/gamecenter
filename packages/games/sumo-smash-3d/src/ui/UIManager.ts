@@ -1,5 +1,6 @@
 import { setText, setWidth, setHeight } from '../../../../shared/hudDom';
 import { buttonIconHtml } from '../../../../shared/arcadeGuide';
+import callFontUrl from '../assets/fonts/NotoSerifJP-Black-subset.woff2?url';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 export type GameMode = 'pve' | 'pvp';
 
@@ -10,12 +11,6 @@ const DAMAGE_LEVELS: ReadonlyArray<readonly [string, string]> = [
   ['#e08a3c', '0 0 4px #000, 2px 2px 4px #000'],
   ['#e0343a', '0 0 4px #000, 0 0 16px #b8272d, 2px 2px 4px #000'],
 ];
-
-/** ガードは LT / RT のどちらでも操作できる。左上の LT と右下の RT を斜線で区切って1つにまとめる */
-const GUARD_ICON_HTML = `${buttonIconHtml([])}`.replace(
-  '</span>',
-  '<span class="agc-btn skill-guard-loop"><span class="loop-lt">LT</span><span class="loop-rt">RT</span></span></span>'
-);
 
 /**
  * 技名を1文字ずつ縦に積む。writing-mode の縦書きはフォントによって字送りがずれるため使わず、
@@ -31,8 +26,6 @@ export class UIManager {
   private readonly lastWins: [number, number] = [-1, -1];
   private p1BuchiFillEl!: HTMLElement;
   private p2BuchiFillEl!: HTMLElement;
-  private p1ShikoFillEl!: HTMLElement;
-  private p2ShikoFillEl!: HTMLElement;
   // バトルHUD要素
   private battleHudEl!: HTMLElement;
   private p1PercentEl!: HTMLElement;
@@ -43,16 +36,16 @@ export class UIManager {
   private p2ChargeBar!: HTMLElement;
   private p1ArmorBadge!: HTMLElement;
   private p2ArmorBadge!: HTMLElement;
-  private p1GuardBadge!: HTMLElement;
-  private p2GuardBadge!: HTMLElement;
-  private p1StunBadge!: HTMLElement;
-  private p2StunBadge!: HTMLElement;
-  private p1GuardBar!: HTMLElement;
-  private p2GuardBar!: HTMLElement;
   private p1BuchiCdEl!: HTMLElement;
+  private p2GrabCdEl!: HTMLElement;
+  private p1GrabCdEl!: HTMLElement;
+  private p1GrabFillEl!: HTMLElement;
+  private p1HariteBox!: HTMLElement;
+  private p2HariteBox!: HTMLElement;
+  private p1HariteBar!: HTMLElement;
+  private p2HariteBar!: HTMLElement;
+  private p2GrabFillEl!: HTMLElement;
   private p2BuchiCdEl!: HTMLElement;
-  private p1ShikoCdEl!: HTMLElement;
-  private p2ShikoCdEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private bannerSubEl!: HTMLElement;
 
@@ -169,6 +162,10 @@ export class UIManager {
           white-space: nowrap;
         }
 
+        .guide-table td {
+          color: #eadfc9;
+        }
+
         .guide-table td:nth-child(1),
         .guide-table td:nth-child(2) {
           white-space: nowrap;
@@ -266,11 +263,14 @@ export class UIManager {
         }
 
         .result-title {
-          font-size: 28px;
+          font-family: 'SumoCall', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+          font-size: 36px;
           font-weight: 900;
           color: #ffffff;
-          letter-spacing: 2px;
-          text-shadow: 0 0 20px #ffd700, 2px 2px 4px #000;
+          letter-spacing: 0.12em;
+          -webkit-text-stroke: 2px #000;
+          paint-order: stroke fill;
+          text-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
           margin: 0 0 6px 0;
           white-space: normal;
           line-height: 1.25;
@@ -615,12 +615,9 @@ export class UIManager {
           right: 0;
           bottom: 0;
           height: 100%;
-          background: linear-gradient(0deg, rgba(43, 93, 138, 0.8), rgba(127, 176, 214, 0.8));
+          /* クールタイム中は、くすんだ黄色が下から溜まっていく。満ちると明るい金色(下の .ready)になる */
+          background: linear-gradient(0deg, rgba(150, 118, 40, 0.85), rgba(196, 160, 60, 0.85));
           transition: background 0.15s ease;
-        }
-
-        .skill-box.p2-side .skill-fill {
-          background: linear-gradient(0deg, rgba(184, 39, 45, 0.8), rgba(224, 138, 60, 0.8));
         }
 
         .skill-box.ready {
@@ -630,6 +627,30 @@ export class UIManager {
 
         .skill-box.ready .skill-fill {
           background: linear-gradient(0deg, rgba(176, 138, 52, 0.95), rgba(232, 193, 90, 0.95));
+        }
+
+        /* 張り手ゲージが満タン: 次の1発が強い。枠を脈打たせて知らせる */
+        .skill-box.gauge-full {
+          animation: hariteFullPulse 0.45s infinite alternate;
+        }
+
+        @keyframes hariteFullPulse {
+          0% { filter: brightness(1); }
+          100% { filter: brightness(1.35); }
+        }
+
+        /* つかみは打撃(黄色)と系統が違うので、青で見せる */
+        .skill-box.grab .skill-fill {
+          background: linear-gradient(0deg, rgba(34, 82, 128, 0.85), rgba(70, 126, 178, 0.85));
+        }
+
+        .skill-box.grab.ready {
+          border-color: #6fb6f0;
+          box-shadow: 0 0 10px rgba(90, 170, 240, 0.65), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
+        }
+
+        .skill-box.grab.ready .skill-fill {
+          background: linear-gradient(0deg, rgba(48, 118, 188, 0.95), rgba(112, 184, 244, 0.95));
         }
 
         /* ボタンアイコンと技名(白い明朝体の縦書き)をボックスの中に重ねる */
@@ -692,6 +713,20 @@ export class UIManager {
           text-shadow: 0 0 3px #000, 1px 1px 2px #000;
         }
 
+        /* ボタンの押し方(連打 / 長押し)。ボックスの下端に小さく */
+        .skill-hint {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 5px;
+          text-align: center;
+          font-size: 12px;
+          font-weight: bold;
+          color: #ffe9a8;
+          text-shadow: 0 0 3px #000, 1px 1px 2px #000;
+          letter-spacing: 0;
+        }
+
         .skill-char {
           display: block;
           width: 1em;
@@ -720,28 +755,15 @@ export class UIManager {
           100% { filter: brightness(1.4); }
         }
 
-        /* ぶちかましのタメ量(長押し中だけ伸びる細い縦線) */
-        .charge-gauge-container {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          right: 0;
-          width: 4px;
-          background: rgba(0, 0, 0, 0.5);
-        }
-
-        .p2-card .charge-gauge-container {
-          right: auto;
-          left: 0;
-        }
-
-        .charge-gauge-fill {
+        /* ぶちかましのタメ量: クールタイムの枠(黄)の上に、赤が下から満ちていく */
+        .charge-fill {
           position: absolute;
           left: 0;
           right: 0;
           bottom: 0;
           height: 0%;
-          background: linear-gradient(0deg, #e0b84a, #c1272d);
+          background: linear-gradient(0deg, rgba(168, 28, 36, 0.92), rgba(226, 60, 52, 0.92));
+          box-shadow: 0 0 10px rgba(226, 60, 52, 0.7);
           transition: height 0.05s linear;
         }
 
@@ -823,94 +845,110 @@ export class UIManager {
         }
 
         /* 中央の幕内タイトル & バナー */
+        /* 掛け声(見合って・はっけよい・勝負あり)は、太い明朝体の縦書き。基調は白 */
+        @font-face {
+          font-family: 'SumoCall';
+          src: url('${callFontUrl}') format('woff2');
+          font-weight: 900;
+          font-display: block;
+        }
+
         .center-announcement {
           position: absolute;
-          top: 36%;
+          top: 50%;
           left: 50%;
-          transform: translate(-50%, -50%) scale(0.85);
-          text-align: center;
+          transform: translate(-50%, calc(-50% - 22px));
+          display: flex;
+          /* 縦書きでは block 方向が右から左。column で、主文の左に副文の列が並ぶ */
+          flex-direction: column;
+          align-items: flex-end; /* 副文の列は、主文の下端に揃える */
+          gap: 0.5em;
+          writing-mode: vertical-rl;
+          text-orientation: upright;
+          font-family: 'SumoCall', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+          font-weight: 900;
           pointer-events: none;
           opacity: 0;
           white-space: nowrap;
-          width: max-content;
-          max-width: 85vw;
-          transition: opacity 0.16s ease-out, transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          transition: opacity 0.2s ease-out, transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1);
         }
 
         .center-announcement.show {
           opacity: 1;
-          transform: translate(-50%, -50%) scale(1.05);
+          transform: translate(-50%, -50%);
         }
 
         .banner-main {
-          font-size: 54px;
-          font-weight: 900;
-          letter-spacing: 6px;
-          color: #fffdf0;
-          text-shadow: 0 0 25px #ff2200, 0 0 55px #ff6600, 3px 3px 6px #000;
-          filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
-          white-space: nowrap;
+          font-size: clamp(44px, 9vh, 96px);
+          line-height: 1.1;
+          letter-spacing: 0.05em;
+          color: #ffffff;
+          -webkit-text-stroke: 3px #000;
+          paint-order: stroke fill;
+          text-shadow: 0 6px 22px rgba(0, 0, 0, 0.7);
         }
 
         .banner-sub {
-          font-size: 17px;
-          font-weight: 900;
-          color: #ffe066;
-          letter-spacing: 1.5px;
-          margin-top: 6px;
-          text-shadow: 0 0 12px rgba(255, 180, 0, 0.85), 2px 2px 4px #000;
-          white-space: nowrap;
+          font-size: clamp(18px, 3.4vh, 32px);
+          line-height: 1.2;
+          letter-spacing: 0.1em;
+          color: rgba(255, 255, 255, 0.85);
+          -webkit-text-stroke: 2px #000;
+          paint-order: stroke fill;
+          text-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+          padding-bottom: 0.4em;
+        }
+
+        /* 副文がないときは、その行ごと詰める */
+        .banner-sub:empty,
+        .result-sub:empty {
+          display: none;
         }
 
       </style>
 
-      <!-- ===== 相撲指南モーダル ===== -->
+      <!-- ===== 遊び方モーダル ===== -->
       <div id="how-to-play-modal">
         <div class="guide-modal-content">
-          <div class="guide-title">相 撲 指 南</div>
+          <div class="guide-title">遊 び 方</div>
           <table class="guide-table">
             <thead>
               <tr>
-                <th>操作・技名</th>
-                <th>アケコン / キー</th>
-                <th>効果・相撲システム</th>
+                <th>技</th>
+                <th>操作</th>
+                <th>説明</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>8方向移動</strong></td>
+                <td><strong>移動</strong></td>
                 <td><span class="guide-key-tag">レバー</span> / <span class="guide-key-tag">WASD</span></td>
-                <td>カメラ基準の直感移動。相手の間合いを詰める。</td>
-              </tr>
-              <tr>
-                <td><strong>すり足</strong></td>
-                <td><span class="guide-key-tag">レバー2回</span> / <span class="guide-key-tag">RB</span> / <span class="guide-key-tag">Shift</span></td>
-                <td>低姿勢で一気に踏み込む高速接近。</td>
+                <td>カメラの向きで8方向に動く。</td>
               </tr>
               <tr>
                 <td><strong>張り手</strong></td>
-                <td><span class="guide-key-tag">Aボタン</span> / <span class="guide-key-tag">J</span></td>
-                <td>発生最速の突っ張り連打。ノックバック倍率を細かく加算。</td>
+                <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">J</span> を<strong>ちょん押し</strong></td>
+                <td>連打できる小さな突き。タメている相手を止める。当て続けると、次の1発が強い。</td>
               </tr>
               <tr>
                 <td><strong>ぶちかまし</strong></td>
-                <td><span class="guide-key-tag">Bボタン</span> / <span class="guide-key-tag">K</span></td>
-                <td>長押しタメで威力・距離UP。大吹き飛ばし・CT 2.8秒。</td>
-              </tr>
-              <tr>
-                <td><strong>四股</strong></td>
-                <td><span class="guide-key-tag">Xボタン</span> / <span class="guide-key-tag">L</span></td>
-                <td>一瞬の<strong>剛体アーマー</strong>＋相手に痛打を与え<strong>真上天高く打ち上げる</strong>衝撃波・CT 4.2秒。</td>
+                <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">J</span> を<strong>長押し</strong></td>
+                <td>タメて、離すと突進。長いほど遠くへ飛ぶ。つかみを弾く。</td>
               </tr>
               <tr>
                 <td><strong>つかみ</strong></td>
-                <td><span class="guide-key-tag">Yボタン / LB</span> / <span class="guide-key-tag">E / U</span></td>
-                <td>相手をがっぷり四つに掴む。<strong>防御貫通＋確定2秒拘束！</strong>レバーで<strong>寄り切り</strong>、追加入力で<strong>上手投げ</strong>へ派生。</td>
+                <td><span class="guide-key-tag">B / Yボタン</span> / <span class="guide-key-tag">K</span></td>
+                <td>近くの相手を投げる。張り手では止まらない。外すと隙が大きい。</td>
               </tr>
               <tr>
-                <td><strong>鉄壁防御</strong></td>
-                <td><span class="guide-key-tag">RT / LT / A+B</span> / <span class="guide-key-tag">Space</span></td>
-                <td>相手の攻撃を受け止める。<strong>使いすぎ・耐久0で気絶！</strong></td>
+                <td><strong>勝負</strong></td>
+                <td>-</td>
+                <td>当たるほど吹き飛びやすい。土俵の外に出たら負け。二本先取。</td>
+              </tr>
+              <tr>
+                <td><strong>反撃</strong></td>
+                <td>ボタン連打</td>
+                <td>連続で殴られたら、連打で押し返せる。</td>
               </tr>
             </tbody>
           </table>
@@ -921,18 +959,17 @@ export class UIManager {
       <!-- ===== 試合決着リザルト画面 ===== -->
       <div id="match-result-modal">
         <div class="result-modal-content">
-          <div class="result-badge">◆ 二本先取・本割決着 ◆</div>
-          <h2 class="result-title" id="result-winner-title">東方 蒼天龍 全勝優勝！！</h2>
-          <div class="result-sub" id="result-sub-text">幕内最高優勝・賜杯授与</div>
+          <h2 class="result-title" id="result-winner-title">蒼天龍　優勝</h2>
+          <div class="result-sub" id="result-sub-text"></div>
           
           <div class="result-score-box">
             <div class="result-player-score">
-              <div class="result-fighter-name p1-color">東方 蒼天龍</div>
+              <div class="result-fighter-name p1-color">蒼天龍</div>
               <div class="result-stars" id="result-p1-stars">★★</div>
             </div>
             <div class="result-vs">VS</div>
             <div class="result-player-score">
-              <div class="result-fighter-name p2-color" id="result-p2-name">西方 紅炎山</div>
+              <div class="result-fighter-name p2-color" id="result-p2-name">紅炎山</div>
               <div class="result-stars" id="result-p2-stars">☆</div>
             </div>
           </div>
@@ -965,25 +1002,26 @@ export class UIManager {
 
             <!-- 技: 回復に合わせて枠が満ちる -->
             <div class="skill-stack">
+              <div class="skill-box ready" id="p1-harite-box">
+                <div class="skill-fill"></div>
+                <div class="charge-fill" id="p1-harite-bar"></div>
+                <div class="skill-label">${buttonIconHtml([0])}${verticalText('張り手')}</div>
+                <div class="skill-hint">連打</div>
+              </div>
               <div class="skill-box ready" id="p1-buchi-cd">
                 <div class="skill-fill" id="p1-buchi-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1])}${verticalText('ぶちかまし')}</div>
-                <div class="charge-gauge-container"><div class="charge-gauge-fill" id="p1-charge-bar"></div></div>
+                <div class="charge-fill" id="p1-charge-bar"></div>
+                <div class="skill-label">${buttonIconHtml([0])}${verticalText('ぶちかまし')}</div>
+                <div class="skill-hint">長押し</div>
               </div>
-              <div class="skill-box ready" id="p1-shiko-cd">
-                <div class="skill-fill" id="p1-shiko-fill"></div>
-                <div class="skill-label">${buttonIconHtml([2])}${verticalText('四股')}</div>
-              </div>
-              <div class="skill-box" id="p1-guard-box">
-                <div class="skill-fill guard-fill" id="p1-guard-bar"></div>
-                <div class="skill-label">${GUARD_ICON_HTML}${verticalText('防御')}</div>
+              <div class="skill-box grab ready" id="p1-grab-cd">
+                <div class="skill-fill" id="p1-grab-fill"></div>
+                <div class="skill-label">${buttonIconHtml([1])}${verticalText('つかみ')}</div>
               </div>
             </div>
 
             <div class="badge-status-wrap">
-              <span class="armor-badge" id="p1-armor-badge">剛体アーマー</span>
-              <span class="guard-badge" id="p1-guard-badge">鉄壁防御</span>
-              <span class="stun-badge" id="p1-stun-badge">体勢崩壊</span>
+              <span class="armor-badge" id="p1-armor-badge">突進中</span>
             </div>
           </div>
 
@@ -1012,33 +1050,34 @@ export class UIManager {
 
             <!-- 技: 回復に合わせて枠が満ちる -->
             <div class="skill-stack">
+              <div class="skill-box p2-side ready" id="p2-harite-box">
+                <div class="skill-fill"></div>
+                <div class="charge-fill" id="p2-harite-bar"></div>
+                <div class="skill-label">${buttonIconHtml([0])}${verticalText('張り手')}</div>
+                <div class="skill-hint">連打</div>
+              </div>
               <div class="skill-box p2-side ready" id="p2-buchi-cd">
                 <div class="skill-fill" id="p2-buchi-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1])}${verticalText('ぶちかまし')}</div>
-                <div class="charge-gauge-container"><div class="charge-gauge-fill" id="p2-charge-bar"></div></div>
+                <div class="charge-fill" id="p2-charge-bar"></div>
+                <div class="skill-label">${buttonIconHtml([0])}${verticalText('ぶちかまし')}</div>
+                <div class="skill-hint">長押し</div>
               </div>
-              <div class="skill-box p2-side ready" id="p2-shiko-cd">
-                <div class="skill-fill" id="p2-shiko-fill"></div>
-                <div class="skill-label">${buttonIconHtml([2])}${verticalText('四股')}</div>
-              </div>
-              <div class="skill-box p2-side" id="p2-guard-box">
-                <div class="skill-fill guard-fill" id="p2-guard-bar"></div>
-                <div class="skill-label">${GUARD_ICON_HTML}${verticalText('防御')}</div>
+              <div class="skill-box p2-side grab ready" id="p2-grab-cd">
+                <div class="skill-fill" id="p2-grab-fill"></div>
+                <div class="skill-label">${buttonIconHtml([1])}${verticalText('つかみ')}</div>
               </div>
             </div>
 
             <div class="badge-status-wrap">
-              <span class="stun-badge" id="p2-stun-badge">体勢崩壊</span>
-              <span class="guard-badge" id="p2-guard-badge">鉄壁防御</span>
-              <span class="armor-badge" id="p2-armor-badge">剛体アーマー</span>
+              <span class="armor-badge" id="p2-armor-badge">突進中</span>
             </div>
           </div>
         </div>
 
         <!-- 中央コール（はっけよい、のこった、勝負あり） -->
         <div class="center-announcement" id="center-announcement">
-          <div class="banner-main" id="banner-main">はっけよい！</div>
-          <div class="banner-sub" id="banner-sub">のこった！のこった！</div>
+          <div class="banner-main" id="banner-main">はっけよい</div>
+          <div class="banner-sub" id="banner-sub"></div>
         </div>
 
       </div>
@@ -1059,20 +1098,18 @@ export class UIManager {
     this.p2ChargeBar = document.getElementById('p2-charge-bar')!;
     this.p1ArmorBadge = document.getElementById('p1-armor-badge')!;
     this.p2ArmorBadge = document.getElementById('p2-armor-badge')!;
-    this.p1GuardBadge = document.getElementById('p1-guard-badge')!;
-    this.p2GuardBadge = document.getElementById('p2-guard-badge')!;
-    this.p1StunBadge = document.getElementById('p1-stun-badge')!;
-    this.p2StunBadge = document.getElementById('p2-stun-badge')!;
-    this.p1GuardBar = document.getElementById('p1-guard-bar')!;
-    this.p2GuardBar = document.getElementById('p2-guard-bar')!;
+    this.p1HariteBox = document.getElementById('p1-harite-box')!;
+    this.p2HariteBox = document.getElementById('p2-harite-box')!;
+    this.p1HariteBar = document.getElementById('p1-harite-bar')!;
+    this.p2HariteBar = document.getElementById('p2-harite-bar')!;
+    this.p1GrabCdEl = document.getElementById('p1-grab-cd')!;
+    this.p2GrabCdEl = document.getElementById('p2-grab-cd')!;
+    this.p1GrabFillEl = document.getElementById('p1-grab-fill')!;
+    this.p2GrabFillEl = document.getElementById('p2-grab-fill')!;
     this.p1BuchiCdEl = document.getElementById('p1-buchi-cd')!;
     this.p2BuchiCdEl = document.getElementById('p2-buchi-cd')!;
-    this.p1ShikoCdEl = document.getElementById('p1-shiko-cd')!;
-    this.p2ShikoCdEl = document.getElementById('p2-shiko-cd')!;
     this.p1BuchiFillEl = document.getElementById('p1-buchi-fill')!;
     this.p2BuchiFillEl = document.getElementById('p2-buchi-fill')!;
-    this.p1ShikoFillEl = document.getElementById('p1-shiko-fill')!;
-    this.p2ShikoFillEl = document.getElementById('p2-shiko-fill')!;
     this.bannerEl = document.getElementById('center-announcement')!;
     this.bannerSubEl = document.getElementById('banner-sub')!;
 
@@ -1130,8 +1167,8 @@ export class UIManager {
   }
 
   public showVictoryModal(winnerName: string, p1Wins: number, p2Wins: number, p2Name: string) {
-    this.resultWinnerTitleEl.textContent = `${winnerName} 優勝！！`;
-    this.resultSubTextEl.textContent = '幕内最高優勝・賜杯授与';
+    this.resultWinnerTitleEl.textContent = `${winnerName}　優勝`;
+    this.resultSubTextEl.textContent = '';
     this.resultP1StarsEl.innerHTML = this.renderStars(p1Wins);
     this.resultP2StarsEl.innerHTML = this.renderStars(p2Wins);
     this.resultP2NameEl.textContent = p2Name;
@@ -1199,16 +1236,12 @@ export class UIManager {
     p2Charge: number,
     p1SuperArmor: boolean,
     p2SuperArmor: boolean,
-    p1Guard: boolean,
-    p2Guard: boolean,
-    p1Stunned: boolean,
-    p2Stunned: boolean,
-    p1GuardGauge: number,
-    p2GuardGauge: number,
     p1BuchiCdRatio: number,
     p2BuchiCdRatio: number,
-    p1ShikoCdRatio: number,
-    p2ShikoCdRatio: number,
+    p1GrabCdRatio: number,
+    p2GrabCdRatio: number,
+    p1HariteGauge: number,
+    p2HariteGauge: number,
   ) {
     // 吹き飛び蓄積率（パーセント数値 ＆ ゲージ ＆ ダイナミックグロー）
     this.updateDamageStyle(this.p1PercentEl, p1Percent);
@@ -1228,23 +1261,23 @@ export class UIManager {
     setHeight(this.p1ChargeBar, `${Math.min(100, p1Charge * 100)}%`);
     setHeight(this.p2ChargeBar, `${Math.min(100, p2Charge * 100)}%`);
 
-    // ガード耐久ゲージ
-    this.updateGuardGauge(this.p1GuardBar, p1GuardGauge);
-    this.updateGuardGauge(this.p2GuardBar, p2GuardGauge);
-
-    // スーパーアーマー / ガード中 / スタン（体勢崩壊）表示
+    // ぶちかまし突進中の表示
     this.p1ArmorBadge.classList.toggle('active', p1SuperArmor);
     this.p2ArmorBadge.classList.toggle('active', p2SuperArmor);
-    this.p1GuardBadge.classList.toggle('active', p1Guard);
-    this.p2GuardBadge.classList.toggle('active', p2Guard);
-    this.p1StunBadge.classList.toggle('active', p1Stunned);
-    this.p2StunBadge.classList.toggle('active', p2Stunned);
 
-    // ぶちかまし / 四股クールタイム表示
+    // ぶちかましのクールタイム表示
     this.updateSkillBox(this.p1BuchiCdEl, this.p1BuchiFillEl, p1BuchiCdRatio);
     this.updateSkillBox(this.p2BuchiCdEl, this.p2BuchiFillEl, p2BuchiCdRatio);
-    this.updateSkillBox(this.p1ShikoCdEl, this.p1ShikoFillEl, p1ShikoCdRatio);
-    this.updateSkillBox(this.p2ShikoCdEl, this.p2ShikoFillEl, p2ShikoCdRatio);
+
+    // 張り手ゲージ(当て続けると赤が溜まる。満タンの間は枠が脈打つ)
+    setHeight(this.p1HariteBar, `${Math.min(100, p1HariteGauge * 100)}%`);
+    setHeight(this.p2HariteBar, `${Math.min(100, p2HariteGauge * 100)}%`);
+    this.p1HariteBox.classList.toggle('gauge-full', p1HariteGauge >= 1);
+    this.p2HariteBox.classList.toggle('gauge-full', p2HariteGauge >= 1);
+
+    // つかみのクールタイム表示
+    this.updateSkillBox(this.p1GrabCdEl, this.p1GrabFillEl, p1GrabCdRatio);
+    this.updateSkillBox(this.p2GrabCdEl, this.p2GrabFillEl, p2GrabCdRatio);
 
     // コントローラー接続インジケーター
   }
@@ -1266,16 +1299,10 @@ export class UIManager {
     box.classList.toggle('danger', level === 3);
   }
 
-  private updateGuardGauge(bar: HTMLElement, gauge: number) {
-    const g = Math.max(0, Math.min(100, gauge));
-    setHeight(bar, `${g}%`);
-    bar.classList.toggle('warning', g < 30);
-  }
-
   private updateSkillBox(boxEl: HTMLElement, fillEl: HTMLElement, remainingRatio: number) {
     const ready = remainingRatio <= 0.02;
-    const cls = `skill-box${boxEl.classList.contains('p2-side') ? ' p2-side' : ''} ${ready ? 'ready' : 'cooling'}`;
-    if (boxEl.className !== cls) boxEl.className = cls;
+    boxEl.classList.toggle('ready', ready);
+    boxEl.classList.toggle('cooling', !ready);
     setHeight(fillEl, `${Math.round((1 - Math.min(1, Math.max(0, remainingRatio))) * 100)}%`);
   }
 

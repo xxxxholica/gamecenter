@@ -8,19 +8,62 @@ import { ParticleManager } from '../effects/ParticleManager';
 export type FighterActionState =
   | 'idle'
   | 'walk'
-  | 'dash'
-  | 'guard'
+  | 'strike_hold'
   | 'harite'
   | 'buchikamashi_charge'
   | 'buchikamashi_rush'
-  | 'shiko'
   | 'grab_attempt'
   | 'grab_holding'
   | 'throw'
   | 'grabbed'
-  | 'stun'
   | 'hit'
   | 'fall';
+
+export interface FighterMoveInput {
+  x: number;
+  z: number;
+  isMoving: boolean;
+}
+
+/** 操作は「打撃」と「つかみ」の2ボタンだけ。打撃はちょん押しで張り手、長押しでぶちかまし。 */
+export interface FighterActions {
+  strikePressed: boolean; // 打撃ボタンを押した瞬間
+  strike: boolean; // 打撃ボタンを押している間
+  strikeReleased: boolean; // 打撃ボタンを離した瞬間
+  grabPressed: boolean; // つかみボタンを押した瞬間
+}
+
+/**
+ * 通常の歩行速度(m/s)。
+ * 以前は摩擦のせいで、設定値 13.5 に対して実際には約 1 m/s しか進めなかった。その3倍にあたる 3.1 m/s。
+ */
+export const WALK_SPEED = 3.1;
+
+/** これより短い押下は張り手、これ以上押し続けるとぶちかましのタメに入る(秒) */
+const TAP_MAX_SEC = 0.16;
+/** タメ中の移動速度(歩行に対する割合) */
+const CHARGE_MOVE_RATIO = 0.4;
+
+/** 連続で攻撃されている間(ハメ)にボタンを連打すると反撃して抜けられる */
+const COUNTER_PER_PRESS = 34; // 3回押すと反撃
+const COUNTER_DECAY_PER_SEC = 120; // 押さないと、溜まった分が減っていく
+const COUNTER_INVULN_SEC = 0.6; // 反撃のあと、しばらくは連続技を受けない
+const COUNTER_IMPULSE = 650; // 相手を押し返す強さ
+/** 張り手を当て続けると溜まるゲージ。満タンで次の1発が強い張り手になる */
+const HARITE_GAUGE_PER_HIT = 25; // 4発で満タン
+const HARITE_GAUGE_IDLE_SEC = 0.5; // この間当てないと、ゲージが減り始める
+const HARITE_GAUGE_DECAY_PER_SEC = 50;
+
+/** つかみを出したとき、この距離までの相手には自動で向き直る(m) */
+const GRAB_AIM_ASSIST_RANGE = 3.6;
+
+/** 吹き飛ばされている間(被弾・投げ)に、地面で毎フレーム速度に掛ける減衰 */
+const GROUND_DRAG = 0.95;
+
+/** 吹き飛ばしの強さ(基本インパルスへの倍率)。摩擦をなくしたので、攻撃ごとに飛距離で決める。 */
+const KB_HARITE = 1.4;
+const KB_RUSH = 0.75;
+const KB_THROW = 1.1;
 
 export class SumoFighter {
   public id: string;
@@ -29,67 +72,58 @@ export class SumoFighter {
   public body: CANNON.Body;
   public mesh: THREE.Group;
 
-  // 相撲システム（蓄積ダメージ・吹き飛び倍率）
+  // 戦闘ステータス
   public damagePercent: number = 0; // 0%〜
-  public hasSuperArmor: boolean = false; // 四股中の吹き飛び無効
-  public isGuarding: boolean = false; // ガード中
+  public hasSuperArmor: boolean = false; // ぶちかまし突進中は吹き飛ばない
   public wins: number = 0;
 
-  // ガード耐久値システム（使いすぎでスタン）
-  public guardGauge: number = 100; // 0〜100
-  public readonly maxGuardGauge: number = 100;
-  public guardCooldown: number = 0; // ガード解除後の再使用制限クールタイム
-  public readonly guardIntervalTime: number = 0.9; // ガード解除後0.9秒は再ガード不可
-  public isStunned: boolean = false; // スタン中
-  public stunTimer: number = 0; // スタン残り時間
-  public readonly maxStunTime: number = 2.2; // スタン持続2.2秒
-
-  // クールタイム（秒）
+  // ぶちかまし
   public buchikamashiCooldown: number = 0;
-  public readonly buchikamashiMaxCooldown: number = 2.8;
+  public readonly buchikamashiMaxCooldown: number = 1.4;
 
-  public shikoCooldown: number = 0;
-  public readonly shikoMaxCooldown: number = 4.2;
-
-  // つかみ（組み手・投げ）システム
+  // つかみ
   public grabCooldown: number = 0;
-  public readonly grabMaxCooldown: number = 0.7; // つかみクールタイム
+  public readonly grabMaxCooldown: number = 0.9;
   public grabbedOpponent: SumoFighter | null = null; // 掴んでいる相手
   public grabber: SumoFighter | null = null; // 自分を掴んでいる相手
-  public grabHoldTimer: number = 0; // 掴み持続時間
-  public grabEscapeMeter: number = 0; // 掴まれ脱出ゲージ（0〜100）
-  public readonly maxGrabHoldTime: number = 2.6; // 最大掴み持続時間（2.6秒、確定2.0秒拘束）
-  public grabAttackCooldown: number = 0; // 掴み中の一方的打撃連打クールタイム
-  public grabPunchCount: number = 0; // 掴み中の打撃ヒット数
+  public grabHoldTimer: number = 0;
+  public grabEscapeMeter: number = 0; // 掴まれている間、ボタンを押すたびに溜まる(100で脱出)
+  public readonly grabHoldTime: number = 0.15; // 掴んでから投げるまで(掴んだらすぐ投げる)
 
-  // アクション状態
+  // 張り手ゲージ(当て続けると溜まる。満タンで次の張り手が強くなる)
+  public hariteGauge: number = 0; // 0〜100
+  private hariteIdle: number = 0;
+  private hariteStrong: boolean = false;
+
+  // 反撃(ハメ抜け)
+  public lastAttacker: SumoFighter | null = null;
+  private counterMeter: number = 0;
+  private invulnTimer: number = 0;
+
+  // 状態
   public state: FighterActionState = 'idle';
   public stateTimer: number = 0;
   public chargeTimer: number = 0;
-  public maxChargeTime: number = 0.65; // チャージ時間短縮でテンポUP
+  public maxChargeTime: number = 0.55;
 
-  // 移動パラメータ
-  private walkSpeed: number = 13.5; // 通常歩行速度 (13.5)
-  private dashSpeed: number = 24.0; // すり足ダッシュ速度 (24.0: 圧倒的な疾走感)
-  private dashDustTimer: number = 0;
+  // 向き
   private facingAngle: number = 0; // ラジアン（Y軸回転）
   private targetFacingAngle: number = 0;
-  private buchikamashiDir: THREE.Vector3 = new THREE.Vector3(1, 0, 0); // ぶちかまし突進方向ベクトル
+  private buchikamashiDir: THREE.Vector3 = new THREE.Vector3(1, 0, 0);
 
-  // 攻撃ヒットボックス用情報
+  // 攻撃判定
   public isAttackActive: boolean = false;
-  public currentAttackType: 'harite' | 'buchikamashi' | 'shiko' | 'grab' | null = null;
+  public currentAttackType: 'harite' | 'harite_strong' | 'buchikamashi' | 'grab' | null = null;
   public attackHitRegistered: boolean = false;
-  public shikoStompDone: boolean = false; // 四股の着地足踏み発生フラグ（ヒット登録フラグと分離）
-  public hariteArm: 'left' | 'right' = 'right'; // 左右交互突っ張りフラグ
+  public hariteArm: 'left' | 'right' = 'right'; // 左右交互
 
-  // 参照
+  // 外部依存
   private soundManager: SoundManager;
   private particleManager: ParticleManager;
   public initialPosition: THREE.Vector3;
   public initialAngle: number;
 
-  // 頭上マーカー（1P / 2P / CPU インジケーター）
+  // 頭上マーカー（1P / 2P / CPU 表記）
   public overheadMarker!: THREE.Sprite;
   private markerBaseY: number = 2.45;
   private markerAnimTimer: number = 0;
@@ -149,17 +183,20 @@ export class SumoFighter {
     this.stateTimer = 0;
     this.chargeTimer = 0;
     this.hasSuperArmor = false;
-    this.isGuarding = false;
-    this.guardGauge = this.maxGuardGauge;
-    this.guardCooldown = 0;
-    this.isStunned = false;
-    this.stunTimer = 0;
     this.buchikamashiCooldown = 0;
-    this.shikoCooldown = 0;
+    this.grabCooldown = 0;
+    this.grabbedOpponent = null;
+    this.grabber = null;
+    this.lastAttacker = null;
+    this.counterMeter = 0;
+    this.invulnTimer = 0;
+    this.hariteGauge = 0;
+    this.hariteIdle = 0;
+    this.hariteStrong = false;
+    this.body.collisionResponse = true;
     this.isAttackActive = false;
     this.currentAttackType = null;
     this.attackHitRegistered = false;
-    this.shikoStompDone = false;
 
     this.syncMeshWithPhysics();
   }
@@ -169,15 +206,8 @@ export class SumoFighter {
    */
   public update(
     dt: number,
-    moveInput: { x: number; z: number; isMoving: boolean; dash: boolean },
-    actionInputs: {
-      harite: boolean;
-      buchikamashiCharge: boolean;
-      buchikamashiRelease: boolean;
-      shiko: boolean;
-      grab: boolean;
-      guard: boolean;
-    },
+    moveInput: FighterMoveInput,
+    actions: FighterActions,
     opponentPos: THREE.Vector3
   ) {
     this.stateTimer += dt;
@@ -186,19 +216,17 @@ export class SumoFighter {
     if (this.buchikamashiCooldown > 0) {
       this.buchikamashiCooldown = Math.max(0, this.buchikamashiCooldown - dt);
     }
-    if (this.shikoCooldown > 0) {
-      this.shikoCooldown = Math.max(0, this.shikoCooldown - dt);
-    }
     if (this.grabCooldown > 0) {
       this.grabCooldown = Math.max(0, this.grabCooldown - dt);
     }
-    if (this.guardCooldown > 0) {
-      this.guardCooldown = Math.max(0, this.guardCooldown - dt);
+    if (this.invulnTimer > 0) {
+      this.invulnTimer = Math.max(0, this.invulnTimer - dt);
     }
 
-    // ガードゲージの自動回復（ガード中・スタン中でない時）
-    if (this.state !== 'guard' && this.state !== 'stun') {
-      this.guardGauge = Math.min(this.maxGuardGauge, this.guardGauge + dt * 22.0);
+    // 張り手を当てない時間が続くと、ゲージが減っていく
+    this.hariteIdle += dt;
+    if (this.hariteGauge > 0 && this.hariteIdle > HARITE_GAUGE_IDLE_SEC) {
+      this.hariteGauge = Math.max(0, this.hariteGauge - HARITE_GAUGE_DECAY_PER_SEC * dt);
     }
 
     // 落下チェック
@@ -216,16 +244,11 @@ export class SumoFighter {
     switch (this.state) {
       case 'idle':
       case 'walk':
-      case 'dash':
-        this.handleMovementAndTransitions(dt, moveInput, actionInputs, opponentPos);
+        this.handleMovementAndTransitions(dt, moveInput, actions, opponentPos);
         break;
 
-      case 'guard':
-        this.handleGuard(dt, moveInput, actionInputs.guard, opponentPos);
-        break;
-
-      case 'stun':
-        this.handleStun(dt);
+      case 'strike_hold':
+        this.handleStrikeHold(dt, moveInput, actions, opponentPos);
         break;
 
       case 'harite':
@@ -233,21 +256,11 @@ export class SumoFighter {
         break;
 
       case 'buchikamashi_charge':
-        this.handleBuchikamashiCharge(
-          dt,
-          actionInputs.buchikamashiCharge,
-          actionInputs.buchikamashiRelease,
-          moveInput,
-          opponentPos
-        );
+        this.handleBuchikamashiCharge(dt, actions, moveInput);
         break;
 
       case 'buchikamashi_rush':
         this.handleBuchikamashiRush(dt);
-        break;
-
-      case 'shiko':
-        this.handleShiko(dt);
         break;
 
       case 'grab_attempt':
@@ -255,7 +268,7 @@ export class SumoFighter {
         break;
 
       case 'grab_holding':
-        this.handleGrabHolding(dt, moveInput, actionInputs, opponentPos);
+        this.handleGrabHolding(dt, moveInput);
         break;
 
       case 'throw':
@@ -263,12 +276,18 @@ export class SumoFighter {
         break;
 
       case 'grabbed':
-        this.handleGrabbed(dt, moveInput, actionInputs);
+        this.handleGrabbed(dt, actions);
         break;
 
       case 'hit':
-        this.handleHitStun(dt);
+        this.handleHitStun(dt, actions);
         break;
+    }
+
+    // 吹き飛ばされている間は、地面で自然に減速する(土俵の摩擦はなくしてある)
+    if ((this.state === 'hit' || this.state === 'throw') && this.isGrounded()) {
+      this.body.velocity.x *= GROUND_DRAG;
+      this.body.velocity.z *= GROUND_DRAG;
     }
 
     // 向きのスムーズな回転
@@ -284,188 +303,174 @@ export class SumoFighter {
     this.updateMarkerAnimation(dt);
   }
 
+  /** HUD用: タメている間だけ 0〜1。突進に入ったあとは 0(chargeTimer は突進の距離計算に残る) */
+  public get chargeRatio(): number {
+    return this.state === 'buchikamashi_charge' ? Math.min(1, this.chargeTimer / this.maxChargeTime) : 0;
+  }
+
+  private isGrounded(): boolean {
+    return this.body.position.y <= 1.15;
+  }
+
+  /** 移動入力に合わせて歩く。ratio は歩行速度に対する割合 */
+  private walk(moveInput: FighterMoveInput, ratio: number = 1) {
+    this.body.velocity.x = moveInput.x * WALK_SPEED * ratio;
+    this.body.velocity.z = moveInput.z * WALK_SPEED * ratio;
+    this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
+  }
+
+  /** 止まるときは、すり足でピタッと踏ん張る */
+  private brake(factor: number = 0.45) {
+    this.body.velocity.x *= factor;
+    this.body.velocity.z *= factor;
+  }
+
   /**
-   * 通常移動、すり足ダッシュおよび攻撃遷移
+   * 通常移動と、打撃・つかみへの遷移
    */
   private handleMovementAndTransitions(
     dt: number,
-    moveInput: { x: number; z: number; isMoving: boolean; dash: boolean },
-    actions: { harite: boolean; buchikamashiCharge: boolean; buchikamashiRelease: boolean; shiko: boolean; grab: boolean; guard: boolean },
+    moveInput: FighterMoveInput,
+    actions: FighterActions,
     opponentPos: THREE.Vector3
   ) {
-    // 接地チェック（土俵平面 Y=0、通常立ち姿勢の剛体中心 Y~0.9m）
-    const isGrounded = this.body.position.y <= 1.15;
+    const grounded = this.isGrounded();
 
-    // ガードへの遷移（地上限定、クールタイム中でなく、ゲージ十分）
-    if (actions.guard && isGrounded && this.guardCooldown <= 0 && this.guardGauge >= 15) {
-      this.startGuard();
+    // つかみ
+    if (actions.grabPressed && grounded && this.grabCooldown <= 0) {
+      this.startGrabAttempt(opponentPos);
       return;
     }
 
-    // つかみへの遷移（地上限定、ガードを崩す特効技！ダッシュ中も即発動可能）
-    if (actions.grab && isGrounded && this.grabCooldown <= 0) {
-      this.startGrabAttempt();
-      return;
-    }
-
-    // 攻撃への遷移優先度: 四股（地上限定） > 張り手 > ぶちかましチャージ（ダッシュ中も即座にキャンセル可能！）
-    if (actions.shiko && isGrounded && this.shikoCooldown <= 0) {
-      this.startShiko();
-      return;
-    }
-    if (actions.harite) {
-      this.startHarite();
-      return;
-    }
-    if (actions.buchikamashiCharge && this.buchikamashiCooldown <= 0) {
-      this.startBuchikamashiCharge(moveInput, opponentPos);
-      return;
-    }
-
-    // 移動制御（すり足ダッシュ / 通常歩行 / 停止）
-    if (moveInput.isMoving) {
-      if (isGrounded) {
-        if (moveInput.dash) {
-          // --- すり足ダッシュ（電光石火の高速疾走・Shiftホールド対応） ---
-          const wasNotDashing = this.state !== 'dash';
-          this.state = 'dash';
-
-          // 初速バースト（ダッシュ開始時にギュンッと鋭く踏み込む）
-          const currentSpeed = wasNotDashing ? this.dashSpeed * 1.12 : this.dashSpeed;
-          this.body.velocity.x = moveInput.x * currentSpeed;
-          this.body.velocity.z = moveInput.z * currentSpeed;
-          this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
-
-          if (wasNotDashing) {
-            this.soundManager.playSuriasi();
-            this.particleManager.spawnDust(
-              new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
-              new THREE.Vector3(moveInput.x, 0, moveInput.z)
-            );
-          }
-
-          // 疾走中の土煙トレイル（高速すり足の砂煙を継続発生）
-          this.dashDustTimer += dt;
-          if (this.dashDustTimer >= 0.075) {
-            this.dashDustTimer = 0;
-            this.particleManager.spawnDust(
-              new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
-              new THREE.Vector3(-moveInput.x * 0.8, 0, -moveInput.z * 0.8)
-            );
-          }
-        } else {
-          // --- 通常歩行 ---
-          this.state = 'walk';
-          const speed = this.walkSpeed;
-          this.body.velocity.x = moveInput.x * speed;
-          this.body.velocity.z = moveInput.z * speed;
-          this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
-        }
+    // 打撃: 押した瞬間に離していれば張り手、そのまま押していれば様子を見る
+    if (actions.strikePressed && grounded) {
+      if (actions.strikeReleased) {
+        this.startHarite();
       } else {
-        // 空中制御: 打ち上げの慣性を維持しつつ、わずかな空中レバー操作で位置調整
-        this.body.velocity.x += moveInput.x * this.walkSpeed * 0.05;
-        this.body.velocity.z += moveInput.z * this.walkSpeed * 0.05;
+        this.state = 'strike_hold';
+        this.stateTimer = 0;
       }
-    } else {
-      if (isGrounded) {
-        if (moveInput.dash) {
-          // レバーニュートラルでもShiftを押した場合は現在向いている正面方向へ高速すり足突進！
-          const wasNotDashing = this.state !== 'dash';
-          this.state = 'dash';
+      return;
+    }
 
-          const dirX = Math.sin(this.facingAngle);
-          const dirZ = Math.cos(this.facingAngle);
-          const currentSpeed = wasNotDashing ? this.dashSpeed * 1.12 : this.dashSpeed;
-          this.body.velocity.x = dirX * currentSpeed;
-          this.body.velocity.z = dirZ * currentSpeed;
+    if (moveInput.isMoving) {
+      if (grounded) {
+        this.state = 'walk';
+        this.walk(moveInput);
+      } else {
+        // 空中制御: 打ち上げの慣性を維持しつつ、わずかなレバー操作で位置調整
+        this.body.velocity.x += moveInput.x * WALK_SPEED * 0.02;
+        this.body.velocity.z += moveInput.z * WALK_SPEED * 0.02;
+      }
+    } else if (grounded) {
+      this.state = 'idle';
+      // 吹き飛びの勢いが残っているときは、急に止めず自然に減速させる
+      if (Math.hypot(this.body.velocity.x, this.body.velocity.z) > 4) {
+        this.body.velocity.x *= GROUND_DRAG;
+        this.body.velocity.z *= GROUND_DRAG;
+      } else {
+        this.brake();
+      }
 
-          if (wasNotDashing) {
-            this.soundManager.playSuriasi();
-            this.particleManager.spawnDust(
-              new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
-              new THREE.Vector3(dirX, 0, dirZ)
-            );
-          }
-
-          this.dashDustTimer += dt;
-          if (this.dashDustTimer >= 0.075) {
-            this.dashDustTimer = 0;
-            this.particleManager.spawnDust(
-              new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
-              new THREE.Vector3(-dirX * 0.8, 0, -dirZ * 0.8)
-            );
-          }
-        } else {
-          // 完全静止（すり足制動でピタッと踏ん張る）
-          this.state = 'idle';
-          this.body.velocity.x *= 0.72;
-          this.body.velocity.z *= 0.72;
-
-          // 静止時は相手の方向を向く
-          const dx = opponentPos.x - this.body.position.x;
-          const dz = opponentPos.z - this.body.position.z;
-          if (Math.hypot(dx, dz) > 0.1) {
-            this.targetFacingAngle = Math.atan2(dx, dz);
-          }
-        }
+      // 静止時は相手の方向を向く
+      const dx = opponentPos.x - this.body.position.x;
+      const dz = opponentPos.z - this.body.position.z;
+      if (Math.hypot(dx, dz) > 0.1) {
+        this.targetFacingAngle = Math.atan2(dx, dz);
       }
     }
   }
 
   /**
-   * つかみ（組み手）開始
+   * 打撃ボタンを押した直後。すぐ離せば張り手、押し続ければぶちかましのタメへ。
    */
-  private startGrabAttempt() {
+  private handleStrikeHold(
+    dt: number,
+    moveInput: FighterMoveInput,
+    actions: FighterActions,
+    opponentPos: THREE.Vector3
+  ) {
+    if (actions.strikeReleased || !actions.strike) {
+      this.startHarite();
+      return;
+    }
+
+    if (moveInput.isMoving) {
+      this.walk(moveInput, CHARGE_MOVE_RATIO);
+    } else {
+      this.brake();
+    }
+
+    if (this.stateTimer >= TAP_MAX_SEC) {
+      if (this.buchikamashiCooldown <= 0) {
+        this.startBuchikamashiCharge(moveInput, opponentPos);
+      } else {
+        // ぶちかましが使えない間は、長押しでも張り手になる
+        this.startHarite();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // つかみ
+  // ---------------------------------------------------------------
+
+  /** つかみ開始。出は遅めで、空振りすると隙が長い。相手が近くにいれば、自動でそちらを向く */
+  private startGrabAttempt(opponentPos?: THREE.Vector3) {
     this.state = 'grab_attempt';
     this.stateTimer = 0;
-    this.isAttackActive = true;
+    this.isAttackActive = false;
     this.currentAttackType = 'grab';
     this.attackHitRegistered = false;
     this.grabCooldown = this.grabMaxCooldown;
 
-    // 前方に力強くすり足踏み込み（5.0 -> 6.5: 相手の間合いへ一気に切り込む）
+    // 相手が近ければ、その方向へ向き直る(狙いが多少ずれていても掴める)
+    if (opponentPos) {
+      const dx = opponentPos.x - this.body.position.x;
+      const dz = opponentPos.z - this.body.position.z;
+      if (Math.hypot(dx, dz) <= GRAB_AIM_ASSIST_RANGE) {
+        this.facingAngle = Math.atan2(dx, dz);
+        this.targetFacingAngle = this.facingAngle;
+      }
+    }
+
+    // 前方へ踏み込む
     const dirX = Math.sin(this.facingAngle);
     const dirZ = Math.cos(this.facingAngle);
-    this.body.velocity.x = dirX * 6.5;
-    this.body.velocity.z = dirZ * 6.5;
+    this.body.velocity.x = dirX * 6;
+    this.body.velocity.z = dirZ * 6;
 
     this.soundManager.playSuriasi();
   }
 
   private handleGrabAttempt(dt: number) {
-    // 発生: 0.03〜0.22秒で掴みヒットボックス有効（吸い付き性能UP）
-    this.isAttackActive = this.stateTimer >= 0.03 && this.stateTimer <= 0.22;
+    // 判定は 0.08〜0.30 秒の間有効
+    this.isAttackActive = this.stateTimer >= 0.08 && this.stateTimer <= 0.3;
 
-    if (this.stateTimer > 0.12) {
-      this.body.velocity.x *= 0.8;
-      this.body.velocity.z *= 0.8;
+    if (this.stateTimer > 0.1) {
+      this.brake(0.7);
     }
 
-    // 0.26秒で空振り終了
-    if (this.stateTimer > 0.26) {
+    // 空振りの隙: 0.5 秒
+    if (this.stateTimer > 0.5) {
       this.state = 'idle';
       this.isAttackActive = false;
       this.currentAttackType = null;
-      this.body.velocity.x = 0;
-      this.body.velocity.z = 0;
     }
   }
 
   /**
-   * つかみ成功（がっぷり四つ成立）
+   * つかみ成功。短く持ち上げたあと、そのまま投げる。
    */
   public onGrabSuccess(opponent: SumoFighter) {
     this.state = 'grab_holding';
     this.stateTimer = 0;
     this.grabHoldTimer = 0;
-    this.grabAttackCooldown = 0;
-    this.grabPunchCount = 0;
     this.isAttackActive = false;
     this.currentAttackType = null;
     this.grabbedOpponent = opponent;
     this.body.velocity.set(0, 0, 0);
 
-    // 組み合いSE & 土煙インパクト
     this.soundManager.playTaiko();
     this.particleManager.spawnHariteHit(
       new THREE.Vector3(
@@ -476,31 +481,22 @@ export class SumoFighter {
     );
   }
 
-  /**
-   * 掴まれた側の状態遷移
-   */
+  /** 掴まれた側 */
   public onGrabbed(grabber: SumoFighter) {
+    // 掴まれている間は体が重なるので、押し返されないよう接触の反発を切る
+    this.body.collisionResponse = false;
     this.state = 'grabbed';
     this.stateTimer = 0;
     this.isAttackActive = false;
     this.currentAttackType = null;
-    this.isGuarding = false;
     this.grabber = grabber;
     this.grabEscapeMeter = 0;
-    this.damagePercent += 3; // 組み止めダメージ3%
     this.body.velocity.set(0, 0, 0);
   }
 
-  /**
-   * がっぷり四つ中（寄り切り押し出し、および投げ技派生受付）
-   */
-  private handleGrabHolding(
-    dt: number,
-    moveInput: { x: number; z: number; isMoving: boolean; dash: boolean },
-    actions: { harite: boolean; buchikamashiCharge: boolean; buchikamashiRelease: boolean; shiko: boolean; grab: boolean; guard: boolean },
-    opponentPos: THREE.Vector3
-  ) {
+  private handleGrabHolding(dt: number, moveInput: FighterMoveInput) {
     if (!this.grabbedOpponent || this.grabbedOpponent.state !== 'grabbed') {
+      if (this.grabbedOpponent) this.grabbedOpponent.body.collisionResponse = true;
       this.state = 'idle';
       this.grabbedOpponent = null;
       return;
@@ -508,87 +504,29 @@ export class SumoFighter {
 
     this.grabHoldTimer += dt;
 
-    // 相手を自分の正面 0.9m にがっちり引き寄せて固定
+    // 相手を自分の正面にがっちり引き寄せて固定
     const forwardX = Math.sin(this.facingAngle);
     const forwardZ = Math.cos(this.facingAngle);
     this.grabbedOpponent.body.position.x = this.body.position.x + forwardX * 0.9;
     this.grabbedOpponent.body.position.z = this.body.position.z + forwardZ * 0.9;
     this.grabbedOpponent.body.position.y = Math.max(this.grabbedOpponent.body.position.y, 0.95);
     this.grabbedOpponent.body.velocity.set(0, 0, 0);
+    this.body.velocity.set(0, 0, 0);
 
-    // 寄り切り移動（移動キー入力で相手をパワフルに土俵際へ押し込む！）
+    // 投げる方向をレバーで決められる
     if (moveInput.isMoving) {
-      const yorikiriSpeed = moveInput.dash ? 11.0 : 7.5; // すり足寄り切り強化 (6.0 -> 7.5 / dash 9.0 -> 11.0)
-      this.body.velocity.x = moveInput.x * yorikiriSpeed;
-      this.body.velocity.z = moveInput.z * yorikiriSpeed;
       this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
-
-      if (Math.random() < 0.35) {
-        this.particleManager.spawnDust(
-          new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
-          new THREE.Vector3(-moveInput.x, 0, -moveInput.z)
-        );
-      }
-    } else {
-      this.body.velocity.x *= 0.5;
-      this.body.velocity.z *= 0.5;
     }
 
-    // つかみ攻撃クールダウン減衰
-    if (this.grabAttackCooldown > 0) {
-      this.grabAttackCooldown = Math.max(0, this.grabAttackCooldown - dt);
-    }
-
-    // 派生アクション①：つかみ打撃攻撃（張り手ボタン A / J で掴んだまま一方的に殴りつける！）
-    if (actions.harite && this.grabAttackCooldown <= 0) {
-      this.grabAttackCooldown = 0.18; // 心地よい高速連打テンポ
-      this.grabPunchCount++;
-
-      // 相手への打撃ダメージ（1発あたり 4.5% 加算）
-      const strikeDamage = 4.5;
-      this.grabbedOpponent.damagePercent += strikeDamage;
-
-      // 左右交互に繰り出す
-      this.hariteArm = this.hariteArm === 'right' ? 'left' : 'right';
-
-      // インパクト音 ＆ エフェクト
-      this.soundManager.playHarite();
-      const strikePos = new THREE.Vector3(
-        this.grabbedOpponent.body.position.x,
-        1.1,
-        this.grabbedOpponent.body.position.z
-      );
-      this.particleManager.spawnHariteHit(strikePos);
-      this.particleManager.triggerShake(0.22);
-
-      // 相手を軽く揺らす（打撃リアクション）
-      const forwardVec = new THREE.Vector3(forwardX, 0, forwardZ);
-      this.grabbedOpponent.body.applyImpulse(
-        new CANNON.Vec3(forwardVec.x * 60, 20, forwardVec.z * 60),
-        this.grabbedOpponent.body.position
-      );
-    }
-
-    // 派生アクション②：投げ（ぶちかましボタン B / K または Grab ボタンで豪快に投げ飛ばす！）
-    if (this.grabHoldTimer > 0.08) {
-      if (actions.buchikamashiCharge || actions.buchikamashiRelease || actions.grab || actions.shiko) {
-        const throwDir = moveInput.isMoving
-          ? new THREE.Vector3(moveInput.x, 0, moveInput.z).normalize()
-          : new THREE.Vector3(forwardX, 0, forwardZ);
-        this.executeThrow(throwDir);
-        return;
-      }
-    }
-
-    // 最大ホールド時間終了（2.6秒）：自動的に前方へ豪快に投げ飛ばす！
-    if (this.grabHoldTimer >= this.maxGrabHoldTime) {
-      this.executeThrow(new THREE.Vector3(forwardX, 0, forwardZ));
+    if (this.grabHoldTimer >= this.grabHoldTime) {
+      const dir = moveInput.isMoving
+        ? new THREE.Vector3(moveInput.x, 0, moveInput.z).normalize()
+        : new THREE.Vector3(forwardX, 0, forwardZ);
+      this.executeThrow(dir);
     }
   }
 
-  /**
-   * 上手投げ（豪快な投げ技）発動！
-   */
+  /** 投げ */
   private executeThrow(throwDir: THREE.Vector3) {
     if (!this.grabbedOpponent) return;
 
@@ -597,30 +535,25 @@ export class SumoFighter {
     this.stateTimer = 0;
     this.body.velocity.set(0, 0, 0);
 
-    // 相手へのダメージ（16%）加算
-    const throwDamage = 16;
-    opponent.damagePercent += throwDamage;
+    opponent.damagePercent += 16;
 
-    // 相手へ強烈な吹き飛ばしインパルス（850 -> 920）
-    const baseThrowImpulse = 920;
-    const kbMult = 1.0 + opponent.damagePercent / 65.0;
-    const finalImpulse = baseThrowImpulse * kbMult;
+    // ダメージが溜まるほど遠くへ飛ぶ(0%で約2m、100%で約7m)
+    const kbMult = 1.0 + opponent.damagePercent / 60.0;
+    const finalImpulse = 920 * KB_THROW * kbMult;
 
-    // 投げの方向（入力方向＋斜め上への豪快な放物線）
-    const impulse = new CANNON.Vec3(
-      throwDir.x * finalImpulse,
-      finalImpulse * 0.32,
-      throwDir.z * finalImpulse
+    opponent.body.applyImpulse(
+      new CANNON.Vec3(throwDir.x * finalImpulse, finalImpulse * 0.12, throwDir.z * finalImpulse),
+      opponent.body.position
     );
-
-    opponent.body.applyImpulse(impulse, opponent.body.position);
     opponent.state = 'hit';
     opponent.stateTimer = 0;
     opponent.grabber = null;
+    opponent.body.collisionResponse = true;
 
-    // ドカン！と地面叩きつけの土煙＋大火花＋カメラシェイク
-    this.particleManager.spawnHariteHit(
-      new THREE.Vector3(opponent.body.position.x, 1.0, opponent.body.position.z)
+    // 投げの叩きつけは、強い当たりと同じ爆発にする
+    this.particleManager.spawnBuchikamashiHit(
+      new THREE.Vector3(opponent.body.position.x, 1.0, opponent.body.position.z),
+      1.0
     );
     this.particleManager.triggerShake(0.8);
     this.soundManager.playTaiko();
@@ -630,78 +563,71 @@ export class SumoFighter {
   }
 
   private handleThrow(dt: number) {
-    this.body.velocity.x *= 0.7;
-    this.body.velocity.z *= 0.7;
-
-    // 0.38秒で投げのフォロースルー終了
+    this.brake(0.7);
     if (this.stateTimer > 0.38) {
       this.state = 'idle';
     }
   }
 
-  /**
-   * 掴まれ拘束中（確定2秒間は完全脱出不能！2秒経過後にレバーガチャ脱出解禁）
-   */
-  private handleGrabbed(
-    dt: number,
-    moveInput: { x: number; z: number; isMoving: boolean; dash: boolean },
-    actions: { harite: boolean; buchikamashiCharge: boolean; buchikamashiRelease: boolean; shiko: boolean; grab: boolean; guard: boolean }
-  ) {
+  /** 掴まれている間: ボタンを連打すると抜けられる */
+  private handleGrabbed(dt: number, actions: FighterActions) {
     if (!this.grabber || this.grabber.state !== 'grab_holding') {
       this.state = 'idle';
       this.grabber = null;
+      this.body.collisionResponse = true;
       return;
     }
 
-    // ★ 確定2秒間（grabHoldTimer < 2.0秒）は完全脱出不能！
-    // 2.0秒が経過した後にのみ、レバーガチャ・ボタン連打で脱出メーターが蓄積される
-    if (this.grabber.grabHoldTimer >= 2.0) {
-      if (actions.harite || actions.grab || actions.shiko || moveInput.dash || moveInput.isMoving) {
-        this.grabEscapeMeter += 16;
-      }
+    if (actions.strikePressed || actions.grabPressed) {
+      this.grabEscapeMeter += 34;
+    }
 
-      // 脱出成功！（双方が弾かれて仕切り直し）
-      if (this.grabEscapeMeter >= 100) {
-        const dx = this.body.position.x - this.grabber.body.position.x;
-        const dz = this.body.position.z - this.grabber.body.position.z;
-        const len = Math.hypot(dx, dz) || 1;
-        const pushX = (dx / len) * 260;
-        const pushZ = (dz / len) * 260;
+    if (this.grabEscapeMeter >= 100) {
+      const dx = this.body.position.x - this.grabber.body.position.x;
+      const dz = this.body.position.z - this.grabber.body.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const push = 260;
+      const pushX = (dx / len) * push;
+      const pushZ = (dz / len) * push;
 
-        this.body.applyImpulse(new CANNON.Vec3(pushX, 50, pushZ), this.body.position);
-        this.grabber.body.applyImpulse(new CANNON.Vec3(-pushX, 50, -pushZ), this.grabber.body.position);
+      this.body.applyImpulse(new CANNON.Vec3(pushX, 50, pushZ), this.body.position);
+      this.grabber.body.applyImpulse(new CANNON.Vec3(-pushX, 50, -pushZ), this.grabber.body.position);
 
-        this.state = 'idle';
-        this.grabber.state = 'idle';
-        this.grabber.grabbedOpponent = null;
-        this.grabber = null;
+      this.state = 'idle';
+      this.body.collisionResponse = true;
+      this.grabber.state = 'idle';
+      this.grabber.grabbedOpponent = null;
+      this.grabber = null;
 
-        this.soundManager.playGuard();
-        this.particleManager.spawnGuardSpark(new THREE.Vector3(this.body.position.x, 1.0, this.body.position.z));
-      }
+      this.soundManager.playGuard();
+      this.particleManager.spawnGuardSpark(new THREE.Vector3(this.body.position.x, 1.0, this.body.position.z));
     }
   }
 
-  /**
-   * 張り手（ボタンA）開始
-   */
+  // ---------------------------------------------------------------
+  // 打撃: 張り手(ちょん押し) / ぶちかまし(長押し)
+  // ---------------------------------------------------------------
+
   private startHarite() {
+    // ゲージが満タンなら、この1発は強い張り手(ゲージは使い切る)
+    this.hariteStrong = this.hariteGauge >= 100;
+    if (this.hariteStrong) this.hariteGauge = 0;
+
     this.state = 'harite';
     this.stateTimer = 0;
     this.isAttackActive = true;
-    this.currentAttackType = 'harite';
+    this.currentAttackType = this.hariteStrong ? 'harite_strong' : 'harite';
     this.attackHitRegistered = false;
 
-    // 左右交互に突っ張りを繰り出す（連打時の爽快感MAX）
+    // 左右交互に突っ張りを繰り出す
     this.hariteArm = this.hariteArm === 'right' ? 'left' : 'right';
 
-    // 前方に程よくすり足踏み込み（6.0 -> 3.5: 爆走連打を抑制）
+    // 前方へ踏み込む
     const dirX = Math.sin(this.facingAngle);
     const dirZ = Math.cos(this.facingAngle);
-    this.body.velocity.x = dirX * 3.5;
-    this.body.velocity.z = dirZ * 3.5;
+    this.body.velocity.x = dirX * 3;
+    this.body.velocity.z = dirZ * 3;
 
-    // 掌底の風切り・気合エフェクトを前方へ発生
     const forwardDir = new THREE.Vector3(dirX, 0, dirZ);
     const fighterPos = new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z);
     this.particleManager.spawnHariteSwing(fighterPos, forwardDir);
@@ -710,46 +636,35 @@ export class SumoFighter {
   }
 
   private handleHarite(dt: number) {
-    // 発生: 0.04〜0.14秒でヒットボックス有効
+    // 判定は 0.04〜0.14 秒
     this.isAttackActive = this.stateTimer >= 0.04 && this.stateTimer <= 0.14;
 
-    // 踏み込みの後にしっかり足元ですり足制動
     if (this.stateTimer > 0.09) {
-      this.body.velocity.x *= 0.82;
-      this.body.velocity.z *= 0.82;
+      this.brake(0.7);
     }
 
-    // 0.23秒で動作終了（0.17s -> 0.23s: 適度な後隙を設け、連打ハメを防止）
-    if (this.stateTimer > 0.23) {
+    // 0.22 秒で終了。連打はできるが、一方的に押し切れるほど速くはない
+    if (this.stateTimer > 0.22) {
       this.state = 'idle';
       this.isAttackActive = false;
       this.currentAttackType = null;
-      this.body.velocity.x = 0;
-      this.body.velocity.z = 0;
     }
   }
 
   /**
-   * ぶちかまし（ボタンB）チャージ開始
-   * 使用時に入力された方向（レバー入力方向）へ瞬時に狙いを定めて突っ込み準備
+   * ぶちかましのタメ開始。タメ中も遅く動け、レバーで突進方向を狙える。
    */
-  private startBuchikamashiCharge(
-    moveInput?: { x: number; z: number; isMoving: boolean },
-    opponentPos?: THREE.Vector3
-  ) {
+  private startBuchikamashiCharge(moveInput?: FighterMoveInput, opponentPos?: THREE.Vector3) {
     this.state = 'buchikamashi_charge';
     this.stateTimer = 0;
     this.chargeTimer = 0;
-    this.body.velocity.x = 0;
-    this.body.velocity.z = 0;
+    this.brake(0.3);
 
-    // 使用時に入力された方向へ瞬時に向きを合わせる！
     if (moveInput && moveInput.isMoving) {
       this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
       this.facingAngle = this.targetFacingAngle;
       this.buchikamashiDir.set(moveInput.x, 0, moveInput.z).normalize();
     } else if (opponentPos) {
-      // レバーニュートラルの場合は相手の方向へ向く
       const dx = opponentPos.x - this.body.position.x;
       const dz = opponentPos.z - this.body.position.z;
       if (Math.hypot(dx, dz) > 0.1) {
@@ -758,29 +673,22 @@ export class SumoFighter {
         this.buchikamashiDir.set(dx, 0, dz).normalize();
       }
     } else {
-      const dirX = Math.sin(this.facingAngle);
-      const dirZ = Math.cos(this.facingAngle);
-      this.buchikamashiDir.set(dirX, 0, dirZ).normalize();
+      this.buchikamashiDir.set(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle)).normalize();
     }
   }
 
-  private handleBuchikamashiCharge(
-    dt: number,
-    isHolding: boolean,
-    isReleased: boolean,
-    moveInput: { x: number; z: number; isMoving: boolean },
-    opponentPos: THREE.Vector3
-  ) {
+  private handleBuchikamashiCharge(dt: number, actions: FighterActions, moveInput: FighterMoveInput) {
     this.chargeTimer += dt;
     const progress = Math.min(1.0, this.chargeTimer / this.maxChargeTime);
 
-    // チャージ中もレバー入力で狙う方向をエイミング可能
+    // タメ中も遅く動け、動かした方向が突進方向になる
     if (moveInput.isMoving) {
-      this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
+      this.walk(moveInput, CHARGE_MOVE_RATIO);
       this.buchikamashiDir.set(moveInput.x, 0, moveInput.z).normalize();
+    } else {
+      this.brake();
     }
 
-    // チャージ音＆粒子
     if (Math.random() < 0.4) {
       this.soundManager.playBuchikamashiCharge(progress);
     }
@@ -789,51 +697,45 @@ export class SumoFighter {
       progress
     );
 
-    // ボタンを離したか、最大タメ完了で突進発動
-    if (isReleased || this.chargeTimer >= this.maxChargeTime * 1.15) {
+    // ボタンを離したか、最大までタメたら突進
+    if (actions.strikeReleased || !actions.strike || this.chargeTimer >= this.maxChargeTime * 1.15) {
       this.releaseBuchikamashi(moveInput);
     }
   }
 
-  /**
-   * ぶちかまし突進発動
-   * 入力方向へ頭から豪快に突っ込む！
-   */
-  private releaseBuchikamashi(moveInput?: { x: number; z: number; isMoving: boolean }) {
+  /** 突進の速さ。歩行より速く、タメるほど速く・長く走る */
+  private rushSpeed(chargeRatio: number): number {
+    return 9 + chargeRatio * 5; // 9〜14 m/s(歩行の3〜4.5倍)
+  }
+
+  private rushDuration(chargeRatio: number): number {
+    return 0.3 + chargeRatio * 0.3; // フルタメで約 8.4m(土俵の半径ぶん)
+  }
+
+  private releaseBuchikamashi(moveInput?: FighterMoveInput) {
     this.state = 'buchikamashi_rush';
     this.stateTimer = 0;
     this.isAttackActive = true;
     this.currentAttackType = 'buchikamashi';
     this.attackHitRegistered = false;
-    this.hasSuperArmor = true; // 突進中は剛体スーパーアーマーで強引に突っ込む！
+    this.hasSuperArmor = true; // 突進中は止まらない
 
-    // 発動の瞬間に移動入力があればその方向へ更新。なければチャージ中に定めた方向をそのまま維持！
     if (moveInput && moveInput.isMoving) {
-      this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
-      this.facingAngle = this.targetFacingAngle;
       this.buchikamashiDir.set(moveInput.x, 0, moveInput.z).normalize();
-    } else if (this.buchikamashiDir.lengthSq() > 0.01) {
-      this.targetFacingAngle = Math.atan2(this.buchikamashiDir.x, this.buchikamashiDir.z);
-      this.facingAngle = this.targetFacingAngle;
-    } else {
-      const dirX = Math.sin(this.facingAngle);
-      const dirZ = Math.cos(this.facingAngle);
-      this.buchikamashiDir.set(dirX, 0, dirZ).normalize();
+    } else if (this.buchikamashiDir.lengthSq() < 0.01) {
+      this.buchikamashiDir.set(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle)).normalize();
     }
+    this.targetFacingAngle = Math.atan2(this.buchikamashiDir.x, this.buchikamashiDir.z);
+    this.facingAngle = this.targetFacingAngle;
 
     const chargeRatio = Math.min(1.0, this.chargeTimer / this.maxChargeTime);
-    // スピード: フルチャージでステージ半径（約9.2m）分突進するよう調整
-    // C=0: 11.5m/s (0.30s持続 = 約3.45m突進), C=1.0: 16.0m/s (0.58s持続 = 約9.28m突進！ステージ半径に完全一致！)
-    const speed = 11.5 + chargeRatio * 4.5;
-
+    const speed = this.rushSpeed(chargeRatio);
     this.body.velocity.x = this.buchikamashiDir.x * speed;
     this.body.velocity.z = this.buchikamashiDir.z * speed;
 
-    // ぶちかましのクールタイム開始
     this.buchikamashiCooldown = this.buchikamashiMaxCooldown;
 
     this.soundManager.playBuchikamashiHit(0.5 + chargeRatio * 0.5);
-    // 突進開始時の後方爆発噴煙
     this.particleManager.spawnDust(
       new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
       new THREE.Vector3(-this.buchikamashiDir.x, 0, -this.buchikamashiDir.z)
@@ -842,20 +744,17 @@ export class SumoFighter {
 
   private handleBuchikamashiRush(dt: number) {
     const chargeRatio = Math.min(1.0, this.chargeTimer / this.maxChargeTime);
-    // 突進持続時間: C=0で0.30s, C=1.0で0.58s（フルチャージで 16.0m/s × 0.58s = 9.28m 突進！）
-    const rushDuration = 0.30 + chargeRatio * 0.28;
-    const speed = 11.5 + chargeRatio * 4.5;
+    const duration = this.rushDuration(chargeRatio);
+    const speed = this.rushSpeed(chargeRatio);
 
-    // 突進中はキャラクターの向きを突進方向に完全固定（頭から突っ込む！）
+    // 突進方向に体を固定（頭から突っ込む）
     this.targetFacingAngle = Math.atan2(this.buchikamashiDir.x, this.buchikamashiDir.z);
     this.facingAngle = this.targetFacingAngle;
 
-    // 突進持続時間中は指定方向への突き進む速度を強力にキープ（突っ込む推進力を維持！）
-    if (this.stateTimer < rushDuration) {
+    if (this.stateTimer < duration) {
       this.body.velocity.x = this.buchikamashiDir.x * speed;
       this.body.velocity.z = this.buchikamashiDir.z * speed;
 
-      // 突進中の土煙トレイル
       if (Math.random() < 0.6) {
         this.particleManager.spawnDust(
           new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
@@ -864,182 +763,46 @@ export class SumoFighter {
       }
     }
 
-    this.isAttackActive = this.stateTimer < rushDuration * 0.95;
+    this.isAttackActive = this.stateTimer < duration * 0.95;
 
-    if (this.stateTimer >= rushDuration) {
+    if (this.stateTimer >= duration) {
       this.state = 'idle';
       this.isAttackActive = false;
       this.currentAttackType = null;
       this.hasSuperArmor = false;
-      this.body.velocity.x *= 0.1;
-      this.body.velocity.z *= 0.1;
+      this.brake(0.1);
     }
   }
 
-  /**
-   * ガード（ボタンD / Space等）
-   */
-  private startGuard() {
-    this.state = 'guard';
-    this.stateTimer = 0;
-    this.isGuarding = true;
-    this.isAttackActive = false;
-    this.currentAttackType = null;
-  }
+  // ---------------------------------------------------------------
+  // 被弾
+  // ---------------------------------------------------------------
 
-  private handleGuard(
-    dt: number,
-    moveInput: { x: number; z: number; isMoving: boolean },
-    isHoldingGuard: boolean,
-    opponentPos: THREE.Vector3
-  ) {
-    // ガード持続中、耐久ゲージを徐々に消費（毎秒26pt消費＝約3.8秒で枯渇）
-    this.guardGauge = Math.max(0, this.guardGauge - dt * 26.0);
-
-    // ガードゲージ枯渇でガードクラッシュ（スタン発生！）
-    if (this.guardGauge <= 0) {
-      this.triggerGuardBreak();
-      return;
-    }
-
-    // ガードを自ら解除した場合
-    if (!isHoldingGuard) {
-      this.state = 'idle';
-      this.isGuarding = false;
-      this.guardCooldown = this.guardIntervalTime; // ガード解除後0.9秒間は再ガード不可！
-      return;
-    }
-
-    // ガード中は低速（通常の35%）で踏ん張り移動
-    const guardSpeed = this.walkSpeed * 0.35;
-    if (moveInput.isMoving) {
-      this.body.velocity.x = moveInput.x * guardSpeed;
-      this.body.velocity.z = moveInput.z * guardSpeed;
-    } else {
-      this.body.velocity.x *= 0.6;
-      this.body.velocity.z *= 0.6;
-    }
-
-    // 相手の方向を常に向く
-    const dx = opponentPos.x - this.body.position.x;
-    const dz = opponentPos.z - this.body.position.z;
-    if (Math.hypot(dx, dz) > 0.1) {
-      this.targetFacingAngle = Math.atan2(dx, dz);
-    }
-  }
-
-  /**
-   * ガードクラッシュ（使いすぎ・シールド破壊によるスタン発生！）
-   */
-  public triggerGuardBreak() {
-    this.state = 'stun';
-    this.stateTimer = 0;
-    this.isGuarding = false;
-    this.isStunned = true;
-    this.stunTimer = this.maxStunTime;
-    this.guardGauge = 0;
-    this.guardCooldown = 2.5; // スタン復帰後もしばらくガード不可
-
-    // 物理速度を停止
-    this.body.velocity.x = 0;
-    this.body.velocity.z = 0;
-
-    // クラッシュ音＆エフェクト
-    const pos = new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z);
-    this.soundManager.playGuardBreak();
-    this.particleManager.spawnGuardBreak(pos);
-  }
-
-  /**
-   * スタン（気絶・無防備）状態
-   */
-  private handleStun(dt: number) {
-    this.stunTimer -= dt;
-    this.body.velocity.x *= 0.8;
-    this.body.velocity.z *= 0.8;
-
-    // ガードゲージはスタン中ごくゆっくり回復
-    this.guardGauge = Math.min(this.maxGuardGauge, this.guardGauge + dt * 10.0);
-
-    // 頭上ピヨピヨ星
-    const pos = new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z);
-    if (Math.random() < 0.22) {
-      this.soundManager.playDaze();
-    }
-    this.particleManager.spawnStunStars(pos);
-
-    // スタン時間終了で通常復帰
-    if (this.stunTimer <= 0) {
-      this.state = 'idle';
-      this.isStunned = false;
-    }
-  }
-
-  /**
-   * 四股（ボタンC）開始
-   */
-  private startShiko() {
-    this.state = 'shiko';
-    this.stateTimer = 0;
-    this.hasSuperArmor = true; // 四股開始で即座にスーパーアーマー発動！
-    this.isAttackActive = false;
-    this.currentAttackType = 'shiko';
-    this.attackHitRegistered = false; // 相手にヒットしたかどうかのフラグ
-    this.shikoStompDone = false; // 足踏み着地エフェクト発生フラグ
-
-    // 四股のクールタイム開始
-    this.shikoCooldown = this.shikoMaxCooldown;
-
-    this.body.velocity.x = 0;
-    this.body.velocity.z = 0;
-  }
-
-  private handleShiko(dt: number) {
-    // 0.0〜0.26秒: 足上げ〜踏み下ろし（スーパーアーマー持続）
-    // 0.26秒地点で大地に着地ドスン！（衝撃波発生＋攻撃判定有効化）
-    if (this.stateTimer >= 0.26 && !this.shikoStompDone) {
-      this.shikoStompDone = true;
-      this.isAttackActive = true; // 攻撃判定を発生！
-      this.soundManager.playShiko();
-      this.particleManager.spawnShikoShockwave(
-        new THREE.Vector3(this.body.position.x, 0, this.body.position.z)
-      );
-    }
-
-    // 0.26秒〜0.46秒の間、攻撃判定を持続（範囲内の相手を確実に捉える！）
-    if (this.stateTimer >= 0.46) {
-      this.isAttackActive = false;
-    }
-
-    // 0.48秒でスーパーアーマー解除
-    if (this.stateTimer >= 0.48) {
-      this.hasSuperArmor = false;
-    }
-
-    // 0.54秒でアクション完了（構えへ復帰）
-    if (this.stateTimer > 0.54) {
-      this.state = 'idle';
-      this.currentAttackType = null;
-      this.isAttackActive = false;
-    }
-  }
-
-  /**
-   * 被弾硬直
-   */
-  private handleHitStun(dt: number) {
+  /** 被弾硬直 */
+  private handleHitStun(dt: number, actions: FighterActions) {
     this.isAttackActive = false;
 
-    // 接地チェック（足元が土俵面 Y=0 付近、剛体重心 Y<=1.05m、かつ下降中）
-    const isGrounded = this.body.position.y <= 1.05 && this.body.velocity.y <= 0.5;
+    // ボタン連打で反撃(連続技・ハメからの脱出)。大きく吹き飛んでいる最中は対象外。
+    this.counterMeter = Math.max(0, this.counterMeter - COUNTER_DECAY_PER_SEC * dt);
+    const speed = Math.hypot(this.body.velocity.x, this.body.velocity.z);
+    if (this.isGrounded() && speed < 6) {
+      if (actions.strikePressed || actions.grabPressed) {
+        this.counterMeter += COUNTER_PER_PRESS;
+      }
+      if (this.counterMeter >= 100) {
+        this.doCounter();
+        return;
+      }
+    }
 
-    // 通常ヒットなら0.25秒で復帰
-    // 四股等で空中に打ち上がっている場合は着地するまで空中くらい状態を維持（最大1.8秒で強制復帰）
-    if ((this.stateTimer > 0.25 && isGrounded) || this.stateTimer > 1.8) {
+    // 接地チェック（剛体重心 Y<=1.05m、かつ下降中）
+    const grounded = this.body.position.y <= 1.05 && this.body.velocity.y <= 0.5;
+
+    // 通常ヒットは 0.25 秒で復帰。空中に打ち上がっている間は着地まで(最大 1.8 秒)
+    if ((this.stateTimer > 0.25 && grounded) || this.stateTimer > 1.8) {
       this.state = 'idle';
 
-      // 空中から着地した瞬間の着地土煙
-      if (isGrounded) {
+      if (grounded) {
         this.soundManager.playTaiko();
         this.particleManager.spawnDust(
           new THREE.Vector3(this.body.position.x, 0.2, this.body.position.z),
@@ -1050,21 +813,90 @@ export class SumoFighter {
   }
 
   /**
+   * 反撃: 連続で攻撃されている状態から抜け、相手を押し返す
+   */
+  private doCounter() {
+    this.counterMeter = 0;
+    this.invulnTimer = COUNTER_INVULN_SEC;
+    this.state = 'idle';
+    this.stateTimer = 0;
+    this.body.velocity.x = 0;
+    this.body.velocity.z = 0;
+
+    const pos = new THREE.Vector3(this.body.position.x, 1.1, this.body.position.z);
+    this.particleManager.spawnGuardSpark(pos);
+    this.particleManager.spawnHariteHit(pos);
+    this.particleManager.triggerShake(0.4);
+    this.soundManager.playGuard();
+
+    const attacker = this.lastAttacker;
+    if (attacker && attacker.state !== 'fall') {
+      const dx = attacker.body.position.x - this.body.position.x;
+      const dz = attacker.body.position.z - this.body.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+
+      // 相手が掴んでいたら放す
+      if (attacker.state === 'grab_holding' && attacker.grabbedOpponent) {
+        attacker.grabbedOpponent.body.collisionResponse = true;
+        attacker.grabbedOpponent.grabber = null;
+        attacker.grabbedOpponent = null;
+      }
+      attacker.state = 'hit';
+      attacker.stateTimer = 0;
+      attacker.isAttackActive = false;
+      attacker.currentAttackType = null;
+      attacker.hasSuperArmor = false;
+      attacker.chargeTimer = 0;
+      attacker.damagePercent += 4;
+      attacker.body.applyImpulse(
+        new CANNON.Vec3((dx / len) * COUNTER_IMPULSE, COUNTER_IMPULSE * 0.2, (dz / len) * COUNTER_IMPULSE),
+        attacker.body.position
+      );
+    }
+  }
+
+  /**
    * 攻撃ヒットの処理（ダメージ蓄積＋ノックバック適用）
+   *
+   * 三すくみ:
+   *  - 張り手は、タメている相手を中断させる(被弾すると必ず硬直に入る)
+   *  - ぶちかましは、突進中は止まらず、つかみを弾き飛ばす
+   *  - つかみは、出の間は張り手を受けても止まらない
    */
   public receiveHit(
     attackerPos: THREE.Vector3,
-    attackType: 'harite' | 'buchikamashi' | 'shiko',
-    attackerChargeProgress: number = 0
+    attackType: 'harite' | 'harite_strong' | 'buchikamashi',
+    attackerChargeProgress: number = 0,
+    attacker: SumoFighter | null = null
   ) {
-    // スーパーアーマー中は吹き飛びを完全に無効化（ノーリアクション）
+    // 反撃した直後は、連続技を受けない
+    if (this.invulnTimer > 0) return;
+
+    if (attacker) this.lastAttacker = attacker;
+
+    // 突進中は吹き飛ばない
     if (this.hasSuperArmor) {
-      // わずかなダメージ倍率加算のみ
       this.damagePercent += 3;
       return;
     }
 
-    // 吹き飛びベクトルの計算（攻撃者から自身への向き）
+    // つかみの出の間は、張り手では止まらない
+    if (this.state === 'grab_attempt' && attackType === 'harite') {
+      this.damagePercent += 2;
+      this.particleManager.spawnGuardSpark(
+        new THREE.Vector3(this.body.position.x, 1.1, this.body.position.z)
+      );
+      return;
+    }
+
+    // 掴んでいる最中に被弾したら、相手を放す
+    if (this.state === 'grab_holding' && this.grabbedOpponent) {
+      this.grabbedOpponent.state = 'idle';
+      this.grabbedOpponent.grabber = null;
+      this.grabbedOpponent.body.collisionResponse = true;
+      this.grabbedOpponent = null;
+    }
+
     const hitDir = new THREE.Vector3(
       this.body.position.x - attackerPos.x,
       0,
@@ -1076,142 +908,65 @@ export class SumoFighter {
       hitDir.normalize();
     }
 
-    // ガード中の処理（ダメージ＆ノックバック大幅カット＋耐久値消費）
-    if (this.state === 'guard') {
-      const myPos = new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z);
-
-      if (attackType === 'harite') {
-        // 張り手ガード: 削りダメージ1%のみ、耐久値-8（16 -> 8: ガードが即割れるのを防止）
-        this.guardGauge -= 8;
-        if (this.guardGauge <= 0) {
-          this.triggerGuardBreak();
-          return;
-        }
-        this.particleManager.spawnGuardSpark(myPos);
-        this.soundManager.playGuard();
-        this.damagePercent += 1;
-        const pushImpulse = new CANNON.Vec3(hitDir.x * 60, 0, hitDir.z * 60);
-        this.body.applyImpulse(pushImpulse, this.body.position);
-        return;
-      } else if (attackType === 'shiko') {
-        // 四股ガード: 耐久値-32（大削り）、削りダメージ3%
-        this.guardGauge -= 32;
-        if (this.guardGauge <= 0) {
-          this.triggerGuardBreak();
-          return;
-        }
-        this.particleManager.spawnGuardSpark(myPos);
-        this.soundManager.playGuard();
-        this.damagePercent += 3;
-        // 地響きによりガードしていても少し上へ浮き上がる
-        const guardLiftImpulse = new CANNON.Vec3(0, 480, 0);
-        this.body.applyImpulse(guardLiftImpulse, this.body.position);
-        return;
-      } else if (attackType === 'buchikamashi') {
-        // ぶちかましガード: 耐久値-45、大削り
-        const chargePower = 1.0 + attackerChargeProgress * 1.2;
-        this.guardGauge -= 45 * chargePower;
-        if (this.guardGauge <= 0) {
-          this.triggerGuardBreak();
-          return;
-        }
-
-        this.particleManager.spawnGuardSpark(myPos);
-        this.soundManager.playGuard();
-        this.damagePercent += (18 * chargePower) * 0.25;
-        const guardImpulse =
-          (550 + attackerChargeProgress * 500) * chargePower * (1.0 + this.damagePercent / 70.0) * 0.25;
-        const impulse = new CANNON.Vec3(hitDir.x * guardImpulse, guardImpulse * 0.05, hitDir.z * guardImpulse);
-        this.body.applyImpulse(impulse, this.body.position);
-        this.state = 'hit';
-        this.stateTimer = 0.15;
-        this.isGuarding = false;
-        this.guardCooldown = this.guardIntervalTime;
-        return;
-      }
-    }
-
-    // スタン中に被弾した場合: スタン解除
-    if (this.state === 'stun') {
-      this.isStunned = false;
-      this.stunTimer = 0;
-    }
-
     let baseDamage = 0;
     let baseImpulse = 0;
 
-    switch (attackType) {
-      case 'harite':
-        baseDamage = 4; // 6 -> 4 (連打での過剰なダメージ蓄積を抑制)
-        baseImpulse = 180; // 260 -> 180 (牽制・小押し出しに適正化)
-        this.particleManager.spawnHariteHit(
-          new THREE.Vector3(this.body.position.x, 1.2, this.body.position.z)
-        );
-        this.soundManager.playHarite();
-        break;
+    if (attackType === 'harite') {
+      baseDamage = 4;
+      baseImpulse = 180;
+      this.particleManager.spawnHariteHit(
+        new THREE.Vector3(this.body.position.x, 1.2, this.body.position.z)
+      );
+      this.soundManager.playHarite();
 
-      case 'buchikamashi':
-        const chargePower = 1.0 + attackerChargeProgress * 1.4;
-        baseDamage = 20 * chargePower;
-        baseImpulse = (700 + attackerChargeProgress * 600) * chargePower;
-        this.particleManager.spawnBuchikamashiHit(
-          new THREE.Vector3(this.body.position.x, 1.0, this.body.position.z),
-          chargePower
-        );
-        this.soundManager.playBuchikamashiHit(chargePower);
-        break;
-
-      case 'shiko':
-        baseDamage = 18; // 四股ヒット: 相手にしっかりダメージ（18%）を与える！
-        baseImpulse = 1350; // 画面内に綺麗に収まる上向きインパルス！
-        this.particleManager.spawnShikoHit(
-          new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z)
-        );
-        this.soundManager.playShikoHit();
-        break;
+      // 当て続けるほど、攻撃側の張り手ゲージが溜まる
+      if (attacker) {
+        attacker.hariteGauge = Math.min(100, attacker.hariteGauge + HARITE_GAUGE_PER_HIT);
+        attacker.hariteIdle = 0;
+      }
+    } else if (attackType === 'harite_strong') {
+      baseDamage = 9;
+      baseImpulse = 480;
+      this.particleManager.spawnBuchikamashiHit(
+        new THREE.Vector3(this.body.position.x, 1.1, this.body.position.z),
+        0.9
+      );
+      this.particleManager.triggerShake(0.3);
+      this.soundManager.playBuchikamashiHit(0.8);
+      if (attacker) attacker.hariteIdle = 0;
+    } else {
+      const chargePower = 1.0 + attackerChargeProgress * 1.4;
+      baseDamage = 20 * chargePower;
+      baseImpulse = 700 * (1.0 + attackerChargeProgress * 1.6);
+      this.particleManager.spawnBuchikamashiHit(
+        new THREE.Vector3(this.body.position.x, 1.0, this.body.position.z),
+        chargePower
+      );
+      this.soundManager.playBuchikamashiHit(chargePower);
     }
 
-    // ダメージ蓄積
     this.damagePercent += baseDamage;
 
-    // ノックバック演算（基本インパルス × (1 + ダメージ倍率 / 70)）
-    const knockbackMultiplier = 1.0 + this.damagePercent / 70.0;
+    // ノックバック = 基本インパルス × (1 + ダメージ / k)。
+    // 張り手は1発が軽いぶん、ダメージが溜まったときの伸びを大きくする(0%で約0.6m、100%で約3.5m)。
+    const knockbackMultiplier =
+      attackType === 'harite'
+        ? 1.0 + this.damagePercent / 21.0
+        : attackType === 'harite_strong'
+          ? 1.0 + this.damagePercent / 35.0
+          : 1.0 + this.damagePercent / 70.0;
+    const kbScale = attackType === 'buchikamashi' ? KB_RUSH : KB_HARITE;
+    const finalImpulse = baseImpulse * kbScale * knockbackMultiplier;
+    this.body.applyImpulse(
+      new CANNON.Vec3(hitDir.x * finalImpulse, finalImpulse * 0.18, hitDir.z * finalImpulse),
+      this.body.position
+    );
 
-    let impulse: CANNON.Vec3;
-    if (attackType === 'shiko') {
-      // 四股専用: 画面内に綺麗に収まる高さ（約3.5m〜4.2m）で真上に打ち上げる！
-      // ダメージが蓄積しても画面外へ飛び出さないよう初速上限（15.0m/s）を設定
-      const liftRatio = 1.0 + (this.damagePercent / 70.0) * 0.35;
-      const initialVy = Math.min(15.0, (baseImpulse / 100) * liftRatio); // 最大初速 15.0m/s (最高高度約4.0m)
-      const verticalImpulse = initialVy * 100;
-      const horizontalDrift = 35 * (1.0 + (this.damagePercent / 70.0) * 0.2);
-
-      impulse = new CANNON.Vec3(
-        hitDir.x * horizontalDrift,
-        verticalImpulse,
-        hitDir.z * horizontalDrift
-      );
-
-      // 地面接触を確実に離脱させ、画面内に収まる垂直初速を直接適用
-      this.body.position.y = Math.max(this.body.position.y, 1.15);
-      this.body.velocity.y = initialVy;
-      this.body.velocity.x = hitDir.x * 0.6;
-      this.body.velocity.z = hitDir.z * 0.6;
-    } else {
-      const finalImpulse = baseImpulse * knockbackMultiplier;
-      // 水平方向＋わずかな上方向成分（浮き上がり）
-      impulse = new CANNON.Vec3(
-        hitDir.x * finalImpulse,
-        finalImpulse * 0.18, // 上に浮き上がらせる
-        hitDir.z * finalImpulse
-      );
-    }
-
-    this.body.applyImpulse(impulse, this.body.position);
-
-    // 状態を被弾へ
     this.state = 'hit';
     this.stateTimer = 0;
+    this.chargeTimer = 0;
+    this.isAttackActive = false;
+    this.currentAttackType = null;
   }
 
   /**
@@ -1221,34 +976,34 @@ export class SumoFighter {
     if (!this.isAttackActive || !this.currentAttackType) return null;
 
     const pos = new THREE.Vector3(this.body.position.x, this.body.position.y, this.body.position.z);
-
-    if (this.currentAttackType === 'shiko') {
-      // 四股は自身の周囲全方位（半径 3.5mの大衝撃波）
-      return { position: pos, radius: 3.5 };
-    }
-
-    // 張り手・ぶちかましは前方
     const forwardX = Math.sin(this.facingAngle);
     const forwardZ = Math.cos(this.facingAngle);
 
     if (this.currentAttackType === 'harite') {
-      pos.x += forwardX * 0.95;
-      pos.z += forwardZ * 0.95;
+      pos.x += forwardX * 1.05;
+      pos.z += forwardZ * 1.05;
       pos.y += 0.2;
-      return { position: pos, radius: 0.65 };
+      return { position: pos, radius: 0.75 };
+    }
+
+    if (this.currentAttackType === 'harite_strong') {
+      pos.x += forwardX * 1.15;
+      pos.z += forwardZ * 1.15;
+      pos.y += 0.2;
+      return { position: pos, radius: 0.95 };
     }
 
     if (this.currentAttackType === 'buchikamashi') {
       pos.x += forwardX * 1.3;
       pos.z += forwardZ * 1.3;
-      return { position: pos, radius: 1.2 };
+      return { position: pos, radius: 1.3 };
     }
 
     if (this.currentAttackType === 'grab') {
-      pos.x += forwardX * 1.15;
-      pos.z += forwardZ * 1.15;
+      pos.x += forwardX * 1.3;
+      pos.z += forwardZ * 1.3;
       pos.y += 0.2;
-      return { position: pos, radius: 0.95 };
+      return { position: pos, radius: 1.2 };
     }
 
     return null;
@@ -1258,18 +1013,17 @@ export class SumoFighter {
    * 回転の補間
    */
   private updateRotation(dt: number) {
-    // 突進中は突進方向に体を完全固定（頭から突っ込む！）
+    // 突進中は突進方向に体を完全固定
     if (this.state === 'buchikamashi_rush') {
       this.facingAngle = this.targetFacingAngle;
       return;
     }
 
-    // 角度差分の正規化 (-PI ~ PI)
     let diff = this.targetFacingAngle - this.facingAngle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
 
-    const rotSpeed = 38.0; // 旋回追従速度大幅UP (26.0 -> 38.0) でレバー入力に即座に足元が追従
+    const rotSpeed = 38.0;
     this.facingAngle += diff * Math.min(1.0, rotSpeed * dt);
   }
 
@@ -1287,28 +1041,49 @@ export class SumoFighter {
   private updateModelAnimation(dt: number) {
     let animProgress = 0;
     let chargeProgress = 0;
+    let animState: 'idle' | 'walk' | 'harite' | 'buchikamashi_charge' | 'buchikamashi_rush' | 'grab_attempt' | 'grab_holding' | 'throw' | 'grabbed' | 'hit' = 'idle';
 
-    if (this.state === 'harite') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.23);
-    } else if (this.state === 'buchikamashi_charge') {
-      chargeProgress = Math.min(1.0, this.chargeTimer / this.maxChargeTime);
-    } else if (this.state === 'buchikamashi_rush') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.46);
-    } else if (this.state === 'shiko') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.54);
-    } else if (this.state === 'grab_attempt') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.22);
-    } else if (this.state === 'grab_holding') {
-      animProgress = Math.min(1.0, this.grabHoldTimer / this.maxGrabHoldTime);
-    } else if (this.state === 'throw') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.38);
-    } else if (this.state === 'grabbed') {
-      animProgress = Math.min(1.0, this.stateTimer / 1.0);
-    } else if (this.state === 'hit') {
-      animProgress = Math.min(1.0, this.stateTimer / 0.25);
+    switch (this.state) {
+      case 'walk':
+        animState = 'walk';
+        break;
+      case 'harite':
+        animState = 'harite';
+        animProgress = Math.min(1.0, this.stateTimer / 0.22);
+        break;
+      case 'buchikamashi_charge':
+        animState = 'buchikamashi_charge';
+        chargeProgress = Math.min(1.0, this.chargeTimer / this.maxChargeTime);
+        break;
+      case 'buchikamashi_rush':
+        animState = 'buchikamashi_rush';
+        animProgress = Math.min(1.0, this.stateTimer / Math.max(0.01, this.rushDuration(Math.min(1, this.chargeTimer / this.maxChargeTime))));
+        break;
+      case 'grab_attempt':
+        animState = 'grab_attempt';
+        animProgress = Math.min(1.0, this.stateTimer / 0.26);
+        break;
+      case 'grab_holding':
+        animState = 'grab_holding';
+        animProgress = Math.min(1.0, this.grabHoldTimer / this.grabHoldTime);
+        break;
+      case 'throw':
+        animState = 'throw';
+        animProgress = Math.min(1.0, this.stateTimer / 0.38);
+        break;
+      case 'grabbed':
+        animState = 'grabbed';
+        animProgress = Math.min(1.0, this.stateTimer / 1.0);
+        break;
+      case 'hit':
+        animState = 'hit';
+        animProgress = Math.min(1.0, this.stateTimer / 0.25);
+        break;
+      default:
+        break;
     }
 
-    this.model.updateAnimation(dt, this.state as any, animProgress, chargeProgress, this.hariteArm);
+    this.model.updateAnimation(dt, animState, animProgress, chargeProgress, this.hariteArm);
   }
 
   /**
@@ -1316,7 +1091,6 @@ export class SumoFighter {
    */
   public updateMarkerAnimation(dt: number) {
     this.markerAnimTimer += dt;
-    // 上下にふわりと揺れる浮遊モーション
     this.overheadMarker.position.y = this.markerBaseY + Math.sin(this.markerAnimTimer * 4.2) * 0.06;
   }
 

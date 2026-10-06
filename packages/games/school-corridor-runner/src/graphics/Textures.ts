@@ -145,10 +145,12 @@ export function createWallTexture(): THREE.CanvasTexture {
   // 教室ドア（引き戸）
   ctx.fillStyle = '#7a4521';
   ctx.fillRect(560, 30, 420, 470);
-  // ドアの窓ガラス（すりガラス）
-  ctx.fillStyle = 'rgba(230, 245, 255, 0.75)';
-  ctx.fillRect(600, 60, 140, 240);
-  ctx.fillRect(780, 60, 140, 240);
+  // ドアの窓ガラス: 左壁の窓と同じく実際に透過させ、奥の教室(addClassroomInterior)を覗けるようにする
+  ctx.fillStyle = '#3e2723';
+  ctx.fillRect(596, 56, 148, 248); // サッシ枠
+  ctx.fillRect(776, 56, 148, 248);
+  ctx.clearRect(600, 60, 140, 240);
+  ctx.clearRect(780, 60, 140, 240);
   // クラス表示札「3年B組」
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(520, 20, 35, 100);
@@ -163,6 +165,7 @@ export function createWallTexture(): THREE.CanvasTexture {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.repeat.set(1, 1);
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
@@ -204,6 +207,45 @@ export function createWindowWallTexture(): THREE.CanvasTexture {
     ctx.fillStyle = '#3e2723';
   }
   ctx.fillRect(W - 14, 0, 14, sillTop);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * 左壁(窓なし版): 窓側と同じ配色・腰壁で統一感を保ちつつ、窓を入れない単調な壁面。
+ * たまに窓の区画と入れ替えて使い、左側がずっと窓だけにならないようにする。
+ */
+export function createPlainWallTexture(): THREE.CanvasTexture {
+  const W = 768, H = 640;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  const sillTop = 478; // 窓側と同じ腰壁の高さ
+  // 上部: 窓側と同じクリーム色の漆喰壁
+  ctx.fillStyle = '#f4ebd0';
+  ctx.fillRect(0, 0, W, sillTop);
+
+  // 下部腰壁(窓側と同じ配色)
+  ctx.fillStyle = '#6e3c1d';
+  ctx.fillRect(0, sillTop, W, H - sillTop);
+  ctx.fillStyle = '#4a2510';
+  ctx.fillRect(0, sillTop - 8, W, 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let x = 0; x < W; x += 64) ctx.fillRect(x, sillTop + 6, 3, H - sillTop - 6);
+
+  // うっすらした継ぎ目(窓側の柱と同じリズムを保ち、単調になりすぎないようにする)
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  const panes = 3;
+  const paneW = W / panes;
+  for (let i = 1; i < panes; i++) {
+    ctx.fillRect(i * paneW - 1, 0, 2, sillTop);
+  }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;

@@ -14,12 +14,15 @@ import { CpuPlayer, CPU_PROFILES } from '../entities/CpuPlayer';
 import { Enemy } from '../entities/Enemy';
 import { Boss } from '../entities/Boss';
 import { HudRenderer } from '../ui/HudRenderer';
-import { TitleScreen } from '../ui/TitleScreen';
 import { ControllerTestScreen } from '../ui/ControllerTestScreen';
 import { LevelUpScreen } from '../ui/LevelUpScreen';
 import { OptionsScreen } from '../ui/OptionsScreen';
 import { HowToPlayScreen } from '../ui/HowToPlayScreen';
 import { ResultScreen } from '../ui/ResultScreen';
+import { mountArcadeGuide, ArcadeGuideOptions } from '../../../../shared/arcadeGuide';
+import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
+import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
+import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
 export class GameEngine {
   public state: GameState = 'TITLE';
@@ -47,7 +50,6 @@ export class GameEngine {
 
   // UI Screens
   public hud: HudRenderer;
-  public titleScreen: TitleScreen;
   public controllerTestScreen: ControllerTestScreen;
   public levelUpScreen: LevelUpScreen;
   public optionsScreen: OptionsScreen;
@@ -74,7 +76,6 @@ export class GameEngine {
     this.screenEffects = new ScreenEffects();
 
     this.hud = new HudRenderer();
-    this.titleScreen = new TitleScreen();
     this.controllerTestScreen = new ControllerTestScreen();
     this.levelUpScreen = new LevelUpScreen();
     this.optionsScreen = new OptionsScreen();
@@ -131,19 +132,8 @@ export class GameEngine {
 
     switch (this.state) {
       case 'TITLE': {
-        const choice = this.titleScreen.update(inputState, this.sound);
-        if (choice === 'START GAME') {
-          this.sound.init();
-          this.sound.playTrack('NORMAL');
-          this.initMatch();
-          this.state = 'PLAYING';
-        } else if (choice === 'HOW TO PLAY') {
-          this.state = 'HOW_TO_PLAY';
-        } else if (choice === 'CONTROLLER TEST') {
-          this.state = 'CONTROLLER_TEST';
-        } else if (choice === 'OPTIONS') {
-          this.state = 'OPTIONS';
-        }
+        // ロゴとスタート操作は arcadeTitleScreen(DOM)側。背面ではデモの試合を自動で進める。
+        this.updateDemo(dt);
         break;
       }
 
@@ -187,6 +177,8 @@ export class GameEngine {
       }
 
       case 'PLAYING': {
+        if (this.countingDown) break;
+
         if (inputState.pause) {
           this.sound.sfx.playMenuConfirm();
           this.state = 'PAUSED';
@@ -211,12 +203,13 @@ export class GameEngine {
       case 'RESULT': {
         const action = this.resultScreen.update(inputState, this.sound);
         if (action === 'PLAY_AGAIN') {
-          this.sound.playTrack('NORMAL');
-          this.initMatch();
-          this.state = 'PLAYING';
+          this.beginMatch();
         } else if (action === 'TITLE') {
           this.sound.stopBgm();
           this.state = 'TITLE';
+        } else if (action === 'EXIT') {
+          this.sound.stopBgm();
+          window.location.href = '../../';
         }
         break;
       }
@@ -319,7 +312,7 @@ export class GameEngine {
     if (this.waveDirector.gameTime >= 300 && !this.playerCleared5Min && this.player.alive) {
       this.playerCleared5Min = true;
       this.player.addScore(50000, true, this.sound, this.damageNumbers);
-      this.damageNumbers.addPopup(this.player.x, this.player.y - 110, '🏆 5-MINUTE SURVIVAL CLEARED! +50,000 PTS! 🏆', '#ffd700', 36);
+      this.damageNumbers.addPopup(this.player.x, this.player.y - 110, '5-MINUTE SURVIVAL CLEARED! +50,000 PTS!', '#ffd700', 36);
       this.sound.sfx.playSpecialReady();
       this.screenEffects.flash('#00f0ff', 0.8);
       this.screenEffects.shake(20);
@@ -438,14 +431,14 @@ export class GameEngine {
               // Generous sword drops & special items
               if (enemy.type === 'BERSERKER') {
                 if (c.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '⚔️ 交戦厨撃破! +120', '#ff0033', 24);
+                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
                 }
                 if (Math.random() < 0.6) {
                   this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
                 }
               } else if (enemy.type === 'WEAPON_MASTER') {
                 if (c.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '💥 重火器兵粉砕! +250', '#e000ff', 26);
+                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
                 }
                 this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
               } else if (enemy.type === 'ELITE') {
@@ -681,14 +674,14 @@ export class GameEngine {
               // Generous sword drops & special items
               if (enemy.type === 'BERSERKER') {
                 if (owner?.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '⚔️ 交戦厨撃破! +120', '#ff0033', 24);
+                  this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
                 }
                 if (Math.random() < 0.6) {
                   this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
                 }
               } else if (enemy.type === 'WEAPON_MASTER') {
                 if (owner?.isPlayer) {
-                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '💥 重火器兵粉砕! +250', '#e000ff', 26);
+                  this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
                 }
                 this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
               } else if (enemy.type === 'ELITE') {
@@ -809,7 +802,7 @@ export class GameEngine {
     if (killer) {
       if (killer.isPlayer) {
         this.player.addScore(3000, true, this.sound, this.damageNumbers);
-        this.damageNumbers.addPopup(this.player.x, this.player.y - 70, '⚔️ RIVAL TAKEDOWN! +3,000', '#ffd700', 32);
+        this.damageNumbers.addPopup(this.player.x, this.player.y - 70, 'RIVAL TAKEDOWN! +3,000', '#ffd700', 32);
       } else if (killer instanceof CpuPlayer) {
         killer.addScore(3000, true);
       }
@@ -818,7 +811,7 @@ export class GameEngine {
     // Check if all CPUs are down at this moment (Domination bonus, game continues!)
     const aliveCpus = this.cpus.filter((c) => c.alive);
     if (aliveCpus.length === 0 && this.player.alive) {
-      this.damageNumbers.addPopup(this.player.x, this.player.y - 90, '👑 TOTAL DOMINATION! ALL RIVALS DOWN! +10,000 👑', '#ffd700', 38);
+      this.damageNumbers.addPopup(this.player.x, this.player.y - 90, 'TOTAL DOMINATION! ALL RIVALS DOWN! +10,000', '#ffd700', 38);
       this.player.addScore(10000, true, this.sound, this.damageNumbers);
       this.sound.sfx.playSpecialReady();
     }
@@ -871,40 +864,131 @@ export class GameEngine {
   }
 
   private endGame() {
+    // タイトルのデモ中は試合を終わらせない
+    if (this.state === 'TITLE') return;
     this.updateLeaderboard();
     this.sound.stopBgm();
     if (this.player.rank === 1) {
       this.sound.playTrack('VICTORY');
     }
+    this.resultScreen.show(this.player, this.standings, this.waveDirector.gameTime);
     this.state = 'RESULT';
   }
 
-  public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    ctx.clearRect(0, 0, width, height);
+  // 画面左下のボタンガイド。状態が変わったときだけ差し替える。
+  private guideState: GameState | null = null;
+
+  private arcadeTitle: ArcadeTitleScreen | null = null;
+
+  // タイトル背面のデモ。プレイヤーを自動で動かし、倒されず、強化は自動で選ぶ。HUDは出さない。
+  private demoTime = 0;
+
+  private updateDemo(dt: number) {
+    this.demoTime += dt;
+    if (this.demoTime > 90) {
+      this.demoTime = 0;
+      this.initMatch();
+    }
+
+    const t = this.demoTime;
+    const demoInput: InputState = {
+      moveX: Math.cos(t * 0.55),
+      moveY: Math.sin(t * 0.8),
+    } as InputState;
+
+    this.player.hp = this.player.maxHp;
+    if (this.player.isSpecialReady) {
+      this.player.activateSpecial(
+        this.enemyGrid,
+        this.sound,
+        this.particleSystem,
+        this.screenEffects,
+        this.damageNumbers
+      );
+    }
+
+    this.updatePlaying(dt, demoInput);
+
+    if (this.state === 'LEVEL_UP') {
+      const cards = this.levelUpScreen.cards;
+      if (cards.length > 0) this.applyUpgrade(cards[Math.floor(Math.random() * cards.length)]);
+      this.state = 'TITLE';
+    }
+  }
+
+  // 試合開始前の 3・2・1・GO!。終わるまで世界は止まり、操作も受け付けない。
+  private countingDown = false;
+  private countdown: ArcadeCountdownHandle | null = null;
+
+  private beginMatch() {
+    this.initMatch();
+    this.state = 'PLAYING';
+    this.countingDown = true;
+    this.countdown?.cancel();
+    this.countdown = startArcadeCountdown({
+      accentColor: '#00e5ff',
+      onGo: () => {
+        this.countingDown = false;
+        this.sound.playTrack('NORMAL');
+      },
+    });
+  }
+
+  private startFromTitle() {
+    this.sound.setSilent(false);
+    this.sound.init();
+    this.beginMatch();
+  }
+
+  private syncGuide() {
+    if (this.guideState === this.state) return;
+    const prev = this.guideState;
+    this.guideState = this.state;
+    this.sound.setSilent(this.state === 'TITLE');
 
     if (this.state === 'TITLE') {
-      const input = this.input.update();
-      this.titleScreen.render(ctx, width, height, input.gamepadConnected, input.gamepadId);
-      return;
+      // 試合から戻ってきたときは、デモ用に新しい試合を用意し直す
+      if (prev !== null) {
+        this.demoTime = 0;
+        this.initMatch();
+      }
+      if (!this.arcadeTitle) {
+        this.arcadeTitle = new ArcadeTitleScreen({
+          slug: 'survivor-score-battle',
+          logoUrl,
+          accentColor: '#00e5ff',
+          tagline: '剣を奪い合う生き残りバトル  1人 vs CPU 7人',
+          startButtonLabel: 'スタート',
+          onStart: () => this.startFromTitle(),
+        });
+      }
+      this.arcadeTitle.show();
+    } else {
+      this.arcadeTitle?.hide();
     }
 
-    if (this.state === 'HOW_TO_PLAY') {
-      this.howToPlayScreen.render(ctx, width, height);
-      return;
-    }
+    const confirm = { indices: [0, 2], label: '決定' };
+    const back = { indices: [1], label: '戻る' };
+    const guides: Record<GameState, ArcadeGuideOptions> = {
+      TITLE: { buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }] },
+      HOW_TO_PLAY: { buttons: [{ indices: [0, 1], label: '戻る' }] },
+      CONTROLLER_TEST: { buttons: [back] },
+      OPTIONS: { moveLabel: '項目選択 / 音量', buttons: [{ indices: [0, 2], label: '切替' }, back] },
+      PLAYING: {
+        moveLabel: '移動',
+        buttons: [
+          { indices: [3, 4, 5, 7], label: '必殺技' },
+          { indices: [9], label: 'ポーズ' },
+        ],
+      },
+      PAUSED: { buttons: [{ indices: [0, 2, 9], label: '再開' }] },
+      LEVEL_UP: { moveLabel: '選択', buttons: [confirm] },
+      RESULT: { moveLabel: '選択', buttons: [confirm] },
+    };
+    mountArcadeGuide({ ...guides[this.state], showHomeHint: true });
+  }
 
-    if (this.state === 'CONTROLLER_TEST') {
-      const input = this.input.update();
-      this.controllerTestScreen.render(ctx, width, height, input);
-      return;
-    }
-
-    if (this.state === 'OPTIONS') {
-      this.optionsScreen.render(ctx, width, height, this.sound);
-      return;
-    }
-
-    // --- In-Game World Rendering ---
+  private renderWorld(ctx: CanvasRenderingContext2D, width: number, height: number) {
     ctx.save();
 
     // Camera transform with Screen Shake offset
@@ -951,6 +1035,37 @@ export class GameEngine {
     this.damageNumbers.render(ctx);
 
     ctx.restore();
+  }
+
+  public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    this.syncGuide();
+    ctx.clearRect(0, 0, width, height);
+
+
+    if (this.state === 'HOW_TO_PLAY') {
+      this.howToPlayScreen.render(ctx, width, height);
+      return;
+    }
+
+    if (this.state === 'CONTROLLER_TEST') {
+      const input = this.input.update();
+      this.controllerTestScreen.render(ctx, width, height, input);
+      return;
+    }
+
+    if (this.state === 'OPTIONS') {
+      this.optionsScreen.render(ctx, width, height, this.sound);
+      return;
+    }
+
+    // --- In-Game World Rendering ---
+    this.renderWorld(ctx, width, height);
+
+    // タイトルでは背面のデモとして世界だけを描く(HUD・演出オーバーレイは出さない)
+    if (this.state === 'TITLE') {
+      return;
+    }
+
 
     // --- Screen Overlays (Flash, HUD, Modals) ---
     this.screenEffects.renderOverlay(ctx, width, height);
@@ -982,22 +1097,7 @@ export class GameEngine {
       ctx.font = '900 64px Impact, sans-serif';
       ctx.fillStyle = '#00f0ff';
       ctx.textAlign = 'center';
-      ctx.fillText('PAUSED', width / 2, height / 2 - 20);
-      ctx.font = '700 22px sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('PRESS PAUSE OR CONFIRM BUTTON TO RESUME', width / 2, height / 2 + 40);
-    }
-
-    // Result Screen
-    if (this.state === 'RESULT') {
-      this.resultScreen.render(
-        ctx,
-        width,
-        height,
-        this.player,
-        this.standings,
-        this.waveDirector.gameTime
-      );
+      ctx.fillText('ポーズ中', width / 2, height / 2 - 20);
     }
   }
 }

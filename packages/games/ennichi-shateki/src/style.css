@@ -934,14 +934,3 @@ body.in-game {
   transition: width 0.05s linear;
 }
 
-.bomb-status {
-  font-size: 14px;
-  font-weight: 900;
-  color: #888888;
-}
-
-.bomb-status.ready {
-  color: #ffcc00;
-  animation: arcadeBlink 0.4s steps(1) infinite;
-}
-

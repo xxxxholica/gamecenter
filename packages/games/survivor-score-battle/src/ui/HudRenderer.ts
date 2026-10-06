@@ -11,12 +11,12 @@ export class HudRenderer {
   public notifyRankChange(newRank: number, prevRank: number) {
     if (newRank < prevRank) {
       // Rank Up (1 is best)
-      this.rankChangeText = newRank === 1 ? '👑 YOU ARE #1! 👑' : `▲ RANK UP! #${newRank}`;
+      this.rankChangeText = newRank === 1 ? 'YOU ARE #1' : `RANK UP #${newRank}`;
       this.rankChangeIsUp = true;
       this.rankChangeTimer = 2.5;
     } else if (newRank > prevRank) {
       // Rank Down
-      this.rankChangeText = `▼ RANK DOWN! #${newRank}`;
+      this.rankChangeText = `RANK DOWN #${newRank}`;
       this.rankChangeIsUp = false;
       this.rankChangeTimer = 2.0;
     }
@@ -46,41 +46,19 @@ export class HudRenderer {
   ) {
     ctx.save();
 
-    // 1. Top Center: Endless Survival Stopwatch
-    const mins = Math.floor(gameTime / 60);
-    const secs = Math.floor(gameTime % 60);
-    const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    // Timer background badge
-    const badgeW = 240;
-    const badgeH = 50;
-    ctx.fillStyle = 'rgba(4, 10, 20, 0.88)';
-    ctx.strokeStyle = '#00f0ff';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 10;
-    ctx.fillRect(width / 2 - badgeW / 2, 16, badgeW, badgeH);
-    ctx.strokeRect(width / 2 - badgeW / 2, 16, badgeW, badgeH);
-    ctx.shadowBlur = 0;
+    const layout = this.statusLayout(ctx, width, height);
+    const comboBottom = layout.topY - 40;
+    const comboH = 56;
 
-    // Small header label
-    ctx.font = '900 11px Impact, sans-serif';
-    ctx.fillStyle = '#00f0ff';
-    ctx.fillText('⚡ SURVIVAL TIME ⚡', width / 2, 20);
-
-    ctx.font = '900 28px Impact, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(timeStr, width / 2, 33);
-
-    // 2. Boss Health Bar (Top Center below timer)
+    // 2. Boss Health Bar (Bottom Center, above time/score row)
     if (activeBoss && activeBoss.alive) {
       const barW = 550;
       const barH = 26;
       const barX = (width - barW) / 2;
-      const barY = 76;
+      const barY = comboBottom - comboH - 10 - barH;
       const hpPct = Math.max(0, activeBoss.hp / activeBoss.maxHp);
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
@@ -103,7 +81,7 @@ export class HudRenderer {
       ctx.font = '900 18px Impact, sans-serif';
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(`⚔ ${activeBoss.bossName} ⚔  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
+      ctx.fillText(`${activeBoss.bossName}  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
     }
 
     // 3. Top-Right: Real-Time Ranking Leaderboard (Spectator Friendly!)
@@ -158,19 +136,21 @@ export class HudRenderer {
       ctx.restore();
     }
 
-    // 6. Mid-Right: Combo Meter
+    // 6. Combo Meter (above the score column)
     if (player.comboCount > 0) {
-      this.renderComboMeter(ctx, width, height, player);
+      this.renderComboMeter(
+        ctx,
+        layout.spanL + layout.colW * 1.5,
+        comboBottom - comboH + 19,
+        player
+      );
     }
 
     // 7. Bottom Center: Special Gauge & HP Bar
-    this.renderPlayerStatus(ctx, width, height, player);
+    this.renderPlayerStatus(ctx, width, height, player, gameTime);
 
     // 8. Bottom Edge: EXP Bar
     this.renderExpBar(ctx, width, height, player);
-
-    // 9. Top-Left: Player Stats & Kills
-    this.renderPlayerStats(ctx, player);
 
     // 10. Screen Edge Sword Locator Arrows
     if (activeItems && cameraX !== undefined && cameraY !== undefined) {
@@ -185,7 +165,7 @@ export class HudRenderer {
     width: number,
     contenders: ContenderState[]
   ) {
-    const boardW = 390;
+    const boardW = 300;
     const rowH = 34;
     const boardX = width - boardW - 24;
     const boardY = 20;
@@ -197,30 +177,17 @@ export class HudRenderer {
     ctx.shadowColor = '#00f0ff';
     ctx.shadowBlur = 12;
 
-    const totalH = 44 + contenders.length * rowH + 8;
+    const totalH = contenders.length * rowH + 16;
     ctx.fillRect(boardX, boardY, boardW, totalH);
     ctx.strokeRect(boardX, boardY, boardW, totalH);
     ctx.shadowBlur = 0;
 
-    // Header title
-    ctx.font = '900 18px Impact, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#00f0ff';
-    ctx.fillText('🏆 LIVE RANKING', boardX + 16, boardY + 28);
-
-    ctx.textAlign = 'center';
-    ctx.font = '900 14px Impact, sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText('SWORDS', boardX + boardW - 150, boardY + 28);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('SCORE', boardX + boardW - 16, boardY + 28);
-
-    // Rows
+    // 文字は各行の枠の縦中央に揃える
+    ctx.save();
+    ctx.textBaseline = 'middle';
     for (let i = 0; i < contenders.length; i++) {
       const c = contenders[i];
-      const y = boardY + 48 + i * rowH;
+      const y = boardY + 10 + i * rowH;
       const isYou = c.isPlayer;
       const isAlive = c.alive;
 
@@ -240,45 +207,32 @@ export class HudRenderer {
       ctx.font = '900 18px Impact, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = !isAlive ? '#666677' : i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#8899aa';
-      ctx.fillText(`${i + 1}`, boardX + 24, y + 20);
+      ctx.fillText(`${i + 1}`, boardX + 24, y + rowH / 2 - 4);
 
       // Name
       ctx.textAlign = 'left';
       ctx.fillStyle = !isAlive ? '#884455' : isYou ? '#ffd700' : c.color;
       ctx.font = isYou ? '900 18px Impact, sans-serif' : '700 16px Impact, sans-serif';
       const isRespawning = !isAlive && c.respawnTimer && c.respawnTimer > 0;
-      const displayName = !isAlive ? (isRespawning ? `⏳ ${c.name}` : `💀 ${c.name}`) : c.name;
-      ctx.fillText(displayName, boardX + 46, y + 20);
-
-      // Swords or Respawn Countdown
-      ctx.textAlign = 'center';
-      if (isRespawning) {
-        ctx.font = '900 13px Impact, sans-serif';
-        ctx.fillStyle = '#ffaa00';
-        ctx.fillText(`REVIVE ${Math.ceil(c.respawnTimer!)}s`, boardX + boardW - 150, y + 20);
-      } else {
-        ctx.font = '900 16px Impact, sans-serif';
-        ctx.fillStyle = !isAlive ? '#555566' : '#ffd700';
-        ctx.fillText(`🗡️${c.swordCount || 0}`, boardX + boardW - 150, y + 20);
-      }
+      const displayName = !isAlive ? (isRespawning ? `${c.name} ${Math.ceil(c.respawnTimer!)}s` : `${c.name} 脱落`) : c.name;
+      ctx.fillText(displayName, boardX + 46, y + rowH / 2 - 4);
 
       // Score
       ctx.textAlign = 'right';
       ctx.fillStyle = !isAlive ? '#778899' : '#ffffff';
       ctx.font = '900 18px Impact, sans-serif';
-      ctx.fillText(c.score.toLocaleString(), boardX + boardW - 16, y + 20);
+      ctx.fillText(c.score.toLocaleString(), boardX + boardW - 16, y + rowH / 2 - 4);
     }
+    ctx.restore();
   }
 
+  // x, y はコンボ文字の中心。下にゲージが続く(全体の高さは約56px)
   private renderComboMeter(
     ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
+    x: number,
+    y: number,
     player: Player
   ) {
-    const x = width - 260;
-    const y = height * 0.58;
-
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -291,96 +245,116 @@ export class HudRenderer {
     ctx.shadowColor = '#ff5500';
     ctx.shadowBlur = 18;
 
-    const countText = `🔥 COMBO ×${player.comboCount}`;
+    const countText = `COMBO ×${player.comboCount}`;
     ctx.strokeText(countText, x, y);
     ctx.fillText(countText, x, y);
-
-    // Multiplier text
-    let multText = 'x1.0';
-    if (player.comboCount >= 100) multText = 'x3.0 MAX MULTIPLIER!';
-    else if (player.comboCount >= 50) multText = 'x2.0 MULTIPLIER!';
-    else if (player.comboCount >= 25) multText = 'x1.5 MULTIPLIER';
-    else if (player.comboCount >= 10) multText = 'x1.2 MULTIPLIER';
-
-    ctx.font = '900 16px Impact, sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.strokeText(multText, x, y + 32);
-    ctx.fillText(multText, x, y + 32);
 
     // Combo decay bar
     const barW = 180;
     const barH = 6;
     const pct = Math.max(0, player.comboTimer / player.comboDuration);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(x - barW / 2, y + 46, barW, barH);
+    ctx.fillRect(x - barW / 2, y + 30, barW, barH);
     ctx.fillStyle = '#ffaa00';
-    ctx.fillRect(x - barW / 2, y + 46, barW * pct, barH);
+    ctx.fillRect(x - barW / 2, y + 30, barW * pct, barH);
 
     ctx.restore();
+  }
+
+  // HP/XPバーと、その上のTIME/SCORE/SPECIAL段の配置。他の要素(コンボ、ボスHP)の基準にもなる。
+  private statusLayout(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const barW = 440;
+    const barX = (width - barW) / 2;
+    const barY = height - 58;
+    // 左端はHPラベル、右端はHP数値(3桁想定)の端に合わせ、その幅を3等分して列にする
+    ctx.save();
+    ctx.font = '900 20px Impact, sans-serif';
+    const spanL = barX - 12 - ctx.measureText('HP').width;
+    const spanR = barX + barW + 12 + ctx.measureText('000').width;
+    // 最も幅を取る値(6桁スコア、時刻、READY)が列に収まる最大サイズを求める
+    ctx.font = '900 60px Impact, sans-serif';
+    const refW = Math.max(...['999,999', '00:00', 'READY'].map((t) => ctx.measureText(t).width));
+    ctx.restore();
+    const colW = (spanR - spanL) / 3;
+    const valueSize = Math.max(28, Math.min(80, Math.floor((60 * (colW - 8)) / refW)));
+    const labelSize = Math.round(valueSize * 0.4);
+    const valueY = barY - 12;
+    const labelY = valueY - valueSize - 4;
+    const topY = labelY - labelSize;
+    return { colW, spanL, valueSize, labelSize, valueY, labelY, topY };
   }
 
   private renderPlayerStatus(
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    player: Player
+    player: Player,
+    gameTime: number
   ) {
     // 1. Health Bar (Bottom Center)
     const barW = 440;
     const barH = 22;
     const barX = (width - barW) / 2;
-    const barY = height - 86;
+    const barY = height - 58;
     const hpPct = Math.max(0, player.hp / player.maxHp);
 
+    // 割合に応じて緑(100%)から黄、赤(0%)へ連続的に変化させる
+    const hpColor = `hsl(${Math.round(hpPct * 120)}, 100%, 55%)`;
+
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.strokeStyle = '#00ff88';
+    ctx.strokeStyle = hpColor;
     ctx.lineWidth = 2;
     ctx.fillRect(barX, barY, barW, barH);
     ctx.strokeRect(barX, barY, barW, barH);
 
-    ctx.fillStyle = hpPct < 0.3 ? '#ff2255' : '#00ff88';
+    ctx.fillStyle = hpColor;
     ctx.fillRect(barX + 2, barY + 2, (barW - 4) * hpPct, barH - 4);
 
-    ctx.font = '900 15px Impact, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.fillText(`HP  ${Math.round(player.hp)} / ${player.maxHp}`, width / 2, barY + 16);
+    this.drawBarLabel(ctx, 'HP', barX - 12, barY + barH / 2, 'right', hpColor);
+    this.drawBarLabel(
+      ctx,
+      `${Math.ceil(player.hp)}`,
+      barX + barW + 12,
+      barY + barH / 2,
+      'left',
+      hpColor
+    );
 
-    // 2. Special Attack Ready / Charge Bar
-    const specW = 440;
-    const specH = 18;
-    const specX = barX;
-    const specY = barY - 26;
+    // 2. Time / Score / Special, above the HP bar (label over value, each centered)
+    const mins = Math.floor(gameTime / 60);
+    const secs = Math.floor(gameTime % 60);
+    const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     const specPct = Math.min(1.0, player.specialGauge / 100);
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.strokeStyle = player.isSpecialReady ? '#ff0055' : '#00f0ff';
-    ctx.lineWidth = 2;
-    if (player.isSpecialReady) {
-      ctx.shadowColor = '#ff0055';
-      ctx.shadowBlur = 18;
-    }
-    ctx.fillRect(specX, specY, specW, specH);
-    ctx.strokeRect(specX, specY, specW, specH);
-
-    const specGrad = ctx.createLinearGradient(specX, 0, specX + specW, 0);
-    specGrad.addColorStop(0, '#00f0ff');
-    specGrad.addColorStop(1, '#ff0055');
-    ctx.fillStyle = specGrad;
-    ctx.fillRect(specX + 2, specY + 2, (specW - 4) * specPct, specH - 4);
-    ctx.shadowBlur = 0;
-
-    // Special Ready Text
-    ctx.font = '900 16px Impact, sans-serif';
+    const { colW, spanL, valueSize, labelSize, valueY, labelY } = this.statusLayout(ctx, width, height);
+    const colX = (i: number) => spanL + colW * (i + 0.5);
+    const cols = [
+      { x: colX(0), label: 'TIME', value: timeStr, color: '#00f0ff', glow: false },
+      { x: colX(1), label: 'SCORE', value: player.score.toLocaleString(), color: '#ffffff', glow: false },
+      player.isSpecialReady
+        ? { x: colX(2), label: 'SPECIAL', value: 'READY', color: '#ff1133', glow: true }
+        : { x: colX(2), label: 'SPECIAL', value: `${Math.floor(specPct * 100)}%`, color: '#ffd700', glow: false },
+    ];
+    ctx.save();
     ctx.textAlign = 'center';
-    if (player.isSpecialReady) {
-      const flash = Math.sin(Date.now() * 0.015) > 0;
-      ctx.fillStyle = flash ? '#ffffff' : '#ffd700';
-      ctx.fillText('⚔️ SWORD STORM READY! [PRESS SPECIAL BUTTON] ⚔️', width / 2, specY + 14);
-    } else {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`⚡ SWORD STORM GAUGE  ${Math.round(specPct * 100)}%`, width / 2, specY + 14);
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+    for (const col of cols) {
+      ctx.font = `900 ${labelSize}px Impact, sans-serif`;
+      ctx.fillStyle = '#8899aa';
+      ctx.strokeText(col.label, col.x, labelY);
+      ctx.fillText(col.label, col.x, labelY);
+      ctx.font = `900 ${valueSize}px Impact, sans-serif`;
+      ctx.fillStyle = col.color;
+      if (col.glow) {
+        ctx.shadowColor = '#ff1133';
+        ctx.shadowBlur = 18;
+      }
+      ctx.strokeText(col.value, col.x, valueY);
+      ctx.fillText(col.value, col.x, valueY);
+      ctx.shadowBlur = 0;
     }
+    ctx.restore();
   }
 
   private renderExpBar(
@@ -389,48 +363,47 @@ export class HudRenderer {
     height: number,
     player: Player
   ) {
-    const barH = 12;
-    const barY = height - barH;
+    const barW = 440;
+    const barH = 22;
+    const barX = (width - barW) / 2;
+    const barY = height - 30;
     const expPct = Math.min(1.0, player.exp / player.nextExp);
 
-    ctx.fillStyle = 'rgba(0, 20, 30, 0.9)';
-    ctx.fillRect(0, barY, width, barH);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 2;
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.strokeRect(barX, barY, barW, barH);
 
-    const grad = ctx.createLinearGradient(0, 0, width, 0);
+    const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
     grad.addColorStop(0, '#00aaff');
     grad.addColorStop(0.5, '#00f0ff');
     grad.addColorStop(1, '#ffd700');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, barY, width * expPct, barH);
+    ctx.fillRect(barX + 2, barY + 2, (barW - 4) * expPct, barH - 4);
 
-    // Top border line
-    ctx.strokeStyle = '#00f0ff';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, barY);
-    ctx.lineTo(width, barY);
-    ctx.stroke();
+    this.drawBarLabel(ctx, 'XP', barX - 12, barY + barH / 2, 'right', '#00f0ff');
+    this.drawBarLabel(ctx, `LV ${player.level}`, barX + barW + 12, barY + barH / 2, 'left', '#ffd700');
   }
 
-  private renderPlayerStats(ctx: CanvasRenderingContext2D, player: Player) {
-    const x = 28;
-    const y = 24;
-
-    ctx.textAlign = 'left';
-    ctx.font = '900 32px Impact, sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 10;
-    ctx.fillText(`LV. ${player.level}`, x, y + 26);
-    ctx.shadowBlur = 0;
-
+  private drawBarLabel(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    align: CanvasTextAlign,
+    color: string
+  ) {
+    ctx.save();
     ctx.font = '900 20px Impact, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`SCORE: ${player.score.toLocaleString()}`, x, y + 62);
-    ctx.fillStyle = '#ffaa00';
-    ctx.fillText(`KILLS: ${player.kills.toLocaleString()}`, x, y + 92);
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText(`SWORDS: 🗡️ ${player.swordSystem.swordCount}`, x, y + 122);
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000000';
+    ctx.fillStyle = color;
+    ctx.strokeText(text, x, y + 1);
+    ctx.fillText(text, x, y + 1);
+    ctx.restore();
   }
 
   private renderSwordLocators(
@@ -504,7 +477,7 @@ export class HudRenderer {
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 4;
-      ctx.fillText(`🗡️ ${Math.round(dist)}m`, 0, -18);
+      ctx.fillText(`${Math.round(dist)}m`, 0, -18);
 
       ctx.restore();
     }

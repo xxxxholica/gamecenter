@@ -31,7 +31,6 @@ export class ArcadeHUD {
   private timeValEl!: HTMLElement;
   private ammoPipsEl!: HTMLElement;
   private bombFillEl!: HTMLElement;
-  private bombStatusEl!: HTMLElement;
   private comboValEl!: HTMLElement;
   private comboRateEl!: HTMLElement;
 
@@ -80,7 +79,6 @@ export class ArcadeHUD {
       <div class="bomb-gauge-wrap" id="hud-bomb-wrap">
         <span class="bomb-gauge-label">爆発弾</span>
         <div class="bomb-gauge-bar"><div class="bomb-gauge-fill" id="hud-bomb-fill"></div></div>
-        <span class="bomb-status" id="hud-bomb-status">チャージ中</span>
       </div>
     `;
 
@@ -130,7 +128,6 @@ export class ArcadeHUD {
     this.timeValEl = byId('hud-time-val');
     this.ammoPipsEl = byId('hud-ammo-pips');
     this.bombFillEl = byId('hud-bomb-fill');
-    this.bombStatusEl = byId('hud-bomb-status');
     this.comboValEl = byId('hud-combo-val');
     this.comboRateEl = byId('hud-combo-rate');
   }
@@ -194,9 +191,6 @@ export class ArcadeHUD {
     // Bomb gauge
     const pct = Math.min(100, Math.max(0, bombCooldownRatio * 100));
     setWidth(this.bombFillEl, `${pct}%`);
-    const ready = bombCooldownRatio >= 1.0;
-    setText(this.bombStatusEl, ready ? '発射可能' : 'チャージ中');
-    this.bombStatusEl.classList.toggle('ready', ready);
 
     // Combo display
     if (combo >= 2) {
@@ -260,7 +254,7 @@ export class ArcadeHUD {
         const shortName = getPrizeShortName(item.name, item.type);
         const svg = getPrizeSvg(item.type);
         breakdownHtml += `
-          <div class="bd-card" title="${item.name} (${item.weight.toLocaleString()}g)">
+          <div class="bd-card" title="${item.name} ${item.weight.toLocaleString()}g">
             <div class="bd-pic">${svg}</div>
             <div class="bd-count-tag">×${item.count}</div>
             <div class="bd-label">${shortName}</div>
@@ -269,7 +263,7 @@ export class ArcadeHUD {
       });
     } else {
       breakdownHtml = `
-        <div class="bd-card bd-card-empty" title="参加賞：ラムネ (100g)">
+        <div class="bd-card bd-card-empty" title="参加賞：ラムネ 100g">
           <div class="bd-pic">${getPrizeSvg('ramune')}</div>
           <div class="bd-count-tag">×1</div>
           <div class="bd-label">参加賞ラムネ</div>

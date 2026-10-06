@@ -2,12 +2,69 @@
  * Web Audio API を用いたリアルタイム効果音シンセサイザー
  * 外部音声ファイルへの依存がなく、即座に低遅延で迫力ある相撲サウンドを再生
  */
+import { SumoBgm, BgmTrack } from './SumoBgm';
+
 export class SoundManager {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
 
+  // BGM
+  private bgm: SumoBgm | null = null;
+  private bgmGain: GainNode | null = null;
+  private static readonly BGM_VOLUME = 0.3;
+  private wantedTrack: BgmTrack | null = null;
+
   constructor() {
-    // ユーザー操作時に初期化
+    // ブラウザは最初の操作がないと音を出せない。最初の操作で音声を有効にする
+    const unlock = () => this.unlock();
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+  }
+
+  /** 音声を有効にする(最初の操作で呼ぶ。ゲームパッドの入力からも呼べる) */
+  public unlock() {
+    this.initCtx();
+    if (this.wantedTrack) this.startBgmNow();
+  }
+
+  private startBgmNow() {
+    if (!this.ctx || !this.wantedTrack) return;
+    if (!this.bgmGain) {
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = this.isMuted ? 0 : SoundManager.BGM_VOLUME;
+      this.bgmGain.connect(this.ctx.destination);
+      this.bgm = new SumoBgm(this.ctx, this.bgmGain);
+    }
+    this.bgm!.start(this.wantedTrack);
+  }
+
+  /** BGMを流す(同じ曲なら何もしない) */
+  public playBgm(track: BgmTrack) {
+    this.wantedTrack = track;
+    if (this.ctx) this.startBgmNow();
+    else this.initCtx(); // 操作前は音が止まったまま待機し、最初の操作で鳴り出す
+    if (this.ctx) this.startBgmNow();
+  }
+
+  public stopBgm() {
+    this.wantedTrack = null;
+    this.bgm?.stop();
+  }
+
+  /** 仕切りや決着の間は、太鼓と低音だけの静かな演奏にする */
+  public setBgmCalm(calm: boolean) {
+    this.bgm?.setCalm(calm);
+  }
+
+  /** 大きな爆発のあいだ、BGMを一時的に下げる */
+  public duckBgm(seconds: number) {
+    if (!this.ctx || !this.bgmGain || this.isMuted) return;
+    const t = this.ctx.currentTime;
+    const g = this.bgmGain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(SoundManager.BGM_VOLUME * 0.2, t + 0.05);
+    g.linearRampToValueAtTime(SoundManager.BGM_VOLUME, t + seconds);
   }
 
   private initCtx() {
@@ -317,6 +374,29 @@ export class SoundManager {
     setTimeout(() => {
       this.playTaiko();
     }, 400);
+  }
+
+  /** 爆発音。重い低音の"ドン"に、砕ける音と、あとを引く轟きを重ねる */
+  public playExplosion(power: number = 1) {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(28, t + 0.7 * power);
+    gain.gain.setValueAtTime(0.95, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.9 * power);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.9 * power);
+
+    this.playNoise(0.35 * power, 0.7, 3200); // 砕ける音
+    this.playNoise(1.2 * power, 0.4, 420); // 轟き
   }
 
   private playNoise(duration: number, volume: number, cutoff: number) {

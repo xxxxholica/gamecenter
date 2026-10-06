@@ -171,7 +171,8 @@ export class InputManager {
       this.keysDown.has('ShiftRight') ||
       this.keysDown.has('KeyK') ||
       this.keysDown.has('KeyJ') ||
-      this.keysDown.has('KeyC')
+      this.keysDown.has('KeyC') ||
+      this.keysDown.has('Space')
     ) {
       special = true;
     }
@@ -243,6 +244,7 @@ export class InputManager {
         this.prevKeysDown.has('KeyK') ||
         this.prevKeysDown.has('KeyJ') ||
         this.prevKeysDown.has('KeyC') ||
+        this.prevKeysDown.has('Space') ||
         !!this.prevGamepadButtons[3] ||
         !!this.prevGamepadButtons[5] ||
         !!this.prevGamepadButtons[7] ||

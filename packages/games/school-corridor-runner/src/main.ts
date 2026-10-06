@@ -1433,53 +1433,53 @@ class Game {
       // 無敵状態でのみ許される、生活指導の先生への突撃粉砕（爽快な特大ボーナス！）
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnLockerBreak(obs.group.position);
-      this.scoreData.score += 1500 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 1500 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (forced && obs.type === ObstacleType.FIRE) {
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnBombExplosion(obs.group.position, this.camera.position);
-      this.scoreData.score += 400 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 400 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (forced && obs.type === ObstacleType.HANGING_SIGN) {
       this.soundSystem.playDeskBreak();
       this.particleSystem.spawnDeskBreak(obs.group.position);
-      this.scoreData.score += 500 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 500 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (forced && (obs.type === ObstacleType.GIMMICK_JUMP || obs.type === ObstacleType.GIMMICK_SLIDE)) {
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnLockerBreak(obs.group.position);
-      this.scoreData.score += 700 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 700 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.DESK_CHAIR) {
       this.soundSystem.playDeskBreak();
       this.particleSystem.spawnDeskBreak(obs.group.position);
-      this.scoreData.score += 250 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 250 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.LOCKER_VAULT || obs.type === ObstacleType.GIMMICK_BOMB) {
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnLockerBreak(obs.group.position);
-      this.scoreData.score += 800 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 800 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.CHARGING_CART) {
       // 暴走配膳台をボムで粉砕（高得点！）
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnBombExplosion(obs.group.position, this.camera.position);
-      this.scoreData.score += 1200 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 1200 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.FALLING_LOCKER) {
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnLockerBreak(obs.group.position);
-      this.scoreData.score += 800 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 800 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.BOUNCING_BALL) {
       this.soundSystem.playDeskBreak();
       this.particleSystem.spawnDeskBreak(obs.group.position);
-      this.scoreData.score += 400 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 400 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     } else if (obs.type === ObstacleType.SWEEPING_POLISHER) {
       this.soundSystem.playLockerBreak();
       this.particleSystem.spawnDeskBreak(obs.group.position);
-      this.scoreData.score += 500 * (1 + this.scoreData.combo * 0.1);
+      this.scoreData.score += 500 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
       this.scoreData.destroyedCount++;
     }
 
@@ -1501,7 +1501,7 @@ class Game {
         this.obstacleManager.removeCoin(coin);
         this.addCombo();
         const baseCoinScore = 1000;
-        const totalCoinScore = Math.floor(baseCoinScore * (1 + this.scoreData.combo * 0.15));
+        const totalCoinScore = Math.floor(baseCoinScore * (1 + Math.min(5.0, this.scoreData.combo * 0.15)));
         this.scoreData.score += totalCoinScore;
         this.soundSystem.playCoin(this.scoreData.combo);
         this.uiManager.triggerScorePop();
@@ -1555,7 +1555,7 @@ class Game {
         if (this.player.group.position.z < obs.z && this.player.lane === obs.lane) {
           if (this.player.isSliding) {
             obs.hasDodged = true;
-            this.scoreData.score += 500 * (1 + this.scoreData.combo * 0.1);
+            this.scoreData.score += 500 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
             this.scoreData.dodgedSignsCount++;
             this.soundSystem.playSignDodge();
             this.addCombo();
@@ -1570,7 +1570,7 @@ class Game {
           if (this.player.posY >= 0.95) {
             // ジャンプで跳び越え成功！
             obs.hasDodged = true;
-            this.scoreData.score += 600 * (1 + this.scoreData.combo * 0.1);
+            this.scoreData.score += 600 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
             this.soundSystem.playSignDodge();
             this.addCombo();
           }
@@ -1582,7 +1582,7 @@ class Game {
         if (this.player.group.position.z < obs.z) {
           if (this.player.isSliding) {
             obs.hasDodged = true;
-            this.scoreData.score += 600 * (1 + this.scoreData.combo * 0.1);
+            this.scoreData.score += 600 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
             this.soundSystem.playSignDodge();
             this.addCombo();
           }
@@ -1607,7 +1607,7 @@ class Game {
         if (this.player.posY >= 0.75) {
           if (!obs.hasDodged && this.player.group.position.z < obs.z) {
             obs.hasDodged = true;
-            this.scoreData.score += 500 * (1 + this.scoreData.combo * 0.1);
+            this.scoreData.score += 500 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
             this.soundSystem.playSignDodge();
             this.addCombo();
           }
@@ -1618,7 +1618,7 @@ class Game {
       if (obs.type === ObstacleType.BOUNCING_BALL && (obs.ballY ?? 0) >= 1.2 && this.player.isSliding) {
         if (!obs.hasDodged && this.player.group.position.z < obs.z) {
           obs.hasDodged = true;
-          this.scoreData.score += 400 * (1 + this.scoreData.combo * 0.1);
+          this.scoreData.score += 400 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
           this.soundSystem.playSignDodge();
           this.addCombo();
         }
@@ -1647,7 +1647,7 @@ class Game {
           proj.isDead = true;
           this.soundSystem.playDeskBreak();
           this.particleSystem.spawnDeskBreak(proj.mesh.position);
-          this.scoreData.score += 300 * (1 + this.scoreData.combo * 0.1);
+          this.scoreData.score += 300 * (1 + Math.min(5.0, this.scoreData.combo * 0.1));
           this.addCombo();
           break;
         }
@@ -2009,15 +2009,15 @@ class Game {
 
     const score = this.scoreData.score;
     let grade = 'C';
-    if (score >= 250000) {
+    if (score >= 900000) {
       grade = 'SSS';
-    } else if (score >= 180000) {
+    } else if (score >= 650000) {
       grade = 'SS';
-    } else if (score >= 120000) {
+    } else if (score >= 450000) {
       grade = 'S';
-    } else if (score >= 70000) {
+    } else if (score >= 280000) {
       grade = 'A';
-    } else if (score >= 35000) {
+    } else if (score >= 150000) {
       grade = 'B';
     }
     this.scoreData.grade = grade;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ExplosionFx } from './ExplosionFx';
 
 interface Particle {
   mesh: THREE.Mesh;
@@ -16,6 +17,19 @@ export class ParticleManager {
   private particles: Particle[] = [];
   private sphereGeo: THREE.SphereGeometry;
   private ringGeo: THREE.RingGeometry;
+
+  // 爆発(閃光・火球・煙・火花・衝撃波)
+  private fx: ExplosionFx;
+
+  // 爆発の位置に土俵の焦げ跡を付ける(土俵側が登録する)。radius は焦げの大きさ(m)
+  public onScorch: ((pos: THREE.Vector3, radius: number, strength: number) => void) | null = null;
+  // 画面全体を一瞬染める(最大級の爆発用)。intensity は 0〜1
+  public onScreenFlash: ((intensity: number) => void) | null = null;
+  // 時間差で起こす連鎖爆発
+  private scheduled: Array<{ t: number; pos: THREE.Vector3; scale: number }> = [];
+
+  // ヒットストップ(強い当たりの一瞬、全体を止めて重さを出す)
+  public hitStopRemaining: number = 0;
 
   // カメラシェイク
   public shakeIntensity: number = 0;
@@ -45,9 +59,67 @@ export class ParticleManager {
     this.scene = scene;
     this.sphereGeo = new THREE.SphereGeometry(1, 8, 8);
     this.ringGeo = new THREE.RingGeometry(0.1, 1, 32);
+    this.fx = new ExplosionFx(scene);
+  }
+
+  /** 爆発を起こす。scale: 0.4 小 / 1.0 強い当たり / 2.5以上 場外の大爆発 */
+  public spawnExplosion(pos: THREE.Vector3, scale: number) {
+    this.fx.explode(pos, scale);
+  }
+
+  /**
+   * 場外・客席への落下用の最大級の爆発。大きな爆発を中心に起こし、そのまわりで連鎖して誘爆する。
+   * 画面の大半が炎と煙で埋まる。
+   */
+  public spawnMegaBlast(center: THREE.Vector3, scale: number) {
+    this.fx.explode(center, scale);
+    this.fx.explode(new THREE.Vector3(center.x, center.y + 1.5, center.z), scale * 0.7);
+    this.onScreenFlash?.(1);
+    this.triggerShake(3.0);
+    this.requestHitStop(0.16);
+
+    // 連鎖: 中心のまわりで、少しずつ遅れて次々に爆発する
+    const n = 9;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * (scale * 0.85);
+      this.scheduled.push({
+        t: 0.08 + (i / n) * 0.85 + Math.random() * 0.08,
+        pos: new THREE.Vector3(
+          center.x + Math.cos(a) * d,
+          center.y + Math.random() * 2.2,
+          center.z + Math.sin(a) * d
+        ),
+        scale: scale * (0.45 + Math.random() * 0.4),
+      });
+    }
+  }
+
+  /** 爆発の跡が燃え続ける */
+  public spawnBurn(pos: THREE.Vector3, seconds: number, scale: number) {
+    this.fx.burn(pos, seconds, scale);
+  }
+
+  /** 強い当たりの一瞬、動きを止める(秒) */
+  public requestHitStop(seconds: number) {
+    this.hitStopRemaining = Math.max(this.hitStopRemaining, seconds);
   }
 
   public update(dt: number) {
+    this.fx.update(dt);
+
+    // 連鎖爆発の時間を進める
+    for (let i = this.scheduled.length - 1; i >= 0; i--) {
+      const e = this.scheduled[i];
+      e.t -= dt;
+      if (e.t <= 0) {
+        this.fx.explode(e.pos, e.scale);
+        this.triggerShake(1.4);
+        this.onScreenFlash?.(0.55);
+        this.scheduled.splice(i, 1);
+      }
+    }
+
     // 粒子の更新
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
@@ -129,6 +201,9 @@ export class ParticleManager {
    * 張り手ヒット（鋭い火花・インパクト閃光）
    */
   public spawnHariteHit(pos: THREE.Vector3) {
+    // 小さな爆発(閃光・火花・煙)を重ねる
+    this.fx.explode(pos, 0.5);
+    this.onScorch?.(pos, 0.45, 0.4);
     for (let i = 0; i < 12; i++) {
       const mat = this.acquireMaterial({
         color: 0xffea00,
@@ -393,6 +468,10 @@ export class ParticleManager {
    */
   public spawnBuchikamashiHit(pos: THREE.Vector3, power: number = 1.0) {
     this.triggerShake(0.7 * power);
+    // 強い当たり: 火球と煙を伴う爆発。ほんの一瞬だけ動きを止めて重さを出す
+    this.fx.explode(pos, 0.75 + 0.9 * power);
+    this.onScorch?.(pos, 0.9 + 0.7 * power, 0.7 + 0.3 * power);
+    this.requestHitStop(0.04 + 0.025 * power);
 
     // 衝撃波リング
     const ringMat = this.acquireMaterial({

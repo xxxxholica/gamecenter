@@ -613,11 +613,6 @@ export class CpuPlayer extends Entity {
     ctx.lineWidth = 1;
     ctx.strokeRect(-barW / 2, barY, barW, barH);
 
-    // Sword Count Badge
-    ctx.font = '900 12px Impact, sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText(`🗡️ ${this.swordSystem.swordCount}`, 0, barY - 2);
-
     // Outer Aura
     ctx.strokeStyle = this.color;
     ctx.lineWidth = 2.5;

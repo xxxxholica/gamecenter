@@ -1,227 +1,225 @@
 import { ContenderState, InputState } from '../types';
 import { Player } from '../entities/Player';
 import { SoundManager } from '../audio/SoundManager';
+import { watchResultAutoReturn } from '../../../../shared/arcadeAutoAction';
+import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
+import { countUpText } from '../../../../shared/arcadeScoreCountUp';
+import { checkHighScore, saveLeaderboardScore } from '../../../../shared/arcadeLeaderboard';
+import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
 
+const SLUG = 'survivor-score-battle';
+
+export type ResultAction = 'PLAY_AGAIN' | 'TITLE' | 'EXIT';
+
+const ACTIONS: ResultAction[] = ['PLAY_AGAIN', 'TITLE', 'EXIT'];
+const MENU_COLORS = ['#ffe600', '#39ff88', '#00f0ff'];
+
+// リザルトはDOMで組む(他のゲームと同じ作り)。canvasはその背面でゲーム画面を描き続ける。
 export class ResultScreen {
-  public selectedOption: 'PLAY_AGAIN' | 'TITLE' = 'PLAY_AGAIN';
-  private animTimer: number = 0;
+  private root: HTMLDivElement;
+  private elStatus: HTMLElement;
+  private elScore: HTMLElement;
+  private elRank: HTMLElement;
+  private elSub: HTMLElement;
+  private buttons: HTMLButtonElement[] = [];
 
-  public update(input: InputState, soundManager: SoundManager): 'PLAY_AGAIN' | 'TITLE' | null {
-    this.animTimer += 0.016;
+  private focus = 0;
+  private armTime = 0;
+  private pending: ResultAction | null = null;
+  // ハイスコアの名前登録が開いている間は、リザルトの操作を受け付けない
+  private nameEntryOpen = false;
 
-    if (input.leftTap || input.rightTap || input.upTap || input.downTap) {
-      this.selectedOption = this.selectedOption === 'PLAY_AGAIN' ? 'TITLE' : 'PLAY_AGAIN';
+  constructor() {
+    this.injectStyle();
+    this.root = document.createElement('div');
+    this.root.id = 'result-overlay';
+    this.root.innerHTML = `
+      <div class="rs-status" id="result-status"></div>
+      <div class="rs-rank" id="result-rank"></div>
+      <div class="rs-score-block">
+        <div class="rs-score-label">スコア</div>
+        <div class="rs-score-val" id="result-total-score">0</div>
+      </div>
+      <div class="rs-sub" id="result-sub"></div>
+      <div id="result-menu" class="rs-menu">
+        <button id="btn-restart" type="button">もう一度遊ぶ</button>
+        <button id="btn-result-title" type="button">タイトルへ</button>
+        <button id="btn-result-exit" type="button">ゲームを終了</button>
+      </div>
+    `;
+    this.root.style.display = 'none';
+    document.body.appendChild(this.root);
+
+    this.elStatus = this.root.querySelector('#result-status')!;
+    this.elScore = this.root.querySelector('#result-total-score')!;
+    this.elRank = this.root.querySelector('#result-rank')!;
+    this.elSub = this.root.querySelector('#result-sub')!;
+    this.buttons = ['btn-restart', 'btn-result-title', 'btn-result-exit'].map(
+      (id) => this.root.querySelector<HTMLButtonElement>('#' + id)!
+    );
+
+    this.buttons.forEach((btn, i) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (performance.now() < this.armTime) return;
+        this.pending = ACTIONS[i];
+      });
+      btn.addEventListener('mouseenter', () => {
+        this.focus = i;
+        this.applyFocus();
+      });
+      btn.addEventListener('focus', () => btn.blur());
+    });
+
+    // 無操作が続いたら自動でタイトルへ戻る(残り秒数はボタンに出る)
+    watchResultAutoReturn(['btn-result-title']);
+  }
+
+  public show(player: Player, _standings: ContenderState[], gameTime: number) {
+    // 優勝のときは見出し(VICTORY)が1位の答えなので、順位は別に出さない
+    const isWinner = player.rank === 1;
+    this.root.classList.toggle('rs-winner', isWinner);
+    this.elStatus.textContent = isWinner ? 'VICTORY' : 'ゲームオーバー';
+    this.elRank.textContent = isWinner ? '' : `${player.rank}位`;
+
+    const mins = Math.floor(gameTime / 60);
+    const secs = Math.floor(gameTime % 60);
+    this.elSub.textContent = `生存時間  ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+    this.root.style.display = 'flex';
+
+    // 見出し、順位、スコア、メニューの順に段階的に見せる(CSSのアニメーションを頭から再生し直す)
+    this.root.classList.remove('rs-play');
+    void this.root.offsetWidth;
+    this.root.classList.add('rs-play');
+    countUpText(this.elScore, player.score.toLocaleString(), { delayMs: 900, durationMs: 1300 });
+
+    this.focus = 0;
+    this.pending = null;
+    this.armTime = performance.now() + 2400;
+    this.applyFocus();
+
+    // 上位3位に入ったら、スコアを見せたあとに名前登録を出して共通ランキングへ保存する
+    const score = player.score;
+    const check = checkHighScore(SLUG, score);
+    if (check.isRankIn) {
+      this.nameEntryOpen = true;
+      mountNameEntryModal({
+        title: 'スコア記録',
+        scoreDisplay: `${score.toLocaleString()} pts`,
+        rankDisplay: `第${check.rank}位`,
+        themeClass: 'theme-skyway',
+        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+        onComplete: (name) => {
+          saveLeaderboardScore(SLUG, score, name);
+          this.nameEntryOpen = false;
+          this.armTime = performance.now() + 800;
+        },
+      });
+    }
+  }
+
+  public hide() {
+    this.root.style.display = 'none';
+  }
+
+  private applyFocus() {
+    const items: ResultMenuItem[] = this.buttons.map((button, i) => ({ button, color: MENU_COLORS[i] }));
+    setupResultMenu(this.root.querySelector('#result-menu'), items);
+    applyResultMenuFocus(items, this.focus);
+  }
+
+  public update(input: InputState, soundManager: SoundManager): ResultAction | null {
+    if (this.nameEntryOpen) return null;
+    const n = ACTIONS.length;
+    const dir = input.upTap || input.leftTap ? -1 : input.downTap || input.rightTap ? 1 : 0;
+    if (dir !== 0) {
+      this.focus = (this.focus + dir + n) % n;
+      this.applyFocus();
       soundManager.sfx.playMenuSelect();
     }
 
-    if (input.confirm) {
-      soundManager.sfx.playMenuConfirm();
-      return this.selectedOption;
+    let action: ResultAction | null = this.pending;
+    this.pending = null;
+    if (!action && performance.now() >= this.armTime) {
+      if (input.confirm) action = ACTIONS[this.focus];
+      else if (input.cancel) action = 'EXIT';
     }
 
-    return null;
+    if (action) {
+      soundManager.sfx.playMenuConfirm();
+      this.hide();
+    }
+    return action;
   }
 
-  public render(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    player: Player,
-    finalStandings: ContenderState[],
-    gameTime: number
-  ) {
-    ctx.save();
-
-    // Dark Background
-    ctx.fillStyle = '#040711';
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const isWinner = player.rank === 1;
-
-    // 1. Header: VICTORY!! or GAME OVER
-    const headerY = height * 0.12;
-    ctx.font = '900 68px Impact, sans-serif';
-    if (isWinner) {
-      ctx.fillStyle = '#ffd700';
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 35;
-      ctx.fillText('🏆 VICTORY!! #1 CHAMPION 🏆', width / 2, headerY);
-    } else {
-      ctx.fillStyle = '#ff2255';
-      ctx.shadowColor = '#ff2255';
-      ctx.shadowBlur = 25;
-      ctx.fillText('GAME OVER - FINAL RESULT', width / 2, headerY);
-    }
-    ctx.shadowBlur = 0;
-
-    // 2. Left Panel: Player Highlights & Stats
-    const leftX = width * 0.28;
-    const leftW = 460;
-    const leftH = 500;
-    const panelY = height * 0.52;
-
-    ctx.fillStyle = 'rgba(8, 16, 32, 0.9)';
-    ctx.strokeStyle = isWinner ? '#ffd700' : '#00f0ff';
-    ctx.lineWidth = 3;
-    if (isWinner) {
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 15;
-    }
-    ctx.fillRect(leftX - leftW / 2, panelY - leftH / 2, leftW, leftH);
-    ctx.strokeRect(leftX - leftW / 2, panelY - leftH / 2, leftW, leftH);
-    ctx.shadowBlur = 0;
-
-    // Player Avatar / Tag
-    ctx.font = '900 48px Impact, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('YOU', leftX, panelY - 180);
-
-    // Rank Badge
-    ctx.font = '900 76px Impact, sans-serif';
-    ctx.fillStyle = isWinner ? '#ffd700' : '#00f0ff';
-    ctx.fillText(`#${player.rank}`, leftX, panelY - 110);
-
-    // Final Score
-    ctx.font = '900 40px Impact, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${player.score.toLocaleString()} PTS`, leftX, panelY - 40);
-
-    // Stat Breakdown
-    const mins = Math.floor(gameTime / 60);
-    const secs = Math.floor(gameTime % 60);
-    const survivalTime = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
-    const statRows = [
-      { label: 'TOTAL KILLS', val: player.kills.toLocaleString() },
-      { label: 'MAX COMBO', val: `×${player.maxCombo}` },
-      { label: 'LEVEL REACHED', val: `LV. ${player.level}` },
-      { label: 'SWORDS ACCUMULATED', val: `🗡️ ${player.swordSystem.swordCount}` },
-      { label: 'SURVIVAL TIME', val: survivalTime },
-    ];
-
-    const statsStartY = panelY + 25;
-    for (let i = 0; i < statRows.length; i++) {
-      const y = statsStartY + i * 40;
-      ctx.textAlign = 'left';
-      ctx.font = '700 19px sans-serif';
-      ctx.fillStyle = '#8899aa';
-      ctx.fillText(statRows[i].label, leftX - leftW / 2 + 35, y);
-
-      ctx.textAlign = 'right';
-      ctx.font = '900 21px Impact, sans-serif';
-      ctx.fillStyle = '#ffd700';
-      ctx.fillText(statRows[i].val, leftX + leftW / 2 - 35, y);
-    }
-
-    // 3. Right Panel: Final Tournament Standings (All 8 Contenders)
-    const rightX = width * 0.72;
-    const rightW = 570;
-    const rightH = 500;
-
-    ctx.fillStyle = 'rgba(8, 16, 32, 0.9)';
-    ctx.strokeStyle = '#00f0ff';
-    ctx.lineWidth = 3;
-    ctx.fillRect(rightX - rightW / 2, panelY - rightH / 2, rightW, rightH);
-    ctx.strokeRect(rightX - rightW / 2, panelY - rightH / 2, rightW, rightH);
-
-    ctx.textAlign = 'center';
-    ctx.font = '900 26px Impact, sans-serif';
-    ctx.fillStyle = '#00f0ff';
-    ctx.fillText('🏆 TOURNAMENT FINAL STANDINGS', rightX, panelY - rightH / 2 + 35);
-
-    const rowH = 46;
-    const tableStartY = panelY - rightH / 2 + 75;
-
-    for (let i = 0; i < finalStandings.length; i++) {
-      const c = finalStandings[i];
-      const y = tableStartY + i * rowH;
-      const isYou = c.isPlayer;
-      const isAlive = c.alive;
-
-      if (isYou) {
-        ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
-        ctx.fillRect(rightX - rightW / 2 + 15, y - 8, rightW - 30, rowH - 6);
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rightX - rightW / 2 + 15, y - 8, rightW - 30, rowH - 6);
-      } else if (!isAlive) {
-        ctx.fillStyle = 'rgba(255, 34, 85, 0.12)';
-        ctx.fillRect(rightX - rightW / 2 + 15, y - 8, rightW - 30, rowH - 6);
+  private injectStyle() {
+    if (document.getElementById('result-overlay-style')) return;
+    const style = document.createElement('style');
+    style.id = 'result-overlay-style';
+    style.textContent = `
+      #result-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 25;
+        flex-direction: column;
+        align-items: center;
+        justify-content: safe center;
+        overflow-y: auto;
+        padding: 16px 0;
+        box-sizing: border-box;
+        background: #02040a;
+        font-family: Impact, 'Arial Black', 'Hiragino Kaku Gothic ProN', sans-serif;
+        color: #fff;
       }
-
-      // Rank
-      ctx.textAlign = 'left';
-      ctx.font = '900 22px Impact, sans-serif';
-      ctx.fillStyle = !isAlive ? '#666677' : i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#8899aa';
-      ctx.fillText(`#${i + 1}`, rightX - rightW / 2 + 25, y + 14);
-
-      // Name & Archetype
-      ctx.fillStyle = !isAlive ? '#884455' : isYou ? '#ffd700' : c.color;
-      const displayName = !isAlive ? `💀 ${c.name}` : c.name;
-      ctx.fillText(displayName, rightX - rightW / 2 + 75, y + 14);
-
-      // Swords count
-      ctx.font = '900 17px Impact, sans-serif';
-      ctx.fillStyle = !isAlive ? '#555566' : '#ffd700';
-      ctx.fillText(`🗡️${c.swordCount || 0}`, rightX + 60, y + 14);
-
-      // Level
-      ctx.font = '700 16px sans-serif';
-      ctx.fillStyle = !isAlive ? '#555566' : '#8899aa';
-      ctx.fillText(`LV.${c.level}`, rightX + 130, y + 14);
-
-      // Score
-      ctx.textAlign = 'right';
-      ctx.font = '900 22px Impact, sans-serif';
-      ctx.fillStyle = !isAlive ? '#778899' : '#ffffff';
-      ctx.fillText(`${c.score.toLocaleString()} PTS`, rightX + rightW / 2 - 25, y + 14);
-    }
-
-    // 4. Action Buttons (Bottom Center)
-    const btnY = height - 70;
-    const btnW = 280;
-    const btnH = 55;
-
-    // PLAY AGAIN BUTTON
-    const playAgainX = width / 2 - 160;
-    const isPlaySelected = this.selectedOption === 'PLAY_AGAIN';
-    ctx.fillStyle = isPlaySelected ? 'rgba(0, 255, 136, 0.3)' : 'rgba(0, 0, 0, 0.7)';
-    ctx.strokeStyle = isPlaySelected ? '#00ff88' : '#334455';
-    ctx.lineWidth = isPlaySelected ? 4 : 2;
-    if (isPlaySelected) {
-      ctx.shadowColor = '#00ff88';
-      ctx.shadowBlur = 20;
-    }
-    ctx.fillRect(playAgainX - btnW / 2, btnY - btnH / 2, btnW, btnH);
-    ctx.strokeRect(playAgainX - btnW / 2, btnY - btnH / 2, btnW, btnH);
-    ctx.shadowBlur = 0;
-
-    ctx.textAlign = 'center';
-    ctx.font = '900 24px Impact, sans-serif';
-    ctx.fillStyle = isPlaySelected ? '#ffffff' : '#8899aa';
-    ctx.fillText('▶ PLAY AGAIN', playAgainX, btnY);
-
-    // TITLE SCREEN BUTTON
-    const titleBtnX = width / 2 + 160;
-    const isTitleSelected = this.selectedOption === 'TITLE';
-    ctx.fillStyle = isTitleSelected ? 'rgba(0, 240, 255, 0.3)' : 'rgba(0, 0, 0, 0.7)';
-    ctx.strokeStyle = isTitleSelected ? '#00f0ff' : '#334455';
-    ctx.lineWidth = isTitleSelected ? 4 : 2;
-    if (isTitleSelected) {
-      ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = 20;
-    }
-    ctx.fillRect(titleBtnX - btnW / 2, btnY - btnH / 2, btnW, btnH);
-    ctx.strokeRect(titleBtnX - btnW / 2, btnY - btnH / 2, btnW, btnH);
-    ctx.shadowBlur = 0;
-
-    ctx.font = '900 24px Impact, sans-serif';
-    ctx.fillStyle = isTitleSelected ? '#ffffff' : '#8899aa';
-    ctx.fillText('⌂ TITLE MENU', titleBtnX, btnY);
-
-    ctx.restore();
+      #result-overlay .rs-status {
+        font-size: clamp(26px, 5vh, 44px);
+        letter-spacing: 4px;
+        text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+      }
+      #result-overlay .rs-rank {
+        font-size: clamp(72px, 20vh, 190px);
+        line-height: 1;
+        color: #fff;
+        text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 0 0 40px rgba(0, 229, 255, 0.45);
+      }
+      #result-overlay .rs-score-block { margin: clamp(10px, 3vh, 30px) 0 clamp(4px, 1vh, 10px); text-align: center; }
+      #result-overlay .rs-score-label { font-size: clamp(12px, 2vh, 18px); letter-spacing: 6px; color: #8899aa; }
+      #result-overlay .rs-score-val {
+        font-size: clamp(36px, min(7vw, 9vh), 76px);
+        letter-spacing: 3px;
+        text-shadow: 3px 3px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
+      }
+      #result-overlay .rs-sub {
+        font-size: clamp(13px, 2.2vh, 20px);
+        color: #8899aa;
+        letter-spacing: 2px;
+        margin-bottom: clamp(16px, 4vh, 44px);
+      }
+      /* 優勝は見出しを主役にする */
+      #result-overlay.rs-winner .rs-status {
+        font-size: clamp(40px, 9vh, 80px);
+        line-height: 1;
+        color: #ffe600 !important;
+        text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 0 0 50px rgba(255, 230, 0, 0.5);
+      }
+      #result-overlay.rs-winner .rs-rank { display: none; }
+      /* 見出し → 順位 → スコア → 補足 → メニューの順に現れる */
+      #result-overlay .rs-status, #result-overlay .rs-rank, #result-overlay .rs-score-block,
+      #result-overlay .rs-sub, #result-overlay .rs-menu { opacity: 0; }
+      #result-overlay.rs-play .rs-status { animation: rs-in 0.4s ease-out 0s forwards; }
+      #result-overlay.rs-play .rs-rank { animation: rs-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) 0.4s forwards; }
+      #result-overlay.rs-play .rs-score-block { animation: rs-in 0.4s ease-out 0.8s forwards; }
+      #result-overlay.rs-play .rs-sub { animation: rs-in 0.4s ease-out 2.0s forwards; }
+      #result-overlay.rs-play .rs-menu { animation: rs-in 0.4s ease-out 2.0s forwards; }
+      @keyframes rs-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @keyframes rs-pop { from { opacity: 0; transform: scale(1.8); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) {
+        #result-overlay .rs-status, #result-overlay .rs-rank, #result-overlay .rs-score-block,
+        #result-overlay .rs-sub, #result-overlay .rs-menu { opacity: 1 !important; animation: none !important; }
+      }
+      #result-overlay .rs-menu button { font-family: inherit; }
+    `;
+    document.head.appendChild(style);
   }
 }

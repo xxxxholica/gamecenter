@@ -55,7 +55,7 @@ export class WaveDirector {
     screenEffects.shake(18);
     screenEffects.flash('#ff0033', 0.6);
 
-    this.warningBannerText = `⚠ WARNING: ${bossType.replace(/_/g, ' ')} APPROACHING ⚠`;
+    this.warningBannerText = `WARNING ${bossType.replace(/_/g, ' ')} APPROACHING`;
     this.warningBannerTimer = 4.0;
 
     const liveContenders = contenders.filter((c) => c.alive);
@@ -100,21 +100,21 @@ export class WaveDirector {
           soundManager.sfx.playBossWarning();
           screenEffects.flash('#ff0033', 0.5);
           screenEffects.shake(12);
-          this.warningBannerText = '⚠️ ALERT: BERSERKER SQUAD DETECTED! (交戦厨部隊強襲) ⚠️';
+          this.warningBannerText = '突撃兵部隊 襲来';
           this.warningBannerTimer = 4.0;
           this.spawnSpecialCluster(enemies, contenders, 'BERSERKER', 3);
         } else if (ev.type === 'ARMED_ASSAULT') {
           soundManager.sfx.playBossWarning();
           screenEffects.flash('#e000ff', 0.5);
           screenEffects.shake(12);
-          this.warningBannerText = '⚡ WARNING: HEAVY WEAPON MASTERS APPROACHING! (重火器兵接近) ⚡';
+          this.warningBannerText = '重火器兵 接近';
           this.warningBannerTimer = 4.0;
           this.spawnSpecialCluster(enemies, contenders, 'WEAPON_MASTER', 2);
         } else if (ev.type === 'LAST_MINUTE') {
           soundManager.playTrack('CLIMAX');
           screenEffects.flash('#ffdd00', 0.7);
           screenEffects.shake(15);
-          this.warningBannerText = '⚡ 45 SECONDS LEFT: FINAL SURVIVAL OVERDRIVE! ⚡';
+          this.warningBannerText = '残り45秒 ファイナルオーバードライブ';
           this.warningBannerTimer = 4.0;
           this.spawnSpecialCluster(enemies, contenders, 'BERSERKER', 3);
           this.spawnSpecialCluster(enemies, contenders, 'WEAPON_MASTER', 2);
@@ -123,7 +123,7 @@ export class WaveDirector {
           soundManager.sfx.playRankUp();
           screenEffects.flash('#00f0ff', 0.8);
           screenEffects.shake(20);
-          this.warningBannerText = '🏆 5-MINUTE SURVIVAL CLEARED! VICTORY ACHIEVED! 🏆';
+          this.warningBannerText = '5分間生存 クリア';
           this.warningBannerTimer = 6.0;
         }
       }
@@ -193,27 +193,27 @@ export class WaveDirector {
       // 0-30s: NORMAL + FAST (俊足タイプが早くも疾走)
       type = roll < 0.65 ? 'NORMAL' : 'FAST';
     } else if (t < 75) {
-      // 30s-1m15s: 交戦厨が早くも突撃開始！
+      // 30s-1m15s: 突撃兵が早くも突撃開始！
       if (roll < 0.40) type = 'NORMAL';
       else if (roll < 0.72) type = 'FAST';
-      else type = 'BERSERKER'; // 28% 交戦厨！
+      else type = 'BERSERKER'; // 28% 突撃兵！
     } else if (t < 150) {
-      // 1m15s-2m30s: 重火器兵と交戦厨が参入！
+      // 1m15s-2m30s: 重火器兵と突撃兵が参入！
       if (roll < 0.25) type = 'NORMAL';
       else if (roll < 0.50) type = 'FAST';
-      else if (roll < 0.72) type = 'BERSERKER'; // 交戦厨
+      else if (roll < 0.72) type = 'BERSERKER'; // 突撃兵
       else if (roll < 0.88) type = 'WEAPON_MASTER'; // 重火器兵
       else type = 'TANK';
     } else if (t < 240) {
       // 2m30s-4m00s: 激戦フェーズ (エリート混成)
       if (roll < 0.15) type = 'NORMAL';
       else if (roll < 0.35) type = 'FAST';
-      else if (roll < 0.62) type = 'BERSERKER'; // 交戦厨
+      else if (roll < 0.62) type = 'BERSERKER'; // 突撃兵
       else if (roll < 0.84) type = 'WEAPON_MASTER'; // 重火器兵
       else if (roll < 0.92) type = 'TANK';
       else type = 'ELITE';
     } else {
-      // 4m00s〜5m+ (クライマックス & エンドレス): 猛烈な交戦厨・重火器兵・エリートの嵐
+      // 4m00s〜5m+ (クライマックス & エンドレス): 猛烈な突撃兵・重火器兵・エリートの嵐
       if (roll < 0.10) type = 'NORMAL';
       else if (roll < 0.25) type = 'FAST';
       else if (roll < 0.58) type = 'BERSERKER';

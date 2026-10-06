@@ -100,10 +100,10 @@ export class OptionsScreen {
       ctx.fillStyle = isSelected ? '#ffffff' : '#778899';
 
       let valueText = '';
-      if (i === 0) valueText = `◀ ${Math.round(settings.bgmVolume * 100)}% ▶`;
-      else if (i === 1) valueText = `◀ ${Math.round(settings.sfxVolume * 100)}% ▶`;
-      else if (i === 2) valueText = settings.isMuted ? '【MUTED】' : '【SOUND ON】';
-      else if (i === 3) valueText = document.fullscreenElement ? '【ENABLED】' : '【DISABLED】';
+      if (i === 0) valueText = `< ${Math.round(settings.bgmVolume * 100)}% >`;
+      else if (i === 1) valueText = `< ${Math.round(settings.sfxVolume * 100)}% >`;
+      else if (i === 2) valueText = settings.isMuted ? 'MUTED' : 'SOUND ON';
+      else if (i === 3) valueText = document.fullscreenElement ? 'ON' : 'OFF';
 
       const label = this.items[i];
       if (valueText) {
@@ -117,11 +117,6 @@ export class OptionsScreen {
         ctx.fillText(label, width / 2, y);
       }
     }
-
-    ctx.textAlign = 'center';
-    ctx.font = '700 18px sans-serif';
-    ctx.fillStyle = '#8899aa';
-    ctx.fillText('レバー上下で項目選択 / 左右で音量増減 / 決定で切替 / キャンセルで戻る', width / 2, height - 60);
 
     ctx.restore();
   }

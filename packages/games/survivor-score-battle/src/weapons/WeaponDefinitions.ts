@@ -4,7 +4,6 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
   ENERGY_BLASTER: {
     type: 'ENERGY_BLASTER',
     name: 'エナジーブラスター',
-    icon: '⚡',
     color: '#00f0ff',
     maxLevel: 8,
     levels: [
@@ -15,13 +14,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 130, cooldown: 0.22, count: 4, speed: 920, pierce: 3, radius: 13, description: '4方向拡散射撃、貫通+1' },
       { damage: 170, cooldown: 0.19, count: 5, speed: 970, pierce: 3, radius: 14, description: '5方向超連射、威力超強化' },
       { damage: 225, cooldown: 0.16, count: 6, speed: 1020, pierce: 4, radius: 15, description: '6連ガトリングブラスト' },
-      { damage: 300, cooldown: 0.13, count: 8, speed: 1100, pierce: 5, radius: 18, description: '【覚醒】全方位オメガバースト' },
+      { damage: 300, cooldown: 0.13, count: 8, speed: 1100, pierce: 5, radius: 18, description: '全方位オメガバースト' },
     ],
   },
   HOMING_MISSILE: {
     type: 'HOMING_MISSILE',
     name: 'ホーミングミサイル',
-    icon: '🚀',
     color: '#ff6600',
     maxLevel: 8,
     levels: [
@@ -32,13 +30,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 240, cooldown: 0.65, count: 5, speed: 600, pierce: 1, radius: 22, description: '5発同時発射、連射速度UP' },
       { damage: 320, cooldown: 0.55, count: 6, speed: 640, pierce: 1, radius: 26, description: '6発クラスター発射' },
       { damage: 420, cooldown: 0.48, count: 8, speed: 690, pierce: 1, radius: 30, description: '8連マイクロミサイル弾幕' },
-      { damage: 600, cooldown: 0.40, count: 10, speed: 750, pierce: 2, radius: 38, description: '【覚醒】殲滅ラグナロクミサイル' },
+      { damage: 600, cooldown: 0.40, count: 10, speed: 750, pierce: 2, radius: 38, description: '殲滅ラグナロクミサイル' },
     ],
   },
   PLASMA_LASER: {
     type: 'PLASMA_LASER',
     name: 'プラズマレーザー',
-    icon: '🌠',
     color: '#33ffaa',
     maxLevel: 8,
     levels: [
@@ -49,13 +46,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 220, cooldown: 0.45, count: 3, speed: 1650, pierce: 99, radius: 25, description: '3条トライアングルレーザー' },
       { damage: 300, cooldown: 0.40, count: 4, speed: 1750, pierce: 99, radius: 28, description: '4条クロスレーザー' },
       { damage: 400, cooldown: 0.35, count: 5, speed: 1850, pierce: 99, radius: 34, description: '極太ハイパーメガ粒子砲' },
-      { damage: 580, cooldown: 0.30, count: 6, speed: 2050, pierce: 99, radius: 44, description: '【覚醒】創世ジェネシスレイ' },
+      { damage: 580, cooldown: 0.30, count: 6, speed: 2050, pierce: 99, radius: 44, description: '創世ジェネシスレイ' },
     ],
   },
   ORBIT_BLADE: {
     type: 'ORBIT_BLADE',
     name: 'オービットブレード',
-    icon: '🌀',
     color: '#ff22aa',
     maxLevel: 8,
     levels: [
@@ -66,13 +62,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 125, cooldown: 0.08, count: 5, speed: 6.5, pierce: 99, radius: 25, description: 'ブレード5枚に増加、威力大幅強化' },
       { damage: 165, cooldown: 0.08, count: 6, speed: 7.0, pierce: 99, radius: 28, description: 'ブレード6枚に増加、超高速回転' },
       { damage: 220, cooldown: 0.08, count: 7, speed: 7.5, pierce: 99, radius: 32, description: 'ブレード7枚による絶対障壁' },
-      { damage: 320, cooldown: 0.08, count: 8, speed: 9.0, pierce: 99, radius: 36, description: '【覚醒】真空無限刃ダンシングストーム' },
+      { damage: 320, cooldown: 0.08, count: 8, speed: 9.0, pierce: 99, radius: 36, description: '真空無限刃ダンシングストーム' },
     ],
   },
   THUNDER_BOLT: {
     type: 'THUNDER_BOLT',
     name: 'サンダーボルト',
-    icon: '⛈️',
     color: '#ffe600',
     maxLevel: 8,
     levels: [
@@ -83,13 +78,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 350, cooldown: 0.8, count: 5, speed: 0, pierce: 99, radius: 55, description: '5本連続落雷、クールダウン短縮' },
       { damage: 470, cooldown: 0.7, count: 6, speed: 0, pierce: 99, radius: 60, description: '6本落雷、衝撃波拡大' },
       { damage: 620, cooldown: 0.6, count: 8, speed: 0, pierce: 99, radius: 70, description: '8本連鎖ライトニングストーム' },
-      { damage: 950, cooldown: 0.5, count: 12, speed: 0, pierce: 99, radius: 85, description: '【覚醒】神罰トールハンマー' },
+      { damage: 950, cooldown: 0.5, count: 12, speed: 0, pierce: 99, radius: 85, description: '神罰トールハンマー' },
     ],
   },
   PULSE_RING: {
     type: 'PULSE_RING',
     name: 'パルスリング',
-    icon: '⭕',
     color: '#00e5ff',
     maxLevel: 8,
     levels: [
@@ -100,13 +94,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 230, cooldown: 0.95, count: 2, speed: 0, pierce: 99, radius: 360, description: '範囲超拡大、威力大幅上昇' },
       { damage: 310, cooldown: 0.85, count: 3, speed: 0, pierce: 99, radius: 400, description: '三重衝撃波を放射' },
       { damage: 420, cooldown: 0.75, count: 3, speed: 0, pierce: 99, radius: 460, description: '画面全体を揺るがす電磁パルス' },
-      { damage: 650, cooldown: 0.65, count: 4, speed: 0, pierce: 99, radius: 560, description: '【覚醒】超新星スーパーノヴァパルス' },
+      { damage: 650, cooldown: 0.65, count: 4, speed: 0, pierce: 99, radius: 560, description: '超新星スーパーノヴァパルス' },
     ],
   },
   DRONE_SQUAD: {
     type: 'DRONE_SQUAD',
     name: 'ディフェンスドローン',
-    icon: '🛸',
     color: '#aa44ff',
     maxLevel: 8,
     levels: [
@@ -117,13 +110,12 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 115, cooldown: 0.16, count: 3, speed: 900, pierce: 3, radius: 11, description: '高速レーザー機銃換装' },
       { damage: 150, cooldown: 0.14, count: 4, speed: 950, pierce: 3, radius: 12, description: 'ドローン4機編成に拡張' },
       { damage: 200, cooldown: 0.12, count: 4, speed: 1000, pierce: 4, radius: 14, description: '超連射ガトリングドローン' },
-      { damage: 300, cooldown: 0.09, count: 6, speed: 1100, pierce: 5, radius: 16, description: '【覚醒】殲滅型自律ドローンアーマダ' },
+      { damage: 300, cooldown: 0.09, count: 6, speed: 1100, pierce: 5, radius: 16, description: '殲滅型自律ドローンアーマダ' },
     ],
   },
   NOVA_BOMB: {
     type: 'NOVA_BOMB',
     name: 'ノヴァボム',
-    icon: '💥',
     color: '#ff0055',
     maxLevel: 8,
     levels: [
@@ -134,7 +126,7 @@ export const WEAPON_REGISTRY: Record<WeaponType, WeaponMeta> = {
       { damage: 460, cooldown: 1.1, count: 3, speed: 500, pierce: 1, radius: 160, description: '3連投擲クラスター爆雷' },
       { damage: 620, cooldown: 0.95, count: 3, speed: 540, pierce: 1, radius: 180, description: '大爆発の余波で連続誘爆' },
       { damage: 820, cooldown: 0.8, count: 4, speed: 580, pierce: 1, radius: 220, description: '4連核撃ノヴァボム' },
-      { damage: 1250, cooldown: 0.65, count: 5, speed: 640, pierce: 1, radius: 280, description: '【覚醒】最終殲滅ディザスターカタストロフィ' },
+      { damage: 1250, cooldown: 0.65, count: 5, speed: 640, pierce: 1, radius: 280, description: '最終殲滅ディザスターカタストロフィ' },
     ],
   },
 };

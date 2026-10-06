@@ -230,7 +230,7 @@ export class OnlineHud {
     const scoreVal = mode === 'versus' ? myScore : teamScore;
     const subLabel = mode === 'versus'
       ? 'あなたの獲得総重量'
-      : `チーム獲得総重量（あなたの貢献: ${myScore.toLocaleString()}g）`;
+      : `チーム獲得総重量・あなたの貢献 ${myScore.toLocaleString()}g`;
 
     // 統計行(stats-row)
     const statsRowHtml = mode === 'versus'

@@ -21,12 +21,15 @@ export class PhysicsWorld {
     this.dohyoMaterial = new CANNON.Material('dohyo');
     this.fighterMaterial = new CANNON.Material('fighter');
 
-    // 力士 vs 土俵（適度な摩擦で踏ん張りが効く）
+    // 力士 vs 土俵。
+    // 摩擦を持たせると、接地した力士の水平速度がほぼ打ち消され(設定速度の約7%しか進めない)、
+    // 歩行も突進も思いどおりの速さにならない。そのため摩擦は0にして、
+    // 止まる・滑る挙動は SumoFighter 側の制動(brake / GROUND_DRAG)で作る。
     const fighterDohyoContact = new CANNON.ContactMaterial(
       this.fighterMaterial,
       this.dohyoMaterial,
       {
-        friction: 0.45,
+        friction: 0.0,
         restitution: 0.05,
       }
     );

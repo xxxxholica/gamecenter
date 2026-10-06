@@ -25,7 +25,7 @@ export class HowToPlayScreen {
     ctx.fillStyle = '#00f0ff';
     ctx.shadowColor = '#00f0ff';
     ctx.shadowBlur = 15;
-    ctx.fillText('HOW TO PLAY (遊び方)', width / 2, 40);
+    ctx.fillText('遊び方', width / 2, 40);
     ctx.shadowBlur = 0;
 
     // 4 Explanation Cards
@@ -33,22 +33,18 @@ export class HowToPlayScreen {
     const cardH = 340;
     const cards = [
       {
-        icon: '🕹️',
         title: '基本操作 & 自動攻撃',
         desc: 'レバー/十字キー/WASDで8方向移動。通常弾攻撃は完全自動！敵の位置を把握し、回避と位置取りに集中せよ。',
       },
       {
-        icon: '🗡️',
         title: 'エンドレス PvPvE 斬り合い',
         desc: '剣アイテムを拾うと回転光剣が増殖！敵だけでなく強豪CPUとも直接激突！撃破されたCPUは一定時間で復活＆パワーアップ！力尽きるまで生き残れ！',
       },
       {
-        icon: '⚡',
         title: '強化 & レベルアップ',
         desc: '敵を倒して散らばる経験値ジェムを回収！レベルアップで新武器やステータスUP、回転剣の本数・威力・回転速度を強化！',
       },
       {
-        icon: '🌪️',
         title: '必殺技 SWORD STORM',
         desc: 'ゲージ100%で必殺技ボタン！超巨大化した無数の剣が超高速回転し、周囲の敵群とライバルを一瞬で薙ぎ払う！',
       },
@@ -71,22 +67,14 @@ export class HowToPlayScreen {
       ctx.fillRect(x, y, cardW, cardH);
       ctx.strokeRect(x, y, cardW, cardH);
 
-      ctx.font = '50px sans-serif';
-      ctx.fillText(c.icon, x + cardW / 2, y + 20);
-
       ctx.font = '900 22px Impact, sans-serif';
       ctx.fillStyle = '#ffd700';
-      ctx.fillText(c.title, x + cardW / 2, y + 90);
+      ctx.fillText(c.title, x + cardW / 2, y + 40);
 
       ctx.font = '600 16px sans-serif';
       ctx.fillStyle = '#ccddee';
-      this.wrapText(ctx, c.desc, x + cardW / 2, y + 140, cardW - 40, 26);
+      this.wrapText(ctx, c.desc, x + cardW / 2, y + 90, cardW - 40, 26);
     }
-
-    // Return button instruction
-    ctx.font = '900 24px Impact, sans-serif';
-    ctx.fillStyle = '#00ff88';
-    ctx.fillText('PRESS CONFIRM OR CANCEL BUTTON TO RETURN TO MENU', width / 2, height - 60);
 
     ctx.restore();
   }

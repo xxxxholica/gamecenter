@@ -32,6 +32,31 @@ export class Audience {
   private animTimer: number = 0;
   private tempObject: THREE.Object3D = new THREE.Object3D();
 
+  // 爆破で吹き飛ばされた観客と座布団(弾道で飛ぶ)
+  private flyers: Array<{
+    index: number;
+    part: 'person' | 'cushion' | 'tile';
+    pos: THREE.Vector3;
+    vel: THREE.Vector3;
+    quat: THREE.Quaternion;
+    angVel: THREE.Vector3;
+    scale: THREE.Vector3;
+    t: number;
+    maxT: number;
+  }> = [];
+  private blown: boolean[] = [];
+
+  // 客席の床(マス席)。1マスずつ吹き飛ばせるよう、インスタンスのタイルで組む
+  private floorTiles!: THREE.InstancedMesh;
+  private tileBase: Array<{ pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3 }> = [];
+  private tileBlown: boolean[] = [];
+  private innerRadius: number;
+  private outerRadius: number;
+  private numRows: number;
+  private flyDummy = new THREE.Object3D();
+  private flyMatrix = new THREE.Matrix4();
+  private zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
   constructor(config: Partial<AudienceConfig> = {}) {
     this.mesh = new THREE.Group();
 
@@ -39,6 +64,9 @@ export class Audience {
     const innerRadius = config.innerRadius ?? 10.6;
     const outerRadius = config.outerRadius ?? 29.5;
     const numRows = config.numRows ?? 13;
+    this.innerRadius = innerRadius;
+    this.outerRadius = outerRadius;
+    this.numRows = numRows;
 
     // 1. マス席のすり鉢状ひな壇フロア作成
     this.createStandFloors(innerRadius, outerRadius, numRows);
@@ -87,13 +115,19 @@ export class Audience {
       const prevHeightY = r === 0 ? -1.25 : -1.18 + Math.pow((r - 1) / (numRows - 1), 1.2) * 2.0;
       const riserHeight = Math.max(0.06, heightY - prevHeightY);
 
-      // 1. 各段の水平踏み面（中央が完全にくり抜かれたドーナツ型リング）
-      const ringGeo = new THREE.RingGeometry(rInner, rOuter, 64);
-      const ringMesh = new THREE.Mesh(ringGeo, ringMatTatami);
-      ringMesh.rotation.x = -Math.PI / 2;
-      ringMesh.position.y = heightY;
-      ringMesh.receiveShadow = true;
-      floorGroup.add(ringMesh);
+      // 1. 各段の水平踏み面。席の数ぶんのタイルに分け、爆破のとき1枚ずつ飛ばせるようにする
+      const midR = (rInner + rOuter) / 2;
+      const nTiles = Math.floor((2 * Math.PI * midR) / 0.88); // 席(観客)と同じ数・同じ角度
+      const tileThickness = 0.14;
+      const arcOuter = (2 * Math.PI * rOuter) / nTiles; // 外側の弧に合わせて、すき間を作らない
+      for (let t = 0; t < nTiles; t++) {
+        const a = (t / nTiles) * Math.PI * 2;
+        this.tileBase.push({
+          pos: new THREE.Vector3(Math.cos(a) * midR, heightY - tileThickness / 2, Math.sin(a) * midR),
+          quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a),
+          scale: new THREE.Vector3(stepWidth + 0.01, tileThickness, arcOuter * 1.003),
+        });
+      }
 
       // 2. 各段の内側垂直蹴込み壁（オープンエンド円筒＝筒壁のみ、中心は完全空洞）
       if (r > 0) {
@@ -120,6 +154,18 @@ export class Audience {
         floorGroup.add(railMesh);
       }
     }
+
+    // タイルをまとめて1つのインスタンスメッシュにする
+    this.floorTiles = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), ringMatTatami, this.tileBase.length);
+    this.floorTiles.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    this.tileBase.forEach((tb, i) => {
+      m.compose(tb.pos, tb.quat, tb.scale);
+      this.floorTiles.setMatrixAt(i, m);
+    });
+    this.floorTiles.instanceMatrix.needsUpdate = true;
+    this.tileBlown = new Array(this.tileBase.length).fill(false);
+    floorGroup.add(this.floorTiles);
 
     this.mesh.add(floorGroup);
   }
@@ -341,6 +387,7 @@ export class Audience {
     }
 
     this.totalCount = seatList.length;
+    this.blown = new Array(this.totalCount).fill(false);
 
     // ジオメトリ定義（座っている人物）
     // 1. 座布団
@@ -565,6 +612,7 @@ export class Audience {
 
     for (let i = start; i < end; i++) {
       const data = this.spectatorData[i];
+      if (this.blown[i]) continue; // 爆破で飛んだ観客は別処理
       if (data.role === 'judge') continue; // 審判親方は微動だにせず威厳を保つ
 
       // 微小なサイン波の首・体の揺れ
@@ -599,4 +647,175 @@ export class Audience {
         attr.needsUpdate = true;
       }
     }
-  }}
+
+    this.updateFlyers(dt);
+  }
+
+  /** 席の高さ(半径から、その段の踏み面の高さを求める) */
+  public floorHeightAt(radius: number): number {
+    const stepWidth = (this.outerRadius - this.innerRadius) / this.numRows;
+    const row = Math.max(0, Math.min(this.numRows - 1, Math.floor((radius - this.innerRadius) / stepWidth)));
+    const progress = row / (this.numRows - 1);
+    return -1.18 + Math.pow(progress, 1.2) * 2.0;
+  }
+
+  /**
+   * 客席を爆破する。爆心地の周りの観客と座布団が、外向きに弾き飛ばされる。
+   * 返り値は吹き飛ばした人数。
+   */
+  public explodeAt(center: THREE.Vector3, radius: number): number {
+    let count = 0;
+    for (let i = 0; i < this.totalCount; i++) {
+      if (this.blown[i]) continue;
+      const data = this.spectatorData[i];
+      const dx = data.basePosition.x - center.x;
+      const dz = data.basePosition.z - center.z;
+      const dy = data.basePosition.y - center.y;
+      const dist = Math.hypot(dx, dz, dy * 0.6);
+      if (dist > radius) continue;
+
+      this.blown[i] = true;
+      count++;
+      const falloff = 1 - dist / radius; // 中心に近いほど強く飛ぶ
+      const len = Math.hypot(dx, dz) || 1;
+      const out = new THREE.Vector3(dx / len, 0, dz / len);
+      // 爆心から離れる向きに、少し散らして飛ばす
+      const spread = new THREE.Vector3((Math.random() - 0.5) * 0.9, 0, (Math.random() - 0.5) * 0.9);
+      const dir = out.add(spread).normalize();
+      const sp = 7 + falloff * 13 + Math.random() * 4;
+
+      // 人は大きく、座布団は人とは別方向へ軽く舞う
+      this.flyers.push({
+        index: i,
+        part: 'person',
+        pos: data.basePosition.clone(),
+        vel: new THREE.Vector3(dir.x * sp, 8 + falloff * 10 + Math.random() * 4, dir.z * sp),
+        quat: new THREE.Quaternion().setFromEuler(data.baseRotation),
+        angVel: new THREE.Vector3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 9),
+        scale: data.baseScale.clone(),
+        t: 0,
+        maxT: 2.6 + Math.random() * 0.8,
+      });
+      const cdir = dir.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 0, (Math.random() - 0.5) * 1.2)).normalize();
+      this.flyers.push({
+        index: i,
+        part: 'cushion',
+        pos: data.basePosition.clone(),
+        vel: new THREE.Vector3(cdir.x * (sp * 0.9), 6 + falloff * 8 + Math.random() * 5, cdir.z * (sp * 0.9)),
+        quat: new THREE.Quaternion().setFromEuler(data.baseRotation),
+        angVel: new THREE.Vector3((Math.random() - 0.5) * 16, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 16),
+        scale: data.baseScale.clone(),
+        t: 0,
+        maxT: 2.2 + Math.random() * 0.8,
+      });
+    }
+
+    // 爆心の床(席のタイル)も、1枚ずつ弾き飛ばす。中心のほうが強く、外のほうが弱い
+    const tileRadius = radius * 0.9;
+    for (let i = 0; i < this.tileBase.length; i++) {
+      if (this.tileBlown[i]) continue;
+      const tb = this.tileBase[i];
+      const dx = tb.pos.x - center.x;
+      const dz = tb.pos.z - center.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > tileRadius) continue;
+
+      this.tileBlown[i] = true;
+      const falloff = 1 - dist / tileRadius;
+      const len = dist || 1;
+      const dir = new THREE.Vector3(dx / len, 0, dz / len).add(
+        new THREE.Vector3((Math.random() - 0.5) * 0.7, 0, (Math.random() - 0.5) * 0.7)
+      ).normalize();
+      const sp = 4 + falloff * 10 + Math.random() * 3;
+      this.flyers.push({
+        index: i,
+        part: 'tile',
+        pos: tb.pos.clone(),
+        vel: new THREE.Vector3(dir.x * sp, 5 + falloff * 9 + Math.random() * 3, dir.z * sp),
+        quat: tb.quat.clone(),
+        angVel: new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 7),
+        scale: tb.scale.clone(),
+        t: 0,
+        maxT: 2.2 + Math.random() * 0.9,
+      });
+    }
+
+    return count;
+  }
+
+  /** 吹き飛んだ観客を元の席に戻す(新しい試合の前に呼ぶ) */
+  public restoreAll() {
+    this.flyers.length = 0;
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < this.totalCount; i++) {
+      if (!this.blown[i]) continue;
+      this.blown[i] = false;
+      const data = this.spectatorData[i];
+      dummy.position.copy(data.basePosition);
+      dummy.rotation.copy(data.baseRotation);
+      dummy.scale.copy(data.baseScale);
+      dummy.updateMatrix();
+      for (const m of [this.zabutonInstanced, this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced]) {
+        m.setMatrixAt(i, dummy.matrix);
+        m.instanceMatrix.clearUpdateRanges();
+        m.instanceMatrix.needsUpdate = true;
+      }
+    }
+    const tm = new THREE.Matrix4();
+    for (let i = 0; i < this.tileBase.length; i++) {
+      if (!this.tileBlown[i]) continue;
+      this.tileBlown[i] = false;
+      const tb = this.tileBase[i];
+      tm.compose(tb.pos, tb.quat, tb.scale);
+      this.floorTiles.setMatrixAt(i, tm);
+    }
+    this.floorTiles.instanceMatrix.clearUpdateRanges();
+    this.floorTiles.instanceMatrix.needsUpdate = true;
+  }
+
+  /** 飛んでいる観客・座布団の弾道を進め、行列を書き込む */
+  private updateFlyers(dt: number) {
+    if (this.flyers.length === 0) return;
+
+    const personMeshes = [this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced];
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+
+    for (let k = this.flyers.length - 1; k >= 0; k--) {
+      const f = this.flyers[k];
+      f.t += dt;
+      f.vel.y -= 24 * dt;
+      f.pos.addScaledVector(f.vel, dt);
+      e.set(f.angVel.x * dt, f.angVel.y * dt, f.angVel.z * dt);
+      q.setFromEuler(e);
+      f.quat.premultiply(q);
+
+      const done = f.t >= f.maxT || f.pos.y < -4;
+      if (done) {
+        const targets =
+          f.part === 'person' ? personMeshes : f.part === 'tile' ? [this.floorTiles] : [this.zabutonInstanced];
+        for (const m of targets) {
+          m.setMatrixAt(f.index, this.zeroMatrix);
+          m.instanceMatrix.addUpdateRange(f.index * 16, 16);
+          m.instanceMatrix.needsUpdate = true;
+        }
+        this.flyers.splice(k, 1);
+        continue;
+      }
+
+      this.flyDummy.position.copy(f.pos);
+      this.flyDummy.quaternion.copy(f.quat);
+      this.flyDummy.scale.copy(f.scale);
+      this.flyDummy.updateMatrix();
+      this.flyMatrix.copy(this.flyDummy.matrix);
+
+      const targets =
+          f.part === 'person' ? personMeshes : f.part === 'tile' ? [this.floorTiles] : [this.zabutonInstanced];
+      for (const m of targets) {
+        m.setMatrixAt(f.index, this.flyMatrix);
+        m.instanceMatrix.addUpdateRange(f.index * 16, 16);
+        m.instanceMatrix.needsUpdate = true;
+      }
+    }
+  }
+}

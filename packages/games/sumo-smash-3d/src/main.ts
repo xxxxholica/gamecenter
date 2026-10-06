@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { PhysicsWorld } from './physics/PhysicsWorld';
 import { Dohyo } from './entities/Dohyo';
 import { Audience } from './entities/Audience';
-import { SumoFighter } from './entities/SumoFighter';
-import { InputManager } from './input/InputManager';
+import { SumoFighter, FighterActions, FighterMoveInput } from './entities/SumoFighter';
+import { InputManager, PlayerInputState } from './input/InputManager';
 import { SoundManager } from './audio/SoundManager';
 import { ParticleManager } from './effects/ParticleManager';
 import { UIManager, GameMode } from './ui/UIManager';
@@ -25,6 +25,14 @@ watchResultAutoReturn(['result-btn-title']);
 const HUB_URL = '../../';
 const ACCENT = '#e63946';
 
+/**
+ * タイトルのあとにモード選択(CPU対戦 / 遊び方)を挟むか。
+ * いまは1人用(CPU対戦)だけなので挟まず、そのまま対戦を始める。
+ * オンライン対戦を追加するときに true に戻して、モード選択にオンラインの項目を足す。
+ * モード選択・遊び方の画面のコードは、そのために残してある。
+ */
+const SHOW_MODE_SELECT = false;
+
 // 画面左下の共通ボタンガイド(場面ごとに差し替える)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
 const guideModeSelect = () => mountArcadeGuide({
@@ -39,12 +47,8 @@ const guideHowTo = () => mountArcadeGuide({ buttons: [{ indices: [0, 1], label: 
 const guideBattle = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
-    { indices: [0], label: '張り手' },
-    { indices: [1], label: 'ぶちかまし・長押しでタメ' },
-    { indices: [2], label: '四股' },
-    { indices: [3, 4], label: 'つかみ' },
-    { indices: [5], label: 'すり足' },
-    { indices: [6, 7], label: '防御' },
+    { indices: [0, 2], label: '打撃　ちょん押し=張り手　長押し=ぶちかまし' },
+    { indices: [1, 3], label: 'つかみ' },
   ],
   showHomeHint: true,
   position: 'top-left',
@@ -71,7 +75,7 @@ const versusArt = (rightLabel: string) => `<svg viewBox="0 0 200 100" xmlns="htt
 const GUIDE_ART = `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
   <rect x="45" y="14" width="110" height="72" rx="4" fill="#f3e6c8" stroke="#8b6b3a" stroke-width="4"/>
   <rect x="38" y="10" width="124" height="10" rx="5" fill="#8b1e0f"/><rect x="38" y="80" width="124" height="10" rx="5" fill="#8b1e0f"/>
-  <text x="100" y="62" text-anchor="middle" font-size="32" font-weight="900" fill="#3a2410" font-family="serif">指南</text>
+  <text x="100" y="60" text-anchor="middle" font-size="24" font-weight="900" fill="#3a2410" font-family="serif">遊び方</text>
 </svg>`;
 
 export type GameState = 'title' | 'menu' | 'battle';
@@ -116,6 +120,19 @@ class SumoGame {
   private camRight: THREE.Vector3 = new THREE.Vector3();
 
   // バトルラウンド管理
+  // 「はっけよい」のあとに出す「のこった」の予約
+  private nokottaTimer: number | null = null;
+
+  private clearNokotta() {
+    if (this.nokottaTimer !== null) {
+      clearTimeout(this.nokottaTimer);
+      this.nokottaTimer = null;
+    }
+  }
+
+  // 客席の爆破(1ラウンドに1回まで)
+  private seatBlastDone: boolean = false;
+
   private roundState: 'standby' | 'active' | 'finished' | 'match_over' = 'standby';
   private roundStandbyTimer: number = 0;
   private isRoundActive: boolean = false;
@@ -173,6 +190,23 @@ class SumoGame {
     // 6. 土俵ステージの構築
     this.dohyo = new Dohyo(this.physics);
     this.scene.add(this.dohyo.mesh);
+
+    // 爆発のたびに、土俵へ焦げ跡を付ける
+    this.particleManager.onScorch = (pos, radius, strength) => this.dohyo.addScorch(pos, radius, strength);
+
+    // 最大級の爆発では、画面全体が一瞬、炎の色に染まる
+    const blastFlash = document.createElement('div');
+    blastFlash.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:5000;opacity:0;' +
+      'background:radial-gradient(circle at 50% 55%, rgba(255,244,210,0.95) 0%, rgba(255,150,50,0.75) 45%, rgba(190,50,10,0.55) 100%);';
+    document.body.appendChild(blastFlash);
+    this.particleManager.onScreenFlash = (intensity) => {
+      blastFlash.style.transition = 'none';
+      blastFlash.style.opacity = String(0.9 * intensity);
+      void blastFlash.offsetWidth;
+      blastFlash.style.transition = `opacity ${0.3 + 0.35 * intensity}s ease-out`;
+      blastFlash.style.opacity = '0';
+    };
 
     // 観客席・大相撲アリーナ（溜席・マス席・吊り屋根）の構築
     this.audience = new Audience({
@@ -252,10 +286,11 @@ class SumoGame {
     this.titleScreen = new ArcadeTitleScreen({
       slug: 'sumo-smash-3d',
       accentColor: ACCENT,
-      tagline: '剛体物理シミュレーション相撲アクション',
+      tagline: '土俵から押し出せ',
       onStart: () => {
         this.soundManager.playHyoshigi();
-        this.openModeSelect();
+        if (SHOW_MODE_SELECT) this.openModeSelect();
+        else this.startBattle('pve');
       },
     });
     this.modeSelect = new ModeSelect(
@@ -346,6 +381,10 @@ class SumoGame {
     this.player1.wins = 0;
     this.player2.wins = 0;
 
+    // 吹き飛んだ客席と土俵の焦げ跡を元に戻す(新しい試合ごと)
+    this.audience.restoreAll();
+    this.dohyo.clearScorches();
+
     // 頭上マーカーのラベル更新（PvPなら2P、PvEならCPU）
     this.player1.setMarkerLabel('1P');
     this.player2.setMarkerLabel(mode === 'pvp' ? '2P' : 'CPU');
@@ -356,6 +395,9 @@ class SumoGame {
     this.uiManager.hideVictoryModal();
     guideBattle();
 
+    // 対戦BGM。仕切りの間は静かに、立ち合いで盛り上がる
+    this.soundManager.playBgm('battle');
+
     // 立ち合いシーケンス開始（初番勝負）
     this.startRoundSequence(true);
   }
@@ -365,9 +407,12 @@ class SumoGame {
    * 「見合って！見合って！」の構え待機を経て、「はっけよい！」の文字と同時に立ち合い（操作可能）開始！
    */
   private startRoundSequence(isFirstRound: boolean) {
+    this.clearNokotta();
     this.roundState = 'standby';
     this.isRoundActive = false;
     this.roundStandbyTimer = 0;
+    this.seatBlastDone = false;
+    this.soundManager.setBgmCalm(true);
 
     // 蓄積ダメージリセット
     this.player1.damagePercent = 0;
@@ -386,21 +431,9 @@ class SumoGame {
     // 柝の音（カチーン！）
     this.soundManager.playHyoshigi();
 
-    let roundTitle = '初番勝負';
-    let subText = '蒼天龍 vs 紅炎山・二本先取';
-
-    if (!isFirstRound) {
-      if (this.player1.wins === 1 && this.player2.wins === 1) {
-        roundTitle = '結びの一番・決戦！';
-        subText = '星取り五分・1 - 1 勝者が優勝！';
-      } else {
-        roundTitle = '二番勝負';
-        const leader = this.player1.wins > this.player2.wins ? '蒼天龍 王手！' : '紅炎山 王手！';
-        subText = `星取り・${this.player1.wins} - ${this.player2.wins} ${leader}`;
-      }
-    }
-
-    this.uiManager.showBanner('見合って！見合って！', `${roundTitle} ｜ ${subText}`, 1400);
+    // 星取りは HUD の丸印で見えるので、決勝の番だけ補足する
+    const isDecider = !isFirstRound && this.player1.wins === 1 && this.player2.wins === 1;
+    this.uiManager.showBanner('見合って', isDecider ? '最終番' : '', 1200);
   }
 
   /**
@@ -412,6 +445,8 @@ class SumoGame {
   }
 
   private showTitle() {
+    this.clearNokotta();
+    this.soundManager.playBgm('menu');
     this.gameState = 'title';
     this.armInput();
     this.uiManager.showTitleScreen();
@@ -424,9 +459,9 @@ class SumoGame {
     this.gameState = 'menu';
     this.armInput();
     this.modeSelect.show([
-      { id: 'pve', badge: '1P vs CPU', art: versusArt('CPU'), title: '幕内本割', sub: 'ひとりで遊ぶ', desc: 'CPUの力士と二本先取で勝負します。' },
+      { id: 'pve', badge: '1P vs CPU', art: versusArt('CPU'), title: 'CPU対戦', sub: '二本先取' },
       // 二人対戦(pvp)は今後オンライン対戦として実装予定のため一旦非表示
-      { id: 'guide', badge: 'HOW TO PLAY', art: GUIDE_ART, title: '相撲指南', sub: '遊び方・技', desc: '操作方法と技の効果を確認します。' },
+      { id: 'guide', art: GUIDE_ART, title: '遊び方', sub: '操作と技' },
     ]);
     guideModeSelect();
   }
@@ -462,6 +497,8 @@ class SumoGame {
 
     // アケコンの「押した瞬間」は毎フレーム取り出しておく(画面をまたいだ押しっぱなしを決定にしない)
     const padPress = this.padEdge.poll();
+    // ゲームパッドだけで始めても音が出るよう、ボタンが押されたら音声を有効にする
+    if (padPress.any(0, 1, 2, 3, 9)) this.soundManager.unlock();
 
     if (this.gameState !== 'battle') {
       this.updateTitleScreen(dt, padPress.any(0, 1));
@@ -564,9 +601,18 @@ class SumoGame {
       if (this.roundStandbyTimer >= 1.35) {
         this.roundState = 'active';
         this.isRoundActive = true;
+        this.soundManager.setBgmCalm(false);
 
         // ★ 文字表示と開始タイミングを完全に一致！
-        this.uiManager.showBanner('はっけよい！', 'のこった！のこった！', 1600);
+        this.uiManager.showBanner('はっけよい', '', 900);
+        // 「のこった」は、少し間をあけて別に出す(勝負がついていれば出さない)
+        this.clearNokotta();
+        this.nokottaTimer = window.setTimeout(() => {
+          this.nokottaTimer = null;
+          if (this.gameState === 'battle' && this.roundState === 'active') {
+            this.uiManager.showBanner('のこった', '', 900);
+          }
+        }, 1100);
         this.soundManager.playTaiko();
       }
       return;
@@ -574,6 +620,7 @@ class SumoGame {
 
     // 2. 試合決着（二本先取達成！リザルトモーダル表示中）
     if (this.roundState === 'match_over') {
+      this.checkSeatBlast();
       this.physics.step(dt);
       this.particleManager.update(dt);
       this.applyCameraShake();
@@ -585,6 +632,7 @@ class SumoGame {
     // 3. ラウンド決着後、次ラウンドへの仕切り直し待ち（「勝負あり！」後）
     if (this.roundState === 'finished') {
       this.roundResetTimer += dt;
+      this.checkSeatBlast();
 
       // 決着後の物理・エフェクト継続
       this.physics.step(dt);
@@ -598,6 +646,15 @@ class SumoGame {
       return;
     }
 
+    // 強い当たりの一瞬だけ、力士と物理を止める(爆発の粒子だけがゆっくり進む)
+    if (this.particleManager.hitStopRemaining > 0) {
+      this.particleManager.hitStopRemaining -= dt;
+      this.particleManager.update(dt * 0.2);
+      this.applyCameraShake();
+      this.updateHud();
+      return;
+    }
+
     // 4. 立ち合い激闘中 (roundState === 'active')
     // 1P 入力更新
     const rawP1Input = this.inputManager.getPlayer1Input();
@@ -606,15 +663,8 @@ class SumoGame {
     const p1Actions = this.toActions(rawP1Input);
 
     // 2P 入力（PvPなら2P操作、PvEならCPU AI）
-    let p2MoveInput = { x: 0, z: 0, isMoving: false, dash: false };
-    let p2Actions = {
-      harite: false,
-      buchikamashiCharge: false,
-      buchikamashiRelease: false,
-      shiko: false,
-      grab: false,
-      guard: false,
-    };
+    let p2MoveInput: FighterMoveInput;
+    let p2Actions: FighterActions;
 
     if (this.gameMode === 'pvp') {
       const rawP2Input = this.inputManager.getPlayer2Input();
@@ -622,20 +672,8 @@ class SumoGame {
       p2Actions = this.toActions(rawP2Input);
     } else {
       const p2Plan = this.ai.update(dt, this.player1);
-      p2MoveInput = {
-        x: p2Plan.moveX,
-        z: p2Plan.moveZ,
-        isMoving: p2Plan.isMoving,
-        dash: p2Plan.dash,
-      };
-      p2Actions = {
-        harite: p2Plan.harite,
-        buchikamashiCharge: p2Plan.buchikamashiCharge,
-        buchikamashiRelease: p2Plan.buchikamashiRelease,
-        shiko: p2Plan.shiko,
-        grab: p2Plan.grab,
-        guard: p2Plan.guard,
-      };
+      p2MoveInput = p2Plan.move;
+      p2Actions = p2Plan.actions;
     }
 
     // 力士の更新
@@ -650,6 +688,9 @@ class SumoGame {
 
     // 物理シミュレーション進行
     this.physics.step(dt);
+
+    // 客席に押し出されたら、客席ごと爆破
+    this.checkSeatBlast();
 
     // 勝敗・リングアウト（Step 1: 落下判定とリセット）
     this.checkRingOut(dt);
@@ -673,20 +714,16 @@ class SumoGame {
       this.player2.damagePercent,
       this.player1.wins,
       this.player2.wins,
-      this.player1.chargeTimer / this.player1.maxChargeTime,
-      this.player2.chargeTimer / this.player2.maxChargeTime,
+      this.player1.chargeRatio,
+      this.player2.chargeRatio,
       this.player1.hasSuperArmor,
       this.player2.hasSuperArmor,
-      this.player1.state === 'guard',
-      this.player2.state === 'guard',
-      this.player1.state === 'stun',
-      this.player2.state === 'stun',
-      this.player1.guardGauge,
-      this.player2.guardGauge,
       this.player1.buchikamashiCooldown / this.player1.buchikamashiMaxCooldown,
       this.player2.buchikamashiCooldown / this.player2.buchikamashiMaxCooldown,
-      this.player1.shikoCooldown / this.player1.shikoMaxCooldown,
-      this.player2.shikoCooldown / this.player2.shikoMaxCooldown
+      this.player1.grabCooldown / this.player1.grabMaxCooldown,
+      this.player2.grabCooldown / this.player2.grabMaxCooldown,
+      this.player1.hariteGauge / 100,
+      this.player2.hariteGauge / 100
     );
   }
 
@@ -694,12 +731,12 @@ class SumoGame {
    * 攻撃ヒット判定（ヒットボックス vs 相手の剛体）
    */
   private checkAttackHits() {
-    this.resolveAttack(this.player1, this.player2, 'A:つかみ打撃！ B:上手投げ！ 移動:寄り切り！', 1800);
-    this.resolveAttack(this.player2, this.player1, '組まれた！2秒後にレバー連打で脱出！', 1600);
+    this.resolveAttack(this.player1, this.player2);
+    this.resolveAttack(this.player2, this.player1);
   }
 
   /** attacker のヒットボックスが defender に届いていればヒット処理を行う */
-  private resolveAttack(attacker: SumoFighter, defender: SumoFighter, grabHint: string, grabBannerMs: number) {
+  private resolveAttack(attacker: SumoFighter, defender: SumoFighter) {
     const hitbox = attacker.getHitbox();
     if (!hitbox || attacker.attackHitRegistered) return;
 
@@ -709,44 +746,75 @@ class SumoGame {
     // ヒット成立！
     attacker.attackHitRegistered = true;
     if (attacker.currentAttackType === 'grab') {
-      // つかみ成立！（ガード貫通）
+      // 突進中の相手は掴めない(突進のほうが、つかみを弾き飛ばす)
+      if (defender.state === 'buchikamashi_rush') {
+        attacker.attackHitRegistered = false;
+        return;
+      }
       if (defender.state !== 'fall' && defender.state !== 'grabbed' && defender.state !== 'throw') {
         attacker.onGrabSuccess(defender);
         defender.onGrabbed(attacker);
-        this.uiManager.showBanner('がっぷり四つ！', grabHint, grabBannerMs);
       }
     } else {
       defender.receiveHit(
         this.hitSourceTmp.set(attacker.body.position.x, attacker.body.position.y, attacker.body.position.z),
         attacker.currentAttackType!,
-        attacker.chargeTimer / attacker.maxChargeTime
+        attacker.chargeTimer / attacker.maxChargeTime,
+        attacker
       );
     }
   }
 
   /** カメラ基準の入力をワールド座標の移動入力に変換する */
-  private toWorldMoveInput(raw: { isMoving: boolean; moveX: number; moveZ: number; dashTriggered: boolean }) {
+  private toWorldMoveInput(raw: PlayerInputState): FighterMoveInput {
     const move = this.worldMoveTmp.set(0, 0, 0);
     if (raw.isMoving) {
       move.addScaledVector(this.camRight, raw.moveX);
       move.addScaledVector(this.camForward, -raw.moveZ);
       move.normalize();
     }
-    return { x: move.x, z: move.z, isMoving: raw.isMoving, dash: raw.dashTriggered };
+    return { x: move.x, z: move.z, isMoving: raw.isMoving };
   }
 
-  private toActions(raw: {
-    buttonAPressed: boolean; buttonB: boolean; buttonBReleased: boolean;
-    buttonCPressed: boolean; buttonGrabPressed: boolean; guard: boolean;
-  }) {
+  private toActions(raw: PlayerInputState): FighterActions {
     return {
-      harite: raw.buttonAPressed,
-      buchikamashiCharge: raw.buttonB,
-      buchikamashiRelease: raw.buttonBReleased,
-      shiko: raw.buttonCPressed,
-      grab: raw.buttonGrabPressed,
-      guard: raw.guard,
+      strikePressed: raw.strikePressed,
+      strike: raw.strike,
+      strikeReleased: raw.strikeReleased,
+      grabPressed: raw.grabPressed,
     };
+  }
+
+  /**
+   * 場外・客席への落下の大爆発。画面の大半を炎と煙が埋める。
+   * audienceRadius > 0 なら、その範囲の観客も吹き飛ばす。1ラウンドに1回だけ。
+   */
+  private megaBlast(center: THREE.Vector3, audienceRadius: number) {
+    if (this.seatBlastDone) return;
+    this.seatBlastDone = true;
+    if (audienceRadius > 0) this.audience.explodeAt(center, audienceRadius);
+    this.particleManager.spawnMegaBlast(center, 14);
+    this.particleManager.spawnBurn(center, 7, 2.6);
+    this.soundManager.playExplosion(2.4);
+    this.soundManager.duckBgm(2.2);
+  }
+
+  /**
+   * 力士が客席に突っ込んだら、その場で客席を爆破する(観客と座布団が吹き飛ぶ)
+   */
+  private checkSeatBlast() {
+    if (this.seatBlastDone) return;
+    const seatInner = this.dohyo.radius + 1.4;
+    for (const f of [this.player1, this.player2]) {
+      const r = Math.hypot(f.body.position.x, f.body.position.z);
+      if (r < seatInner - 0.2) continue;
+      const floor = this.audience.floorHeightAt(r);
+      if (f.body.position.y > floor + 0.9) continue; // まだ客席の上を飛んでいる
+
+      // 客席ごと大爆破(観客と座布団が吹き飛ぶ)
+      this.megaBlast(new THREE.Vector3(f.body.position.x, floor + 0.7, f.body.position.z), 9);
+      return;
+    }
   }
 
   /**
@@ -763,12 +831,21 @@ class SumoGame {
     if (p1Fell || p2Fell) {
       this.isRoundActive = false;
       this.roundResetTimer = 0;
+      this.clearNokotta();
       this.soundManager.playHyoshigi();
+      this.soundManager.setBgmCalm(true);
+
+      // 客席に届く前に落ちた場合も、落ちた場所で大爆発
+      const fallen = p1Fell ? this.player1 : this.player2;
+      this.megaBlast(
+        new THREE.Vector3(fallen.body.position.x, 0.8, fallen.body.position.z),
+        0
+      );
 
       if (p1Fell && p2Fell) {
         // 同体・取り直し
         this.roundState = 'finished';
-        this.uiManager.showBanner('同体！取り直し', '物言いがつきました！取り直します', 2400);
+        this.uiManager.showBanner('同体　取り直し', '', 2000);
         return;
       }
 
@@ -778,27 +855,28 @@ class SumoGame {
       if (p2Fell) {
         // 1P 勝利！
         this.player1.wins++;
-        winnerText = '東方 蒼天龍の勝ち！';
+        winnerText = '蒼天龍';
         kimarite = this.determineKimarite(this.player1, this.player2);
       } else {
         // 2P 勝利！
         this.player2.wins++;
-        winnerText = '西方 紅炎山の勝ち！';
+        winnerText = '紅炎山';
         kimarite = this.determineKimarite(this.player2, this.player1);
       }
 
       // 決まり手コール
-      this.uiManager.showBanner('勝負あり！', `${winnerText} 決まり手: ${kimarite}`, 2200);
+      this.uiManager.showBanner('勝負あり', `${winnerText}　${kimarite}`, 2000);
 
       // 二点先取（2勝）達成チェック
       if (this.player1.wins >= 2 || this.player2.wins >= 2) {
         // 試合終了！自動で次ラウンドに進まないよう 'match_over' に移行
         this.roundState = 'match_over';
         setTimeout(() => {
-          const grandWinner = this.player1.wins >= 2 ? '東方 蒼天龍' : '西方 紅炎山';
-          const p2DisplayName = '西方 紅炎山';
+          const grandWinner = this.player1.wins >= 2 ? '蒼天龍' : '紅炎山';
+          const p2DisplayName = '紅炎山';
           if (this.gameState !== 'battle' || this.roundState !== 'match_over') return;
           this.soundManager.playTaiko();
+          this.soundManager.playBgm('menu');
           this.menuNav.clear();
           this.armInput(600);
           this.uiManager.showVictoryModal(grandWinner, this.player1.wins, this.player2.wins, p2DisplayName);
@@ -818,17 +896,11 @@ class SumoGame {
     if (winner.state === 'throw') {
       return '上手投げ';
     }
-    if (winner.state === 'grab_holding') {
-      return '寄り切り';
-    }
     if (winner.state === 'buchikamashi_rush') {
       return '突き出し';
     }
     if (winner.state === 'harite') {
       return '押し出し';
-    }
-    if (winner.state === 'shiko') {
-      return '送り出し';
     }
     if (loser.damagePercent > 120) {
       return '寄り倒し';

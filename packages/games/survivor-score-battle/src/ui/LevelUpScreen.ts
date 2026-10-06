@@ -2,6 +2,7 @@ import { InputState, UpgradeCard, WeaponType } from '../types';
 import { Player } from '../entities/Player';
 import { WEAPON_REGISTRY } from '../weapons/WeaponDefinitions';
 import { SoundManager } from '../audio/SoundManager';
+import { drawIcon } from './Icons';
 
 export class LevelUpScreen {
   public cards: UpgradeCard[] = [];
@@ -48,9 +49,8 @@ export class LevelUpScreen {
         id: `weapon_up_${pick}`,
         category: 'WEAPON_UPGRADE',
         weaponType: pick,
-        title: `${meta.icon} ${meta.name} LV.${nextLvl}`,
+        title: `${meta.name} LV.${nextLvl}`,
         description: lvlConfig.description,
-        icon: meta.icon,
         rarity: nextLvl === 8 ? 'LEGENDARY' : 'RARE',
       });
     }
@@ -63,9 +63,8 @@ export class LevelUpScreen {
         id: `weapon_new_${pick}`,
         category: 'WEAPON_NEW',
         weaponType: pick,
-        title: `【NEW】${meta.icon} ${meta.name}`,
+        title: `NEW ${meta.name}`,
         description: meta.levels[0].description,
-        icon: meta.icon,
         rarity: 'EPIC',
       });
     }
@@ -76,45 +75,40 @@ export class LevelUpScreen {
         id: 'stat_sword_count',
         category: 'STAT_BOOST',
         statType: 'SWORD_COUNT',
-        title: '🗡️ SWORD +1',
+        title: 'SWORD +1',
         description: `回転する剣を1本追加！ (現在: ${player.swordSystem.swordCount}本)`,
-        icon: '🗡️',
         rarity: 'EPIC',
       },
       {
         id: 'stat_sword_damage',
         category: 'STAT_BOOST',
         statType: 'SWORD_DAMAGE',
-        title: '💥 剣の威力強化',
+        title: '剣の威力強化',
         description: '回転剣の攻撃力 +30%',
-        icon: '⚔️',
         rarity: 'RARE',
       },
       {
         id: 'stat_sword_speed',
         category: 'STAT_BOOST',
         statType: 'SWORD_SPEED',
-        title: '⚡ 剣の回転速度UP',
+        title: '剣の回転速度UP',
         description: '剣の旋回スピード +25%',
-        icon: '🌀',
         rarity: 'RARE',
       },
       {
         id: 'stat_sword_size',
         category: 'STAT_BOOST',
         statType: 'SWORD_SIZE',
-        title: '📐 巨大回転刃',
+        title: '巨大回転刃',
         description: '剣のサイズと当たり判定 +25%',
-        icon: '✨',
         rarity: 'RARE',
       },
       {
         id: 'stat_sword_radius',
         category: 'STAT_BOOST',
         statType: 'SWORD_RADIUS',
-        title: '💫 旋回半径拡大',
+        title: '旋回半径拡大',
         description: '剣の回転軌道範囲 +25%',
-        icon: '💫',
         rarity: 'COMMON',
       },
     ];
@@ -132,54 +126,48 @@ export class LevelUpScreen {
         id: 'stat_power',
         category: 'STAT_BOOST',
         statType: 'ATTACK_POWER',
-        title: '⚔ POWER',
+        title: 'POWER',
         description: '全武器の攻撃力 +25%',
-        icon: '⚔️',
         rarity: 'COMMON',
       },
       {
         id: 'stat_rapid',
         category: 'STAT_BOOST',
         statType: 'ATTACK_SPEED',
-        title: '⚡ RAPID',
+        title: 'RAPID',
         description: '全武器の攻撃速度 +20%',
-        icon: '⚡',
         rarity: 'COMMON',
       },
       {
         id: 'stat_speed',
         category: 'STAT_BOOST',
         statType: 'MOVE_SPEED',
-        title: '💨 SPEED',
+        title: 'SPEED',
         description: '移動速度 +15%',
-        icon: '💨',
         rarity: 'COMMON',
       },
       {
         id: 'stat_vital',
         category: 'STAT_BOOST',
         statType: 'MAX_HP',
-        title: '❤️ VITAL',
+        title: 'VITAL',
         description: '最大HP +30 & 全回復',
-        icon: '❤️',
         rarity: 'COMMON',
       },
       {
         id: 'stat_magnet',
         category: 'STAT_BOOST',
         statType: 'MAGNET_RADIUS',
-        title: '🧲 MAGNET',
+        title: 'MAGNET',
         description: 'アイテム回収範囲 +40%',
-        icon: '🧲',
         rarity: 'COMMON',
       },
       {
         id: 'stat_crit',
         category: 'STAT_BOOST',
         statType: 'CRIT_CHANCE',
-        title: '🎯 CRITICAL',
+        title: 'CRITICAL',
         description: '会心の一撃確率 +12%',
-        icon: '🎯',
         rarity: 'RARE',
       },
     ];
@@ -220,34 +208,42 @@ export class LevelUpScreen {
   public render(ctx: CanvasRenderingContext2D, width: number, height: number, playerLevel: number) {
     ctx.save();
 
-    // Semi-transparent dark overlay
-    ctx.fillStyle = 'rgba(4, 7, 16, 0.88)';
+    // HUDが透けて見えないよう、濃いオーバーレイで覆う
+    ctx.fillStyle = 'rgba(4, 7, 16, 0.97)';
     ctx.fillRect(0, 0, width, height);
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Banner: LEVEL UP!
-    const bannerY = height * 0.18;
-    ctx.font = '900 64px Impact, sans-serif';
+    // 縦方向は「見出し / カード」を1つの塊として画面中央に置く
+    const titleH = 72;
+    const subH = 34;
+    const gapTitleCards = 56;
+    const cardH = 400;
+    const totalH = titleH + subH + gapTitleCards + cardH;
+    const top = (height - totalH) / 2;
+
+    const titleY = top + titleH / 2;
+    const subY = top + titleH + subH / 2;
+    const cardsCY = top + titleH + subH + gapTitleCards + cardH / 2;
+
+    ctx.font = '900 72px Impact, sans-serif';
     ctx.fillStyle = '#ffd700';
     ctx.shadowColor = '#ffd700';
     ctx.shadowBlur = 25;
-    ctx.fillText('⚡ LEVEL UP! ⚡', width / 2, bannerY);
+    ctx.fillText('LEVEL UP', width / 2, titleY);
     ctx.shadowBlur = 0;
 
-    ctx.font = '900 24px Impact, sans-serif';
+    ctx.font = '900 28px Impact, sans-serif';
     ctx.fillStyle = '#00f0ff';
-    ctx.fillText(`PLAYER REACHED LEVEL ${playerLevel}`, width / 2, bannerY + 50);
+    ctx.fillText(`LV ${playerLevel}`, width / 2, subY);
 
-    // Cards layout
+    // カードは横中央に等間隔で並べる
     const numCards = this.cards.length;
     const cardW = 320;
-    const cardH = 460;
     const cardSpacing = 40;
     const totalW = numCards * cardW + (numCards - 1) * cardSpacing;
     const startX = (width - totalW) / 2 + cardW / 2;
-    const cardY = height * 0.58;
 
     for (let i = 0; i < numCards; i++) {
       const card = this.cards[i];
@@ -255,70 +251,52 @@ export class LevelUpScreen {
       const cx = startX + i * (cardW + cardSpacing);
 
       ctx.save();
-      ctx.translate(cx, cardY);
+      ctx.translate(cx, cardsCY);
 
       if (isSelected) {
-        const floatY = Math.sin(this.animTimer * 5) * 8 - 8;
-        ctx.translate(0, floatY);
+        ctx.translate(0, Math.sin(this.animTimer * 5) * 6 - 10);
       }
 
-      // Card Background & Border
-      let borderColor = '#445566';
-      if (card.rarity === 'LEGENDARY') borderColor = '#ffd700';
-      else if (card.rarity === 'EPIC') borderColor = '#bb44ff';
-      else if (card.rarity === 'RARE') borderColor = '#00f0ff';
+      let accent = '#445566';
+      if (card.rarity === 'LEGENDARY') accent = '#ffd700';
+      else if (card.rarity === 'EPIC') accent = '#bb44ff';
+      else if (card.rarity === 'RARE') accent = '#00f0ff';
 
       if (isSelected) {
-        borderColor = '#ffffff';
-        ctx.shadowColor = '#00f0ff';
+        ctx.shadowColor = accent;
         ctx.shadowBlur = 30;
       }
 
-      ctx.fillStyle = isSelected ? 'rgba(10, 24, 45, 0.95)' : 'rgba(8, 14, 25, 0.9)';
-      ctx.strokeStyle = borderColor;
+      ctx.fillStyle = isSelected ? 'rgba(12, 28, 50, 0.98)' : 'rgba(8, 14, 25, 0.92)';
+      ctx.strokeStyle = isSelected ? '#ffffff' : accent;
       ctx.lineWidth = isSelected ? 5 : 2.5;
-
       ctx.fillRect(-cardW / 2, -cardH / 2, cardW, cardH);
       ctx.strokeRect(-cardW / 2, -cardH / 2, cardW, cardH);
       ctx.shadowBlur = 0;
 
-      // Card Header Tag
-      ctx.font = '900 16px Impact, sans-serif';
-      ctx.fillStyle = borderColor;
-      ctx.fillText(card.rarity, 0, -cardH / 2 + 30);
+      // カード内は上から レア度 / アイコン / タイトル / 説明
+      const y0 = -cardH / 2;
+      ctx.font = '900 18px Impact, sans-serif';
+      ctx.fillStyle = accent;
+      ctx.fillText(card.rarity, 0, y0 + 34);
 
-      // Card Big Icon
-      ctx.font = '80px sans-serif';
-      ctx.fillText(card.icon, 0, -cardH / 2 + 110);
+      drawIcon(ctx, card.weaponType ?? card.statType, 0, y0 + 120, 96, accent);
 
-      // Card Title
-      ctx.font = '900 24px Impact, sans-serif';
+      ctx.font = '900 26px Impact, sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(card.title, 0, -cardH / 2 + 200);
+      this.wrapText(ctx, card.title, 0, y0 + 216, cardW - 40, 34);
 
-      // Card Description
-      ctx.font = '700 18px sans-serif';
+      ctx.font = '700 20px sans-serif';
       ctx.fillStyle = '#aaccdd';
-      this.wrapText(ctx, card.description, 0, -cardH / 2 + 270, cardW - 40, 26);
-
-      // Selection Marker
-      if (isSelected) {
-        ctx.fillStyle = '#ffd700';
-        ctx.font = '900 22px Impact, sans-serif';
-        ctx.fillText('▼ CHOOSE [ENTER / A] ▼', 0, cardH / 2 - 35);
-      }
+      this.wrapText(ctx, card.description, 0, y0 + 292, cardW - 56, 30);
 
       ctx.restore();
     }
 
-    // Helper text
-    ctx.font = '700 18px sans-serif';
-    ctx.fillStyle = '#8899aa';
-    ctx.fillText('レバー左右で選択 / 決定ボタンで強化取得', width / 2, height - 45);
-
     ctx.restore();
   }
 
+  // 文字単位で折り返す。最終行が1〜2文字だけ孤立しないよう、前の行から文字を送って均す。
   private wrapText(
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -327,21 +305,27 @@ export class LevelUpScreen {
     maxWidth: number,
     lineHeight: number
   ) {
-    const words = text.split('');
+    const chars = text.split('');
+    const lines: string[] = [];
     let line = '';
-    let curY = y;
-
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n];
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && n > 0) {
-        ctx.fillText(line, x, curY);
-        line = words[n];
-        curY += lineHeight;
+    for (const ch of chars) {
+      if (line && ctx.measureText(line + ch).width > maxWidth) {
+        lines.push(line);
+        line = ch;
       } else {
-        line = testLine;
+        line += ch;
       }
     }
-    ctx.fillText(line, x, curY);
+    lines.push(line);
+
+    if (lines.length > 1) {
+      const last = lines.length - 1;
+      while (lines[last].length < 3 && lines[last - 1].length > 3) {
+        lines[last] = lines[last - 1].slice(-1) + lines[last];
+        lines[last - 1] = lines[last - 1].slice(0, -1);
+      }
+    }
+
+    lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
   }
 }
