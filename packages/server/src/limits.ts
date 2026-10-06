@@ -1,5 +1,5 @@
 // 開放中でも第三者に負荷をかけられないための制限類。値は環境変数で上書きできる。
-const num = (key: string, def: number) => {
+export const num = (key: string, def: number) => {
   const v = Number(process.env[key]);
   return Number.isFinite(v) && v > 0 ? v : def;
 };

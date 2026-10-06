@@ -5,10 +5,12 @@ import { watchResultAutoReturn } from '../../../../shared/arcadeAutoAction';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import {
-  checkHighScore,
+  GAME_LEADERBOARD_DEFS,
   saveLeaderboardScore,
-  loadLeaderboard,
+  loadLeaderboardAndCheck,
+  padEmptyEntries,
   escapeHtml,
+  type LeaderboardEntry,
 } from '../../../../shared/arcadeLeaderboard';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
 
@@ -35,6 +37,8 @@ export class ResultScreen {
   private pending: ResultAction | null = null;
   // ハイスコアの名前登録が開いている間は、リザルトの操作を受け付けない
   private nameEntryOpen = false;
+  /** show() の呼び出しごとに増やす。サーバーの応答を待つ間に画面が閉じられた・出し直された場合の判定用 */
+  private showSeq = 0;
 
   constructor() {
     this.injectStyle();
@@ -107,10 +111,12 @@ export class ResultScreen {
     this.elSub.textContent = `生存時間 ${time}　撃破 ${player.kills}体　最大コンボ ${player.maxCombo}`;
 
     const score = player.score;
-    const check = checkHighScore(SLUG, score);
+    const seq = ++this.showSeq;
 
-    // ハイスコアランキング表を初期描画
-    this.renderLeaderboard(player, undefined, check.isRankIn, false);
+    // ランキング表は、サーバーから取得するまで「記録なし」の枠で出しておく。
+    // 順位の確認が終わるまでは、メニューの操作と名前登録の判断を保留する。
+    this.nameEntryOpen = true;
+    this.renderLeaderboard(player, padEmptyEntries(GAME_LEADERBOARD_DEFS[SLUG], [], 3), undefined, false, false);
 
     this.root.style.display = 'flex';
 
@@ -125,9 +131,14 @@ export class ResultScreen {
     this.armTime = performance.now() + 2400;
     this.applyFocus();
 
-    // 上位3位に入ったら、スコアを見せたあとに名前登録を出して共通ランキングへ保存する
-    if (check.isRankIn) {
-      this.nameEntryOpen = true;
+    void loadLeaderboardAndCheck(SLUG, score, undefined, 3).then(({ list, ...check }) => {
+      if (seq !== this.showSeq) return;   // 取得中に画面が閉じられた・出し直された
+      this.renderLeaderboard(player, list, undefined, check.isRankIn, false);
+      // 上位3位に入ったら、スコアを見せたあとに名前登録を出して共通ランキングへ保存する
+      if (!check.isRankIn) {
+        this.nameEntryOpen = false;
+        return;
+      }
       mountNameEntryModal({
         title: 'スコア記録',
         scoreDisplay: `${score.toLocaleString()}点`,
@@ -135,19 +146,20 @@ export class ResultScreen {
         themeClass: 'theme-skyway',
         delayMs: NAME_ENTRY_AFTER_RESULT_MS,
         onComplete: (name) => {
-          const res = saveLeaderboardScore(SLUG, score, name, undefined, `撃破${player.kills}体`);
           this.nameEntryOpen = false;
           this.armTime = performance.now() + 800;
-          // 保存直後のランキングを即時再描画し、登録された順位を光らせる
-          this.renderLeaderboard(player, res.rank, false, true);
+          // 保存直後のランキングを再描画し、登録された順位を光らせる(保存に失敗したら強調なしで元の表を出す)
+          void saveLeaderboardScore(SLUG, score, name, undefined, `撃破${player.kills}体`).then((res) => {
+            if (seq !== this.showSeq) return;
+            this.renderLeaderboard(player, res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined, false, res.rank > 0);
+          });
         },
       });
-    }
+    });
   }
 
   /** 殿堂入りハイスコアランキングの描画 */
-  private renderLeaderboard(player: Player, highlightRank?: number, checkRankIn?: boolean, isRegistered?: boolean) {
-    const list = loadLeaderboard(SLUG, undefined, 3);
+  private renderLeaderboard(player: Player, list: LeaderboardEntry[], highlightRank?: number, checkRankIn?: boolean, isRegistered?: boolean) {
     // 順位は文字と色(金・銀・銅)で示す
     const rankColors = ['#ffd700', '#d0e0f0', '#cd7f32'];
 
@@ -191,6 +203,7 @@ export class ResultScreen {
   }
 
   public hide() {
+    this.showSeq++;
     this.root.style.display = 'none';
   }
 

@@ -34,6 +34,14 @@ export interface ControlHandlers {
   /** game='all' で全ゲームを閉鎖(緊急停止) */
   close(game: string): boolean;
   kick(game: string, id: number): boolean;
+  /** ランキングの枠('<ゲームid>' か '<ゲームid>:<バリアント>')の記録をすべて消す。消した件数。存在しない枠は null */
+  clearBoard(board: string): number | null;
+  /** 管理画面用: すべてのランキングの枠(空の枠も)と、その記録 */
+  listBoards(): { board: string; slug: string; variant?: string; variantLabel?: string; entries: object[] }[];
+  /** ランキングの枠の rank 位(1始まり)に、開発者の印を付ける・外す。変えたら true、すでにその状態なら false、存在しない枠・順位は null */
+  setDev(board: string, rank: number, on: boolean): boolean | null;
+  /** ランキングの枠の rank 位(1始まり)を1件消す。消したら true、なければ false、存在しない枠は null */
+  removeEntry(board: string, rank: number): boolean | null;
 }
 
 /**
@@ -65,6 +73,24 @@ export function handleAdminRequest(h: ControlHandlers, method: string, url: URL)
     const id = Number(url.searchParams.get('id'));
     if (!Number.isInteger(id)) return { code: 400, body: { error: 'bad_request' } };
     return h.kick(url.searchParams.get('game') ?? '', id) ? { code: 200, body: h.status() } : { code: 404, body: { error: 'not_found' } };
+  }
+  if (method === 'GET' && url.pathname === '/lb') return { code: 200, body: { boards: h.listBoards() } };
+  if (method === 'POST' && url.pathname === '/lb-dev') {
+    const rank = Number(url.searchParams.get('rank'));
+    const on = url.searchParams.get('on');
+    if (!Number.isInteger(rank) || (on !== '1' && on !== '0')) return { code: 400, body: { error: 'bad_request' } };
+    const r = h.setDev(url.searchParams.get('board') ?? '', rank, on === '1');
+    return r === null ? { code: 404, body: { error: 'not_found' } } : { code: 200, body: { changed: r } };
+  }
+  if (method === 'POST' && url.pathname === '/lb-clear') {
+    const n = h.clearBoard(url.searchParams.get('board') ?? '');
+    return n === null ? { code: 404, body: { error: 'unknown_board' } } : { code: 200, body: { cleared: n } };
+  }
+  if (method === 'POST' && url.pathname === '/lb-remove') {
+    const rank = Number(url.searchParams.get('rank'));
+    if (!Number.isInteger(rank)) return { code: 400, body: { error: 'bad_request' } };
+    const r = h.removeEntry(url.searchParams.get('board') ?? '', rank);
+    return r === null ? { code: 404, body: { error: 'unknown_board' } } : { code: r ? 200 : 404, body: { removed: r } };
   }
   return { code: 404, body: { error: 'not_found' } };
 }

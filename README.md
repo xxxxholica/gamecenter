@@ -79,6 +79,14 @@ https://game.hinata.works/ で公開している。
 ```
 
 
+## ランキング(サーバー保存)
+
+各ゲームのランキング(上位3件)と、midnight-skywayのゴースト(走行の軌跡)は、ブラウザではなくサーバーに保存する。オンライン対戦サーバー(`packages/server`)と同じNodeプロセスが `/api/...` で受け付ける。
+
+- `npm run dev` は `/api` を同じポート(5173)のまま、開発用のサーバーへ中継する。記録は `packages/server/data/leaderboard.json`(Git管理外)に保存される。消せば空に戻る。
+- ブラウザ側は `packages/shared/arcadeLeaderboard.ts`(HTTPクライアント)、順位判定などの純粋ロジックは `arcadeLeaderboardCore.ts`(サーバーと共有)。
+- 自己ベスト(midnight-skyway)と、音量・難易度などの端末ごとの設定は、これまでどおりlocalStorage。
+
 ## アケコン操作
 
 ホーム画面からゲームの開始・終了までアケコン(Gamepad API標準マッピング)だけで完結する。レバーを矢印キー、ボタンをEnter/Spaceに割り当てるキーボードエンコーダ式の筐体でも操作できる。

@@ -20,6 +20,14 @@ export const ADMIN_HTML = `<!doctype html>
     </div>
   </section>
   <div id="games"></div>
+  <section class="card" id="boards-card">
+    <div class="head">
+      <h2>ランキング管理</h2>
+      <button id="boards-reload" class="ghost">再読み込み</button>
+    </div>
+    <p class="note">記録に「開発者」の印を付けると、名前が「開発者」になり、ホームのランキングで強調されます。</p>
+    <div id="boards"></div>
+  </section>
 </main>
 <script src="/admin/app.js"></script>
 </body>
@@ -91,6 +99,22 @@ button:disabled { opacity: .5; cursor: default; }
 .members { display: flex; flex-direction: column; gap: 6px; }
 .member { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: .4em .7em; border-radius: 8px; background: #0a111f; border: 1px solid #22304a; font-size: .9rem; }
 .member button { padding: .3em .8em; font-size: .85rem; }
+.note { margin: 0; font-size: .8rem; color: #8fa3c2; line-height: 1.6; }
+#boards { display: flex; flex-direction: column; gap: 8px; }
+.board { background: #0a111f; border: 1px solid #22304a; border-radius: 10px; }
+.board > summary { cursor: pointer; padding: .6em .8em; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; font-size: .95rem; }
+.board > summary small { color: #8fa3c2; font-weight: 600; }
+.board .inner { display: flex; flex-direction: column; gap: 6px; padding: 0 .6em .7em; }
+.entry { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: .5em .6em; border-radius: 8px; background: #0c1626; border: 1px solid #22304a; font-size: .9rem; }
+.entry .pos { font-weight: 800; color: #00e5ff; min-width: 2.4em; }
+.entry .who { font-weight: 700; }
+.entry .score { font-variant-numeric: tabular-nums; color: #ffd54a; }
+.entry .meta { color: #8fa3c2; font-size: .78rem; }
+.entry .mark { font-size: .75rem; padding: .05em .5em; border-radius: 999px; border: 1px solid #ffd54a; color: #ffd54a; }
+.entry .mark.dev { border-color: #ff9be4; color: #ff9be4; }
+.entry .acts { margin-left: auto; display: flex; gap: 6px; }
+.entry button, .board .clear { padding: .3em .8em; font-size: .82rem; }
+.empty { color: #8fa3c2; font-size: .85rem; padding: .3em .2em; }
 `;
 
 export const ADMIN_JS = `
@@ -101,6 +125,9 @@ export const ADMIN_JS = `
   var TITLES = { 'midnight-skyway': 'MIDNIGHT SKYWAY', 'ennichi-shateki': 'えんにち射的' };
   var PHASES = { lobby: '参加受付中', loading: 'ロード中', racing: '実行中' };
   var MINUTES = [['60', '1時間'], ['120', '2時間'], ['180', '3時間'], ['360', '6時間']];
+  var boardsEl = document.getElementById('boards');
+  var BOARD_TITLES = { 'street-b-boy': 'ストリートビーボーイ', 'school-corridor-runner': 'テンパレラン', 'survivor-score-battle': 'サバイバー・スコアバトル', 'ennichi-shateki': 'えんにち射的', 'extreme-edge-arcade': '極限ギリギリ選手権', 'tani-runner-124': '単位増殖ラン', 'midnight-skyway': 'ミッドナイト・スカイウェイ' };
+  var openBoards = {};  // board -> true (再読み込みしても、開いていた枠は開いたままにする)
   var cards = {};      // gameId -> { el, selects, minutes, ... } (選択中の値を自動更新で上書きしないため、カードは作り直さず中身だけ更新する)
 
   function el(tag, props, children) {
@@ -199,6 +226,66 @@ export const ADMIN_JS = `
     ]);
   }
 
+  // ---- ランキング管理 ----
+  function boardTitle(b) { return (BOARD_TITLES[b.slug] || b.slug) + (b.variantLabel ? ' / ' + b.variantLabel : ''); }
+
+  function buildEntry(b, e) {
+    var kids = [el('span', { className: 'pos', text: e.rank + '位' }), el('span', { className: 'who', text: e.name }), el('span', { className: 'score', text: e.formattedScore })];
+    if (e.cleared) kids.push(el('span', { className: 'mark', text: 'クリア' }));
+    if (e.dev) kids.push(el('span', { className: 'mark dev', text: '開発者' }));
+    if (e.extra) kids.push(el('span', { className: 'meta', text: e.extra }));
+    kids.push(el('span', { className: 'meta', text: e.date + (e.hasGhost ? ' ゴースト有' : '') }));
+    var devBtn = el('button', { text: e.dev ? '開発者を外す' : '開発者にする' });
+    devBtn.addEventListener('click', function () {
+      actBoards('/admin/api/lb-dev?board=' + encodeURIComponent(b.board) + '&rank=' + e.rank + '&on=' + (e.dev ? '0' : '1'));
+    });
+    var delBtn = el('button', { className: 'danger', text: '削除' });
+    delBtn.addEventListener('click', function () {
+      if (window.confirm(boardTitle(b) + ' の ' + e.rank + '位 (' + e.name + ' ' + e.formattedScore + ') を削除します。よろしいですか？')) {
+        actBoards('/admin/api/lb-remove?board=' + encodeURIComponent(b.board) + '&rank=' + e.rank);
+      }
+    });
+    kids.push(el('span', { className: 'acts' }, [devBtn, delBtn]));
+    return el('div', { className: 'entry' }, kids);
+  }
+
+  function buildBoard(b) {
+    var d = el('details', { className: 'board' });
+    d.open = !!openBoards[b.board];
+    d.addEventListener('toggle', function () { openBoards[b.board] = d.open; });
+    d.appendChild(el('summary', null, [el('span', { text: boardTitle(b) }), el('small', { text: b.entries.length + '件' })]));
+    var inner = el('div', { className: 'inner' });
+    if (b.entries.length === 0) inner.appendChild(el('div', { className: 'empty', text: '記録はまだありません' }));
+    b.entries.forEach(function (e) { inner.appendChild(buildEntry(b, e)); });
+    if (b.entries.length > 0) {
+      var clear = el('button', { className: 'danger clear', text: 'このボードの記録をすべて消す' });
+      clear.addEventListener('click', function () {
+        if (window.confirm(boardTitle(b) + ' の記録 ' + b.entries.length + ' 件をすべて消します(ゴーストも消えます)。よろしいですか？')) {
+          actBoards('/admin/api/lb-clear?board=' + encodeURIComponent(b.board));
+        }
+      });
+      inner.appendChild(clear);
+    }
+    d.appendChild(inner);
+    return d;
+  }
+
+  function renderBoards(r) {
+    boardsEl.textContent = '';
+    r.boards.forEach(function (b) { boardsEl.appendChild(buildBoard(b)); });
+  }
+
+  function loadBoards() {
+    return call('GET', '/admin/api/lb').then(renderBoards).catch(function () {
+      boardsEl.textContent = '';
+      boardsEl.appendChild(el('div', { className: 'empty', text: 'ランキングを読み込めませんでした。再読み込みを押してください。' }));
+    });
+  }
+
+  function actBoards(path) {
+    return call('POST', path).then(loadBoards).catch(loadBoards);
+  }
+
   function refresh() {
     return call('GET', '/admin/api/status').then(render).catch(function () {});
   }
@@ -215,7 +302,10 @@ export const ADMIN_JS = `
       .then(function () { location.href = '/admin/login'; });
   });
 
+  document.getElementById('boards-reload').addEventListener('click', loadBoards);
+
   refresh();
+  loadBoards();
   setInterval(refresh, 10000);
 })();
 `;

@@ -6,6 +6,10 @@
 //       分=random は 1/2/3/6 時間から開放時に1回選ぶ)。設定を省略すると前回の設定。
 //   close <ゲーム|all>                      … 閉鎖して参加者を全員切断(all で全ゲームを緊急停止)
 //   kick <ゲーム> <参加者id>                 … 参加者を追い出す(id は status の参加者一覧)
+//   clear-board <枠>                        … ランキングの枠の記録(とゴースト)をすべて消す。枠は <ゲームid> か <ゲームid>:<コース/難易度>
+//       例: clear-board street-b-boy / clear-board midnight-skyway:tokyo_skyway
+//   mark-dev <枠> <順位> [off]              … 枠の<順位>位の記録に、開発者の印を付ける(名前が「開発者」になり、ホームで強調される)。off で外す
+//   remove-record <枠> <順位>               … 枠の<順位>位(1〜3)の記録を1件消す(荒らし・不正な記録の削除)
 // ゲームは id(例: midnight-skyway)か、一意に決まる部分文字列(例: skyway)。
 import http from 'node:http';
 import { DEFAULT_SOCKET, type ServerStatus } from './control.ts';
@@ -14,7 +18,7 @@ const DEFAULT_MINUTES = 180;
 const socketPath = process.env.ONLINE_CONTROL_SOCKET ?? DEFAULT_SOCKET;
 const [cmd, ...rest] = process.argv.slice(2);
 
-function call(method: string, path: string): Promise<ServerStatus> {
+function call(method: string, path: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath, method, path }, (res) => {
       let body = '';
@@ -52,8 +56,18 @@ try {
     show(await call('POST', `/close?${new URLSearchParams({ game: rest[0] })}`));
   } else if (cmd === 'kick' && rest[0] && rest[1]) {
     show(await call('POST', `/kick?${new URLSearchParams({ game: rest[0], id: rest[1] })}`));
+  } else if (cmd === 'clear-board' && rest[0]) {
+    const r = await call('POST', `/lb-clear?${new URLSearchParams({ board: rest[0] })}`);
+    console.log(`${rest[0]}: ${r.cleared} 件を消しました`);
+  } else if (cmd === 'mark-dev' && rest[0] && rest[1]) {
+    const off = rest[2] === 'off';
+    const r = await call('POST', `/lb-dev?${new URLSearchParams({ board: rest[0], rank: rest[1], on: off ? '0' : '1' })}`);
+    console.log(`${rest[0]}: ${rest[1]}位の開発者の印を${off ? '外し' : '付け'}${r.changed ? 'ました' : '(すでにその状態です)'}`);
+  } else if (cmd === 'remove-record' && rest[0] && rest[1]) {
+    await call('POST', `/lb-remove?${new URLSearchParams({ board: rest[0], rank: rest[1] })}`);
+    console.log(`${rest[0]}: ${rest[1]}位の記録を消しました`);
   } else {
-    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id>>');
+    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id> | clear-board <枠> | mark-dev <枠> <順位> [off] | remove-record <枠> <順位>>');
     process.exit(2);
   }
 } catch (e) {

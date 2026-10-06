@@ -1,11 +1,10 @@
 import { setText } from '../../../../shared/hudDom';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import {
-  checkHighScore,
   saveLeaderboardScore,
   loadLeaderboard,
 } from '../../../../shared/arcadeLeaderboard';
-import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
 
 export interface RankingRecord {
   name: string;
@@ -173,22 +172,14 @@ export class HudManager {
     }
     countUpText(this.elResultTotalScore, score.toString().padStart(6, '0'));
 
-    const check = checkHighScore('street-b-boy', score);
-    if (check.isRankIn && score > 0) {
-      this.isNameEntryOpen = true;
-      mountNameEntryModal({
-        title: 'ダンス記録',
-        scoreDisplay: `${score.toLocaleString()} pts`,
-        rankDisplay: `第${check.rank}位`,
-        themeClass: 'theme-street',
-        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (katakanaName) => {
-          this.isNameEntryOpen = false;
-          saveLeaderboardScore('street-b-boy', score, katakanaName, undefined, undefined, { cleared: status === 'clear' });
-          this.onNameEntryClosed?.();
-        },
-      });
-    }
+    runHighScoreEntryFlow({
+      slug: 'street-b-boy',
+      score,
+      modal: { title: 'ダンス記録', scoreDisplay: `${score.toLocaleString()} pts`, themeClass: 'theme-street', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
+      onName: (name) => void saveLeaderboardScore('street-b-boy', score, name, undefined, undefined, { cleared: status === 'clear' }),
+      onClosed: () => this.onNameEntryClosed?.(),
+    });
   }
 
   public hideResult(): void {
@@ -208,8 +199,8 @@ export class HudManager {
     return loadLeaderboard('street-b-boy');
   }
 
-  private renderRankings(highlightRank?: number): void {
-    const list = loadLeaderboard('street-b-boy');
+  private async renderRankings(highlightRank?: number): Promise<void> {
+    const list = await loadLeaderboard('street-b-boy');
     this.elRankingList.innerHTML = '';
     list.forEach((rec, idx) => {
       const isCurrent = highlightRank === (idx + 1);

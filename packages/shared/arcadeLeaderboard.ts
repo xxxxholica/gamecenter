@@ -1,309 +1,180 @@
-// アーケード共通ランキング管理基盤
-// 各ゲームおよびホーム画面(hub)で同一のlocalStorageキーとデータ構造を共有する
+// アーケード共通ランキング管理基盤(ブラウザ側)。ランキングはサーバー(/api/leaderboard...)に保存する。
+// 型・ゲーム定義・順位判定などの純粋ロジックは arcadeLeaderboardCore.ts(サーバーと共有)。
+// 通信は同一オリジンの相対パス。失敗しても例外は投げず、取得は「記録なし」、登録は rank=-1 を返す(ゲームの進行を止めない)。
+import {
+  DEV_NAME,
+  GAME_LEADERBOARD_DEFS,
+  LEADERBOARD_MAX_ENTRIES,
+  leaderboardBoardKey,
+  padEmptyEntries,
+  rankForScore,
+  sanitizeLeaderboardName,
+} from './arcadeLeaderboardCore.ts';
+import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCore.ts';
 
-export interface LeaderboardEntry {
-  rank: number;
-  name: string;      // カタカナ最大5文字 (記録なしの場合は「記録なし」)
-  score: number;     // 比較用スコア数値(タイムアタックはミリ秒)
-  formattedScore: string; // 表示用文字列 (例: "0 pts", "0 単位", "00:00.000", "0 pt")
-  date: string;      // YYYY/MM/DD
-  extra?: string;    // 称号やマシン名など
-  /** ステージを最後までクリアした記録か。ホームのランキングで、名前の右に ★ を付けて表示する */
-  cleared?: boolean;
+export * from './arcadeLeaderboardCore.ts';
+
+const API = '/api';
+const TIMEOUT_MS = 5000;
+
+/** loadAllLeaderboards の結果のキー */
+export const getLeaderboardKey = leaderboardBoardKey;
+
+const boardPath = (slug: string, variantId?: string) =>
+  `${API}/leaderboard/${encodeURIComponent(slug)}${variantId ? `/${encodeURIComponent(variantId)}` : ''}`;
+
+async function request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
+  const res = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
+  return res.json();
 }
-
-export interface LeaderboardVariant {
-  id: string;        // 例: "tokyo_skyway", "elementary"
-  label: string;     // 表示名 例: "STAGE01", "小学生"
-}
-
-export interface GameLeaderboardDef {
-  slug: string;
-  hasScore: boolean;
-  scoreOrder: 'desc' | 'asc'; // desc: 高い方が上位, asc: 低い方(タイム等)が上位
-  unit: string;
-  formatScore: (score: number) => string;
-  variants?: LeaderboardVariant[];
-}
-
-function padZero(n: number, len: number): string {
-  return String(n).padStart(len, '0');
-}
-
-/** HTML特殊文字をエスケープして XSS (Cross-Site Scripting) を防止する */
-export function escapeHtml(str: string): string {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// 簡易NGワード（公序良俗・卑猥・差別用語の主要パターン）
-const NG_WORD_REGEX = /^(シネ|コロス|キチガイ|バカ|アホ|カス|シネヨ|レイプ|チンコ|マンコ|ペニス|セックス|オメコ)$/i;
 
 /**
- * プレイヤー名を厳格に検証・サニタイズする (最大5文字)
- * 危険なHTML特殊文字、制御文字、不正な型を除去し、安全な文字列に正規化する。
+ * サーバーの応答を、型と範囲が正しい形に整える(名前の再検証・件数・日付の長さ)。
+ * 文字列は素のまま返す。HTML に入れる側(innerHTML)が、出力するときに escapeHtml する。textContent に入れる側はそのまま使える。
  */
-export function sanitizeLeaderboardName(rawName: unknown): string {
-  if (typeof rawName !== 'string') return 'ゲスト';
-  // 制御文字・危険記号（< > " ' & ` \ / など）および改行を除去
-  const cleaned = rawName
-    .replace(/[\u0000-\u001F\u007F-\u009F<>'"&`\\/]/g, '')
-    .trim()
-    .slice(0, 5);
-  if (!cleaned) return 'ゲスト';
-  if (NG_WORD_REGEX.test(cleaned)) {
-    return 'ゲスト';
-  }
-  return cleaned;
+function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEntry[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => item && typeof item.score === 'number' && item.score > 0 && item.name !== '記録なし')
+    .slice(0, LEADERBOARD_MAX_ENTRIES)
+    .map((item, idx) => ({
+      id: typeof item.id === 'string' ? item.id : undefined,
+      hasGhost: item.hasGhost === true ? true : undefined,
+      rank: idx + 1,
+      // 開発者の印が付いた記録だけ、予約された名前をそのまま使う(プレイヤーの名前は DEV_NAME を拒否する)
+      name: item.dev === true && item.name === DEV_NAME ? DEV_NAME : sanitizeLeaderboardName(item.name),
+      score: item.score,
+      formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(item.score),
+      date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
+      extra: typeof item.extra === 'string' ? item.extra.slice(0, 30) : undefined,
+      cleared: item.cleared === true ? true : undefined,
+      dev: item.dev === true ? true : undefined,
+    }));
 }
 
-export function formatTimeMs(ms: number): string {
-  if (ms <= 0) return '00:00.000';
-  const totalSec = Math.floor(ms / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  const millis = Math.floor(ms % 1000);
-  return `${padZero(m, 2)}:${padZero(s, 2)}.${padZero(millis, 3)}`;
+/** 保存済みの実スコアリスト(「記録なし」の枠は含まない)。通信に失敗したら例外 */
+async function fetchRawScores(def: GameLeaderboardDef, slug: string, variantId?: string): Promise<LeaderboardEntry[]> {
+  const data = await request('GET', boardPath(slug, variantId));
+  return normalizeEntries(def, data.entries);
 }
 
-export const GAME_LEADERBOARD_DEFS: Record<string, GameLeaderboardDef> = {
-  'street-b-boy': {
-    slug: 'street-b-boy',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: 'pts',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
-  },
-  'ennichi-shateki': {
-    slug: 'ennichi-shateki',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: 'g',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} g` : '0 g'),
-  },
-  'extreme-edge-arcade': {
-    slug: 'extreme-edge-arcade',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: 'pt',
-    formatScore: (score) => (score > 0 ? `${score.toFixed(1)} pt` : '0.0 pt'),
-  },
-  'tani-runner-124': {
-    slug: 'tani-runner-124',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: '単位',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score)} 単位` : '0 単位'),
-    variants: [
-      { id: 'elementary', label: '小学生レベル' },
-      { id: 'middle', label: '中学生レベル' },
-      { id: 'kosen', label: '高専生レベル' },
-    ],
-  },
-  'midnight-skyway': {
-    slug: 'midnight-skyway',
-    hasScore: true,
-    scoreOrder: 'asc',
-    unit: '',
-    formatScore: (score) => formatTimeMs(score),
-    variants: [
-      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ' },
-      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ' },
-      { id: 'tokyo_climb', label: '東京 スカイクライム' },
-    ],
-  },
-  'school-corridor-runner': {
-    slug: 'school-corridor-runner',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: 'pts',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
-  },
-  'survivor-score-battle': {
-    slug: 'survivor-score-battle',
-    hasScore: true,
-    scoreOrder: 'desc',
-    unit: 'pts',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
-  },
-  'phaser-fighter': {
-    slug: 'phaser-fighter',
-    hasScore: false,
-    scoreOrder: 'desc',
-    unit: 'pt',
-    formatScore: () => '0 pt',
-  },
-};
-
-const STORAGE_PREFIX = 'gamecenter:leaderboard:v2:';
-
-export function getLeaderboardKey(slug: string, variantId?: string): string {
-  return variantId ? `${STORAGE_PREFIX}${slug}:${variantId}` : `${STORAGE_PREFIX}${slug}`;
-}
-
-/** 保存済みの実スコアリストのみを取得する（モックや未記録は含まない） */
-export function loadRawScores(slug: string, variantId?: string): LeaderboardEntry[] {
+/** 保存済みの実スコアリストのみを取得する(「記録なし」の枠は含まない)。失敗時は空 */
+export async function loadRawScores(slug: string, variantId?: string): Promise<LeaderboardEntry[]> {
   const def = GAME_LEADERBOARD_DEFS[slug];
   if (!def || !def.hasScore) return [];
-
-  const key = getLeaderboardKey(slug, variantId);
   try {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter(
-            (item) => item && typeof item.score === 'number' && item.score > 0 && item.name !== '記録なし',
-          )
-          .map((item) => ({
-            ...item,
-            name: sanitizeLeaderboardName(item.name),
-            formattedScore:
-              typeof item.formattedScore === 'string'
-                ? escapeHtml(item.formattedScore)
-                : def.formatScore(item.score),
-            date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
-            extra: typeof item.extra === 'string' ? escapeHtml(item.extra.slice(0, 30)) : undefined,
-            cleared: item.cleared === true ? true : undefined,
-          }));
-      }
-    }
-  } catch {
-    // ignore
+    return await fetchRawScores(def, slug, variantId);
+  } catch (e) {
+    console.warn('Failed to load leaderboard', e);
+    return [];
   }
-  return [];
 }
 
-/** 表示用ランキングを取得する（実記録が minCount 未満の場合は「記録なし / 0pt」等のスロットで埋めて返す） */
-export function loadLeaderboard(slug: string, variantId?: string, minCount = 3): LeaderboardEntry[] {
+/** 表示用ランキングを取得する(実記録が minCount 未満なら「記録なし」の枠で埋める) */
+export async function loadLeaderboard(slug: string, variantId?: string, minCount = 3): Promise<LeaderboardEntry[]> {
   const def = GAME_LEADERBOARD_DEFS[slug];
-  const zeroFormatted = def ? def.formatScore(0) : '0 pt';
-
-  // 対戦専用・スコアなしゲーム
-  if (!def || !def.hasScore) {
-    const emptyList: LeaderboardEntry[] = [];
-    for (let i = 0; i < minCount; i++) {
-      emptyList.push({
-        rank: i + 1,
-        name: '記録なし',
-        score: 0,
-        formattedScore: zeroFormatted,
-        date: '',
-      });
-    }
-    return emptyList;
-  }
-
-  const raw = loadRawScores(slug, variantId);
-  const result: LeaderboardEntry[] = raw.map((item, idx) => ({
-    ...item,
-    rank: idx + 1,
-  }));
-
-  for (let i = result.length; i < minCount; i++) {
-    result.push({
-      rank: i + 1,
-      name: '記録なし',
-      score: 0,
-      formattedScore: zeroFormatted,
-      date: '',
-    });
-  }
-
-  return result;
+  const raw = await loadRawScores(slug, variantId);
+  return padEmptyEntries(def, raw, minCount);
 }
 
-/** ランキングボード(ハブ)に出るのは上位3位まで。4位以下は記録も名前登録もしない。 */
-export const LEADERBOARD_MAX_ENTRIES = 3;
+/** 全ゲーム・全バリアントのランキングを1回で取得する(ハブ用)。キーは getLeaderboardKey(slug, variantId)。失敗時は空 */
+export async function loadAllLeaderboards(): Promise<Record<string, LeaderboardEntry[]>> {
+  try {
+    const data = await request('GET', `${API}/leaderboards`);
+    const out: Record<string, LeaderboardEntry[]> = {};
+    for (const [key, list] of Object.entries<unknown>(data.boards ?? {})) {
+      const def = GAME_LEADERBOARD_DEFS[key.split(':')[0]];
+      if (def) out[key] = normalizeEntries(def, list);
+    }
+    return out;
+  } catch (e) {
+    console.warn('Failed to load leaderboards', e);
+    return {};
+  }
+}
 
-export function checkHighScore(
+/**
+ * 表示用ランキングと、今回のスコアが上位に入るかを1回の取得でまとめて返す(結果画面でランキング表も出すとき用)。
+ * 通信に失敗したら「記録なし」の枠だけで、入らない扱い(サーバーに届かないなら、名前を入れさせても登録できない)。
+ */
+export async function loadLeaderboardAndCheck(
+  slug: string,
+  score: number,
+  variantId?: string,
+  minCount = 3,
+  maxEntries = LEADERBOARD_MAX_ENTRIES,
+): Promise<{ list: LeaderboardEntry[]; isRankIn: boolean; rank: number }> {
+  const def = GAME_LEADERBOARD_DEFS[slug];
+  if (!def || !def.hasScore) return { list: padEmptyEntries(def, [], minCount), isRankIn: false, rank: -1 };
+  try {
+    const raw = await fetchRawScores(def, slug, variantId);
+    const rank = rankForScore(def, raw, score, maxEntries);
+    return { list: padEmptyEntries(def, raw, minCount), isRankIn: rank > 0, rank };
+  } catch (e) {
+    console.warn('Failed to load leaderboard', e);
+    return { list: padEmptyEntries(def, [], minCount), isRankIn: false, rank: -1 };
+  }
+}
+
+/** 今回のスコアが上位に入るか(名前入力を出すかの判定)。通信に失敗したら入らない扱い */
+export async function checkHighScore(
   slug: string,
   score: number,
   variantId?: string,
   maxEntries = LEADERBOARD_MAX_ENTRIES,
-): { isRankIn: boolean; rank: number } {
-  const def = GAME_LEADERBOARD_DEFS[slug];
-  if (!def || !def.hasScore || score <= 0) return { isRankIn: false, rank: -1 };
-
-  const currentList = loadRawScores(slug, variantId);
-  const isAsc = def.scoreOrder === 'asc';
-
-  // 比較ロジック: ascなら score < 他, descなら score > 他
-  const isBetter = (a: number, b: number) => (isAsc ? a < b : a > b);
-
-  let newRank = -1;
-  for (let i = 0; i < currentList.length; i++) {
-    if (isBetter(score, currentList[i].score)) {
-      newRank = i + 1;
-      break;
-    }
-  }
-
-  if (newRank === -1 && currentList.length < maxEntries) {
-    newRank = currentList.length + 1;
-  }
-
-  return {
-    isRankIn: newRank > 0 && newRank <= maxEntries,
-    rank: newRank,
-  };
+): Promise<{ isRankIn: boolean; rank: number }> {
+  if (score <= 0) return { isRankIn: false, rank: -1 };
+  const { isRankIn, rank } = await loadLeaderboardAndCheck(slug, score, variantId, 0, maxEntries);
+  return { isRankIn, rank };
 }
 
 export interface SaveLeaderboardOptions {
   /** ステージを最後までクリアした記録なら true。ホームのランキングで、名前の右に ★ が付く */
   cleared?: boolean;
-  maxEntries?: number;
+  /** midnight-skyway: 走行の軌跡(ゴースト)。上位に入ったときだけサーバーに保存される */
+  ghost?: unknown;
 }
 
-export function saveLeaderboardScore(
+/** 記録を登録する。rank は登録後の順位(圏外・失敗は -1)、list は更新後の表示用ランキング */
+export async function saveLeaderboardScore(
   slug: string,
   score: number,
   name: string,
   variantId?: string,
   extra?: string,
   options: SaveLeaderboardOptions = {},
-): { rank: number; list: LeaderboardEntry[] } {
-  const maxEntries = options.maxEntries ?? LEADERBOARD_MAX_ENTRIES;
+): Promise<{ rank: number; list: LeaderboardEntry[] }> {
   const def = GAME_LEADERBOARD_DEFS[slug];
   if (!def || !def.hasScore || score <= 0) return { rank: -1, list: [] };
-
-  const list = loadRawScores(slug, variantId);
-  const isAsc = def.scoreOrder === 'asc';
-  const today = new Date().toISOString().split('T')[0].replace(/-/g, '/');
-
-  const safeName = sanitizeLeaderboardName(name);
-  const newEntry: LeaderboardEntry = {
-    rank: 0,
-    name: safeName,
-    score,
-    formattedScore: def.formatScore(score),
-    date: today,
-    extra: typeof extra === 'string' ? escapeHtml(extra.slice(0, 30)) : undefined,
-    cleared: options.cleared === true ? true : undefined,
-  };
-
-  list.push(newEntry);
-  list.sort((a, b) => (isAsc ? a.score - b.score : b.score - a.score));
-
-  const topRaw = list.slice(0, maxEntries).map((item, idx) => ({
-    ...item,
-    rank: idx + 1,
-  }));
-
   try {
-    const key = getLeaderboardKey(slug, variantId);
-    localStorage.setItem(key, JSON.stringify(topRaw));
+    const data = await request('POST', boardPath(slug, variantId), {
+      name: sanitizeLeaderboardName(name),
+      score,
+      extra: typeof extra === 'string' ? extra.slice(0, 30) : undefined,
+      cleared: options.cleared === true ? true : undefined,
+      ghost: options.ghost,
+    });
+    const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 3);
+    return { rank: typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1, list };
   } catch (e) {
-    console.warn('Failed to save leaderboard to localStorage', e);
+    console.warn('Failed to save leaderboard', e);
+    return { rank: -1, list: [] };
   }
+}
 
-  const enteredRank =
-    topRaw.findIndex((item) => item === newEntry || (item.score === score && item.name === newEntry.name)) + 1;
-  return { rank: enteredRank > 0 ? enteredRank : -1, list: loadLeaderboard(slug, variantId, 3) };
+/** エントリidを指定してゴースト(走行の軌跡)を取得する。失敗は null */
+export async function fetchGhost<T = unknown>(slug: string, variantId: string, id: string): Promise<T | null> {
+  try {
+    const data = await request('GET', `${API}/ghost/${encodeURIComponent(slug)}/${encodeURIComponent(variantId)}/${encodeURIComponent(id)}`);
+    return (data.ghost ?? null) as T | null;
+  } catch (e) {
+    console.warn('Failed to load ghost', e);
+    return null;
+  }
 }

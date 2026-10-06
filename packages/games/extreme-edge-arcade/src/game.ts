@@ -15,8 +15,7 @@ import { Stage5Yakisoba } from './stages/stage5_yakisoba';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
 import { RankingManager } from './ranking';
-import { checkHighScore } from '../../../shared/arcadeLeaderboard';
-import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 export type GameState =
   | 'TITLE'
@@ -729,25 +728,15 @@ export class GameManager {
     rankEl.textContent = rankText;
     rankEl.style.color = rankColor;
 
-    // Register high score into local ranking Top 3
-    const check = checkHighScore('extreme-edge-arcade', deviation);
-    if (check.isRankIn) {
-      this.isNameEntryOpen = true;
-      mountNameEntryModal({
-        title: '限界記録',
-        scoreDisplay: `${deviation.toFixed(1)} pt`,
-        rankDisplay: `第${check.rank}位`,
-        themeClass: 'theme-extreme',
-        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (katakanaName) => {
-          this.isNameEntryOpen = false;
-          this.resultArmTime = performance.now() + 800;
-          RankingManager.addScore(deviation, rankText, katakanaName);
-        },
-      });
-    } else {
-      RankingManager.addScore(deviation, rankText);
-    }
+    // Register high score into the server ranking Top 3.
+    runHighScoreEntryFlow({
+      slug: 'extreme-edge-arcade',
+      score: deviation,
+      modal: { title: '限界記録', scoreDisplay: `${deviation.toFixed(1)} pt`, themeClass: 'theme-extreme', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
+      onName: (name) => void RankingManager.addScore(deviation, rankText, name),
+      onClosed: () => { this.resultArmTime = performance.now() + 800; },
+    });
   }
 
   // --- Danger overlay: screen-edge vignette + flash, no numbers ---

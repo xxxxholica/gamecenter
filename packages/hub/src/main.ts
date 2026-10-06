@@ -12,7 +12,9 @@ import {
 } from './gameFrame';
 import {
   GAME_LEADERBOARD_DEFS,
-  loadLeaderboard,
+  getLeaderboardKey,
+  loadAllLeaderboards,
+  padEmptyEntries,
   LeaderboardEntry,
   escapeHtml,
 } from '../../shared/arcadeLeaderboard';
@@ -62,12 +64,19 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
       return `
         <div class="ranking-row">
           <span class="rank-pos ${posClasses[idx] ?? ''}">${posLabels[idx] ?? `${idx + 1}TH`}</span>
-          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}</span>
+          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}${e.dev ? '<span class="rank-dev-mark">♛</span>' : ''}</span>
           <span class="rank-score ${isEmpty ? 'is-empty' : ''}">${safeScore}</span>
         </div>
       `;
     })
     .join('');
+}
+
+// ランキングはサーバーから取得する。取得するまで・失敗したときは「記録なし」の枠で表示する
+let boards: Record<string, LeaderboardEntry[]> = {};
+
+function entriesFor(slug: string, variantId?: string): LeaderboardEntry[] {
+  return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 3);
 }
 
 // ===== 全ゲーム一覧 =====
@@ -93,7 +102,7 @@ games.forEach((game) => {
   if (def && def.hasScore) {
     const hasVariants = def.variants && def.variants.length > 0;
     const initialVariant = hasVariants ? def.variants![0] : undefined;
-    const entries = loadLeaderboard(game.slug, initialVariant?.id);
+    const entries = entriesFor(game.slug, initialVariant?.id);
     // 見出しの右の小さなタグは、バリエーション(コース/難易度)の名前
     const variantTagHtml = hasVariants
       ? `<span class="ranking-variant-tag" id="tag-${game.slug}">${initialVariant!.label}</span>`
@@ -112,7 +121,7 @@ games.forEach((game) => {
     `;
   } else {
     // スコアリングなし(対戦専用): ランキングボードを表示しつつグレーアウト
-    const entries = loadLeaderboard(game.slug);
+    const entries = entriesFor(game.slug);
     rankingHtml = `
       <div class="card-ranking-container is-disabled" data-slug="${game.slug}">
         <div class="ranking-header">
@@ -168,6 +177,21 @@ games.forEach((game) => {
   }
 });
 
+// 取得したランキングで、全カードの表示を更新する(バリアントのあるカードは、いま出しているバリアントの分)
+async function refreshBoards() {
+  boards = await loadAllLeaderboards();
+  for (const game of games) {
+    const def = GAME_LEADERBOARD_DEFS[game.slug];
+    if (!def || !def.hasScore) continue;
+    const rowsEl = document.getElementById(`rows-${game.slug}`);
+    if (!rowsEl) continue;
+    const rotator = rotators.find((r) => r.slug === game.slug);
+    const variant = def.variants?.[rotator?.variantIndex ?? 0];
+    rowsEl.innerHTML = renderRowsHtml(entriesFor(game.slug, variant?.id));
+  }
+}
+void refreshBoards();
+
 // ===== 時間経過でコース/難易度ランキングをローテーション切替 (4秒間隔) =====
 const ROTATION_INTERVAL_MS = 4000;
 let rotationTimer: number | null = null;
@@ -184,7 +208,7 @@ function rotateVariants() {
     setTimeout(() => {
       rotator.variantIndex = (rotator.variantIndex + 1) % def.variants!.length;
       const curVariant = def.variants![rotator.variantIndex];
-      const entries = loadLeaderboard(rotator.slug, curVariant.id);
+      const entries = entriesFor(rotator.slug, curVariant.id);
 
       rotator.tagEl.textContent = curVariant.label;
       rotator.rowsEl.innerHTML = renderRowsHtml(entries);
@@ -212,7 +236,14 @@ function stopRotation() {
 // 画面がアクティブな時だけタイマーを動かす
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopRotation();
-  else startRotation();
+  else {
+    startRotation();
+    void refreshBoards();   // ゲームで記録した後に戻ってきたときのため
+  }
+});
+// 戻るボタン(bfcache)で復元されたときも最新にする
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) void refreshBoards();
 });
 startRotation();
 
@@ -279,7 +310,10 @@ function launchSelected(slug = games[current].slug) {
   rememberLastGame(slug);
   const url = `games/${slug}/`;
   if (shouldOpenInFrame()) {
-    openGameFrame(url, () => setPressed(false));
+    openGameFrame(url, () => {
+      setPressed(false);
+      void refreshBoards();   // ゲームで記録した分を反映する
+    });
   } else {
     window.location.href = url;
   }

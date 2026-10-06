@@ -23,9 +23,11 @@ import { OFFLINE_ART, ONLINE_ART } from './online/modeArt';
 import { OnlineHud } from './online/OnlineHud';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { sumDefeated } from './online/snapshot';
-import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+
+const SLUG = 'ennichi-shateki';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
-import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -69,7 +71,7 @@ class ArcadeCorkShooter {
   private offlineCountdown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
   private score: number = 0;
-  private highScore: number = 9800;
+  private highScore: number = 0;
   private timeLeft: number = 30.0;
   readonly MAX_TIME_CAP = 45.0; // 念のための上限。実際は下の延長枠で 30+15=45秒 を超えない
   // 延長できる秒数の総量(1プレイ)。延長の種類を増やしても、この枠を使い切ったらそれ以上は延びない
@@ -656,40 +658,11 @@ class ArcadeCorkShooter {
     this.restoreOfflineView();
   }
 
-  // --- HIGH SCORES (ブラウザに保存して、再読み込みしても残す) ---
-  private static readonly HIGH_SCORE_KEY = 'ennichi_shateki_highscores';
-
+  // --- HIGH SCORE (共通ランキング=サーバーの1位。「新記録」の判定に使う) ---
   private loadHighScores() {
-    try {
-      const raw = localStorage.getItem(ArcadeCorkShooter.HIGH_SCORE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.length === 0) return;
-      const entries = parsed
-        .filter((e) => e && typeof e.score === 'number' && typeof e.name === 'string')
-        .slice(0, 5)
-        .map((e, idx) => ({ rank: idx + 1, score: e.score, name: e.name }));
-      if (entries.length === 0) return;
-      this.hud.highScores = entries;
-      this.highScore = entries[0].score;
-    } catch {
-      // 保存データが壊れていたら初期値のまま
-    }
-  }
-
-  /** 今回のスコアがトップ5に入るなら、順位の位置に挿入して保存する(1位でなくても記録される) */
-  private recordHighScore(score: number) {
-    const list = this.hud.highScores;
-    if (list.length >= 5 && score <= list[list.length - 1].score) return;
-    list.push({ rank: 0, score, name: 'しゃてき名人' });
-    list.sort((a, b) => b.score - a.score);
-    this.hud.highScores = list.slice(0, 5);
-    this.hud.highScores.forEach((e, idx) => (e.rank = idx + 1));
-    try {
-      localStorage.setItem(ArcadeCorkShooter.HIGH_SCORE_KEY, JSON.stringify(this.hud.highScores));
-    } catch {
-      // 保存できない環境(プライベートモードなど)では、今回の起動中だけ有効
-    }
+    void loadRawScores(SLUG).then((list) => {
+      if (list.length > 0) this.highScore = Math.max(this.highScore, list[0].score);
+    });
   }
 
   private enterResults() {
@@ -699,7 +672,6 @@ class ArcadeCorkShooter {
 
     const isNewRecord = this.score > this.highScore;
     if (isNewRecord) this.highScore = this.score;
-    this.recordHighScore(this.score);
 
     this.resultFocus = 0; // 再挑戦がデフォルト
     this.resultArmTime = performance.now() + 600;
@@ -712,22 +684,15 @@ class ArcadeCorkShooter {
       showHomeHint: true,
     });
 
-    const check = checkHighScore('ennichi-shateki', this.score);
-    if (check.isRankIn && this.score > 0) {
-      this.isNameEntryOpen = true;
-      mountNameEntryModal({
-        title: '番付 記名',
-        scoreDisplay: `${this.score.toLocaleString()} g`,
-        rankDisplay: `第${check.rank}位`,
-        themeClass: 'theme-ennichi',
-        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (katakanaName) => {
-          this.isNameEntryOpen = false;
-          this.resultArmTime = performance.now() + 800;
-          saveLeaderboardScore('ennichi-shateki', this.score, katakanaName);
-        },
-      });
-    }
+    const finalScore = this.score;
+    runHighScoreEntryFlow({
+      slug: SLUG,
+      score: finalScore,
+      modal: { title: '番付 記名', scoreDisplay: `${finalScore.toLocaleString()} g`, themeClass: 'theme-ennichi', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
+      onName: (name) => void saveLeaderboardScore(SLUG, finalScore, name),
+      onClosed: () => { this.resultArmTime = performance.now() + 800; },
+    });
 
     if (isNewRecord) {
       sounds.playGrandPrizeFanfare();

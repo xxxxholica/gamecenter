@@ -10,7 +10,7 @@ import {
   ArcadeNameEntryCore,
   NameEntryState,
 } from './arcadeNameEntryCore';
-import { escapeHtml } from './arcadeLeaderboard';
+import { checkHighScore, escapeHtml } from './arcadeLeaderboard';
 import { MenuNav } from './arcadeMenuNav';
 import { PadEdge, startPadLoop } from './arcadePad';
 import { setupResultMenu, applyResultMenuFocus } from './arcadeResultMenu';
@@ -986,4 +986,43 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   };
 
   return cleanup;
+}
+
+export interface HighScoreEntryFlowOptions {
+  slug: string;
+  score: number;
+  variantId?: string;
+  /** 名前入力の見出し・スコア表示・テーマ・待ち時間(順位と完了時の処理はこの関数が足す) */
+  modal: Omit<ArcadeNameEntryModalOptions, 'rankDisplay' | 'onComplete'>;
+  /** 順位の確認中と名前入力中は true、それ以外は false。結果画面の操作を止めるために使う */
+  setBlocked: (blocked: boolean) => void;
+  /** 名前が決まったとき(ランキングへの登録はここで行う) */
+  onName: (name: string) => void;
+  /** 名前入力が閉じたあと(操作の受付を戻した後)。決定ボタンの誤爆防止の待ちなどに使う */
+  onClosed?: () => void;
+}
+
+/**
+ * 結果画面の「順位の確認 → 上位に入っていれば名前入力 → 登録」の流れ。
+ * 順位の確認はサーバーへの問い合わせなので、終わるまでは結果画面の操作を止める(setBlocked)。
+ * 上位に入らない・通信に失敗したときは、名前入力を出さずに操作を戻す。
+ */
+export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): void {
+  const { slug, score, variantId, modal, setBlocked, onName, onClosed } = options;
+  setBlocked(true);
+  void checkHighScore(slug, score, variantId).then((check) => {
+    if (!check.isRankIn) {
+      setBlocked(false);
+      return;
+    }
+    mountNameEntryModal({
+      ...modal,
+      rankDisplay: `第${check.rank}位`,
+      onComplete: (name) => {
+        setBlocked(false);
+        onClosed?.();
+        onName(name);
+      },
+    });
+  });
 }

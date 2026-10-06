@@ -3,12 +3,6 @@ import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { getPrizeSvg, getPrizeShortName } from './prize_icons';
 import { PrizeBreakdownEntry } from './results_pile';
 
-export interface HighScoreEntry {
-  rank: number;
-  score: number;
-  name: string;
-}
-
 export class ArcadeHUD {
   private container: HTMLDivElement;
 
@@ -35,15 +29,6 @@ export class ArcadeHUD {
 
   // Bottom Center Consolidated Container (Combo + Multiplier)
   private bottomCenterEl!: HTMLDivElement;
-
-  // High scores list
-  public highScores: HighScoreEntry[] = [
-    { rank: 1, score: 9800, name: 'しゃてき名人' },
-    { rank: 2, score: 7500, name: 'スナイパーたろう' },
-    { rank: 3, score: 5400, name: 'お祭りボーイ' },
-    { rank: 4, score: 3600, name: 'はやうち次郎' },
-    { rank: 5, score: 2200, name: '見習いはなこ' },
-  ];
 
   constructor() {
     this.container = document.createElement('div');

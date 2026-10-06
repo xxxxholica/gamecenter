@@ -15,26 +15,6 @@ const STRIDE = 5;
 /** Progress fractions of the sector lines and the finish (kept in sync with TimeAttackManager). */
 export const SECTOR_FRACTIONS = [0.33, 0.66, 0.98];
 
-const key = (mapId: string): string => `ghost_${mapId}`;
-
-export function loadGhost(mapId: string): GhostTrace | null {
-  try {
-    const raw = localStorage.getItem(key(mapId));
-    const g = raw ? (JSON.parse(raw) as GhostTrace) : null;
-    return g && g.v === 1 && Array.isArray(g.s) && g.s.length >= STRIDE * 2 ? g : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveGhost(mapId: string, g: GhostTrace): void {
-  try {
-    localStorage.setItem(key(mapId), JSON.stringify(g));
-  } catch (e) {
-    console.warn('Failed to save ghost', e);
-  }
-}
-
 const round = (v: number, d: number): number => { const k = 10 ** d; return Math.round(v * k) / k; };
 
 /** Samples the player's run every SAMPLE_MS (race clock) so it can be replayed later. */

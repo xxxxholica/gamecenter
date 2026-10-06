@@ -1,10 +1,11 @@
-export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'TIME_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
+export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'GHOST_SELECT' | 'TIME_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
 
 export interface GameFlowCallbacks {
   onEnterTitle: () => void;
   onEnterModeSelect: () => void;
   onEnterCarSelect: () => void;
   onEnterMapSelect: () => void;
+  onEnterGhostSelect: () => void;
   onEnterTimeSelect: () => void;
   onEnterOnlineLobby: () => void;
   onEnterOnlineCourse: () => void;
@@ -55,6 +56,11 @@ export class GameFlowManager {
   public goToMapSelect(): void {
     this.currentScreen = 'MAP_SELECT';
     this.callbacks.onEnterMapSelect();
+  }
+
+  public goToGhostSelect(): void {
+    this.currentScreen = 'GHOST_SELECT';
+    this.callbacks.onEnterGhostSelect();
   }
 
   public goToTimeSelect(): void {

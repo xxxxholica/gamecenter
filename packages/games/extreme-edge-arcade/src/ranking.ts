@@ -13,8 +13,8 @@ export interface RankingEntry {
 }
 
 export class RankingManager {
-  static getRankings(): RankingEntry[] {
-    const list: LeaderboardEntry[] = loadLeaderboard('extreme-edge-arcade');
+  static async getRankings(): Promise<RankingEntry[]> {
+    const list: LeaderboardEntry[] = await loadLeaderboard('extreme-edge-arcade');
     return list.map((item) => ({
       rank: item.rank,
       score: item.score,
@@ -24,8 +24,8 @@ export class RankingManager {
     }));
   }
 
-  static addScore(score: number, title: string, name = 'ゲスト'): number {
-    const res = saveLeaderboardScore('extreme-edge-arcade', score, name, undefined, title);
+  static async addScore(score: number, title: string, name = 'ゲスト'): Promise<number> {
+    const res = await saveLeaderboardScore('extreme-edge-arcade', score, name, undefined, title);
     return res.rank;
   }
 }

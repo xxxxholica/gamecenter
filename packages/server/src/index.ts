@@ -3,18 +3,23 @@
 // 管理操作は2経路: ①サーバー機上のUnixソケット(所有者のみ, npm run ctl) ②リバースプロキシの後ろに置く管理画面(admin.ts)。
 // 接続: /online-ws?game=<ゲームid>、公開ステータス: /online-status(全ゲームの開催状況。個人情報なし)。
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { LIMITS, RateWindow } from './limits.ts';
 import { startControl, safeUrl, DEFAULT_SOCKET, type ControlHandlers } from './control.ts';
 import { startAdminWeb } from './admin.ts';
 import { log } from './log.ts';
 import { GameHost } from './host.ts';
+import { LeaderboardStore } from './leaderboardStore.ts';
+import { handleLeaderboardRequest } from './leaderboardApi.ts';
 import { GAME_FACTORIES } from './games/index.ts';
 import type { Msg, Peer } from './engine.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
 const HOST = process.env.ONLINE_HOST ?? '127.0.0.1';
 const WS_PATH = process.env.ONLINE_WS_PATH ?? '/online-ws';
+const LEADERBOARD_FILE = process.env.LEADERBOARD_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'leaderboard.json');
 const CONTROL_SOCKET = process.env.ONLINE_CONTROL_SOCKET ?? DEFAULT_SOCKET;
 const ADMIN_PORT = Number(process.env.ONLINE_ADMIN_PORT ?? 8788);
 const PROXY_SECRET = process.env.ONLINE_PROXY_SECRET;
@@ -49,8 +54,11 @@ function findHost(name: string): GameHost | null {
   return part.length === 1 ? part[0] : null;
 }
 
+const leaderboard = new LeaderboardStore(LEADERBOARD_FILE);
+
 // 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
 const server = http.createServer((req, res) => {
+  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed)) return;
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
     for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
@@ -215,6 +223,21 @@ const controlHandlers: ControlHandlers = {
   },
   kick(game, id) {
     return findHost(game)?.kick(id) ?? false;
+  },
+  listBoards() {
+    return leaderboard.adminBoards();
+  },
+  setDev(board, rank, on) {
+    const [slug, variant] = board.split(':');
+    return leaderboard.setDev(slug, variant, rank, on);
+  },
+  clearBoard(board) {
+    const [slug, variant] = board.split(':');
+    return leaderboard.clearBoard(slug, variant);
+  },
+  removeEntry(board, rank) {
+    const [slug, variant] = board.split(':');
+    return leaderboard.removeEntry(slug, variant, rank);
   },
 };
 startControl(CONTROL_SOCKET, controlHandlers);

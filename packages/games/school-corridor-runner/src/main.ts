@@ -18,8 +18,8 @@ import { createSchoolGateNameplateTexture } from './graphics/Textures';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
-import { checkHighScore, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
-import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -2159,22 +2159,14 @@ class Game {
       showHomeHint: true,
     });
 
-    const check = checkHighScore('school-corridor-runner', score);
-    if (check.isRankIn && score > 0) {
-      this.isNameEntryOpen = true;
-      mountNameEntryModal({
-        title: '脱出記録',
-        scoreDisplay: `${Math.floor(score).toLocaleString()} pts`,
-        rankDisplay: `第${check.rank}位`,
-        themeClass: 'theme-corridor',
-        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (katakanaName) => {
-          this.isNameEntryOpen = false;
-          this.resultArmTime = performance.now() + 800;
-          saveLeaderboardScore('school-corridor-runner', score, katakanaName, undefined, undefined, { cleared: state === GameState.CLEARED });
-        },
-      });
-    }
+    runHighScoreEntryFlow({
+      slug: 'school-corridor-runner',
+      score,
+      modal: { title: '脱出記録', scoreDisplay: `${Math.floor(score).toLocaleString()} pts`, themeClass: 'theme-corridor', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
+      onName: (name) => void saveLeaderboardScore('school-corridor-runner', score, name, undefined, undefined, { cleared: state === GameState.CLEARED }),
+      onClosed: () => { this.resultArmTime = performance.now() + 800; },
+    });
   }
 }
 

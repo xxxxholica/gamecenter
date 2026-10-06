@@ -44,6 +44,21 @@ app.use('/admin', (req, res) => {
   req.pipe(upstream);
 });
 
+// 開発用: 本番ではリバースプロキシが担う /api/(ランキングの保存)を、ここで同じサーバー(8787)へ中継する。
+// connect はマウント先のプレフィックスを req.url から外すので、元のパスは originalUrl から取る。
+const ONLINE_PORT = 8787;
+app.use('/api', (req, res) => {
+  const upstream = http.request(
+    { host: '127.0.0.1', port: ONLINE_PORT, method: req.method, path: req.originalUrl || '/api/', headers: { ...req.headers, host: 'localhost' } },
+    (up) => {
+      res.writeHead(up.statusCode ?? 502, up.headers);
+      up.pipe(res);
+    },
+  );
+  upstream.on('error', () => res.writeHead(502).end('online server is not running'));
+  req.pipe(upstream);
+});
+
 let viteServers = [];
 
 try {

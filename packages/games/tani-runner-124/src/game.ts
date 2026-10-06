@@ -19,9 +19,8 @@ import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
-import { checkHighScore } from '../../../shared/arcadeLeaderboard';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
-import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 /** 最後のジャンプのタイミングゲージ: 緑の帯の中心(0〜1)・半幅、カーソルの往復にかかる秒数、受付時間 */
 const LAUNCH_ZONE_CENTER = 0.8;
@@ -817,23 +816,14 @@ export class Game {
     this.successScreen?.classList.remove('hidden');
     this.openResultMenu(['retry-success-btn', 'title-success-btn', 'exit-success-btn']);
 
-    const check = checkHighScore('tani-runner-124', score, this.level);
-    if (check.isRankIn) {
-      this.resultMenu.setLocked(true);
-      mountNameEntryModal({
-        title: '卒業名簿',
-        scoreDisplay: `${score} 単位`,
-        rankDisplay: `第${check.rank}位`,
-        themeClass: 'theme-tani',
-        delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (katakanaName) => {
-          this.resultMenu.setLocked(false);
-          RankingStore.add(score, this.level, katakanaName);
-        },
-      });
-    } else {
-      RankingStore.add(score, this.level);
-    }
+    runHighScoreEntryFlow({
+      slug: 'tani-runner-124',
+      score,
+      variantId: this.level,
+      modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
+      onName: (name) => void RankingStore.add(score, this.level, name),
+    });
   }
 
   private openResultMenu(buttonIds: string[]): void {
