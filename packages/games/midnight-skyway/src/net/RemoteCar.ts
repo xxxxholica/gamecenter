@@ -46,8 +46,8 @@ export class RemoteCar {
     this.car.group.add(this.label);
   }
 
-  public push(s: CarState, now = performance.now()): void {
-    this.track.push(s, now);
+  public push(s: CarState, now = performance.now(), sentAt?: number): void {
+    this.track.push(s, now, sentAt);
   }
 
   public get stale(): boolean {

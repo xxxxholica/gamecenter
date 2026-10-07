@@ -7,6 +7,19 @@
   <link rel="icon" type="image/png" href="./favicon.png" />
   <link rel="icon" href="./favicon.ico" />
   <style>
+    /* 手書き風のやさしい書体(Yusei Magic / SIL OFL)。使う文字だけのサブセット。ONLINE・RANKING・CASUAL の見出しと、順位・スコアの英数字は従来のまま。
+       太さは1種類だけなので、太字指定でも擬似太字にならないよう、全ての太さをこのファイルに割り当てる */
+    @font-face {
+      font-family: 'Yusei Magic';
+      src: url('./fonts/YuseiMagic-Regular.woff2') format('woff2');
+      font-weight: 100 900;
+      font-display: swap;
+    }
+
+    :root {
+      --hand-font: 'Yusei Magic', 'Hiragino Maru Gothic ProN', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -16,8 +29,8 @@
     html, body {
       width: 100%;
       min-height: 100%;
-      background: #07060c;
-      color: #fff;
+      background: #faf8f5;
+      color: #1e293b;
       font-family: 'Impact', 'Arial Black', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
     }
 
@@ -30,54 +43,122 @@
       overflow-x: hidden;
       padding: 56px 24px 64px;
 
-      /* 星空 + 淡いネオングロー */
+      /* カラフルな落書き + 方眼メモ帳のグリッド */
+      background-color: #faf9f6;
       background-image:
-        radial-gradient(1.5px 1.5px at 20px 30px, rgba(255,255,255,0.5) 100%, transparent),
-        radial-gradient(1.5px 1.5px at 120px 90px, rgba(255,255,255,0.35) 100%, transparent),
-        radial-gradient(1px 1px at 200px 40px, rgba(255,255,255,0.4) 100%, transparent),
-        radial-gradient(1.5px 1.5px at 300px 140px, rgba(255,255,255,0.3) 100%, transparent),
-        radial-gradient(1px 1px at 60px 180px, rgba(255,255,255,0.4) 100%, transparent),
-        radial-gradient(1.5px 1.5px at 340px 220px, rgba(255,255,255,0.3) 100%, transparent),
-        radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 177, 0, 0.14), transparent 60%),
-        radial-gradient(ellipse 700px 400px at 100% 20%, rgba(255, 43, 77, 0.1), transparent 60%);
-      background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, no-repeat, no-repeat;
-      background-size: 360px 240px, 360px 240px, 360px 240px, 360px 240px, 360px 240px, 360px 240px, auto, auto;
+        url('/doodles.svg'),
+        linear-gradient(to right, rgba(148, 163, 184, 0.28) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.28) 1px, transparent 1px);
+      background-repeat: repeat, repeat, repeat;
+      background-size: 800px 800px, 24px 24px, 24px 24px;
     }
 
-    /* CRT走査線オーバーレイ(ゲーム本編のscanlinesと揃えたトーン) */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: 50;
-      pointer-events: none;
-      background: repeating-linear-gradient(
-        0deg,
-        rgba(0, 0, 0, 0.15) 0px,
-        rgba(0, 0, 0, 0.15) 2px,
-        transparent 2px,
-        transparent 4px
-      );
-      mix-blend-mode: multiply;
-      opacity: 0.5;
-    }
-
-    /* ===== ゲーム一覧 ===== */
-    #game-list {
+    /* ===== ハブ全体レイアウト ===== */
+    #hub-container {
       position: relative;
       z-index: 1;
       width: 100%;
       max-width: 1080px;
+      display: flex;
+      flex-direction: column;
+      gap: 44px;
+    }
+
+    .game-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding-bottom: 2px;
+      border-bottom: 2px dashed #cbd5e1;
+      background: transparent;
+    }
+
+    /* 文字の長さ分の付箋スタイル */
+    .section-title {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 6px 18px 6px 14px;
+      font-family: 'Impact', 'Arial Black', system-ui, sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      border-radius: 4px 10px 4px 2px;
+      box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+      margin-bottom: -2px;
+      position: relative;
+      z-index: 2;
+      transition: transform 0.18s ease;
+    }
+
+    #section-online .section-title {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-left: 5px solid #0284c7;
+      transform: rotate(-0.8deg);
+    }
+
+    #section-ranking .section-title {
+      background: #fef08a;
+      color: #854d0e;
+      border-left: 5px solid #eab308;
+      transform: rotate(0.6deg);
+    }
+
+    #section-other .section-title {
+      background: #fce7f3;
+      color: #9d174d;
+      border-left: 5px solid #ec4899;
+      transform: rotate(-0.5deg);
+    }
+
+    .section-note {
+      font-family: var(--hand-font);
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: #64748b;
+      letter-spacing: 0.04em;
+    }
+
+    .game-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 28px;
     }
 
     @media (max-width: 680px) {
-      #game-list {
+      .game-grid {
         grid-template-columns: 1fr;
       }
     }
+
+    /* オンライン開催状況バッジ (白ボックスに黒文字) */
+    .card-online-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1.5px solid #000000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      font-size: 0.8rem;
+      font-family: var(--hand-font);
+      font-weight: 600;
+      color: #000000;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+    }
+
 
     .card {
       --accent: #ff2fd4;
@@ -85,13 +166,18 @@
       display: flex;
       flex-direction: column;
       height: 100%;
-      background: linear-gradient(180deg, #1c1c26, #131319);
-      border: 1px solid #2c2c3a;
-      border-radius: 14px;
+      scroll-margin-top: 80px;
+      background: #ffffff;
+      border: 2px solid #cbd5e1;
+      border-radius: 16px;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      box-shadow:
+        0 10px 25px -3px rgba(15, 23, 42, 0.12),
+        0 4px 10px -2px rgba(15, 23, 42, 0.08),
+        0 1px 3px 0 rgba(15, 23, 42, 0.06);
       transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
     }
+
 
     /* カード全体をクリック領域にしつつ、デベロッパー表記だけ独立したリンクにする透明オーバーレイ */
     .card-link {
@@ -106,18 +192,46 @@
       transform: translateY(-6px);
       border-color: var(--accent);
       box-shadow:
-        0 14px 34px rgba(0, 0, 0, 0.55),
-        0 0 0 1px var(--accent),
-        0 0 26px color-mix(in srgb, var(--accent) 55%, transparent);
+        0 20px 36px -4px rgba(15, 23, 42, 0.20),
+        0 8px 16px -2px rgba(15, 23, 42, 0.12),
+        0 0 0 1.5px var(--accent),
+        0 0 22px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+
+    .card-thumb-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: #f1f5f9;
     }
 
     .card-thumb {
+      position: absolute;
+      inset: 0;
       display: block;
       width: 100%;
-      aspect-ratio: 16 / 9;
+      height: 100%;
       object-fit: cover;
-      filter: saturate(0.92) brightness(0.94);
-      transition: filter 0.18s ease;
+      filter: saturate(0.96) brightness(0.98);
+      transition: filter 0.18s ease, opacity 0.25s ease;
+    }
+
+    .card-preview {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+    }
+
+    body:not(.pad-mode) .card:hover .card-preview,
+    body.pad-mode .card.selected .card-preview {
+      opacity: 1;
     }
 
     body:not(.pad-mode) .card:hover .card-thumb,
@@ -146,7 +260,7 @@
       height: 100%;
       object-fit: contain;
       object-position: left center;
-      filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
       transform-origin: left center;
       transition: transform 0.18s ease;
     }
@@ -159,15 +273,16 @@
     .card-title-en {
       font-size: 0.95rem;
       letter-spacing: 0.04em;
-      color: #d6d6e2;
+      color: #64748b;
       margin-bottom: 2px;
     }
 
     .card h2 {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: var(--hand-font);
       font-weight: 700;
       font-size: 1.05rem;
       letter-spacing: 0.02em;
+      color: #0f172a;
       margin-bottom: 8px;
     }
 
@@ -191,24 +306,26 @@
     }
 
     .card-dev-name {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: var(--hand-font);
+      font-weight: 600;
       text-transform: none;
       font-size: 0.76rem;
-      color: #8f8fa5;
+      color: #64748b;
     }
 
     .card-dev:hover .card-dev-name {
-      color: #fff;
+      color: #0f172a;
       text-decoration: underline;
     }
 
     .card-desc {
-      font-family: system-ui, sans-serif;
+      font-family: var(--hand-font);
+      font-weight: 600;
       text-transform: none;
-      color: #9a9ab0;
-      font-size: 0.85rem;
+      color: #1e293b;
+      font-size: 0.9rem;
       line-height: 1.7;
-      min-height: calc(0.85rem * 1.7 * 3);
+      min-height: calc(0.9rem * 1.7 * 3);
       display: -webkit-box;
       -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
@@ -216,7 +333,7 @@
       margin-bottom: 16px;
     }
 
-    /* ===== ランキング表示 (絵文字不使用) ===== */
+    /* ===== ランキング表示 (明るいカード内ブロック) ===== */
     .card-ranking-container {
       margin-top: auto;
       height: 116px;
@@ -225,9 +342,9 @@
       flex-direction: column;
       justify-content: space-between;
       padding: 9px 14px 10px;
-      background: rgba(0, 0, 0, 0.42);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 8px;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
     }
 
     .ranking-header {
@@ -238,23 +355,23 @@
     }
 
     .ranking-title {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: var(--hand-font);
       font-size: 0.72rem;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: 0.08em;
-      color: #9292a4;
+      color: #64748b;
     }
 
     .ranking-variant-tag {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: var(--hand-font);
       font-size: 0.68rem;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: 0.04em;
       padding: 2px 7px;
       border-radius: 4px;
-      background: rgba(146, 146, 164, 0.12);
-      color: #9292a4;
-      border: 1px solid rgba(146, 146, 164, 0.28);
+      background: #e2e8f0;
+      color: #475569;
+      border: 1px solid #cbd5e1;
       transition: opacity 0.22s ease;
     }
 
@@ -285,50 +402,38 @@
     }
 
     .rank-pos.gold {
-      color: #ffd700;
-      text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+      color: #d97706;
     }
 
     .rank-pos.silver {
-      color: #d2d2dc;
-      text-shadow: 0 0 5px rgba(210, 210, 220, 0.3);
+      color: #64748b;
     }
 
     .rank-pos.bronze {
-      color: #df985f;
-      text-shadow: 0 0 5px rgba(223, 152, 95, 0.3);
+      color: #b45309;
     }
 
     /* クリアした記録の名前のすぐ右の ★ */
     .rank-clear-mark {
       margin-left: 5px;
       font-size: 0.8rem;
-      color: #ffd700;
-      text-shadow: 0 0 6px rgba(255, 215, 0, 0.45);
-    }
-
-    /* 開発者の記録の印。クリア済みの ★ の右に並ぶ(両方なら ★ ♛) */
-    .rank-dev-mark {
-      margin-left: 5px;
-      font-size: 0.8rem;
-      color: #ff9be4;
-      text-shadow: 0 0 6px rgba(255, 155, 228, 0.5);
+      color: #d97706;
     }
 
     .rank-name {
       flex: 1;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: var(--hand-font);
       font-size: 0.8rem;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: 0.08em;
-      color: #e6e6f0;
+      color: #0f172a;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     .rank-name.is-empty {
-      color: #6d6d80;
+      color: #94a3b8;
       font-weight: 500;
     }
 
@@ -337,59 +442,72 @@
       font-variant-numeric: tabular-nums;
       font-size: 0.84rem;
       letter-spacing: 0.04em;
-      color: #9f9fb5;
+      color: #475569;
       flex-shrink: 0;
     }
 
     .rank-score.is-empty {
-      color: #646476;
+      color: #94a3b8;
     }
 
-    /* グレーアウトされたランキング枠 (ストリートストライカー等: 枠は他と同じくはっきり表示し中身のみグレーアウト) */
+    /* ランキングなしゲーム用の枠 (中央に利用不可メッセージを表示) */
     .card-ranking-container.is-disabled {
-      background: rgba(0, 0, 0, 0.42);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .card-ranking-container.is-disabled .ranking-title {
-      color: #555566;
-    }
-
-    .card-ranking-container.is-disabled .rank-pos {
-      color: #4e4e5e !important;
-      text-shadow: none !important;
-    }
-
-    .card-ranking-container.is-disabled .rank-name,
-    .card-ranking-container.is-disabled .rank-score {
-      color: #525262 !important;
-    }
-
-    /* 対戦専用枠 (スコアリングなしゲーム用) */
-    .card-vs-box {
-      margin-top: auto;
-      height: 126px;
-      box-sizing: border-box;
-      padding: 11px 14px;
-      background: rgba(0, 0, 0, 0.42);
-      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-      border-radius: 8px;
-      display: flex;
+      flex-direction: row;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      background: #f1f5f9;
+      border: 1.5px dashed #cbd5e1;
+      padding: 10px 14px;
     }
 
-    .vs-tag {
-      font-family: 'Impact', 'Arial Black', sans-serif;
-      font-size: 0.74rem;
-      letter-spacing: 0.1em;
-      color: var(--accent);
+    .ranking-unavailable {
+      font-family: var(--hand-font);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      text-align: center;
+      user-select: none;
     }
 
-    .vs-desc {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
-      font-size: 0.74rem;
-      color: #8b8b9e;
+    /* アケコンガイドのライトスタイル調整 */
+    .agc-root {
+      background: rgba(255, 255, 255, 0.94) !important;
+      border: 1.5px solid #cbd5e1 !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+      color: #1e293b !important;
+    }
+
+    .agc-row {
+      color: #1e293b !important;
+    }
+
+    /* 共有CSSの .agc-label は明るい色を直接指定しているので、白地では個別に上書きする */
+    .agc-label {
+      color: #1e293b !important;
+    }
+
+    .agc-home .agc-label {
+      color: #64748b !important;
+    }
+
+    .agc-btn {
+      background: #0f172a !important;
+      color: #ffffff !important;
+      border: 1px solid #334155 !important;
+    }
+
+    /* パネルの白地に溶けないよう、キートップは灰色の面と濃い縁・下の影でくっきり見せる */
+    .agc-root .agc-btn.agc-key {
+      background: #e2e8f0 !important;
+      color: #0f172a !important;
+      border: 1.5px solid #475569 !important;
+      border-bottom: 3px solid #475569 !important;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.25) !important;
+    }
+
+    .agc-key-sep {
+      color: #64748b !important;
     }
 
     /* ===== アケコン操作 ===== */
@@ -405,7 +523,28 @@
   </style>
 </head>
 <body>
-  <div id="game-list"></div>
+  <div id="hub-container">
+    <section class="game-section" id="section-online" style="display: none;">
+      <div class="section-header">
+        <h2 class="section-title">ONLINE</h2>
+      </div>
+      <div class="game-grid" id="grid-online"></div>
+    </section>
+
+    <section class="game-section" id="section-ranking">
+      <div class="section-header">
+        <h2 class="section-title">RANKING</h2>
+      </div>
+      <div class="game-grid" id="grid-ranking"></div>
+    </section>
+
+    <section class="game-section" id="section-other">
+      <div class="section-header">
+        <h2 class="section-title">CASUAL</h2>
+      </div>
+      <div class="game-grid" id="grid-other"></div>
+    </section>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@
 // 検証はここで行う: クライアントの申告は信用しない(名前の正規化・スコア範囲・ゴーストの形式)。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {
   GAME_LEADERBOARD_DEFS,
@@ -11,7 +12,9 @@ import {
   getLeaderboardDef,
   insertScore,
   leaderboardBoardKey as boardKey,
+  parseBoardKey,
   rankForScore,
+  sanitizeLeaderboardExtra,
   sanitizeLeaderboardName,
   type GameLeaderboardDef,
   type LeaderboardEntry,
@@ -81,7 +84,7 @@ export function validateGhost(raw: unknown, timeMs: number): GhostTrace | null {
   return {
     v: 1,
     timeMs,
-    carName: typeof g.carName === 'string' ? g.carName.slice(0, 30) : '',
+    carName: sanitizeLeaderboardExtra(g.carName) ?? '',
     date: typeof g.date === 'string' ? g.date.slice(0, 10) : '',
     kind: 'player',
     s: g.s as number[],
@@ -89,9 +92,11 @@ export function validateGhost(raw: unknown, timeMs: number): GhostTrace | null {
 }
 
 /** スコアの妥当な範囲。タイム(asc)は1秒〜1時間、点数は1〜10億。 */
-function scoreInRange(def: GameLeaderboardDef, score: number): boolean {
+function scoreInRange(def: GameLeaderboardDef, score: number, variant?: string): boolean {
   if (!Number.isFinite(score)) return false;
-  return def.scoreOrder === 'asc' ? score >= 1000 && score <= 3_600_000 : score >= 1 && score <= 1_000_000_000;
+  const v = def.variants?.find((x) => x.id === variant);
+  const [lo, hi] = def.scoreOrder === 'asc' ? [1000, 3_600_000] : [1, 1_000_000_000];
+  return score >= Math.max(lo, v?.minScore ?? lo) && score <= Math.min(hi, v?.maxScore ?? hi);
 }
 
 export class LeaderboardStore {
@@ -104,7 +109,7 @@ export class LeaderboardStore {
     try {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       for (const [key, b] of Object.entries<Board>(data?.boards ?? {})) {
-        const [slug, variant] = key.split(':');
+        const [slug, variant] = parseBoardKey(key);
         if (!this.def(slug, variant) || !b || !Array.isArray(b.entries)) continue;     // 知らない枠・壊れた枠は捨てる
         if ((b.rev ?? 0) !== this.revisionOf(slug, variant)) continue;                 // コースが作り直された枠は破棄する
         const entries = b.entries.filter(isStoredEntry).slice(0, LEADERBOARD_MAX_ENTRIES);   // 手で編集して壊れた行があっても、読み出しで落ちない
@@ -150,7 +155,7 @@ export class LeaderboardStore {
   all(): Record<string, LeaderboardEntry[]> {
     const out: Record<string, LeaderboardEntry[]> = {};
     for (const key of this.keys()) {
-      const [slug, variant] = key.split(':');
+      const [slug, variant] = parseBoardKey(key);
       out[key] = this.list(slug, variant) ?? [];
     }
     return out;
@@ -165,7 +170,7 @@ export class LeaderboardStore {
     const def = this.def(slug, variant);
     if (!def) return { ok: false, error: 'unknown_board' };
     const score = typeof input.score === 'number' ? input.score : NaN;
-    if (!scoreInRange(def, score)) return { ok: false, error: 'bad_score' };
+    if (!scoreInRange(def, score, variant)) return { ok: false, error: 'bad_score' };
 
     const key = boardKey(slug, variant);
     const board = this.boards.get(key) ?? { rev: this.revisionOf(slug, variant), entries: [] };
@@ -187,7 +192,7 @@ export class LeaderboardStore {
       score,
       formattedScore: def.formatScore(score),
       date: today(),
-      extra: typeof input.extra === 'string' && input.extra ? input.extra.slice(0, 30) : undefined,
+      extra: sanitizeLeaderboardExtra(input.extra),
       cleared: input.cleared === true ? true : undefined,
       ghost,
     };
@@ -200,7 +205,7 @@ export class LeaderboardStore {
   /** 管理画面用: すべての枠(記録が空の枠も)を、表示名つきで返す。 */
   adminBoards(): { board: string; slug: string; variant?: string; variantLabel?: string; entries: LeaderboardEntry[] }[] {
     return this.keys().map((key) => {
-      const [slug, variant] = key.split(':');
+      const [slug, variant] = parseBoardKey(key);
       const variantLabel = getLeaderboardDef(slug)?.variants?.find((v) => v.id === variant)?.label;
       return { board: key, slug, variant, variantLabel, entries: this.list(slug, variant) ?? [] };
     });
@@ -251,11 +256,48 @@ export class LeaderboardStore {
     return true;
   }
 
+  /** 変更が続いても書き込みは一定間隔にまとめる(ゴースト込みで数百KBになるため、毎回の同期書き込みで対戦の中継を止めない) */
+  private static readonly SAVE_DELAY_MS = 300;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private writing = false;
+  private dirty = false;
+
   private save(): void {
     if (!this.file) return;
+    this.dirty = true;
+    if (this.saveTimer || this.writing) return;
+    this.saveTimer = setTimeout(() => void this.writeAsync(), LeaderboardStore.SAVE_DELAY_MS);
+    this.saveTimer.unref();
+  }
+
+  private async writeAsync(): Promise<void> {
+    this.saveTimer = null;
+    if (!this.file || !this.dirty) return;
+    this.writing = true;
+    this.dirty = false;
+    try {
+      const file = this.file;
+      await fsp.mkdir(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await fsp.writeFile(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
+      await fsp.rename(tmp, file);
+    } catch (e) {
+      console.warn('[leaderboard] 保存に失敗しました:', (e as Error).message);
+    } finally {
+      this.writing = false;
+      if (this.dirty && !this.saveTimer) this.save();           // 書いている間に変更があった
+    }
+  }
+
+  /** 未保存の変更を、いますぐ同期で書き出す(終了時・テスト用)。 */
+  flush(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    if (!this.file || !this.dirty) return;
+    this.dirty = false;
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.${process.pid}.tmp`;
+      const tmp = `${this.file}.${process.pid}.sync.tmp`;
       fs.writeFileSync(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
       fs.renameSync(tmp, this.file);
     } catch (e) {

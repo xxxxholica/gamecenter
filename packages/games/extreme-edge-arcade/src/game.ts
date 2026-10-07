@@ -11,7 +11,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { Stage1Drink } from './stages/stage1_drink';
 import { Stage3Phone } from './stages/stage3_phone';
 import { Stage4Clock } from './stages/stage4_clock';
-import { Stage5Yakisoba } from './stages/stage5_yakisoba';
+import { Stage5Balloon } from './stages/stage5_balloon';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
 import { RankingManager } from './ranking';
@@ -116,11 +116,25 @@ export class GameManager {
       (fx) => new Stage1Drink(fx),
       (fx) => new Stage3Phone(fx),
       (fx) => new Stage4Clock(fx),
-      (fx) => new Stage5Yakisoba(fx),
+      (fx) => new Stage5Balloon(fx),
     ];
 
     this.bindDomElements();
     this.showTitle();
+    if (GameManager.PREVIEW) this.setupPreview();
+  }
+
+  /** ホームのサムネイル・ホバー動画の収録用(?preview または ?noHud)。HUD・ガイド・文字を隠し、1種目目を自動で始める */
+  private static readonly PREVIEW = typeof location !== 'undefined' && /[?&](preview|noHud)\b/.test(location.search);
+
+  private setupPreview() {
+    const style = document.createElement('style');
+    style.textContent = `
+      #hud-overlay, #center-banner, #brief-overlay, #result-overlay, #title-overlay, #ranking-overlay,
+      #danger-vignette, #danger-flash, #demo-banner, #demo-prompt, #agc-guide { display: none !important; }
+    `;
+    document.head.appendChild(style);
+    this.startGame();
   }
 
   private bindDomElements() {
@@ -336,13 +350,13 @@ export class GameManager {
     // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
     const stageGuideOptions = [
       // Stage 1 (ドリンクバー)
-      { moveLabel: '上: ドリンクを注ぐ', showHomeHint: true },
+      { moveLabel: '上: ドリンクを止める', showHomeHint: true },
       // Stage 2 (スマホ充電)
       { moveLabel: '上: ケーブルを挿す', showHomeHint: true },
       // Stage 3 (目覚まし時計)
       { moveLabel: '上: 時計を止める', showHomeHint: true },
-      // Stage 4 (焼きそば湯切り)
-      { moveLabel: '上: カップを傾ける', showHomeHint: true },
+      // Stage 4 (風船ふくらまし)
+      { moveLabel: '上: 空気を止める', showHomeHint: true },
     ];
     if (stageGuideOptions[index]) {
       mountArcadeGuide(stageGuideOptions[index]);
@@ -441,6 +455,7 @@ export class GameManager {
 
       case 'STAGE_BRIEF': {
         this.briefTimer += dt;
+        if (GameManager.PREVIEW && this.briefTimer >= 0.3) this.dismissBriefing();   // 収録: 説明カードは自動で閉じる
         // 直前の連打で誤って閉じないよう、表示から0.5秒は受け付けない
         if (this.briefTimer >= 0.5 && (this.input.wasButton0Pressed() || this.input.wasButton1Pressed() || this.input.wasLeverUpPressed())) {
           this.dismissBriefing();
@@ -713,11 +728,9 @@ export class GameManager {
       const row = document.createElement('tr');
       const scoreColor = rec.success ? '#00ff66' : '#ff1a1a';
       const statusText = rec.success ? `${rec.scorePercent.toFixed(1)}%` : '大惨事・0%';
-      row.innerHTML = `
-        <td>${rec.stageNumber}</td>
-        <td>${rec.stageTitle}</td>
-        <td style="color: ${scoreColor}; font-weight: bold;">${statusText}</td>
-      `;
+      const cells = [String(rec.stageNumber), rec.stageTitle, statusText].map((text) => Object.assign(document.createElement('td'), { textContent: text }));
+      cells[2].style.cssText = `color: ${scoreColor}; font-weight: bold;`;
+      row.append(...cells);
       tbody.appendChild(row);
     });
 

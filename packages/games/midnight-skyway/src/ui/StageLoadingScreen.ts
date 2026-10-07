@@ -50,10 +50,9 @@ export class StageLoadingScreen {
     if (/^STAGE\s*\d+$/i.test(stageNum.trim())) {
       stageNum = stageNum.trim() + ':';
     }
-    this.stageTitleEl.innerHTML = `
-      <span class="stage-num-block">${stageNum}</span>
-      <span class="stage-name-block">${name || ''}</span>
-    `;
+    const numEl = Object.assign(document.createElement('span'), { className: 'stage-num-block', textContent: stageNum });
+    const nameEl = Object.assign(document.createElement('span'), { className: 'stage-name-block', textContent: name || '' });
+    this.stageTitleEl.replaceChildren(numEl, nameEl);
     this.creditEl.textContent = attribution || '';
     this.creditEl.style.display = attribution ? 'block' : 'none';
     this.progressFillEl.style.width = '0%';

@@ -12,6 +12,8 @@
     "dev": "node scripts/dev-all.mjs",
     "dev:hub": "npm run dev -w packages/hub",
     "build": "node scripts/build.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
     "preview": "npx serve dist",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "deploy:server": "node scripts/deploy-server.mjs"

@@ -23,9 +23,12 @@ export function isGameFrameOpen(): boolean {
   return frame !== null;
 }
 
-/** 全画面中ならtrue。このときだけiframeで開く(通常は従来どおりページ移動)。 */
+/**
+ * 常にiframeで開く。
+ * 全画面状態をゲーム起動中・終了後も完全に維持し、ゲームから戻る際のリロードや遅延をなくす。
+ */
 export function shouldOpenInFrame(): boolean {
-  return !!document.fullscreenElement;
+  return true;
 }
 
 export function openGameFrame(url: string, closed: () => void): void {
@@ -33,7 +36,7 @@ export function openGameFrame(url: string, closed: () => void): void {
   onClosed = closed;
   const el = document.createElement('iframe');
   el.src = url;
-  el.setAttribute('allow', 'fullscreen; gamepad; autoplay');
+  el.setAttribute('allow', 'fullscreen; gamepad; autoplay; keyboard-map');
   el.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;background:#000';
   // 読み込めたらフォーカスを渡す(キー入力・ゲームパッドをゲーム側で受けるため)
   el.addEventListener('load', () => {

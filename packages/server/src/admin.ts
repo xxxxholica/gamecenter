@@ -25,9 +25,20 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 監視側の検知窓と合わせてある
 const MAX_BODY_BYTES = 1024;
 
+/** 長さの違いで時間差が出ないよう、SHA-256 にかけて同じ長さにしてから比べる。 */
 function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a), bb = Buffer.from(b);
-  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+/** 不正なパーセントエンコーディング(%だけ等)で例外にならないデコード。失敗したら元の文字列のまま。 */
+function safeDecode(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
 }
 
 /** `a=1&b=2` 形式の小さいPOSTボディを読む。上限を超えたら null(読み切らず接続を切る)。 */
@@ -55,7 +66,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
   for (const part of header.split(';')) {
     const i = part.indexOf('=');
     if (i < 0) continue;
-    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    out[part.slice(0, i).trim()] = safeDecode(part.slice(i + 1).trim());
   }
   return out;
 }
@@ -70,6 +81,11 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
     return null;
   }
 
+  // 上の判定で string だと分かった値を、クロージャの中でも string として使えるよう束ねる
+  const proxySecret: string = secret;
+  const user: string = adminUser;
+  const pass: string = adminPass;
+
   // メモリ上のセッション(再起動で全員ログアウトになる。イベント用途として許容)。
   const sessions = new Map<string, number>(); // token -> 作成時刻
   // ログイン失敗の回数制限(IPごと)。固定ウィンドウ: findtime 内に maxAttempts 回失敗したら以降は 429。
@@ -77,6 +93,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
 
   function sweepSessions(now: number): void {
     for (const [tok, t] of sessions) if (now - t > SESSION_TTL_MS) sessions.delete(tok);
+    for (const [ip, f] of loginFails) if (now - f.start >= LOGIN_WINDOW_MS) loginFails.delete(ip);
   }
   function tooManyFailures(ip: string, now: number): boolean {
     const f = loginFails.get(ip);
@@ -89,7 +106,15 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
     else f.n++;
   }
 
-  const server = http.createServer(async (req, res) => {
+  const server = http.createServer((req, res) => {
+    // 非同期ハンドラの例外は unhandled rejection になり、同じプロセスのオンライン対戦ごと落ちる。ここで必ず受け止める。
+    handle(req, res).catch((e: Error) => {
+      log(`admin error: ${e.message}`);
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end('{"error":"internal"}');
+      else res.end();
+    });
+  });
+  async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const send = (code: number, type: string, body: string, extraHeaders: http.OutgoingHttpHeaders = {}) => {
       res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extraHeaders }).end(body);
     };
@@ -97,7 +122,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
     const html = (code: number, body: string, extraHeaders: http.OutgoingHttpHeaders = {}) => send(code, 'text/html; charset=utf-8', body, extraHeaders);
 
     const proxy = req.headers['x-online-proxy'];
-    if (typeof proxy !== 'string' || !safeEqual(proxy, secret)) return json(403, { error: 'forbidden' });
+    if (typeof proxy !== 'string' || !safeEqual(proxy, proxySecret)) return json(403, { error: 'forbidden' });
 
     const url = safeUrl(req.url);
     if (!url) return json(400, { error: 'bad_request' });
@@ -125,7 +150,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
       const body = await readBody(req, MAX_BODY_BYTES);
       const params = new URLSearchParams(body ?? '');
       const u = params.get('user') ?? '', p = params.get('pass') ?? '';
-      if (safeEqual(u, adminUser) && safeEqual(p, adminPass)) {
+      if (safeEqual(u, user) && safeEqual(p, pass)) {
         const token = crypto.randomBytes(32).toString('hex');
         sessions.set(token, now);
         log(`admin login ok ip=${ip}`);
@@ -176,7 +201,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
       return json(r.code, r.body);
     }
     json(404, { error: 'not_found' });
-  });
+  }
   server.listen(port, host, () => console.log(`[online] admin web http://${host}:${port} (リバースプロキシ経由のみ)`));
   return server;
 }

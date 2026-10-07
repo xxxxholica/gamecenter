@@ -54,6 +54,8 @@ hub + 全ゲームをビルドし、`dist/`以下に1つのサイトとして組
 ```bash
 npm run build
 npm run preview   # dist/ を配信して確認
+npm run typecheck  # 全パッケージの型チェック(CI でも実行)
+npm test           # 全パッケージのテスト(CI でも実行)
 ```
 
 出力レイアウト:
@@ -94,7 +96,7 @@ https://game.hinata.works/ で公開している。
 | 場所 | 操作 |
 | --- | --- |
 | ホーム | レバー: ゲームを選ぶ / ボタン(0〜7, START): 離した瞬間にゲーム開始 |
-| ゲーム中 | SELECT(button 8)を1秒長押し: ホームへ戻る(キーボードはEsc) |
+| ゲーム中 | SELECT(button 8)またはキーボードのBackspaceを1秒長押し: ホームへ戻る(短押しはメニューの「戻る」) |
 
 - ゲームから戻ると、直前に遊んだゲームが選択された状態で表示される。
 - ブラウザはゲームパッド操作をユーザー操作とみなさないため、アケコンだけで遊ぶと音が鳴らず全画面にもならない。筐体では自動再生を許可したキオスクモードで起動すること:
@@ -106,7 +108,7 @@ https://game.hinata.works/ で公開している。
 
 1. `packages/games/<slug>/` に新しいVite+TypeScriptプロジェクトを作成する(既存ゲームの`package.json`/`vite.config.ts`を雛形にする)。
    - `vite.config.ts` に `base: './'` を設定すること(`dist/games/<slug>/` にネストして配置されるため)。
-2. エントリ(`src/main.ts`)で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼び、SELECT長押しでホームへ戻れるようにする。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにすること。
+2. エントリ(`src/main.ts`)で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼び、SELECT(キーボードはBackspace)長押しでホームへ戻れるようにする。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにすること。
 3. `packages/hub/src/games.ts` にエントリを追加する(タイトル・説明文・サムネイル画像・アクセントカラー)。サムネイルは `packages/hub/public/thumbnails/<slug>.webp` に置く。
 4. `npm install`(workspaceが自動検出される)→ `npm run build` で確認。
 

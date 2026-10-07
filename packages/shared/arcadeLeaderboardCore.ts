@@ -26,6 +26,9 @@ export interface LeaderboardVariant {
    * サーバーは、保存済みの版と違う枠を、起動時に破棄する(サーバーの再起動=デプロイで反映される)。
    */
   revision?: number;
+  /** サーバーが受け付けるスコアの下限・上限(省略時は汎用の範囲)。コースの最短タイムを下回る申告などを弾く */
+  minScore?: number;
+  maxScore?: number;
 }
 
 export interface GameLeaderboardDef {
@@ -58,6 +61,19 @@ export const DEV_NAME = '開発者';
 
 const NG_WORD_REGEX = /^(シネ|コロス|キチガイ|バカ|アホ|カス|シネヨ|レイプ|チンコ|マンコ|ペニス|セックス|オメコ)$/i;
 
+/** 制御文字・危険記号（< > " ' & ` \ / など）・表示を乱す文字(ゼロ幅・双方向の制御) */
+const UNSAFE_CHARS = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF<>'"&`\\/]/g;
+
+/**
+ * 称号・マシン名などの補足文字列(extra / carName)の検証。名前と同じ危険な文字を除去し、最大 maxLen 文字に切る。
+ * 空になる・文字列でないなら undefined。
+ */
+export function sanitizeLeaderboardExtra(raw: unknown, maxLen = 30): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const cleaned = Array.from(raw.replace(UNSAFE_CHARS, '').trim()).slice(0, maxLen).join('');
+  return cleaned || undefined;
+}
+
 /**
  * プレイヤー名を厳格に検証・サニタイズする (最大5文字)
  * 危険なHTML特殊文字、制御文字、表示を乱す文字(ゼロ幅・双方向の制御)、不正な型を除去し、安全な文字列に正規化する。
@@ -65,10 +81,7 @@ const NG_WORD_REGEX = /^(シネ|コロス|キチガイ|バカ|アホ|カス|シ�
 export function sanitizeLeaderboardName(rawName: unknown): string {
   if (typeof rawName !== 'string') return 'ゲスト';
   // 制御文字・危険記号（< > " ' & ` \ / など）および改行を除去
-  const cleaned = rawName
-    .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF<>'"&`\\/]/g, '')
-    .trim()
-    .slice(0, 5);
+  const cleaned = Array.from(rawName.replace(UNSAFE_CHARS, '').trim()).slice(0, 5).join('');   // コードポイント単位(絵文字などのサロゲートペアを分断しない)
   if (!cleaned) return 'ゲスト';
   if (cleaned === DEV_NAME || NG_WORD_REGEX.test(cleaned)) {
     return 'ゲスト';
@@ -125,10 +138,11 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     scoreOrder: 'asc',
     unit: '',
     formatScore: (score) => formatTimeMs(score),
+    // minScore は shared/netProtocol.ts の MIN_FINISH_MS(コースごとの物理的な最短タイム)と同じ値
     variants: [
-      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ', revision: 1 },
-      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ', revision: 1 },
-      { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 1 },
+      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ', revision: 1, minScore: 30000 },
+      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ', revision: 1, minScore: 28000 },
+      { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 1, minScore: 58000 },
     ],
   },
   'school-corridor-runner': {
@@ -165,6 +179,12 @@ export function getLeaderboardDef(slug: string): GameLeaderboardDef | undefined 
 /** 1枠(ゲーム、バリアントがあるゲームはバリアントごと)を指すキー。クライアントのキャッシュ・サーバーの保存で共通 */
 export function leaderboardBoardKey(slug: string, variantId?: string): string {
   return variantId ? `${slug}:${variantId}` : slug;
+}
+
+/** leaderboardBoardKey の逆。'<slug>' → [slug, undefined]、'<slug>:<variant>' → [slug, variant] */
+export function parseBoardKey(key: string): [string, string | undefined] {
+  const i = key.indexOf(':');
+  return i < 0 ? [key, undefined] : [key.slice(0, i), key.slice(i + 1)];
 }
 
 /** ランキングボード(ハブ)に出るのは上位3位まで。4位以下は記録も名前登録もしない。 */

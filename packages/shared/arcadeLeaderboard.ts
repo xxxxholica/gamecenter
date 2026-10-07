@@ -8,6 +8,7 @@ import {
   leaderboardBoardKey,
   padEmptyEntries,
   rankForScore,
+  sanitizeLeaderboardExtra,
   sanitizeLeaderboardName,
 } from './arcadeLeaderboardCore.ts';
 import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCore.ts';
@@ -52,7 +53,7 @@ function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEn
       score: item.score,
       formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(item.score),
       date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
-      extra: typeof item.extra === 'string' ? item.extra.slice(0, 30) : undefined,
+      extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
       cleared: item.cleared === true ? true : undefined,
       dev: item.dev === true ? true : undefined,
     }));
@@ -156,7 +157,7 @@ export async function saveLeaderboardScore(
     const data = await request('POST', boardPath(slug, variantId), {
       name: sanitizeLeaderboardName(name),
       score,
-      extra: typeof extra === 'string' ? extra.slice(0, 30) : undefined,
+      extra: sanitizeLeaderboardExtra(extra),
       cleared: options.cleared === true ? true : undefined,
       ghost: options.ghost,
     });

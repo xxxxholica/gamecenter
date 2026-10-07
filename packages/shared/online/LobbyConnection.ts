@@ -108,6 +108,9 @@ export class LobbyConnection<R extends BaseRoom, S extends { t: string }, C exte
     this.offs.forEach((f) => f());
     this.offs = [];
     this.stopPoll();
+    // 前の参加の room を残さない(残すと、次に start() した時に「参加済み」と見なして join を送らず、接続中のまま止まる)
+    this.room = null;
+    this.view = 'connecting';
   }
 
   /** 参加できない案内の「再試行」: 閉鎖・切断なら接続し直し、満員・レース中ならもう一度参加する。 */

@@ -4,6 +4,24 @@ import callFontUrl from '../assets/fonts/NotoSerifJP-Black-subset.woff2?url';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 export type GameMode = 'pve' | 'pvp';
 
+/** 多人数の上部バーの1人分 */
+export interface MultiPlayer {
+  name: string;
+  /** 色(CSS) */
+  css: string;
+  /** 角印の文字(1P〜4P) */
+  label: string;
+  me: boolean;
+}
+
+/** 結果の順位表の1行 */
+export interface ResultRow {
+  name: string;
+  css: string;
+  wins: number;
+  me: boolean;
+}
+
 /** 吹き飛び蓄積率の段階ごとの [文字色, 文字影] */
 const DAMAGE_LEVELS: ReadonlyArray<readonly [string, string]> = [
   ['#f6efdc', '0 0 4px #000, 2px 2px 4px #000'],
@@ -24,6 +42,8 @@ function verticalText(text: string): string {
 export class UIManager {
   private readonly damageLevels = new WeakMap<HTMLElement, number>();
   private readonly lastWins: [number, number] = [-1, -1];
+  private multiCards: { card: HTMLElement; percent: HTMLElement; stars: HTMLElement }[] = [];
+  private multiLast: { wins: number; out: boolean }[] = [];
   private p1BuchiFillEl!: HTMLElement;
   private p2BuchiFillEl!: HTMLElement;
   // バトルHUD要素
@@ -58,12 +78,9 @@ export class UIManager {
   // リザルト画面要素
   private resultModalEl!: HTMLElement;
   private resultWinnerTitleEl!: HTMLElement;
-  private resultSubTextEl!: HTMLElement;
-  private resultP1StarsEl!: HTMLElement;
-  private resultP2StarsEl!: HTMLElement;
-  private resultP2NameEl!: HTMLElement;
   private resultBtns: HTMLElement[] = [];
   public selectedResultIndex: number = 0;
+  private rematchEnabled = true;
 
   // バナータイマー
   private bannerTimer: any = null;
@@ -239,9 +256,9 @@ export class UIManager {
           background: linear-gradient(135deg, #1c1510 0%, #2b1d14 50%, #15100c 100%);
           border: 3px solid #d4af37;
           border-radius: 12px;
-          width: 620px;
+          width: 700px;
           max-width: 92%;
-          padding: 28px 32px;
+          padding: 32px 40px 28px;
           box-sizing: border-box;
           text-align: center;
           box-shadow: 0 0 50px rgba(255, 215, 0, 0.35), 0 20px 40px rgba(0, 0, 0, 0.9);
@@ -264,68 +281,74 @@ export class UIManager {
 
         .result-title {
           font-family: 'SumoCall', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
-          font-size: 36px;
+          font-size: 68px;
           font-weight: 900;
           color: #ffffff;
-          letter-spacing: 0.12em;
-          -webkit-text-stroke: 2px #000;
+          letter-spacing: 0.2em;
+          -webkit-text-stroke: 3px #000;
           paint-order: stroke fill;
           text-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
-          margin: 0 0 6px 0;
+          margin: 4px 0 32px 0;
           white-space: normal;
-          line-height: 1.25;
+          line-height: 1.15;
         }
 
-        .result-sub {
-          font-size: 15px;
-          color: #ffd700;
-          letter-spacing: 2px;
-          font-weight: bold;
-          margin-bottom: 20px;
-          white-space: nowrap;
-        }
+        .result-title.win { color: #ffe27a; text-shadow: 0 0 24px rgba(255, 215, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.7); }
+        .result-title.lose { color: #aeb6c8; }
 
-        .result-score-box {
-          display: flex;
-          align-items: center;
-          justify-content: space-around;
-          background: rgba(0, 0, 0, 0.5);
-          border: 1px solid #554433;
-          border-radius: 8px;
-          padding: 14px 18px;
-          margin-bottom: 22px;
-        }
 
-        .result-player-score {
-          flex: 1;
-        }
 
-        .result-fighter-name {
-          font-size: 17px;
-          font-weight: bold;
-          letter-spacing: 1.5px;
-          margin-bottom: 4px;
-          white-space: nowrap;
-        }
 
-        .result-stars {
-          font-size: 24px;
-          color: #ffd700;
-          letter-spacing: 4px;
-          white-space: nowrap;
-        }
 
-        .result-vs {
-          font-size: 18px;
-          font-weight: 900;
-          color: #887766;
-          padding: 0 12px;
-          white-space: nowrap;
-        }
+
 
         .result-buttons {
           margin-bottom: 4px;
         }
+
+        /* ===== 多人数(オンライン2〜4人)の表示 ===== */
+        .multi-row { display: none; gap: 10px; align-items: flex-start; justify-content: center; }
+        #battle-hud.multi .multi-row { display: flex; }
+        /* 自分の技の箱(左下)だけを残し、1対1用のカード・中央の星取りは隠す */
+        #battle-hud.multi .p2-card,
+        #battle-hud.multi .hud-center-marks,
+        #battle-hud.multi .p1-card .fighter-header,
+        #battle-hud.multi .p1-card .knockback-wrap,
+        #battle-hud.multi .p1-card .badge-status-wrap { display: none; }
+        #battle-hud.multi .p1-card { min-width: 0; }
+        #battle-hud.multi .hud-top { gap: 0; }
+        /* 幅が狭い画面では、左上の操作ガイドに自分のカードが隠れないよう、上部バーを右に寄せる */
+        @media (max-width: 1400px) {
+          #battle-hud.multi .hud-top { justify-content: flex-end; }
+        }
+        .mcard {
+          position: relative;
+          min-width: 124px;
+          padding: 4px 8px 6px;
+          text-align: center;
+          white-space: nowrap;
+          border-bottom: 3px solid var(--mc, #fff);
+          background: linear-gradient(180deg, rgba(8, 6, 4, 0.0) 0%, rgba(8, 6, 4, 0.55) 100%);
+          transition: opacity 0.25s ease;
+        }
+        .mcard.out { opacity: 0.38; }
+        .mcard.me { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 14px var(--mc, #fff); border-radius: 3px; }
+        .mcard .fighter-header { margin-bottom: 0; }
+        .mcard .player-badge { background: var(--mc, #666); }
+        .mcard .fighter-name { font-size: 15px; letter-spacing: 1px; }
+        .mcard .knockback-wrap { margin: 0; }
+        .mcard .knockback-value { font-size: 42px; }
+        .mcard .knockback-unit { font-size: 18px; margin-top: 2px; }
+        .mcard .stars-container { justify-content: center; font-size: 18px; }
+
+        /* 結果: 順位表(CPU対戦もオンラインも共通) */
+        .result-list { margin-bottom: 28px; background: rgba(0, 0, 0, 0.5); border: 1px solid #554433; border-radius: 8px; padding: 12px 18px; }
+        .result-row { display: flex; align-items: center; gap: 14px; padding: 10px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        .result-row:last-child { border-bottom: none; }
+        .result-row .rank { width: 2em; font-size: 28px; font-weight: 900; color: #d4af37; text-align: center; }
+        .result-row .rname { flex: 1; text-align: left; font-size: 24px; font-weight: bold; letter-spacing: 2px; }
+        .result-row .rme { display: inline-block; font-size: 15px; font-weight: 900; line-height: 1.4; color: #000; background: #ffd700; border-radius: 3px; padding: 5px 12px; margin-left: 12px; vertical-align: middle; letter-spacing: 1px; }
+        .result-row .rstars { font-size: 30px; color: #ffd700; letter-spacing: 4px; }
 
         /* ===== 洗練されたバトル中HUD ===== */
         #battle-hud {
@@ -483,24 +506,8 @@ export class UIManager {
           text-shadow: 0 0 4px #000, 0 0 4px #000;
         }
 
-        .star-win {
-          color: #e0b84a;
-          text-shadow: 0 0 8px rgba(224, 184, 74, 0.7);
-          display: inline-block;
-          animation: starGlow 1.5s infinite alternate ease-in-out;
-          white-space: nowrap;
-        }
 
-        .star-loss {
-          color: rgba(255, 255, 255, 0.22);
-          display: inline-block;
-          white-space: nowrap;
-        }
 
-        @keyframes starGlow {
-          from { transform: scale(1); filter: drop-shadow(0 0 2px #ffd700); }
-          to { transform: scale(1.1); filter: drop-shadow(0 0 6px #ffd700); }
-        }
 
         /* ===== 主役！ダメージ蓄積（吹き飛び率）ヒーローセクション ===== */
         .knockback-wrap {
@@ -666,8 +673,8 @@ export class UIManager {
         }
 
         /* LT / RT: 2つの丸を斜めにずらし、間に斜線を引く */
-        /* ボタンの丸は X / B / LT / RT すべて同じ直径にそろえる */
-        .skill-label .agc-btn {
+        /* ボタンの丸は X / B / LT / RT すべて同じ直径にそろえる (アケコン時) */
+        .skill-label .agc-pad-only .agc-btn {
           box-sizing: border-box;
           width: 30px;
           min-width: 30px;
@@ -675,6 +682,22 @@ export class UIManager {
           padding: 0;
           border-radius: 50% !important;
           font-size: 13px;
+        }
+
+        /* キーボード用のキートップ: スキルボックス(幅60px)内にきれいに収まるスタイル */
+        .skill-label .agc-kbd-only .agc-btn.agc-key {
+          box-sizing: border-box !important;
+          width: auto !important;
+          min-width: 22px !important;
+          max-width: 52px !important;
+          height: 20px !important;
+          padding: 0 5px !important;
+          border-radius: 4px !important;
+          font-size: 10px !important;
+          font-weight: 800 !important;
+          letter-spacing: 0 !important;
+          line-height: 1 !important;
+          white-space: nowrap !important;
         }
 
         /* LT / RT: 同じ丸の中で LT と RT を交互に切り替える */
@@ -900,8 +923,7 @@ export class UIManager {
         }
 
         /* 副文がないときは、その行ごと詰める */
-        .banner-sub:empty,
-        .result-sub:empty {
+        .banner-sub:empty {
           display: none;
         }
 
@@ -959,20 +981,8 @@ export class UIManager {
       <!-- ===== 試合決着リザルト画面 ===== -->
       <div id="match-result-modal">
         <div class="result-modal-content">
-          <h2 class="result-title" id="result-winner-title">蒼天龍　優勝</h2>
-          <div class="result-sub" id="result-sub-text"></div>
-          
-          <div class="result-score-box">
-            <div class="result-player-score">
-              <div class="result-fighter-name p1-color">蒼天龍</div>
-              <div class="result-stars" id="result-p1-stars">★★</div>
-            </div>
-            <div class="result-vs">VS</div>
-            <div class="result-player-score">
-              <div class="result-fighter-name p2-color" id="result-p2-name">紅炎山</div>
-              <div class="result-stars" id="result-p2-stars">☆</div>
-            </div>
-          </div>
+          <h2 class="result-title" id="result-winner-title">勝利</h2>
+          <div class="result-list" id="result-list"></div>
 
           <div class="result-buttons" id="result-menu">
             <button id="result-btn-rematch">再挑戦</button>
@@ -1005,18 +1015,18 @@ export class UIManager {
               <div class="skill-box ready" id="p1-harite-box">
                 <div class="skill-fill"></div>
                 <div class="charge-fill" id="p1-harite-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0])}${verticalText('張り手')}</div>
+                <div class="skill-label">${buttonIconHtml([0], 'Space')}${verticalText('張り手')}</div>
                 <div class="skill-hint">連打</div>
               </div>
               <div class="skill-box ready" id="p1-buchi-cd">
                 <div class="skill-fill" id="p1-buchi-fill"></div>
                 <div class="charge-fill" id="p1-charge-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0])}${verticalText('ぶちかまし')}</div>
+                <div class="skill-label">${buttonIconHtml([0], 'Space')}${verticalText('ぶちかまし')}</div>
                 <div class="skill-hint">長押し</div>
               </div>
               <div class="skill-box grab ready" id="p1-grab-cd">
                 <div class="skill-fill" id="p1-grab-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1])}${verticalText('つかみ')}</div>
+                <div class="skill-label">${buttonIconHtml([1], 'K')}${verticalText('つかみ')}</div>
               </div>
             </div>
 
@@ -1053,18 +1063,18 @@ export class UIManager {
               <div class="skill-box p2-side ready" id="p2-harite-box">
                 <div class="skill-fill"></div>
                 <div class="charge-fill" id="p2-harite-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0])}${verticalText('張り手')}</div>
+                <div class="skill-label">${buttonIconHtml([0], ',')}${verticalText('張り手')}</div>
                 <div class="skill-hint">連打</div>
               </div>
               <div class="skill-box p2-side ready" id="p2-buchi-cd">
                 <div class="skill-fill" id="p2-buchi-fill"></div>
                 <div class="charge-fill" id="p2-charge-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0])}${verticalText('ぶちかまし')}</div>
+                <div class="skill-label">${buttonIconHtml([0], ',')}${verticalText('ぶちかまし')}</div>
                 <div class="skill-hint">長押し</div>
               </div>
               <div class="skill-box p2-side grab ready" id="p2-grab-cd">
                 <div class="skill-fill" id="p2-grab-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1])}${verticalText('つかみ')}</div>
+                <div class="skill-label">${buttonIconHtml([1], '.')}${verticalText('つかみ')}</div>
               </div>
             </div>
 
@@ -1072,6 +1082,7 @@ export class UIManager {
               <span class="armor-badge" id="p2-armor-badge">突進中</span>
             </div>
           </div>
+          <div class="multi-row" id="multi-row"></div>
         </div>
 
         <!-- 中央コール（はっけよい、のこった、勝負あり） -->
@@ -1116,10 +1127,6 @@ export class UIManager {
     // リザルト画面要素
     this.resultModalEl = document.getElementById('match-result-modal')!;
     this.resultWinnerTitleEl = document.getElementById('result-winner-title')!;
-    this.resultSubTextEl = document.getElementById('result-sub-text')!;
-    this.resultP1StarsEl = document.getElementById('result-p1-stars')!;
-    this.resultP2StarsEl = document.getElementById('result-p2-stars')!;
-    this.resultP2NameEl = document.getElementById('result-p2-name')!;
     this.resultBtns = [
       document.getElementById('result-btn-rematch')!,
       document.getElementById('result-btn-title')!,
@@ -1142,22 +1149,35 @@ export class UIManager {
     });
   }
 
-  /** 再挑戦 / タイトルに戻る / ゲームを終了 (全ゲーム共通の縦並びメニュー) */
+  /** 再挑戦 / タイトルに戻る / ゲームを終了 (全ゲーム共通の縦並びメニュー)。再挑戦を隠している間は、その項目を除く。 */
   private resultMenuItems(): ResultMenuItem[] {
     const colors = ['#ffe600', '#39ff88', '#00f0ff'];
-    return this.resultBtns.map((button, i) => ({ button, color: colors[i] }));
+    return this.resultBtns
+      .map((button, i) => ({ button, color: colors[i] }))
+      .filter((_, i) => this.rematchEnabled || i !== 0);
+  }
+
+  /** オンライン対戦では再挑戦できない(場は試合ごとに空に戻る)ので、再挑戦のボタンを隠す。 */
+  public setRematchEnabled(enabled: boolean) {
+    this.rematchEnabled = enabled;
+    this.resultBtns[0].style.display = enabled ? '' : 'none';
   }
 
   public selectResultIndex(index: number) {
-    this.selectedResultIndex = (index + this.resultBtns.length) % this.resultBtns.length;
+    let i = (index + this.resultBtns.length) % this.resultBtns.length;
+    if (!this.rematchEnabled && i === 0) i = 1;
+    this.selectedResultIndex = i;
     const items = this.resultMenuItems();
     setupResultMenu(document.getElementById('result-menu'), items);
-    applyResultMenuFocus(items, this.selectedResultIndex);
+    applyResultMenuFocus(items, i - (this.rematchEnabled ? 0 : 1));
   }
 
   /** dir: -1 = 上/左, +1 = 下/右 */
   public moveResultSelection(dir: number) {
-    this.selectResultIndex(this.selectedResultIndex + dir);
+    const n = this.resultBtns.length;
+    let next = (this.selectedResultIndex + dir + n) % n;
+    if (!this.rematchEnabled && next === 0) next = (next + dir + n) % n;
+    this.selectResultIndex(next);
   }
 
   public confirmCurrentResultSelection() {
@@ -1166,13 +1186,37 @@ export class UIManager {
     else this.onExit?.();
   }
 
-  public showVictoryModal(winnerName: string, p1Wins: number, p2Wins: number, p2Name: string) {
-    this.resultWinnerTitleEl.textContent = `${winnerName}　優勝`;
-    this.resultSubTextEl.textContent = '';
-    this.resultP1StarsEl.innerHTML = this.renderStars(p1Wins);
-    this.resultP2StarsEl.innerHTML = this.renderStars(p2Wins);
-    this.resultP2NameEl.textContent = p2Name;
-
+  /** 結果: 「勝利/敗北」の見出しと、得点の多い順の順位表(CPU対戦もオンラインも共通)。me=自分の行(オンラインだけ印を付ける)。 */
+  public showVictory(won: boolean, rows: ResultRow[]) {
+    this.resultWinnerTitleEl.textContent = won ? '勝利' : '敗北';
+    this.resultWinnerTitleEl.classList.toggle('win', won);
+    this.resultWinnerTitleEl.classList.toggle('lose', !won);
+    const sorted = rows.map((r, i) => ({ r, i })).sort((a, b) => b.r.wins - a.r.wins || a.i - b.i);
+    const box = document.getElementById('result-list')!;
+    box.replaceChildren(
+      ...sorted.map(({ r }, k) => {
+        const row = document.createElement('div');
+        row.className = 'result-row';
+        const rank = document.createElement('span');
+        rank.className = 'rank';
+        rank.textContent = `${k + 1}`;
+        const name = document.createElement('span');
+        name.className = 'rname';
+        name.style.color = r.css;
+        name.append(r.name);
+        if (r.me) {
+          const me = document.createElement('span');
+          me.className = 'rme';
+          me.textContent = 'あなた';
+          name.append(me);
+        }
+        const stars = document.createElement('span');
+        stars.className = 'rstars';
+        stars.textContent = '★'.repeat(r.wins) + '☆'.repeat(Math.max(0, 2 - r.wins));
+        row.append(rank, name, stars);
+        return row;
+      })
+    );
     this.selectResultIndex(0);
     this.resultModalEl.classList.add('show');
   }
@@ -1183,6 +1227,57 @@ export class UIManager {
 
   public isVictoryModalOpen(): boolean {
     return this.resultModalEl.classList.contains('show');
+  }
+
+  /**
+   * 多人数(オンライン)の上部バーに切り替える(null で1対1の表示に戻す)。
+   * 1対1用のカードは隠し、自分の技の箱(左下)だけを残す。
+   */
+  public setMultiLayout(players: MultiPlayer[] | null) {
+    this.battleHudEl.classList.toggle('multi', players !== null);
+    this.multiCards = [];
+    const row = document.getElementById('multi-row')!;
+    row.replaceChildren();
+    if (!players) return;
+    this.multiLast = players.map(() => ({ wins: -1, out: false }));
+    for (const p of players) {
+      const card = document.createElement('div');
+      card.className = `mcard${p.me ? ' me' : ''}`;
+      card.style.setProperty('--mc', p.css);
+      card.innerHTML = `
+        <div class="fighter-header">
+          <span class="player-badge"></span>
+          <span class="fighter-name"></span>
+        </div>
+        <div class="knockback-wrap"><div class="damage-number-box"><span class="knockback-value">0</span><span class="knockback-unit">%</span></div></div>
+        <div class="stars-container"></div>`;
+      card.querySelector('.player-badge')!.textContent = p.label;
+      card.querySelector('.fighter-name')!.textContent = p.name;
+      row.append(card);
+      this.multiCards.push({
+        card,
+        percent: card.querySelector<HTMLElement>('.knockback-value')!,
+        stars: card.querySelector<HTMLElement>('.stars-container')!,
+      });
+    }
+  }
+
+  /** 多人数の上部バーの更新(ダメージ%・得点・脱落)。 */
+  public updateMulti(rows: { damage: number; wins: number; out: boolean }[]) {
+    rows.forEach((r, i) => {
+      const c = this.multiCards[i];
+      if (!c) return;
+      this.updateDamageStyle(c.percent, r.damage);
+      const last = this.multiLast[i];
+      if (r.wins !== last.wins) {
+        last.wins = r.wins;
+        c.stars.innerHTML = this.renderWinMarks(r.wins);
+      }
+      if (r.out !== last.out) {
+        last.out = r.out;
+        c.card.classList.toggle('out', r.out);
+      }
+    });
   }
 
   /** 対戦モードに合わせて西方(2P/CPU)の表示を切り替える */
@@ -1311,18 +1406,6 @@ export class UIManager {
     let s = '';
     for (let i = 0; i < 2; i++) {
       s += i < wins ? '<span class="mark-win">●</span>' : '<span class="mark-pending">○</span>';
-    }
-    return s;
-  }
-
-  private renderStars(wins: number): string {
-    let s = '';
-    for (let i = 0; i < 2; i++) {
-      if (i < wins) {
-        s += '<span class="star-win">★</span>';
-      } else {
-        s += '<span class="star-loss">☆</span>';
-      }
     }
     return s;
   }

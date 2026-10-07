@@ -1,5 +1,6 @@
 import { InputState } from '../types';
 import { SoundManager } from '../audio/SoundManager';
+import { toggleFullscreen } from '../../../../shared/fullscreenKey';
 
 export class OptionsScreen {
   public selectedIndex: number = 0;
@@ -44,11 +45,7 @@ export class OptionsScreen {
       if (this.selectedIndex === 2) {
         soundManager.toggleMute();
       } else if (this.selectedIndex === 3) {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
-        }
+        toggleFullscreen();
       } else if (this.selectedIndex === 4) {
         return true; // Back
       }

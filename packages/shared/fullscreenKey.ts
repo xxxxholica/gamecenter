@@ -8,6 +8,11 @@
 export const FULLSCREEN_TOGGLE_MESSAGE = 'gamecenter:toggle-fullscreen';
 
 export function toggleFullscreen(): void {
+  if (window.parent !== window) {
+    // ハブのiframeの中: 全画面にするのは親のページ
+    window.parent.postMessage({ type: FULLSCREEN_TOGGLE_MESSAGE }, window.location.origin);
+    return;
+  }
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {});
   } else if (document.fullscreenEnabled) {
@@ -21,11 +26,7 @@ export function mountFullscreenKey(): void {
     if (e.code !== 'KeyF' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target;
     if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable]')) return;
-    if (window.parent !== window) {
-      // ハブのiframeの中: 全画面にするのは親のページ
-      window.parent.postMessage({ type: FULLSCREEN_TOGGLE_MESSAGE }, window.location.origin);
-    } else {
-      toggleFullscreen();
-    }
+    toggleFullscreen();
   });
 }
+

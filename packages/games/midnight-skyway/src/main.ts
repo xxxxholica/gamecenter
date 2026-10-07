@@ -64,7 +64,7 @@ const guideModeSelect = () => mountArcadeGuide({
 const guideCarSelect = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
   buttons: [
-    { indices: [2, 3, 4, 5], label: 'カラー変更' },
+    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C / X' },
     { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
@@ -97,7 +97,7 @@ const guideTimeSelect = () => mountArcadeGuide({
 const guideLobby = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
   buttons: [
-    { indices: [2, 3, 4, 5], label: 'カラー変更' },
+    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C / X' },
     { indices: [0], label: 'コース希望へ' },
     { indices: [1], label: '退出' },
   ],
@@ -121,11 +121,12 @@ const guideOnlineWait = () => mountArcadeGuide({
 });
 const guideRace = () => mountArcadeGuide({
   moveLabel: '↑走る ↓減速 ←→ハンドル',
+  keyMoveLabel: 'W/↑ 走る  S/↓ 減速  A/D/←→ ハンドル',
   buttons: [
-    { indices: [0], label: 'ハンドブレーキ' },
-    { indices: [2], label: 'カメラ切替' },
-    { indices: [3], label: '前方確認' },
-    { indices: [9], label: 'ポーズ' },
+    { indices: [0], label: 'ハンドブレーキ', keyLabel: 'Space' },
+    { indices: [2], label: 'カメラ切替', keyLabel: 'C' },
+    { indices: [3], label: '前方確認', keyLabel: 'V' },
+    { indices: [9], label: 'ポーズ', keyLabel: 'P' },
   ],
   showHomeHint: true,
 });
@@ -262,7 +263,7 @@ window.addEventListener('DOMContentLoaded', () => {
     online.goTime = goTime;
     const traffic = currentMapInstance.traffic;
     if (traffic) traffic.sharedClock = () => (net.serverNow() - goTime) / 1000;
-    timeAttack.startCountdownSynced(goTime - net.serverNow());
+    timeAttack.startCountdownSynced(goTime - net.serverNow(), () => goTime - net.serverNow());
   };
 
   timeAttack.callbacks.onCountdown = (step) => {
@@ -435,8 +436,14 @@ window.addEventListener('DOMContentLoaded', () => {
       driveHUD.setRemoteMarkers([...online.race.remotes.values()].filter((r) => r.valid).map((r) => ({ x: r.pos.x, z: r.pos.z, color: r.color })));
     }
   };
+  const isPreviewMode = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
   driveScene.callbacks.onBeforeConstrain = (car) => {
     online?.race?.collide(car);
+    if (isPreviewMode && car) {
+      car.canDrive = true;
+      car.autopilot = { steer: 0, throttle: true, brake: false };
+      if (car.speed < 18) car.speed = 28;
+    }
   };
 
   // ==========================================
@@ -991,6 +998,12 @@ window.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Initial State: Enter Title Screen
-  flow.goToTitle();
+  // Initial State: Enter Title Screen or directly start race if preview
+  if (isPreviewMode) {
+    if (stageLoadingContainer) stageLoadingContainer.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    flow.startRace();
+  } else {
+    flow.goToTitle();
+  }
 });

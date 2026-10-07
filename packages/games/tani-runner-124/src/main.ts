@@ -15,9 +15,3 @@ window.addEventListener('DOMContentLoaded', () => {
   new Game();
 });
 
-// Escapeでホーム(ゲームセンターハブ)へ戻る。games/<slug>/配下からルートへは2階層上。
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') {
-    window.location.href = '../../';
-  }
-});

@@ -9,7 +9,6 @@ export class DemoInputManager extends InputManager {
   private simBtn1 = false;
   private simPrevBtn1 = false;
   private simLeverY = 0;
-  private simTilt = 0;
 
   setScenario(stageId: number) {
     this.stageId = stageId;
@@ -19,7 +18,6 @@ export class DemoInputManager extends InputManager {
     this.simBtn1 = false;
     this.simPrevBtn1 = false;
     this.simLeverY = 0;
-    this.simTilt = 0;
   }
 
   updateDemo(dt: number) {
@@ -27,21 +25,9 @@ export class DemoInputManager extends InputManager {
     this.simPrevBtn0 = this.simBtn0;
     this.simPrevBtn1 = this.simBtn1;
 
-    // Stage 1: Drink (Pour -> Pause -> Pour -> Confirm)
+    // Stage 1: Drink (自動で注がれる → 終盤で止める)
     if (this.stageId === 1) {
-      if (this.demoTime < 2.0) {
-        this.simBtn0 = true;
-      } else if (this.demoTime < 3.2) {
-        this.simBtn0 = false; // pause & let foam settle
-      } else if (this.demoTime < 4.2) {
-        this.simBtn0 = true; // top it off
-      } else if (this.demoTime < 4.6) {
-        this.simBtn0 = false;
-      } else if (this.demoTime < 5.0) {
-        this.simBtn1 = true; // confirm with S/Down
-      } else {
-        this.simBtn1 = false;
-      }
+      this.simBtn0 = this.demoTime >= 4.0 && this.demoTime < 4.2;
     }
 
     // Stage 2 (id=2, Stage3Phone): Smartphone Charge
@@ -64,17 +50,9 @@ export class DemoInputManager extends InputManager {
       }
     }
 
-    // Stage 4 (id=4, Stage5Yakisoba): Ease into a bold hold-tilt to show off the pour & lid-peel tension
+    // Stage 4 (id=4, Stage5Balloon): 自動でふくらむ風船を、割れる寸前で止める
     else if (this.stageId === 4) {
-      if (this.demoTime < 1.0) {
-        this.simTilt = 0;
-      } else if (this.demoTime < 2.2) {
-        this.simTilt = Math.min(0.62, (this.demoTime - 1.0) / 1.2 * 0.62);
-      } else if (this.demoTime < 6.5) {
-        this.simTilt = 0.62; // held risky angle: past the lid-peel threshold, short of failure
-      } else {
-        this.simTilt = Math.max(0, 0.62 - (this.demoTime - 6.5) * 0.5);
-      }
+      this.simBtn0 = this.demoTime >= 6.3 && this.demoTime < 6.5;
     }
   }
 
@@ -112,10 +90,6 @@ export class DemoInputManager extends InputManager {
 
   override wasLeverDownPressed(): boolean {
     return (this.simBtn1 && !this.simPrevBtn1) || this.simLeverY > 0.4;
-  }
-
-  override getForwardTilt(): number {
-    return this.simTilt;
   }
 
   override anyPressed(): boolean {

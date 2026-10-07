@@ -9,6 +9,10 @@ export const LIMITS = {
   maxConnsPerIp: num('ONLINE_MAX_CONNS_PER_IP', 50),
   maxConnsTotal: num('ONLINE_MAX_CONNS_TOTAL', 64),
   connectsPerMinPerIp: num('ONLINE_CONNECTS_PER_MIN', 120),
+  /** 1つのIPが全体の枠を使い切って、他の参加者を締め出さないよう、同一IPの上限は全体の75%までに抑える(上の値と小さい方) */
+  get effectiveConnsPerIp(): number {
+    return Math.min(this.maxConnsPerIp, Math.max(1, Math.floor(this.maxConnsTotal * 0.75)));
+  },
   maxPayloadBytes: 2048,
   msgsPerSec: 60,
   idleTimeoutMs: 30000,

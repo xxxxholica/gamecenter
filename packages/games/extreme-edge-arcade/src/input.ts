@@ -140,7 +140,7 @@ export class InputManager {
     return this.btn1 && !this.prevBtn1;
   }
 
-  // Lever forward / Up (Cable push, Yakisoba tilt)
+  // Lever forward / Up (Cable push)
   isLeverUp(): boolean {
     return this.leverY < -0.3;
   }

@@ -55,12 +55,19 @@ export function watchResultAutoReturn(titleButtonIds: string[], seconds = 30): v
     window.addEventListener(ev, touch, { passive: true });
   }
 
+  let wasShown = false;
   window.setInterval(() => {
     const buttons = titleButtonIds.map((id) => document.getElementById(id));
     const shown = buttons.find((el): el is HTMLElement => !!el && isShown(el)) ?? null;
     // 画面に出ていないボタンに残った表示は消す
     for (const el of buttons) if (el && el !== shown) setButtonSuffix(el, '');
-    if (!shown) return;
+    if (!shown) {
+      wasShown = false;
+      return;
+    }
+    // リザルトが出た時点から数える(出る前の最後の操作から数えると、出た時にもう残りが少ないことがある)
+    if (!wasShown) touch();
+    wasShown = true;
     if (document.querySelector('.ane-overlay') || padActive()) touch();
 
     const remain = seconds - (performance.now() - last) / 1000;

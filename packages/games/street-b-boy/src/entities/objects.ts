@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BoundingBox2D } from './player';
 import { TextureGenerator } from '../world/textures';
+import { EdgeTrigger } from '../engine/edgeTrigger';
 
 // 1. CASSETTE TAPE (Coin)
 export class CassetteTape {
@@ -566,6 +567,8 @@ export class FireHydrant {
   public x: number;
   public y: number;
   public isErupted: boolean = false;
+  /** プレイヤーが水柱に入った瞬間(得点・コンボ・効果音を1回の通過につき1回だけ出すため) */
+  public readonly columnEntry = new EdgeTrigger();
   private waterColumn: THREE.Mesh;
   private capMesh: THREE.Mesh;
 

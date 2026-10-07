@@ -50,7 +50,7 @@ function cleanDefeated(d: unknown): Defeated | null {
   return out;
 }
 
-export class EnnichiGame implements GameModule {
+export class EnnichiGame implements GameModule<EnnichiMember> {
   readonly id = 'ennichi-shateki';
   readonly maxPlayers = MAX_PLAYERS;
   /** 実行(racing)の最大時間: カウントダウン+プレイ+猶予 */
@@ -71,7 +71,7 @@ export class EnnichiGame implements GameModule {
     'はやうち次郎',
   ];
 
-  private room!: Room;
+  private room!: Room<EnnichiMember>;
   private modeSetting = RANDOM;
   private mode: Mode = 'versus';
   private seed = 0;
@@ -85,7 +85,7 @@ export class EnnichiGame implements GameModule {
   private tick: ReturnType<typeof setInterval> | null = null;
   private endTimer: ReturnType<typeof setTimeout> | null = null;
 
-  attach(room: Room): void {
+  attach(room: Room<EnnichiMember>): void {
     this.room = room;
   }
 
@@ -102,11 +102,11 @@ export class EnnichiGame implements GameModule {
     return {};
   }
 
-  private data(m: Member): EnnichiMember {
-    return m.data as EnnichiMember;
+  private data(m: Member<EnnichiMember>): EnnichiMember {
+    return m.data;
   }
 
-  onJoin(m: Member): void {
+  onJoin(m: Member<EnnichiMember>): void {
     m.data = { mode: null, aim: null, snap: null, snapDirty: false, score: 0, defeated: {}, ufoPts: 0, lastUfoHit: 0, finalized: false } satisfies EnnichiMember;
   }
 
@@ -119,7 +119,7 @@ export class EnnichiGame implements GameModule {
     this.fires = [];
   }
 
-  playerInfo(m: Member): object {
+  playerInfo(m: Member<EnnichiMember>): object {
     return { mode: this.data(m).mode };
   }
 
@@ -131,7 +131,7 @@ export class EnnichiGame implements GameModule {
     return { modeSetting: this.modeSetting, votes: this.votes() };
   }
 
-  onPref(m: Member, msg: Msg): string | null {
+  onPref(m: Member<EnnichiMember>, msg: Msg): string | null {
     if (msg.mode !== null && !MODES.includes(msg.mode as Mode)) return 'bad_pref';
     this.data(m).mode = msg.mode as Mode | null;
     this.room.broadcastRoom();
@@ -161,7 +161,7 @@ export class EnnichiGame implements GameModule {
     return { t: 'go', at, endAt };
   }
 
-  onPlayMessage(m: Member, msg: Msg): void {
+  onPlayMessage(m: Member<EnnichiMember>, msg: Msg): void {
     const d = this.data(m);
     switch (msg.t) {
       case 'aim':
@@ -207,7 +207,7 @@ export class EnnichiGame implements GameModule {
   }
 
   /** 共有の的への命中: 出現中の的だけ。最初の1件を採用(協力はHPを減らす)。 */
-  private ufoHit(m: Member, n: unknown): void {
+  private ufoHit(m: Member<EnnichiMember>, n: unknown): void {
     const spec = this.schedule.find((u) => u.n === n);
     const now = Date.now();
     const d = this.data(m);

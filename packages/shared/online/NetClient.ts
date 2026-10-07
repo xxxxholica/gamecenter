@@ -2,8 +2,13 @@
 import type { CoreClientMsg, CoreServerMsg } from './core';
 
 const HEARTBEAT_MS = 10000;
-/** 時計合わせは RTT が最小だったサンプルを採用する。 */
+/** 接続直後に短い間隔で打つ回数。 */
 const SYNC_SAMPLES = 8;
+/**
+ * 時計合わせは、直近このサンプル数のうち RTT が最小だったものを採用する。古いサンプルは押し出されるので、
+ * 接続後に端末の時計が補正されたり回線が変わったりしても、数回のハートビート(10秒おき)のうちに追従する。
+ */
+const SYNC_WINDOW = 12;
 
 /** 接続先。VITE_ONLINE_WS で上書き可。開発時(vite)はローカルのサーバー、本番は同一ホストの /online-ws。 */
 export function serverUrl(game: string): string {
@@ -25,7 +30,7 @@ export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: s
   private handlers = new Map<string, Set<(m: never) => void>>();
   private closeHandlers = new Set<(code: number) => void>();
   private heartbeat: number | null = null;
-  private bestRtt = Infinity;
+  private syncSamples: { rtt: number; offset: number }[] = [];
   /** サーバー時刻 - ローカル時刻 (ms) */
   private offset = 0;
 
@@ -67,7 +72,7 @@ export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: s
       ws.onopen = () => {
         opened = true;
         this.connected = true;
-        this.bestRtt = Infinity;
+        this.syncSamples = [];
         this.ping();
         // 最初の数回は短い間隔で打って時計を合わせる
         for (let i = 1; i < SYNC_SAMPLES; i++) setTimeout(() => this.ping(), i * 150);
@@ -99,10 +104,9 @@ export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: s
     const m = msg as CoreServerMsg;
     if (m.t === 'hello') {
       const rtt = Date.now() - m.c;
-      if (rtt < this.bestRtt) {
-        this.bestRtt = rtt;
-        this.offset = m.now + rtt / 2 - Date.now();
-      }
+      this.syncSamples.push({ rtt, offset: m.now + rtt / 2 - Date.now() });
+      if (this.syncSamples.length > SYNC_WINDOW) this.syncSamples.shift();
+      this.offset = this.syncSamples.reduce((best, x) => (x.rtt < best.rtt ? x : best)).offset;
       this.open = m.open;
     } else if (m.t === 'status') {
       this.open = m.open;

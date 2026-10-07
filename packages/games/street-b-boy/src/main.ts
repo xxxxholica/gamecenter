@@ -8,7 +8,7 @@ import { Stage, STAGE_CONFIGS, FINAL_STAGE, DEFAULT_BACKGROUND, DEFAULT_FOG_DENS
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock } from './entities/objects';
-import { installHomeReturn } from '../../../shared/homeReturn';
+import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
@@ -20,8 +20,8 @@ watchResultAutoReturn(['btn-result-title']);
 mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
-    { indices: [0], label: 'ジャンプ' },
-    { indices: [1, 2], label: 'スピン攻撃' },
+    { indices: [0], label: 'ジャンプ', keyLabel: 'Space' },
+    { indices: [1, 2], label: 'スピン攻撃', keyLabel: 'Shift / X' },
   ],
   showHomeHint: true,
 });
@@ -148,7 +148,7 @@ class StreetBBoyGame {
     };
     bindResultBtn('btn-restart', 0, () => this.retryFromResult());
     bindResultBtn('btn-result-title', 1, () => this.setupTitleScene());
-    bindResultBtn('btn-result-exit', 2, () => { window.location.href = '../../'; });
+    bindResultBtn('btn-result-exit', 2, () => { returnToHub(); });
 
     this.hud.onNameEntryClosed = () => {
       this.resultArmTime = performance.now() + 800;
@@ -162,13 +162,6 @@ class StreetBBoyGame {
         this.startGame();
       });
     }
-
-    // Escapeでホーム(ゲームセンターハブ)へ戻る。games/<slug>/配下からルートへは2階層上。
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape') {
-        window.location.href = '../../';
-      }
-    });
   }
 
   private retryFromResult(): void {
@@ -217,10 +210,10 @@ class StreetBBoyGame {
     if (input.confirmPressed) {
       if (this.resultMenuFocus === 0) this.retryFromResult();
       else if (this.resultMenuFocus === 1) this.setupTitleScene();
-      else window.location.href = '../../';
+      else returnToHub();
     } else if (input.spinPressed) {
       // Bボタン: 終了
-      window.location.href = '../../';
+      returnToHub();
     }
   }
 
@@ -847,12 +840,17 @@ class StreetBBoyGame {
       }
     }
 
-    // 消火栓の水柱(トリガー): 噴出中に触れると高く打ち上げる
+    // 消火栓の水柱(トリガー): 噴出中に触れると高く打ち上げる。
+    // 打ち上げは触れている間ずっと続けるが、得点・コンボ・効果音は「入った瞬間」の1回だけ(毎フレーム出すと、1回通るだけで数万点入る)
     for (const hyd of this.stage.fireHydrants) {
       const column = hyd.getColumnAABB();
-      if (column && this.checkAABB(pBox, column)) {
+      const inside = !!column && this.checkAABB(pBox, column);
+      const entered = hyd.columnEntry.update(inside);
+      if (inside) {
         this.player.vy = 20.5;
         this.player.isGrounded = false;
+      }
+      if (entered) {
         this.sound.playGeyser();
         this.stage.particleSystem.spawnWater(this.player.x, this.player.y + 0.5, 8);
         this.triggerCameraShake(0.2, 0.2);

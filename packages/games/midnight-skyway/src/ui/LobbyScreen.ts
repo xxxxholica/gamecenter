@@ -38,6 +38,7 @@ const css = `
 .lobby-card .lb-players { display: flex; flex-direction: column; gap: 5px; }
 .lobby-card .lb-player { display: flex; align-items: center; gap: 8px; padding: .4em .6em; border-radius: 8px; background: #0c1626; border: 1px solid #22304a; font-size: .85rem; }
 .lobby-card .lb-player.me { border-color: #00e5ff; }
+.lobby-card .lb-player.empty { color: #7f90ad; }
 .lobby-card .lb-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; flex: none; background: #555; }
 .lobby-card .lb-dot.none { border-style: dashed; background: transparent; }
 .lobby-card .lb-name { flex: 1; font-weight: 700; white-space: nowrap; }
@@ -53,7 +54,7 @@ const hex = (c: number): string => '#' + c.toString(16).padStart(6, '0');
 
 /**
  * オンライン対戦の接続・参加と、待機画面。
- *  - 開いたら接続して自動で参加する(名前は参加順に PLAYER 1〜4)。2人目が入ると30秒で自動開始。
+ *  - 開いたら接続して自動で参加する(名前はサーバーが走り屋の二つ名からランダムに付ける)。2人目が入ると30秒で自動開始。
  *  - マシン選択・コース希望の間は何も表示しない(選んでいる間に開始時間が来ても、そのまま始まる)。
  *    接続できない・閉鎖・満員などの時だけ、どの画面でも中央にカードを出す。
  *  - コース希望まで進んだあとの待機画面(setWaitingVisible(true))で、参加者・開始までの残り(あと◯秒 / 待機中)を出す。
@@ -198,6 +199,10 @@ export class LobbyScreen {
     if (c.view === 'room' && room) {
       const list = el('div', { cls: 'lb-players' });
       for (const pl of room.players) list.append(this.playerRow(pl, room.you));
+      for (let i = room.players.length; i < MAX_PLAYERS; i++) {
+        // 空いている枠。参加済みの行と同じ高さになるよう、見えない2行ぶんの文字を入れる(行の高さは右側の2行表示で決まる)
+        list.append(el('div', { cls: 'lb-player empty' }, el('span', { cls: 'lb-dot none' }), el('span', { cls: 'lb-name', textContent: '対戦相手を待っています…' }), el('span', { cls: 'lb-meta', textContent: '\u00a0\n\u00a0' })));
+      }
       card.append(el('div', { cls: 'lb-sub', textContent: `参加者 ${room.players.length} / ${MAX_PLAYERS}` }), list);
       if (room.mapMode !== 'random') {
         const st = STAGES.find((s) => s.id === room.mapMode);

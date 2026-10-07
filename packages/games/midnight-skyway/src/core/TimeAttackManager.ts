@@ -62,6 +62,8 @@ export class TimeAttackManager {
   public elapsedTimeMs: number = 0;
   public topSpeedKmH: number = 0;
 
+  /** オンライン対戦のカウントダウン: GO までの残り時間(ms)。あればフレームの積算の代わりにこれで進める。 */
+  private syncedRemaining: (() => number) | null = null;
   private mapId: string = '';
   private carName: string = '';
   private sectorCount: number = 3;
@@ -117,6 +119,7 @@ export class TimeAttackManager {
     this.nextCheckIdx = 0;
     this.countdownTimer = 0;
     this.countdownStep = 3;
+    this.syncedRemaining = null;
     this.callbacks.onStateChange?.(this.state);
   }
 
@@ -135,9 +138,11 @@ export class TimeAttackManager {
   /**
    * オンライン対戦: GO まで msUntilGo ミリ秒になるようにカウントダウンを始める(全員のGOを揃える)。
    * 3 → 2 → 1 → GO の表示は 1 秒刻みのまま、最初の刻みだけ短くなる。
+   * remainingMs を渡すと、フレームの積算(重い端末ではフレームを落として遅れる)ではなく、その関数が返す GO までの残り時間で進める。
    */
-  public startCountdownSynced(msUntilGo: number): void {
+  public startCountdownSynced(msUntilGo: number, remainingMs?: () => number): void {
     this.reset();
+    this.syncedRemaining = remainingMs ?? null;
     this.state = 'COUNTDOWN';
     const remaining = Math.max(0, msUntilGo);
     this.countdownStep = Math.min(3, Math.max(1, Math.ceil(remaining / 1000)));
@@ -149,6 +154,25 @@ export class TimeAttackManager {
   public update(dt: number, progressFraction: number, currentSpeedKmH: number): void {
     if (currentSpeedKmH > this.topSpeedKmH) {
       this.topSpeedKmH = Math.round(currentSpeedKmH);
+    }
+
+    if (this.state === 'COUNTDOWN' && this.syncedRemaining) {
+      const rem = this.syncedRemaining();
+      if (rem <= 0) {
+        this.syncedRemaining = null;
+        this.countdownStep = 0;
+        this.callbacks.onCountdown?.('GO');
+        this.state = 'RACING';
+        this.elapsedTimeMs = -rem;                              // GO の時刻から遅れて気づいた分も、レース時間に含める
+        this.callbacks.onStateChange?.(this.state);
+      } else {
+        const step = Math.min(3, Math.ceil(rem / 1000));
+        if (step < this.countdownStep) {
+          this.countdownStep = step;
+          this.callbacks.onCountdown?.(step);
+        }
+      }
+      return;
     }
 
     if (this.state === 'COUNTDOWN') {

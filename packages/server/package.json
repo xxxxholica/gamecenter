@@ -6,10 +6,16 @@
   "scripts": {
     "start": "node src/index.ts",
     "dev": "node --watch src/index.ts",
-    "test": "node --test src/",
+    "typecheck": "tsc -p .",
+    "test": "node --test \"src/**/*.test.ts\"",
     "ctl": "node src/ctl.ts"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "cannon-es": "0.20.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2"
   }
 }

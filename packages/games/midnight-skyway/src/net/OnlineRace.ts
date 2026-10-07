@@ -41,6 +41,8 @@ export class OnlineRace {
   private standingsTimer = 0;
   private crashCooldown = 0;
   private finished = new Map<number, number>();
+  /** サーバーが決めた順位(先頭が1位の参加者id)。まだ届いていなければ null で、自分の画面の進行率から仮に並べる。 */
+  private serverOrder: number[] | null = null;
   private offs: (() => void)[] = [];
 
   constructor(client: SkywayNet, drive: DriveScene, players: RacerInfo[], you: number, night: boolean, hooks: OnlineRaceHooks) {
@@ -58,9 +60,16 @@ export class OnlineRace {
     }
     this.offs.push(
       client.on('states', (m) => {
-        for (const [id, s] of Object.entries(m.s)) this.remotes.get(Number(id))?.push(s as CarState);
+        const now = performance.now();
+        const serverNow = this.client.serverNow();
+        for (const [id, s] of Object.entries(m.s)) {
+          const ts = m.ts?.[Number(id)];
+          // 送信時刻(サーバー時刻)を、この端末の performance.now の時計に直す
+          this.remotes.get(Number(id))?.push(s as CarState, now, ts === undefined ? undefined : now - (serverNow - ts));
+        }
       }),
       client.on('results', (m) => this.applyResults(m.entries)),
+      client.on('standings', (m) => { this.serverOrder = m.order; }),
     );
   }
 
@@ -103,7 +112,7 @@ export class OnlineRace {
           r2(cc.position.x), r2(cc.position.y), r2(cc.position.z), r3(cc.rotationY), r2(cc.speed),
           r3(cc.currentSteerAngle), r3(cc.bodyRoll), r3(cc.groundPitch), cc.isDrifting ? 1 : 0, r3(p),
         ];
-        this.client.send({ t: 'state', s });
+        this.client.send({ t: 'state', s, ts: Math.round(this.client.serverNow()) });
       }
     }
 
@@ -148,10 +157,17 @@ export class OnlineRace {
     for (const rc of this.remotes.values()) {
       rows.push({ id: rc.id, name: rc.name, color: rc.color, me: false, timeMs: this.finished.get(rc.id) ?? null, prog: rc.progress });
     }
-    rows.sort((a, b) => {
-      if (a.timeMs !== null || b.timeMs !== null) return (a.timeMs ?? Infinity) - (b.timeMs ?? Infinity);
-      return b.prog - a.prog;
-    });
+    const order = this.serverOrder;
+    if (order) {
+      // サーバーの順位に従う(全員の画面で同じになる)。まだ載っていない人(退出直後など)は後ろに回す
+      const rank = (id: number) => { const i = order.indexOf(id); return i < 0 ? order.length : i; };
+      rows.sort((a, b) => rank(a.id) - rank(b.id));
+    } else {
+      rows.sort((a, b) => {
+        if (a.timeMs !== null || b.timeMs !== null) return (a.timeMs ?? Infinity) - (b.timeMs ?? Infinity);
+        return b.prog - a.prog;
+      });
+    }
     return rows;
   }
 

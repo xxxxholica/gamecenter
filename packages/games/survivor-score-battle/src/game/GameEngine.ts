@@ -22,6 +22,7 @@ import { ResultScreen } from '../ui/ResultScreen';
 import { mountArcadeGuide, ArcadeGuideOptions } from '../../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
+import { returnToHub } from '../../../../shared/homeReturn';
 import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
 export class GameEngine {
@@ -210,7 +211,7 @@ export class GameEngine {
           this.state = 'TITLE';
         } else if (action === 'EXIT') {
           this.sound.stopBgm();
-          window.location.href = '../../';
+          returnToHub();
         }
         break;
       }
@@ -984,11 +985,11 @@ export class GameEngine {
       PLAYING: {
         moveLabel: '移動',
         buttons: [
-          { indices: [3, 4, 5, 7], label: '必殺技' },
-          { indices: [9], label: 'ポーズ' },
+          { indices: [3, 4, 5, 7], label: '必殺技', keyLabel: 'Shift / Space' },
+          { indices: [9], label: 'ポーズ', keyLabel: 'P' },
         ],
       },
-      PAUSED: { buttons: [{ indices: [0, 2, 9], label: '再開' }] },
+      PAUSED: { buttons: [{ indices: [0, 2, 9], label: '再開', keyLabel: 'Enter / Space' }] },
       LEVEL_UP: { moveLabel: '選択', buttons: [confirm] },
       RESULT: { moveLabel: '選択', buttons: [confirm] },
     };

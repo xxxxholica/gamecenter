@@ -1,34 +1,21 @@
 import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
-import { PhysicsWorld } from '../physics/PhysicsWorld';
+import { DOHYO_HEIGHT, DOHYO_RADIUS } from '../../../../shared/sumoSim/SimWorld';
 
+/** 土俵の見た目(物理の剛体は、シミュレーション側 shared/sumoSim が持つ)。 */
 export class Dohyo {
   public mesh: THREE.Group;
-  public body: CANNON.Body;
-  public readonly radius: number = 9.2;
-  public readonly height: number = 1.2;
+  public readonly radius: number = DOHYO_RADIUS;
+  public readonly height: number = DOHYO_HEIGHT;
 
   // 爆発で付く焦げ跡(その試合のあいだ残る)
   private scorches: THREE.Mesh[] = [];
   private scorchTextures: THREE.CanvasTexture[] = [];
   private static readonly MAX_SCORCHES = 70;
 
-  constructor(physics: PhysicsWorld) {
+  constructor() {
     this.mesh = new THREE.Group();
 
-    // 1. 土俵の剛体（円柱）
-    // Cannon-es の Cylinder は、Z軸方向またはY軸方向の向きに注意
-    // CANNON.Cylinder(radiusTop, radiusBottom, height, numSegments)
-    const cylinderShape = new CANNON.Cylinder(this.radius, this.radius + 0.9, this.height, 32);
-    this.body = new CANNON.Body({
-      mass: 0, // 静的剛体（動かない）
-      material: physics.dohyoMaterial,
-      position: new CANNON.Vec3(0, -this.height / 2, 0),
-    });
-    this.body.addShape(cylinderShape);
-    physics.world.addBody(this.body);
-
-    // 2. Three.js メッシュ作成
+    // Three.js メッシュ作成
     this.createDohyoMesh();
   }
 

@@ -15,7 +15,7 @@ import { TeacherProjectile } from './entities/TeacherProjectile';
 import { PowerUp } from './entities/PowerUp';
 import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
-import { installHomeReturn } from '../../../shared/homeReturn';
+import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
@@ -27,7 +27,8 @@ watchResultAutoReturn(['btn-result-title']);
 
 mountArcadeGuide({
   moveLabel: '移動',
-  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃(手裏剣/辞書ボム)' }],
+  keyMoveLabel: 'WASD / 矢印',
+  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃(手裏剣/辞書ボム)', keyLabel: 'Space / Enter' }],
   showHomeHint: true,
 });
 
@@ -277,7 +278,7 @@ class Game {
           e.preventDefault();
           return;
         }
-        window.location.href = '../../';
+        returnToHub();
       });
       btnExit.addEventListener('mouseenter', () => {
         this.resultFocus = 2;
@@ -847,10 +848,10 @@ class Game {
       } else if (this.resultFocus === 1) {
         this.showTitle();
       } else {
-        window.location.href = '../../';
+        returnToHub();
       }
     } else if (input.cancel) {
-      window.location.href = '../../';
+      returnToHub();
     }
   }
 

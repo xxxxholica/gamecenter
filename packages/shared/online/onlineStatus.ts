@@ -27,3 +27,22 @@ export async function fetchOnlineStatus(game: string, timeoutMs = 3000): Promise
     return null;
   }
 }
+
+/**
+ * 全ゲームのオンライン対戦開催状況を取得する。
+ * 各ゲームの公開ステータス（open, players, max, phase等）のマップを返す。
+ */
+export async function fetchAllOnlineStatuses(timeoutMs = 3000): Promise<Record<string, PublicStatus>> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    const res = await fetch(statusUrl(), { cache: 'no-store', signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return {};
+    const all = (await res.json()) as { games?: Record<string, PublicStatus> };
+    return all.games ?? {};
+  } catch {
+    return {};
+  }
+}
+

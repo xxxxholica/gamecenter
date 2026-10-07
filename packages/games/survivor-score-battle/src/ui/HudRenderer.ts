@@ -2,12 +2,14 @@ import { ContenderState } from '../types';
 import { Player } from '../entities/Player';
 import { Boss } from '../entities/Boss';
 import { PickupItem } from '../items/ExpGem';
+import { getInputMode } from '../../../../shared/arcadeGuide';
 
 /** SPECIAL が使える間、ランキング変動のバーと同じ場所に出すお知らせの周期(秒)と、1回に出しておく長さ(秒) */
 const SPECIAL_NOTICE_PERIOD = 12;
 const SPECIAL_NOTICE_SHOW = 3.5;
-/** SPECIAL を発動するアケコンのボタン名(ボタンガイドと同じ表記: Y / LB / RB / RT のどれでもよい) */
-const SPECIAL_BUTTONS = ['Y', 'LB', 'RB', 'RT'];
+/** SPECIAL を発動するボタン名(コントローラー / キーボード) */
+const SPECIAL_BUTTONS_PAD = ['Y', 'LB', 'RB', 'RT'];
+const SPECIAL_BUTTONS_KBD = ['Shift', 'Space'];
 
 export class HudRenderer {
   /** SPECIAL が使える状態になってからの経過時間(秒)。使えない間は 0 */
@@ -48,13 +50,15 @@ export class HudRenderer {
     return this.specialReady && this.specialReadyClock % SPECIAL_NOTICE_PERIOD < SPECIAL_NOTICE_SHOW;
   }
 
-  /** ボタンガイドと同じ見た目の丸いバッジ(暗い塗り+白縁+白文字)を描く。描いた幅を返す */
-  private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number): number {
+  /** ボタンガイドと同じ見た目のバッジを描く。pad時は丸、key時はキートップ調。描いた幅を返す */
+  private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number, isKey: boolean = false): number {
     ctx.save();
-    ctx.font = "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
-    const w = Math.max(30, ctx.measureText(label).width + 18);
+    ctx.font = isKey
+      ? "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
+      : "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    const w = Math.max(30, ctx.measureText(label).width + (isKey ? 22 : 18));
     const h = 30;
-    const r = h / 2;
+    const r = isKey ? 6 : h / 2;
     ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.moveTo(left + r, cy - r);
@@ -66,34 +70,50 @@ export class HudRenderer {
     ctx.fillStyle = '#10131a';
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = isKey ? 2 : 2.5;
     ctx.stroke();
+
+    if (isKey) {
+      // キートップの下部ハイライト線
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(left + 2, cy + r - 1);
+      ctx.lineTo(left + w - 2, cy + r - 1);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, left + w / 2, cy + 1);
+    ctx.fillText(label, left + w / 2, cy + (isKey ? 0 : 1));
     ctx.restore();
     return w;
   }
 
-  /** 「(Y)(LB)(RB)(RT) で必殺技を発動」を1行で出す。ランキング変動のバーと同じ位置・同じ高さ */
+  /** 「(Y)(LB)(RB)(RT) で必殺技を発動」を1行で出す。入力モードに応じてキーボード用キーに自動切替 */
   private renderSpecialNotice(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const isPad = getInputMode() === 'gamepad';
+    const buttons = isPad ? SPECIAL_BUTTONS_PAD : SPECIAL_BUTTONS_KBD;
+
     const boxH = 75;
     const boxY = height * 0.28;
     const pulse = 0.65 + 0.35 * Math.sin(this.specialReadyClock * 6);
 
     // 1行ぶんの幅を測る: ボタンのバッジ + 説明
     const label = 'で必殺技を発動';
-    const badgeFont = "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+    const badgeFont = isPad
+      ? "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
+      : "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
     const labelFont = "700 24px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
     ctx.save();
     ctx.font = badgeFont;
-    const badgeW = SPECIAL_BUTTONS.map((b) => Math.max(30, ctx.measureText(b).width + 18));
+    const badgeW = buttons.map((b) => Math.max(30, ctx.measureText(b).width + (isPad ? 18 : 22)));
     ctx.font = labelFont;
     const labelW = ctx.measureText(label).width;
     ctx.restore();
     const badgeGap = 8;
-    const badgesW = badgeW.reduce((a, b) => a + b, 0) + badgeGap * (SPECIAL_BUTTONS.length - 1);
+    const badgesW = badgeW.reduce((a, b) => a + b, 0) + badgeGap * (buttons.length - 1);
     const contentW = badgesW + 14 + labelW;
     // 順位の上下のウィンドウ(RANK UP / RANK DOWN)と同じ大きさ。中身はこの幅に収まる
     const boxW = Math.max(500, contentW + 64);
@@ -112,8 +132,8 @@ export class HudRenderer {
 
     let x = (width - contentW) / 2;
     ctx.textAlign = 'left';
-    SPECIAL_BUTTONS.forEach((b, i) => {
-      this.drawButtonBadge(ctx, b, x, boxY);
+    buttons.forEach((b, i) => {
+      this.drawButtonBadge(ctx, b, x, boxY, !isPad);
       x += badgeW[i] + badgeGap;
     });
     x += 14 - badgeGap;
@@ -138,6 +158,7 @@ export class HudRenderer {
     cameraX?: number,
     cameraY?: number
   ) {
+    if (typeof location !== 'undefined' && location.search.includes('noHud')) return;
     ctx.save();
 
     ctx.textAlign = 'center';

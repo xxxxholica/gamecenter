@@ -180,7 +180,7 @@ export class InputManager {
    * バックボタン（タイトルに戻る / ESC）
    */
   public isBackTriggered(): boolean {
-    if (this.keysPressed.has('Escape')) return true;
+    if (this.keysPressed.has('Backspace') || this.keysPressed.has('Escape')) return true;
 
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     const pad = gamepads[0];

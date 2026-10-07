@@ -1,5 +1,5 @@
-// 全ゲーム共通: アケコン/ゲームパッドの SELECT(Back / Share。標準マッピングの button 8)を長押しするとホーム(ハブ)へ戻る。
-// 短押しはゲームによって別用途(phaser-fighter の CPU 切替など)に使われているため、長押しで判定する。
+// 全ゲーム共通: アケコン/ゲームパッドの SELECT(Back / Share。標準マッピングの button 8)、またはキーボードの Backspace を長押しするとホーム(ハブ)へ戻る。
+// 短押しはゲームによって別用途(メニューの「戻る」・phaser-fighter の CPU 切替など)に使われているため、長押しで判定する。
 // 各ゲームのエントリで installHomeReturn() を1回呼ぶ。キーボードの Escape は従来どおり各ゲーム側で処理する。
 
 import { mountFullscreenKey } from './fullscreenKey';
@@ -9,9 +9,26 @@ const HOLD_MS = 1000;
 // 短押しでゲージが一瞬ちらつかないよう、この時間を超えて押し続けたときだけ表示する
 const SHOW_AFTER_MS = 150;
 // games/<slug>/ 配下からルートへは2階層上
-const HUB_URL = '../../';
+export const HUB_URL = '../../';
+export const CLOSE_GAME_MESSAGE = 'gamecenter:close-game';
 
-function isSelectHeld(): boolean {
+/**
+ * ホーム(ハブ)へ戻る。
+ * ハブのiframe内にいる場合は親へメッセージを送り、親側で即座にiframeを閉じる(リロード不要・全画面維持)。
+ * 直接開かれている場合は通常どおりページ移動する。
+ */
+export function returnToHub(): void {
+  if (window.parent !== window) {
+    window.parent.postMessage({ type: CLOSE_GAME_MESSAGE }, window.location.origin);
+  } else {
+    window.location.href = HUB_URL;
+  }
+}
+
+let backspaceHeld = false;
+
+function isHomeHeld(): boolean {
+  if (backspaceHeld) return true;
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const pad of pads) {
     if (pad && pad.connected && pad.buttons[SELECT_BUTTON]?.pressed) return true;
@@ -56,6 +73,17 @@ export function installHomeReturn(): void {
   // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
   mountFullscreenKey();
 
+  // Backspace の押下状態。キーを離す・ウィンドウが外れる(keyup を取り逃す)と解除する
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Backspace') backspaceHeld = true;
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Backspace') backspaceHeld = false;
+  });
+  window.addEventListener('blur', () => {
+    backspaceHeld = false;
+  });
+
   let overlay: { root: HTMLDivElement; fill: HTMLDivElement } | null = null;
   let holdStart: number | null = null;
   let leaving = false;
@@ -63,7 +91,7 @@ export function installHomeReturn(): void {
   const tick = (now: number) => {
     if (leaving) return;
 
-    if (isSelectHeld()) {
+    if (isHomeHeld()) {
       holdStart ??= now;
       const elapsed = now - holdStart;
       if (elapsed >= SHOW_AFTER_MS) {
@@ -73,7 +101,7 @@ export function installHomeReturn(): void {
       }
       if (elapsed >= HOLD_MS) {
         leaving = true;
-        window.location.href = HUB_URL;
+        returnToHub();
         return;
       }
     } else {

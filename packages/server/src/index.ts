@@ -5,16 +5,15 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { WebSocketServer, type WebSocket } from 'ws';
-import { LIMITS, RateWindow } from './limits.ts';
-import { startControl, safeUrl, DEFAULT_SOCKET, type ControlHandlers } from './control.ts';
+import { createConnectionManager } from './connections.ts';
+import { createControlHandlers } from './controlHandlers.ts';
+import { startControl, safeUrl, DEFAULT_SOCKET } from './control.ts';
 import { startAdminWeb } from './admin.ts';
 import { log } from './log.ts';
 import { GameHost } from './host.ts';
 import { LeaderboardStore } from './leaderboardStore.ts';
 import { handleLeaderboardRequest } from './leaderboardApi.ts';
 import { GAME_FACTORIES } from './games/index.ts';
-import type { Msg, Peer } from './engine.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
 const HOST = process.env.ONLINE_HOST ?? '127.0.0.1';
@@ -32,42 +31,7 @@ for (const [id, make] of Object.entries(GAME_FACTORIES)) hosts.set(id, new GameH
 /** 再起動したら、必ず閉鎖から始まる(開放状態は保存しない)。起動時から開放しておく(開発用): ONLINE_START_OPEN=1 */
 if (process.env.ONLINE_START_OPEN === '1') for (const h of hosts.values()) if (!h.open) h.setOpen(true);
 
-const connectRate = new RateWindow(LIMITS.connectsPerMinPerIp, 60_000);
-const connsByIp = new Map<string, number>();
-
-interface Client extends Peer {
-  ws: WebSocket;
-  ip: string;
-  host: GameHost;
-  lastMsg: number;
-  windowStart: number;
-  windowCount: number;
-}
-const clients = new Set<Client>();
-let nextId = 1;
-
-/** id、または一意に決まる部分文字列(CLI・管理画面用)でゲームを探す。 */
-function findHost(name: string): GameHost | null {
-  const exact = hosts.get(name);
-  if (exact) return exact;
-  const part = [...hosts.values()].filter((h) => name && h.id.includes(name));
-  return part.length === 1 ? part[0] : null;
-}
-
 const leaderboard = new LeaderboardStore(LEADERBOARD_FILE);
-
-// 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
-const server = http.createServer((req, res) => {
-  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed)) return;
-  if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
-    const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
-    for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
-    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }).end(JSON.stringify({ games }));
-    return;
-  }
-  res.writeHead(404).end();
-});
-const wss = new WebSocketServer({ noServer: true, maxPayload: LIMITS.maxPayloadBytes });
 
 /** リバースプロキシ(ループバック)経由の時だけ X-Forwarded-For を信用する。 */
 function clientIp(req: http.IncomingMessage): string {
@@ -85,161 +49,25 @@ const ALLOWED_ORIGINS = (process.env.ONLINE_ALLOWED_ORIGINS ?? 'https://game.hin
   .split(',').map((o) => o.trim()).filter(Boolean);
 const originAllowed = (origin: string) => ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin);
 
-server.on('upgrade', (req, socket, head) => {
-  const reject = (code: number) => {
-    socket.write(`HTTP/1.1 ${code} X\r\nConnection: close\r\n\r\n`);
-    socket.destroy();
-  };
-  const u = safeUrl(req.url);
-  if (!u || u.pathname !== WS_PATH) return reject(404);
-  const host = hosts.get(u.searchParams.get('game') ?? '');
-  if (!host) return reject(404);
-  // 他のサイトのページからの勝手な接続(CSWSH)を断る。ブラウザは必ず Origin を付ける(Origin 無し=ブラウザ以外はここでは許可)。
-  const origin = req.headers.origin;
-  if (origin && !originAllowed(origin)) {
-    log(`reject origin=${origin}`);
-    return reject(403);
+const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllowed, clientIp });
+
+// 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
+const server = http.createServer((req, res) => {
+  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed)) return;
+  if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
+    const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
+    for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }).end(JSON.stringify({ games }));
+    return;
   }
-  const ip = clientIp(req);
-  if (!connectRate.hit(ip)) return reject(429);
-  if (clients.size >= LIMITS.maxConnsTotal || (connsByIp.get(ip) ?? 0) >= LIMITS.maxConnsPerIp) return reject(503);
-  wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, ip, host));
+  res.writeHead(404).end();
 });
+server.on('upgrade', (req, socket, head) => connections.handleUpgrade(req, socket, head));
 
-function onConnection(ws: WebSocket, ip: string, host: GameHost) {
-  ws.on('error', () => ws.terminate());                    // 閉鎖中の早期 return より前に登録(不正フレームで未処理の error になってプロセスが落ちるのを防ぐ)
-  // 閉鎖中は状態を伝えてすぐ切る。クライアント登録・ルーム・タイマーは一切作らない。
-  if (!host.open) {
-    ws.send(JSON.stringify({ t: 'status', open: false }), () => ws.close(4001, 'closed'));
-    return;
-  }
-  const now = Date.now();
-  const client: Client = {
-    id: nextId++,
-    ws,
-    ip,
-    host,
-    lastMsg: now,
-    windowStart: now,
-    windowCount: 0,
-    send: (msg: Msg) => {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-    },
-    close: (code: number) => ws.close(code),
-  };
-  clients.add(client);
-  host.clients.add(client);
-  connsByIp.set(ip, (connsByIp.get(ip) ?? 0) + 1);
-  log(`${host.id} connect id=${client.id} ip=${ip} clients=${clients.size}`);
+// アイドル切断・無応答の回収と、レート表の掃除。
+setInterval(() => connections.sweep(), 5000);
 
-  client.send({ t: 'status', open: true });
-
-  ws.on('message', (data, isBinary) => {
-    if (isBinary) return ws.close(1003);
-    const t = Date.now();
-    if (t - client.windowStart >= 1000) {
-      client.windowStart = t;
-      client.windowCount = 0;
-    }
-    if (++client.windowCount > LIMITS.msgsPerSec) return ws.close(4008, 'rate');
-    client.lastMsg = t;
-    let msg: Msg;
-    try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      return;
-    }
-    if (msg && typeof msg === 'object' && !Array.isArray(msg) && typeof msg.t === 'string') handle(client, msg);
-  });
-  ws.on('close', (code) => {
-    log(`${host.id} disconnect id=${client.id} code=${code} clients=${clients.size - 1}`);
-    host.room.leave(client.id);
-    host.clients.delete(client);
-    clients.delete(client);
-    const n = (connsByIp.get(ip) ?? 1) - 1;
-    if (n <= 0) connsByIp.delete(ip);
-    else connsByIp.set(ip, n);
-  });
-}
-
-function handle(c: Client, msg: Msg) {
-  const host = c.host;
-  if (msg.t === 'hello') {
-    c.send({ t: 'hello', open: host.open, now: Date.now(), c: Number(msg.c) || 0 });
-    return;
-  }
-  // 以降は開放中の一般操作のみ。
-  if (!host.open) return;
-  const room = host.room;
-  switch (msg.t) {
-    case 'join': {
-      const r = room.join(c);
-      if (r !== 'ok') c.send({ t: 'error', code: r });
-      return;
-    }
-    case 'leave':
-      room.leave(c.id);
-      return;
-    case 'loaded':
-      room.setLoaded(c.id);
-      return;
-    case 'pref':
-      room.handlePref(c.id, msg);
-      return;
-    default:
-      room.handlePlay(c.id, msg);                           // state / finish / aim / fire など(ゲームが解釈する)
-  }
-}
-
-// アイドル切断と、レート表の掃除。
-setInterval(() => {
-  const now = Date.now();
-  connectRate.sweep(now);
-  for (const c of clients) {
-    if (now - c.lastMsg > LIMITS.idleTimeoutMs) {
-      if (c.ws.readyState === c.ws.CLOSING || c.ws.readyState === c.ws.CLOSED) c.ws.terminate();
-      else c.ws.close(4002, 'idle');
-    }
-  }
-}, 5000);
-
-const controlHandlers: ControlHandlers = {
-  status: () => ({ games: [...hosts.values()].map((h) => h.status()), clients: clients.size }),
-  open(game, opts) {
-    const h = findHost(game);
-    if (!h) return false;
-    h.setOpen(true, opts);
-    return true;
-  },
-  close(game) {
-    if (game === 'all') {                                    // 緊急停止
-      for (const h of hosts.values()) h.setOpen(false);
-      return true;
-    }
-    const h = findHost(game);
-    if (!h) return false;
-    h.setOpen(false);
-    return true;
-  },
-  kick(game, id) {
-    return findHost(game)?.kick(id) ?? false;
-  },
-  listBoards() {
-    return leaderboard.adminBoards();
-  },
-  setDev(board, rank, on) {
-    const [slug, variant] = board.split(':');
-    return leaderboard.setDev(slug, variant, rank, on);
-  },
-  clearBoard(board) {
-    const [slug, variant] = board.split(':');
-    return leaderboard.clearBoard(slug, variant);
-  },
-  removeEntry(board, rank) {
-    const [slug, variant] = board.split(':');
-    return leaderboard.removeEntry(slug, variant, rank);
-  },
-};
+const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count());
 startControl(CONTROL_SOCKET, controlHandlers);
 startAdminWeb(ADMIN_PORT, '127.0.0.1', PROXY_SECRET, ADMIN_USER, ADMIN_PASS, controlHandlers);
 
@@ -247,9 +75,14 @@ server.listen(PORT, HOST, () => {
   console.log(`[online] ws://${HOST}:${PORT}${WS_PATH}?game=<id> games=${[...hosts.keys()].join(',')} open=[${[...hosts.values()].filter((h) => h.open).map((h) => h.id).join(',')}]`);
 });
 
+// 1つの Promise の失敗でプロセスごと落ちて、開催中の対戦が全部切れないようにログだけ残す。
+// (同期の uncaughtException は、状態が壊れたまま動き続けないよう握りつぶさない。落ちたらサービス管理側が再起動する)
+process.on('unhandledRejection', (e) => log(`unhandledRejection: ${(e as Error)?.message ?? e}`));
+
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
-    for (const c of clients) c.ws.close(1001);
+    leaderboard.flush();
+    connections.closeAll(1001);
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   });

@@ -31,7 +31,7 @@ export interface CarSpec {
   roof: number;
 }
 
-/** 待機中の参加者。name は参加順に自動で付く(PLAYER 1〜4)。car が null=まだ選んでいない(開始時に自動で決まる)。course は希望するコース(null=おまかせ)。 */
+/** 待機中の参加者。name は参加時にサーバーがランダムに付ける(走り屋の二つ名)。car が null=まだ選んでいない(開始時に自動で決まる)。course は希望するコース(null=おまかせ)。 */
 export interface PlayerInfo {
   id: number;
   name: string;
@@ -64,7 +64,8 @@ export type ClientMsg =
   /** 待機中の希望。マシン(種類+色)・コースのうち送ったものだけ更新する。色は他の参加者と被れない(被ると color_taken)。 */
   | { t: 'pref'; car?: CarSpec; course?: string | null }
   | { t: 'leave' }
-  | { t: 'state'; s: CarState }
+  /** ts: 送信時のサーバー時刻(ms)。受け取った側が、通信の揺らぎに左右されず送信間隔どおりに補間するのに使う。 */
+  | { t: 'state'; s: CarState; ts?: number }
   | { t: 'loaded' }
   | { t: 'finish'; timeMs: number };
 
@@ -90,7 +91,10 @@ export type ServerMsg =
   | { t: 'start'; seed: number; map: string; tod: string; grid: number[]; players: RacerInfo[] }
   /** 全員のロード完了。at(サーバー時刻ms)にカウントダウンを開始する。 */
   | { t: 'go'; at: number }
-  | { t: 'states'; s: Record<number, CarState> }
+  /** ts: s の各車の、送信側が付けた送信時刻(サーバー時刻ms)。付いていない車は無い。 */
+  | { t: 'states'; s: Record<number, CarState>; ts?: Record<number, number> }
+  /** 走行中の順位(先頭が1位の参加者id)。サーバーが全員の進行率を同じ時刻に揃えて決めるので、全員の画面で同じになる。 */
+  | { t: 'standings'; order: number[] }
   | { t: 'results'; entries: FinishEntry[]; done: boolean; endsInMs?: number }
   /** レースが終わってルームが空に戻った(次のレースに出るには、もう一度参加する)。 */
   | { t: 'left' };

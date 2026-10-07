@@ -59,8 +59,8 @@ export class LevelSelectScreen {
       <div class="lv-title-bar"><div class="lv-title-main">難易度選択</div></div>
       <div class="lv-cards">${cards}</div>
       <div class="lv-action-bar">
-        <button type="button" class="lv-btn-back">${buttonIconHtml([1])} タイトルへ</button>
-        <button type="button" class="lv-btn-start">${buttonIconHtml([0])} 決定</button>
+        <button type="button" class="lv-btn-back">${buttonIconHtml([1], 'Backspace')} タイトルへ</button>
+        <button type="button" class="lv-btn-start">${buttonIconHtml([0], 'Enter')} 決定</button>
       </div>
     `;
 

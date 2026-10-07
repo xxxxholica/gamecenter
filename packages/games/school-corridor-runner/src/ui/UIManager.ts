@@ -1,4 +1,5 @@
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
+import { toggleFullscreen } from '../../../../shared/fullscreenKey';
 import { GameScore, GameState } from '../types';
 
 export class UIManager {
@@ -74,27 +75,11 @@ export class UIManager {
       if (e.code === 'KeyF') {
         this.toggleFullscreen();
       }
-      if (e.code === 'Escape') {
-        this.navigateToHub();
-      }
     });
   }
 
-  // ホーム(ゲームセンターハブ)へ戻る。games/<slug>/配下からルートへは2階層上。
-  private navigateToHub(): void {
-    window.location.href = '../../';
-  }
-
   public toggleFullscreen(): void {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.warn('Fullscreen request failed:', err);
-      });
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
+    toggleFullscreen();
   }
 
   /**

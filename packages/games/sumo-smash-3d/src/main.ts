@@ -1,20 +1,30 @@
 import * as THREE from 'three';
-import { PhysicsWorld } from './physics/PhysicsWorld';
+import * as CANNON from 'cannon-es';
 import { Dohyo } from './entities/Dohyo';
 import { Audience } from './entities/Audience';
-import { SumoFighter, FighterActions, FighterMoveInput } from './entities/SumoFighter';
+import { FighterView } from './entities/FighterView';
 import { InputManager, PlayerInputState } from './input/InputManager';
 import { SoundManager } from './audio/SoundManager';
 import { ParticleManager } from './effects/ParticleManager';
-import { UIManager, GameMode } from './ui/UIManager';
+import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
-import { installHomeReturn } from '../../../shared/homeReturn';
+import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { PadEdge, readPad } from '../../../shared/arcadePad';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
+import type { PublicStatus } from '../../../shared/online/core';
+import type { FighterSnap, FxEvent, ServerMsg } from '../../../shared/sumoProtocol';
+import { ROUND_NAMES, WINS_TO_MATCH } from '../../../shared/sumoProtocol';
+import { FIGHTERS, MATCH_OVER_DELAY_SEC, SimWorld, startPose } from '../../../shared/sumoSim/SimWorld';
+import type { FighterInput } from '../../../shared/sumoSim/SimWorld';
+import type { FighterActions, FighterMoveInput } from '../../../shared/sumoSim/SimFighter';
+import { createNet, fetchSumoStatus } from './online/net';
+import { WaitScreen } from './online/WaitScreen';
+import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
+import { replayFx, type FxSink } from './online/fx';
 
 // SELECT長押しでハブ(ゲーム選択画面)へ戻る
 installHomeReturn();
@@ -24,14 +34,6 @@ watchResultAutoReturn(['result-btn-title']);
 // games/<slug>/ 配下からハブ(ルート)へは2階層上
 const HUB_URL = '../../';
 const ACCENT = '#e63946';
-
-/**
- * タイトルのあとにモード選択(CPU対戦 / 遊び方)を挟むか。
- * いまは1人用(CPU対戦)だけなので挟まず、そのまま対戦を始める。
- * オンライン対戦を追加するときに true に戻して、モード選択にオンラインの項目を足す。
- * モード選択・遊び方の画面のコードは、そのために残してある。
- */
-const SHOW_MODE_SELECT = false;
 
 // 画面左下の共通ボタンガイド(場面ごとに差し替える)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
@@ -43,12 +45,11 @@ const guideModeSelect = () => mountArcadeGuide({
   ],
   showHomeHint: true,
 });
-const guideHowTo = () => mountArcadeGuide({ buttons: [{ indices: [0, 1], label: '閉じる' }], showHomeHint: true });
 const guideBattle = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
-    { indices: [0, 2], label: '打撃　ちょん押し=張り手　長押し=ぶちかまし' },
-    { indices: [1, 3], label: 'つかみ' },
+    { indices: [0, 2], label: '打撃　ちょん押し=張り手　長押し=ぶちかまし', keyLabel: 'Space / J' },
+    { indices: [1, 3], label: 'つかみ', keyLabel: 'K / E' },
   ],
   showHomeHint: true,
   position: 'top-left',
@@ -72,72 +73,67 @@ const versusArt = (rightLabel: string) => `<svg viewBox="0 0 200 100" xmlns="htt
   <text x="52" y="14" text-anchor="middle" font-size="12" font-weight="900" fill="#7fd4ff">1P</text>
   <text x="148" y="14" text-anchor="middle" font-size="12" font-weight="900" fill="#ff9d8a">${rightLabel}</text>
 </svg>`;
-const GUIDE_ART = `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-  <rect x="45" y="14" width="110" height="72" rx="4" fill="#f3e6c8" stroke="#8b6b3a" stroke-width="4"/>
-  <rect x="38" y="10" width="124" height="10" rx="5" fill="#8b1e0f"/><rect x="38" y="80" width="124" height="10" rx="5" fill="#8b1e0f"/>
-  <text x="100" y="60" text-anchor="middle" font-size="24" font-weight="900" fill="#3a2410" font-family="serif">遊び方</text>
-</svg>`;
 
 export type GameState = 'title' | 'menu' | 'battle';
 
+type RoundState = 'waiting' | 'standby' | 'active' | 'finished' | 'match_over';
+
+/**
+ * 画面(このクラス)は、力士の「見た目」だけを持つ。物理・当たり判定・ラウンド進行・得点は shared/sumoSim の SimWorld が持ち、
+ *   CPU対戦: ブラウザの中で SimWorld を動かす(1P=自分、2P=CPU)
+ *   オンライン対戦: サーバーが SimWorld を動かし、届いた状態(スナップショット)と演出を表示する(自分の操作だけを送る)
+ * どちらも、力士の状態(FighterSnap)と演出イベント(FxEvent)を受け取って描くだけの同じ経路で表示する。
+ */
 class SumoGame {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
 
-  private physics: PhysicsWorld;
   private dohyo: Dohyo;
   private audience: Audience;
-  private player1: SumoFighter;
-  private player2: SumoFighter;
-  private ai: SumoAI;
+  /** 力士の見た目(最大4人。使わない分は隠す) */
+  private readonly views: FighterView[] = [];
+  /** いま土俵に立っている力士の数 */
+  private activeCount = 2;
 
   private inputManager: InputManager;
   private soundManager: SoundManager;
   private particleManager: ParticleManager;
   private uiManager: UIManager;
+  /** 演出イベントの再生先 */
+  private fxSink!: FxSink;
 
   // ゲーム状態
   private gameState: GameState = 'title';
-  private gameMode: GameMode = 'pve';
 
   // 固定カメラの基本位置・注視点（クォータービュー）
   // 土俵が大きく見えるよう、真上寄りの斜め見下ろしを保ったまま近づけている
-  private readonly cameraBasePos = new THREE.Vector3(0, 17.2, 18.4);
-  private readonly cameraLookAt = new THREE.Vector3(0, 0.5, 0);
+  private readonly cameraBasePos = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
+    ? new THREE.Vector3(0, 9.5, 11.2)
+    : new THREE.Vector3(0, 17.2, 18.4);
+  private readonly cameraLookAt = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
+    ? new THREE.Vector3(0, 1.2, 0)
+    : new THREE.Vector3(0, 0.5, 0);
 
   // タイトル画面カメラ周回用
   private titleCameraAngle: number = 0;
 
   // カメラの正面・右ベクトル（移動ベクトル変換用）
   private camForward: THREE.Vector3 = new THREE.Vector3();
-  // 毎フレーム使い回す作業用ベクトル(力士側は受け取った値を保持しない)
-  private readonly p1PosTmp = new THREE.Vector3();
-  private readonly p2PosTmp = new THREE.Vector3();
-  private readonly hitTargetTmp = new THREE.Vector3();
-  private readonly hitSourceTmp = new THREE.Vector3();
+  // 毎フレーム使い回す作業用ベクトル
   private readonly worldMoveTmp = new THREE.Vector3();
   private camRight: THREE.Vector3 = new THREE.Vector3();
-
-  // バトルラウンド管理
-  // 「はっけよい」のあとに出す「のこった」の予約
-  private nokottaTimer: number | null = null;
-
-  private clearNokotta() {
-    if (this.nokottaTimer !== null) {
-      clearTimeout(this.nokottaTimer);
-      this.nokottaTimer = null;
-    }
-  }
 
   // 客席の爆破(1ラウンドに1回まで)
   private seatBlastDone: boolean = false;
 
-  private roundState: 'standby' | 'active' | 'finished' | 'match_over' = 'standby';
-  private roundStandbyTimer: number = 0;
+  private roundState: RoundState = 'standby';
   private isRoundActive: boolean = false;
-  private roundResetTimer: number = 0;
   private lastTime: number = 0;
+  /** 力士を初期位置へ戻した回数(変わったら、客席の爆破を再び可能にする) */
+  private lastRc = -1;
+  /** 結果の画面を出した(試合ごとに1回) */
+  private modalShown = false;
 
   // 全ゲーム共通のタイトル画面・モード選択・メニュー操作
   private titleScreen: ArcadeTitleScreen;
@@ -146,6 +142,22 @@ class SumoGame {
   private padEdge = new PadEdge();
   // 画面を切り替えた直後に、同じ押下が次の画面の決定・戻るとして二重に入らないようにする
   private inputArmTime: number = 0;
+
+  // CPU対戦(ブラウザ内のシミュレーション)
+  private cpu: { sim: SimWorld; ai: SumoAI } | null = null;
+
+  // オンライン対戦(サーバーが持つシミュレーションの表示)
+  private readonly net = createNet();
+  private onlineStatus: PublicStatus | null = null;
+  private waitScreen: WaitScreen | null = null;
+  /** オンライン対戦の力士名(参加者の番号順。サーバーがランダムに付けた名前) */
+  private onlineNames: string[] = [];
+  private match: OnlineMatch | null = null;
+  private onlineWired = false;
+  private onlineYou = 0;
+  private startingFlow = false;
+  private noticeEl: HTMLElement | null = null;
+  private noticeTimer: number | null = null;
 
   constructor() {
     // 1. Three.js シーン初期化（明るくクリアなアリーナ空間）
@@ -181,14 +193,19 @@ class SumoGame {
     this.setupLighting();
 
     // 5. 各種マネージャー
-    this.physics = new PhysicsWorld();
     this.soundManager = new SoundManager();
     this.particleManager = new ParticleManager(this.scene);
+    this.fxSink = {
+      sound: this.soundManager,
+      particle: this.particleManager,
+      showBanner: (m, s, ms) => this.uiManager.showBanner(m, s, ms),
+      blast: (c, r) => this.megaBlast(c, r),
+    };
     this.inputManager = new InputManager();
     this.uiManager = new UIManager();
 
     // 6. 土俵ステージの構築
-    this.dohyo = new Dohyo(this.physics);
+    this.dohyo = new Dohyo();
     this.scene.add(this.dohyo.mesh);
 
     // 爆発のたびに、土俵へ焦げ跡を付ける
@@ -217,43 +234,13 @@ class SumoGame {
     });
     this.scene.add(this.audience.mesh);
 
-    // 7. 力士の構築
-    // 東方 蒼天龍（1P: 紺碧マワシ、画面左側・西向き）
-    this.player1 = new SumoFighter(
-      'p1',
-      '蒼天龍',
-      {
-        skinColor: 0xefc49b,
-        mawashiColor: 0x1b4965, // 紺碧
-        hairColor: 0x111111,
-      },
-      this.physics,
-      this.soundManager,
-      this.particleManager,
-      new THREE.Vector3(-4.6, 1.2, 0),
-      Math.PI / 2 // 東から西（右向き）
-    );
-    this.scene.add(this.player1.mesh);
-
-    // 西方 紅炎山（CPU/2P: 深紅マワシ、画面右側・東向き）
-    this.player2 = new SumoFighter(
-      'p2',
-      '紅炎山',
-      {
-        skinColor: 0xebb485,
-        mawashiColor: 0x8b1e0f, // 深紅
-        hairColor: 0x111111,
-      },
-      this.physics,
-      this.soundManager,
-      this.particleManager,
-      new THREE.Vector3(4.6, 1.2, 0),
-      -Math.PI / 2 // 西から東（左向き）
-    );
-    this.scene.add(this.player2.mesh);
-
-    // 8. 敵AI
-    this.ai = new SumoAI(this.player2);
+    // 7. 力士の見た目(最大4人: 東方 蒼天龍・西方 紅炎山・翠嵐海・金剛峰)
+    FIGHTERS.forEach((f, i) => {
+      const view = new FighterView(i, f.name, { skinColor: f.skin, mawashiColor: f.mawashi, hairColor: f.hair }, this.soundManager, this.particleManager, `${i + 1}P`);
+      this.scene.add(view.mesh);
+      this.views.push(view);
+    });
+    this.showViews(2, [null, null]);
 
     // リサイズ監視
     window.addEventListener('resize', this.onWindowResize.bind(this));
@@ -263,23 +250,18 @@ class SumoGame {
       if (this.uiManager.isVictoryModalOpen() && this.menuNav.pushKey(e)) e.preventDefault();
     });
 
-    // リザルト画面: 再挑戦 / タイトルに戻る / ゲームを終了
+    // リザルト画面: 再挑戦(CPU対戦だけ) / タイトルに戻る / ゲームを終了
     this.uiManager.onRematch = () => {
       this.uiManager.hideVictoryModal();
       this.soundManager.playTaiko();
-      this.startBattle(this.gameMode);
+      this.startCpuBattle();
     };
     this.uiManager.onReturnTitle = () => {
       this.uiManager.hideVictoryModal();
-      this.returnToTitle();
+      this.returnToTitle();                                   // オンラインの途中だった場合の片付けも、タイトルへ戻る時にまとめて行う
     };
     this.uiManager.onExit = () => {
-      window.location.href = HUB_URL;
-    };
-    // 相撲指南を閉じたらモード選択へ戻る
-    this.uiManager.onHowToPlayClosed = () => {
-      this.soundManager.playHarite();
-      this.openModeSelect();
+      returnToHub();
     };
 
     // タイトル画面(全ゲーム共通)。スタートでモード選択へ
@@ -289,8 +271,7 @@ class SumoGame {
       tagline: '土俵から押し出せ',
       onStart: () => {
         this.soundManager.playHyoshigi();
-        if (SHOW_MODE_SELECT) this.openModeSelect();
-        else this.startBattle('pve');
+        void this.onStartPressed();
       },
     });
     this.modeSelect = new ModeSelect(
@@ -303,7 +284,13 @@ class SumoGame {
     );
 
     // 初期状態はタイトル画面
-    this.showTitle();
+    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    if (isPreview) {
+      this.titleScreen.hide();
+      this.startCpuBattle();
+    } else {
+      this.showTitle();
+    }
 
     // アニメーションループ開始
     this.lastTime = performance.now();
@@ -366,74 +353,73 @@ class SumoGame {
   }
 
   /**
-   * バトル開始
+   * 土俵に立つ力士(n人)を、初期位置に出す。使わない分は隠す。labels は頭上マーカーの文字。
    */
-  public startBattle(mode: GameMode) {
-    this.gameMode = mode;
-    this.gameState = 'battle';
+  /** labels は力士ごとの頭上マーカーの文字。null は何も出さない */
+  private showViews(n: number, labels: (string | null)[]) {
+    this.activeCount = n;
+    this.views.forEach((v, i) => {
+      if (i >= n) {
+        v.mesh.visible = false;
+        v.gone = true;
+        return;
+      }
+      const pose = startPose(i, n);
+      v.placeAt(pose.x, pose.z, pose.angle);
+      v.setMarkerLabel(labels[i] ?? null);
+    });
+  }
 
-    // カメラ位置を定位置へ
+  /** 試合の画面の共通の準備(CPU対戦・オンライン対戦) */
+  private prepareBattleScreen() {
+    this.gameState = 'battle';
     this.camera.position.copy(this.cameraBasePos);
     this.camera.lookAt(this.cameraLookAt);
     this.computeCameraVectors();
-
-    // 力士とスコアリセット
-    this.player1.wins = 0;
-    this.player2.wins = 0;
 
     // 吹き飛んだ客席と土俵の焦げ跡を元に戻す(新しい試合ごと)
     this.audience.restoreAll();
     this.dohyo.clearScorches();
 
-    // 頭上マーカーのラベル更新（PvPなら2P、PvEならCPU）
-    this.player1.setMarkerLabel('1P');
-    this.player2.setMarkerLabel(mode === 'pvp' ? '2P' : 'CPU');
-
-    // UI切り替え
-    this.uiManager.setMode(mode);
     this.uiManager.hideTitleScreen();
     this.uiManager.hideVictoryModal();
     guideBattle();
-
-    // 対戦BGM。仕切りの間は静かに、立ち合いで盛り上がる
     this.soundManager.playBgm('battle');
 
-    // 立ち合いシーケンス開始（初番勝負）
-    this.startRoundSequence(true);
+    this.isRoundActive = false;
+    this.seatBlastDone = false;
+    this.lastRc = -1;
+    this.modalShown = false;
+
+    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    if (isPreview) {
+      this.camera.position.set(0, 11.5, 13.5);
+      this.camera.lookAt(new THREE.Vector3(0, 1.0, 0));
+      this.computeCameraVectors();
+      const bh = document.getElementById('battle-hud');
+      if (bh) bh.style.display = 'none';
+      const banners = document.querySelectorAll('.banner-container, #banner');
+      banners.forEach((b) => (b as HTMLElement).style.display = 'none');
+      const guides = document.querySelectorAll('.agc-root');
+      guides.forEach((g) => (g as HTMLElement).style.display = 'none');
+    }
   }
 
   /**
-   * 立ち合いシーケンス開始
-   * 「見合って！見合って！」の構え待機を経て、「はっけよい！」の文字と同時に立ち合い（操作可能）開始！
+   * CPU対戦(1P=自分 vs 2P=CPU、二本先取)。シミュレーションはこのブラウザの中で動かす。
    */
-  private startRoundSequence(isFirstRound: boolean) {
-    this.clearNokotta();
+  public startCpuBattle() {
+    this.match = null;
+    this.showViews(2, ['あなた', null]);
+    this.uiManager.setMultiLayout(null);
+    this.uiManager.setRematchEnabled(true);
+    this.uiManager.setMode('pve');
+    this.prepareBattleScreen();
+
+    const sim = new SimWorld(CANNON, { count: 2, winsToMatch: WINS_TO_MATCH });
+    this.cpu = { sim, ai: new SumoAI(sim.fighters[1]) };
     this.roundState = 'standby';
-    this.isRoundActive = false;
-    this.roundStandbyTimer = 0;
-    this.seatBlastDone = false;
-    this.soundManager.setBgmCalm(true);
-
-    // 蓄積ダメージリセット
-    this.player1.damagePercent = 0;
-    this.player2.damagePercent = 0;
-
-    // 位置・剛体速度リセット
-    this.player1.resetPosition();
-    this.player2.resetPosition();
-    this.player1.body.velocity.set(0, 0, 0);
-    this.player2.body.velocity.set(0, 0, 0);
-
-    // 構えアニメーション（仕切り線で静止構え）
-    this.player1.model.updateAnimation(0.016, 'idle', 0, 0);
-    this.player2.model.updateAnimation(0.016, 'idle', 0, 0);
-
-    // 柝の音（カチーン！）
-    this.soundManager.playHyoshigi();
-
-    // 星取りは HUD の丸印で見えるので、決勝の番だけ補足する
-    const isDecider = !isFirstRound && this.player1.wins === 1 && this.player2.wins === 1;
-    this.uiManager.showBanner('見合って', isDecider ? '最終番' : '', 1200);
+    sim.start();                                              // 「見合って」から。柝・バナーは演出イベントとして最初のフレームで再生される
   }
 
   /**
@@ -445,7 +431,9 @@ class SumoGame {
   }
 
   private showTitle() {
-    this.clearNokotta();
+    this.leaveOnline();                                       // オンラインの途中だった場合の片付け(オフラインでは何もしない)
+    this.cpu = null;
+    this.showViews(2, [null, null]);
     this.soundManager.playBgm('menu');
     this.gameState = 'title';
     this.armInput();
@@ -454,28 +442,33 @@ class SumoGame {
     guideTitle();
   }
 
-  /** モード選択(1P vs CPU / 相撲指南) */
+  /** モード選択(CPU対戦 / オンライン対戦) */
   private openModeSelect() {
     this.gameState = 'menu';
     this.armInput();
+    const st = this.onlineStatus;
+    const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
     this.modeSelect.show([
-      { id: 'pve', badge: '1P vs CPU', art: versusArt('CPU'), title: 'CPU対戦', sub: '二本先取' },
-      // 二人対戦(pvp)は今後オンライン対戦として実装予定のため一旦非表示
-      { id: 'guide', art: GUIDE_ART, title: '遊び方', sub: '操作と技' },
+      { id: 'pve', badge: 'OFFLINE', art: versusArt('CPU'), title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・ぶちかまし・つかみで、先に二番取った方が勝ちです。' },
+      {
+        id: 'online',
+        badge: 'ONLINE',
+        art: versusArt('4P'),
+        title: 'オンライン対戦',
+        sub: !st ? '' : full ? '満員' : st.phase !== 'lobby' ? '対戦中' : `参加中 ${st.players}/${st.max}`,
+        desc: '最大4人の乱戦。土俵に最後まで残った人が1点、先に2点取った人の勝ち。待っている間に集まった人で始まります。',
+      },
     ]);
     guideModeSelect();
   }
 
   private onModeSelected(id: string) {
     this.modeSelect.hide();
-    if (id === 'guide') {
-      this.armInput();
-      this.uiManager.openHowToPlay();
-      this.soundManager.playHarite();
-      guideHowTo();
+    if (id === 'online') {
+      this.enterOnlineWait();
       return;
     }
-    this.startBattle(id === 'pvp' ? 'pvp' : 'pve');
+    this.startCpuBattle();
   }
 
   private armInput(ms: number = 300) {
@@ -501,7 +494,7 @@ class SumoGame {
     if (padPress.any(0, 1, 2, 3, 9)) this.soundManager.unlock();
 
     if (this.gameState !== 'battle') {
-      this.updateTitleScreen(dt, padPress.any(0, 1));
+      this.updateTitleScreen(dt);
     } else if (this.roundState === 'match_over' && this.uiManager.isVictoryModalOpen()) {
       this.updateResultMenu(padPress.any(0, 9), padPress.any(1));
       this.updateBattle(dt);
@@ -522,7 +515,7 @@ class SumoGame {
   /**
    * タイトル画面中の更新
    */
-  private updateTitleScreen(dt: number, padClose: boolean) {
+  private updateTitleScreen(dt: number) {
     // カメラの優雅なアトラクト旋回
     this.titleCameraAngle += dt * 0.18;
     const camRadius = 20.0;
@@ -533,24 +526,9 @@ class SumoGame {
     );
     this.camera.lookAt(0, 1.2, 0);
 
-    // 力士2人は構えアニメーション
-    this.player1.model.updateAnimation(dt, 'idle', 0, 0);
-    this.player2.model.updateAnimation(dt, 'idle', 0, 0);
-    this.player1.updateMarkerAnimation(dt);
-    this.player2.updateMarkerAnimation(dt);
+    // 土俵に立つ力士は構えアニメーション
+    for (let i = 0; i < this.activeCount; i++) this.views[i].idle(dt);
 
-    // 相撲指南を開いている間: A / B / Enter / Space / Esc で閉じる(閉じるとモード選択へ戻る)
-    if (this.uiManager.isHowToPlayOpen()) {
-      if (this.isInputArmed() && (padClose || this.inputManager.isKeyTriggered('Escape', 'Enter', 'Space', 'Backspace'))) {
-        this.uiManager.closeHowToPlay();
-      }
-      return;
-    }
-
-    // タイトル画面で Esc: ハブへ戻る(スタートは共通タイトル画面、モード選択は共通モード選択が受け付ける)
-    if (this.gameState === 'title' && this.isInputArmed() && this.inputManager.isKeyTriggered('Escape')) {
-      window.location.href = HUB_URL;
-    }
   }
 
   /**
@@ -569,200 +547,293 @@ class SumoGame {
     if (padConfirm || this.inputManager.isKeyTriggered('Enter', 'Space')) {
       this.uiManager.confirmCurrentResultSelection();
     } else if (padExit) {
-      window.location.href = HUB_URL;
+      returnToHub();
     }
   }
 
+  // ---------------------------------------------------------------
+  // オンライン対戦: モード選択 → 待機 → 対戦(サーバーのシミュレーションを表示し、自分の操作を送る) → 結果
+  // ---------------------------------------------------------------
+
+  /** START: オンライン対戦が開かれていればモード選択を挟み、そうでなければ従来どおりそのままCPU対戦を始める。 */
+  private async onStartPressed() {
+    if (this.startingFlow) return;
+    this.startingFlow = true;
+    try {
+      this.onlineStatus = await fetchSumoStatus(1500);        // 開催状況の確認は START の時の1回だけ(WebSocket には繋がない)
+    } finally {
+      this.startingFlow = false;
+    }
+    if (this.gameState !== 'title') return;
+    if (this.onlineStatus) this.openModeSelect();
+    else this.startCpuBattle();
+  }
+
+  /** 画面の上部に出す短い案内(接続が切れた・相手が抜けた など) */
+  private showNotice(text: string) {
+    if (!this.noticeEl) {
+      this.noticeEl = document.createElement('div');
+      this.noticeEl.style.cssText =
+        'position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:9999;pointer-events:none;padding:.7em 1.4em;border-radius:6px;' +
+        'background:rgba(14,12,16,.94);border:1px solid #e63946;color:#fff;font:700 1rem system-ui,"Hiragino Kaku Gothic ProN",sans-serif;letter-spacing:.08em;' +
+        'box-shadow:0 0 24px rgba(230,57,70,.35);display:none;';
+      document.body.appendChild(this.noticeEl);
+    }
+    this.noticeEl.textContent = text;
+    this.noticeEl.style.display = 'block';
+    if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    this.noticeTimer = window.setTimeout(() => {
+      if (this.noticeEl) this.noticeEl.style.display = 'none';
+    }, 3500);
+  }
+
+  private enterOnlineWait() {
+    this.gameState = 'menu';
+    this.armInput();
+    this.wireOnline();
+    if (!this.waitScreen) {
+      this.waitScreen = new WaitScreen(this.net, {
+        onBack: () => {                                       // 退出してモード選択へ(接続も切る)
+          this.leaveOnline();
+          this.openModeSelect();
+        },
+        onErrorToTitle: (msg: string) => {                    // 入れない時はリトライを尋ねず、案内してタイトルへ戻る
+          this.returnToTitle();
+          this.showNotice(msg);
+        },
+      });
+    }
+    guideModeSelect();
+    this.waitScreen.show();
+  }
+
+  /** サーバーからの通知の受け口(1回だけ登録する)。 */
+  private wireOnline() {
+    if (this.onlineWired) return;
+    this.onlineWired = true;
+    this.net.on('room', (m) => {
+      this.onlineYou = m.you;
+      this.waitScreen?.setRoom(m);
+    });
+    this.net.on('left', () => this.waitScreen?.setRoom(null));
+    this.net.on('start', (m) => this.beginOnlineMatch(m));
+    this.net.on('go', () => this.onOnlineGo());
+  }
+
+  /** 開始の合図: 試合の画面を作り、ロード完了を伝える(全員が揃うと go が来る)。 */
+  private beginOnlineMatch(m: Extract<ServerMsg, { t: 'start' }>) {
+    if (this.gameState !== 'menu') return;
+    this.waitScreen?.hide();                                  // 接続は保ったまま、待機画面だけ閉じる
+    this.modeSelect.hide();
+    const slot = Math.max(0, m.players.findIndex((p) => p.id === this.onlineYou));
+    const count = m.players.length;
+    this.cpu = null;
+    this.match?.dispose();
+    this.match = new OnlineMatch(this.net, slot, count, {
+      onResults: (res) => this.onOnlineResults(res),
+      onDisconnect: () => {
+        if (this.gameState !== 'battle' || this.uiManager.isVictoryModalOpen()) return;
+        this.returnToTitle();
+        this.showNotice('接続が切れました');
+      },
+    });
+
+    this.onlineNames = m.players.map((p) => p.name);
+    this.showViews(count, FIGHTERS.slice(0, count).map((_, i) => (i === slot ? 'あなた' : null)));
+    this.uiManager.setMultiLayout(
+      FIGHTERS.slice(0, count).map((f, i) => ({ name: this.onlineNames[i] ?? f.name, css: f.css, label: `${i + 1}P`, me: i === slot }))
+    );
+    this.uiManager.setRematchEnabled(false);
+    this.prepareBattleScreen();
+    this.soundManager.setBgmCalm(true);
+    this.roundState = 'waiting';
+    this.showNotice(`あなたは ${FIGHTERS[slot].side} ${this.onlineNames[slot] ?? FIGHTERS[slot].name}(${slot + 1}P)`);
+    this.net.send({ t: 'loaded' });
+  }
+
+  /** 全員のロードが揃った。サーバーが仕切りを始めるので、その状態が届くのを待つ。 */
+  private onOnlineGo() {
+    if (!this.match || this.gameState !== 'battle' || this.roundState !== 'waiting') return;
+    this.roundState = 'standby';
+  }
+
+  /** 試合の結果が届いた(二本先取・最後の1人)。 */
+  private onOnlineResults(res: ResultsMsg) {
+    if (this.gameState !== 'battle' || !this.match) return;
+    if (res.w === null) {                                     // 全員が抜けた
+      this.returnToTitle();
+      this.showNotice('試合が終了しました');
+      return;
+    }
+    if (this.uiManager.isVictoryModalOpen()) return;
+    const me = this.match.slot;
+    this.roundState = 'match_over';
+    this.showOnlineVictory(res.w, res.s, me);
+  }
+
+  /** オンラインの結果表示: 勝者と順位表。自分が勝ったかを添える。 */
+  private showOnlineVictory(winner: number, wins: number[], me: number) {
+    this.modalShown = true;
+    this.soundManager.playTaiko();
+    this.soundManager.playBgm('menu');
+    this.menuNav.clear();
+    this.armInput(600);
+    const rows = wins.map((w, i) => ({ name: this.onlineNames[i] ?? FIGHTERS[i].name, css: FIGHTERS[i].css, wins: w, me: i === me }));
+    this.uiManager.showVictory(winner === me, rows);
+    guideResult();
+  }
+
+  /** オンラインの途中だった場合の片付け。オフラインでは何も起きない。 */
+  private leaveOnline() {
+    this.waitScreen?.hide();
+    this.match?.dispose();
+    this.match = null;
+    this.uiManager.setRematchEnabled(true);
+    this.uiManager.setMultiLayout(null);
+    if (this.net.connected) {
+      this.net.send({ t: 'leave' });
+      this.net.close();                                       // 開いたままにして負荷をかけない
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // バトル中の1フレーム
+  // ---------------------------------------------------------------
+
   /**
-   * バトル中の更新
+   * バトル中の更新。CPU対戦はブラウザ内のシミュレーションを進め、オンライン対戦はサーバーから届いた状態を取り出す。
+   * どちらも「力士の状態+演出イベント」を受け取って、同じ経路で描く。
    */
   private updateBattle(dt: number) {
-    // Esc: ハブへ戻る(アケコンは SELECT 長押し。全ゲーム共通)
-    if (this.inputManager.isKeyTriggered('Escape')) {
-      window.location.href = HUB_URL;
-      return;
-    }
+    let snaps: FighterSnap[] | null = null;
+    let wins: number[] = [];
+    let rc = 0;
+    let phase: RoundState = this.roundState;
+    let events: FxEvent[] = [];
 
-    // 1. 立ち合い待機（仕切り中: 「見合って！見合って！」）
-    if (this.roundState === 'standby') {
-      this.roundStandbyTimer += dt;
-
-      // 仕切り中は静止（移動や攻撃は一切受け付けない）
-      this.player1.body.velocity.set(0, 0, 0);
-      this.player2.body.velocity.set(0, 0, 0);
-      this.player1.model.updateAnimation(dt, 'idle', 0, 0);
-      this.player2.model.updateAnimation(dt, 'idle', 0, 0);
-      this.physics.step(dt);
-      this.particleManager.update(dt);
-      this.applyCameraShake();
-      this.updateHud();
-
-      // ★ 1.35秒経過のまさにこの瞬間：立ち合い開始！
-      if (this.roundStandbyTimer >= 1.35) {
-        this.roundState = 'active';
-        this.isRoundActive = true;
-        this.soundManager.setBgmCalm(false);
-
-        // ★ 文字表示と開始タイミングを完全に一致！
-        this.uiManager.showBanner('はっけよい', '', 900);
-        // 「のこった」は、少し間をあけて別に出す(勝負がついていれば出さない)
-        this.clearNokotta();
-        this.nokottaTimer = window.setTimeout(() => {
-          this.nokottaTimer = null;
-          if (this.gameState === 'battle' && this.roundState === 'active') {
-            this.uiManager.showBanner('のこった', '', 900);
+    if (this.cpu) {
+      // 1P は自分の操作、2P は CPU
+      const { sim, ai } = this.cpu;
+      const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+      let mine: FighterInput;
+      if (isPreview) {
+        // プレビュー時は 1P も相手方向へ押し込み、押し合いの格闘状態を維持する
+        const p1X = sim.fighters[0].body.position.x;
+        const p2X = sim.fighters[1].body.position.x;
+        const dirX = p2X > p1X ? 1 : -1;
+        mine = {
+          move: { x: dirX, z: 0, isMoving: true },
+          actions: {
+            strikePressed: Math.random() < 0.2,
+            strike: true,
+            strikeReleased: false,
+            grabPressed: false,
           }
-        }, 1100);
-        this.soundManager.playTaiko();
+        };
+        const bh = document.getElementById('battle-hud');
+        if (bh) bh.style.display = 'none';
+        const banners = document.querySelectorAll('.banner-container, #banner');
+        banners.forEach((b) => (b as HTMLElement).style.display = 'none');
+      } else {
+        const raw = this.inputManager.getPlayer1Input();
+        mine = { move: this.toWorldMoveInput(raw), actions: this.toActions(raw) };
       }
-      return;
-    }
-
-    // 2. 試合決着（二本先取達成！リザルトモーダル表示中）
-    if (this.roundState === 'match_over') {
-      this.checkSeatBlast();
-      this.physics.step(dt);
-      this.particleManager.update(dt);
-      this.applyCameraShake();
-      this.updateHud();
-
-      return;
-    }
-
-    // 3. ラウンド決着後、次ラウンドへの仕切り直し待ち（「勝負あり！」後）
-    if (this.roundState === 'finished') {
-      this.roundResetTimer += dt;
-      this.checkSeatBlast();
-
-      // 決着後の物理・エフェクト継続
-      this.physics.step(dt);
-      this.particleManager.update(dt);
-      this.applyCameraShake();
-      this.updateHud();
-
-      if (this.roundResetTimer >= 2.4) {
-        this.startRoundSequence(false);
+      const plan = ai.update(dt, sim.fighters[0]);
+      sim.step(dt, [mine, { move: plan.move, actions: plan.actions }]);
+      snaps = sim.fighterSnaps();
+      wins = sim.wins;
+      rc = sim.resetCount;
+      phase = sim.phase as RoundState;
+      events = sim.fx.take();
+      if (phase === 'match_over' && sim.phaseTime >= MATCH_OVER_DELAY_SEC && !this.modalShown) {
+        this.modalShown = true;
+        this.showVictory(sim.winner ?? 0);
       }
-      return;
+    } else if (this.match) {
+      // 自分の操作をサーバーへ送る(結果表示中は不要)
+      const now = Date.now();
+      if (this.roundState !== 'match_over') {
+        const raw = this.inputManager.getPlayer1Input();
+        const mv = this.toWorldMoveInput(raw);
+        this.match.sendInput(now, mv.x, mv.z, mv.isMoving, raw.strikePressed, raw.strike, raw.strikeReleased, raw.grabPressed);
+      }
+      events = this.match.drainEvents(now);
+      const view = this.match.view(now);
+      if (view) {
+        snaps = view.f;
+        wins = view.w;
+        rc = view.rc;
+        phase = (ROUND_NAMES[view.rs] ?? 'standby') as RoundState;
+      }
     }
 
-    // 強い当たりの一瞬だけ、力士と物理を止める(爆発の粒子だけがゆっくり進む)
+    // 演出(効果音・粒子・バナー・爆破)
+    for (const ev of events) replayFx(ev, this.fxSink);
+
+    // 力士の状態を画面に反映する
+    if (snaps) {
+      if (rc !== this.lastRc) {
+        this.lastRc = rc;
+        this.seatBlastDone = false;                           // 仕切り直し: 客席の爆破を再び可能にする
+      }
+      // 結果を出している間は、局面を結果のまま保つ
+      if (this.roundState !== 'match_over' || !this.uiManager.isVictoryModalOpen()) this.roundState = phase;
+      this.isRoundActive = this.roundState === 'active';
+      for (let i = 0; i < this.activeCount; i++) this.views[i].applyState(snaps[i], dt);
+      this.checkSeatBlast();
+      this.updateHud(wins);
+    } else {
+      for (let i = 0; i < this.activeCount; i++) this.views[i].idle(dt);
+    }
+
+    // エフェクト(強い当たりの一瞬は、粒子だけゆっくり進める)
     if (this.particleManager.hitStopRemaining > 0) {
       this.particleManager.hitStopRemaining -= dt;
       this.particleManager.update(dt * 0.2);
-      this.applyCameraShake();
-      this.updateHud();
-      return;
-    }
-
-    // 4. 立ち合い激闘中 (roundState === 'active')
-    // 1P 入力更新
-    const rawP1Input = this.inputManager.getPlayer1Input();
-
-    const p1MoveInput = this.toWorldMoveInput(rawP1Input);
-    const p1Actions = this.toActions(rawP1Input);
-
-    // 2P 入力（PvPなら2P操作、PvEならCPU AI）
-    let p2MoveInput: FighterMoveInput;
-    let p2Actions: FighterActions;
-
-    if (this.gameMode === 'pvp') {
-      const rawP2Input = this.inputManager.getPlayer2Input();
-      p2MoveInput = this.toWorldMoveInput(rawP2Input);
-      p2Actions = this.toActions(rawP2Input);
     } else {
-      const p2Plan = this.ai.update(dt, this.player1);
-      p2MoveInput = p2Plan.move;
-      p2Actions = p2Plan.actions;
+      this.particleManager.update(dt);
     }
-
-    // 力士の更新
-    const p1Pos = this.p1PosTmp.set(this.player1.body.position.x, this.player1.body.position.y, this.player1.body.position.z);
-    const p2Pos = this.p2PosTmp.set(this.player2.body.position.x, this.player2.body.position.y, this.player2.body.position.z);
-
-    this.player1.update(dt, p1MoveInput, p1Actions, p2Pos);
-    this.player2.update(dt, p2MoveInput, p2Actions, p1Pos);
-
-    // 攻撃判定（Step 3: ヒットボックス判定とノックバック演算）
-    this.checkAttackHits();
-
-    // 物理シミュレーション進行
-    this.physics.step(dt);
-
-    // 客席に押し出されたら、客席ごと爆破
-    this.checkSeatBlast();
-
-    // 勝敗・リングアウト（Step 1: 落下判定とリセット）
-    this.checkRingOut(dt);
-
-    // エフェクト・パーティクルの更新
-    this.particleManager.update(dt);
-
-    // カメラシェイクの適用
     this.applyCameraShake();
+  }
 
-    // UI統計の更新
-    this.updateHud();
+  /** CPU対戦の結果(勝った人の番号 0=自分 1=CPU)。 */
+  private showVictory(winner: number) {
+    this.soundManager.playTaiko();
+    this.soundManager.playBgm('menu');
+    this.menuNav.clear();
+    this.armInput(600);
+    const wins = this.cpu?.sim.wins ?? [0, 0];
+    this.uiManager.showVictory(winner === 0, [
+      { name: FIGHTERS[0].name, css: FIGHTERS[0].css, wins: wins[0], me: false },
+      { name: FIGHTERS[1].name, css: FIGHTERS[1].css, wins: wins[1], me: false },
+    ]);
+    guideResult();
   }
 
   /**
    * HUDの更新
    */
-  private updateHud() {
-    this.uiManager.updateStats(
-      this.player1.damagePercent,
-      this.player2.damagePercent,
-      this.player1.wins,
-      this.player2.wins,
-      this.player1.chargeRatio,
-      this.player2.chargeRatio,
-      this.player1.hasSuperArmor,
-      this.player2.hasSuperArmor,
-      this.player1.buchikamashiCooldown / this.player1.buchikamashiMaxCooldown,
-      this.player2.buchikamashiCooldown / this.player2.buchikamashiMaxCooldown,
-      this.player1.grabCooldown / this.player1.grabMaxCooldown,
-      this.player2.grabCooldown / this.player2.grabMaxCooldown,
-      this.player1.hariteGauge / 100,
-      this.player2.hariteGauge / 100
-    );
-  }
-
-  /**
-   * 攻撃ヒット判定（ヒットボックス vs 相手の剛体）
-   */
-  private checkAttackHits() {
-    this.resolveAttack(this.player1, this.player2);
-    this.resolveAttack(this.player2, this.player1);
-  }
-
-  /** attacker のヒットボックスが defender に届いていればヒット処理を行う */
-  private resolveAttack(attacker: SumoFighter, defender: SumoFighter) {
-    const hitbox = attacker.getHitbox();
-    if (!hitbox || attacker.attackHitRegistered) return;
-
-    const defPos = this.hitTargetTmp.set(defender.body.position.x, defender.body.position.y, defender.body.position.z);
-    if (hitbox.position.distanceTo(defPos) >= hitbox.radius + 0.85) return;
-
-    // ヒット成立！
-    attacker.attackHitRegistered = true;
-    if (attacker.currentAttackType === 'grab') {
-      // 突進中の相手は掴めない(突進のほうが、つかみを弾き飛ばす)
-      if (defender.state === 'buchikamashi_rush') {
-        attacker.attackHitRegistered = false;
-        return;
-      }
-      if (defender.state !== 'fall' && defender.state !== 'grabbed' && defender.state !== 'throw') {
-        attacker.onGrabSuccess(defender);
-        defender.onGrabbed(attacker);
-      }
-    } else {
-      defender.receiveHit(
-        this.hitSourceTmp.set(attacker.body.position.x, attacker.body.position.y, attacker.body.position.z),
-        attacker.currentAttackType!,
-        attacker.chargeTimer / attacker.maxChargeTime,
-        attacker
+  private updateHud(wins: number[]) {
+    const v = this.views;
+    if (this.match) {
+      // オンライン(多人数): 上部バーに全員のダメージ・得点。技の箱(左下)は自分の分
+      const me = v[this.match.slot];
+      this.uiManager.updateMulti(
+        v.slice(0, this.activeCount).map((f, i) => ({ damage: f.damagePercent, wins: wins[i] ?? 0, out: f.gone || f.state === 'fall' || f.position.y < -1.8 }))
       );
+      this.uiManager.updateStats(
+        me.damagePercent, 0, wins[this.match.slot] ?? 0, 0,
+        me.chargeRatio, 0, me.hasSuperArmor, false,
+        me.buchikamashiCooldownRatio, 0, me.grabCooldownRatio, 0, me.hariteGauge, 0
+      );
+      return;
     }
+    this.uiManager.updateStats(
+      v[0].damagePercent, v[1].damagePercent, wins[0] ?? 0, wins[1] ?? 0,
+      v[0].chargeRatio, v[1].chargeRatio, v[0].hasSuperArmor, v[1].hasSuperArmor,
+      v[0].buchikamashiCooldownRatio, v[1].buchikamashiCooldownRatio, v[0].grabCooldownRatio, v[1].grabCooldownRatio,
+      v[0].hariteGauge, v[1].hariteGauge
+    );
   }
 
   /** カメラ基準の入力をワールド座標の移動入力に変換する */
@@ -805,107 +876,18 @@ class SumoGame {
   private checkSeatBlast() {
     if (this.seatBlastDone) return;
     const seatInner = this.dohyo.radius + 1.4;
-    for (const f of [this.player1, this.player2]) {
-      const r = Math.hypot(f.body.position.x, f.body.position.z);
+    for (let i = 0; i < this.activeCount; i++) {
+      const f = this.views[i];
+      if (f.gone) continue;
+      const r = Math.hypot(f.position.x, f.position.z);
       if (r < seatInner - 0.2) continue;
       const floor = this.audience.floorHeightAt(r);
-      if (f.body.position.y > floor + 0.9) continue; // まだ客席の上を飛んでいる
+      if (f.position.y > floor + 0.9) continue; // まだ客席の上を飛んでいる
 
       // 客席ごと大爆破(観客と座布団が吹き飛ぶ)
-      this.megaBlast(new THREE.Vector3(f.body.position.x, floor + 0.7, f.body.position.z), 9);
+      this.megaBlast(new THREE.Vector3(f.position.x, floor + 0.7, f.position.z), 9);
       return;
     }
-  }
-
-  /**
-   * 場外リングアウトの判定（二本先取ルール）
-   */
-  private checkRingOut(dt: number) {
-    if (this.roundState !== 'active') {
-      return;
-    }
-
-    const p1Fell = this.player1.body.position.y < -1.8;
-    const p2Fell = this.player2.body.position.y < -1.8;
-
-    if (p1Fell || p2Fell) {
-      this.isRoundActive = false;
-      this.roundResetTimer = 0;
-      this.clearNokotta();
-      this.soundManager.playHyoshigi();
-      this.soundManager.setBgmCalm(true);
-
-      // 客席に届く前に落ちた場合も、落ちた場所で大爆発
-      const fallen = p1Fell ? this.player1 : this.player2;
-      this.megaBlast(
-        new THREE.Vector3(fallen.body.position.x, 0.8, fallen.body.position.z),
-        0
-      );
-
-      if (p1Fell && p2Fell) {
-        // 同体・取り直し
-        this.roundState = 'finished';
-        this.uiManager.showBanner('同体　取り直し', '', 2000);
-        return;
-      }
-
-      let winnerText = '';
-      let kimarite = '';
-
-      if (p2Fell) {
-        // 1P 勝利！
-        this.player1.wins++;
-        winnerText = '蒼天龍';
-        kimarite = this.determineKimarite(this.player1, this.player2);
-      } else {
-        // 2P 勝利！
-        this.player2.wins++;
-        winnerText = '紅炎山';
-        kimarite = this.determineKimarite(this.player2, this.player1);
-      }
-
-      // 決まり手コール
-      this.uiManager.showBanner('勝負あり', `${winnerText}　${kimarite}`, 2000);
-
-      // 二点先取（2勝）達成チェック
-      if (this.player1.wins >= 2 || this.player2.wins >= 2) {
-        // 試合終了！自動で次ラウンドに進まないよう 'match_over' に移行
-        this.roundState = 'match_over';
-        setTimeout(() => {
-          const grandWinner = this.player1.wins >= 2 ? '蒼天龍' : '紅炎山';
-          const p2DisplayName = '紅炎山';
-          if (this.gameState !== 'battle' || this.roundState !== 'match_over') return;
-          this.soundManager.playTaiko();
-          this.soundManager.playBgm('menu');
-          this.menuNav.clear();
-          this.armInput(600);
-          this.uiManager.showVictoryModal(grandWinner, this.player1.wins, this.player2.wins, p2DisplayName);
-          guideResult();
-        }, 2200);
-      } else {
-        // どちらも2勝に達していない場合は仕切り直し（次ラウンドへ）
-        this.roundState = 'finished';
-      }
-    }
-  }
-
-  /**
-   * 相撲の決まり手判定
-   */
-  private determineKimarite(winner: SumoFighter, loser: SumoFighter): string {
-    if (winner.state === 'throw') {
-      return '上手投げ';
-    }
-    if (winner.state === 'buchikamashi_rush') {
-      return '突き出し';
-    }
-    if (winner.state === 'harite') {
-      return '押し出し';
-    }
-    if (loser.damagePercent > 120) {
-      return '寄り倒し';
-    }
-    return '押し出し';
   }
 
   /**

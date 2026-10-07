@@ -67,11 +67,11 @@ export class TitleScene {
     clockGroup.rotation.y = Math.PI / 2;
     this.turntableGroup.add(clockGroup);
 
-    // Object D: Yakisoba Cup (Stage 4)
-    const yakisobaGroup = this.buildYakisobaModel();
-    yakisobaGroup.position.set(0, 0.3, -1.9);
-    yakisobaGroup.rotation.y = 0;
-    this.turntableGroup.add(yakisobaGroup);
+    // Object D: Balloon (Stage 4)
+    const balloonGroup = this.buildBalloonModel();
+    balloonGroup.position.set(0, 0.3, -1.9);
+    balloonGroup.rotation.y = 0;
+    this.turntableGroup.add(balloonGroup);
 
     this.group.add(this.turntableGroup);
 
@@ -227,30 +227,33 @@ export class TitleScene {
     return g;
   }
 
-  private buildYakisobaModel(): THREE.Group {
+  private buildBalloonModel(): THREE.Group {
     const g = new THREE.Group();
-    // Square Container
-    const cup = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.45, 1.1),
-      new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.9 })
+    // 空気入れの台座
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.45, 0.2, 20),
+      new THREE.MeshStandardMaterial({ color: 0xcfd4dc, metalness: 0.9, roughness: 0.25 })
     );
-    cup.position.y = 0.25;
-    g.add(cup);
+    base.position.y = 0.1;
+    g.add(base);
 
-    // Red Lid with Yellow Hazard Rim
-    const lid = new THREE.Mesh(
-      new THREE.BoxGeometry(1.12, 0.03, 1.12),
-      new THREE.MeshStandardMaterial({ color: 0xcc2222 })
+    // ふくらんだ赤い風船(縦に少し長い)
+    const balloon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 32, 24),
+      new THREE.MeshStandardMaterial({ color: 0xe8213a, roughness: 0.25, emissive: 0x440008, emissiveIntensity: 0.25 })
     );
-    lid.position.y = 0.48;
-    g.add(lid);
+    balloon.scale.y = 1.15;
+    balloon.position.y = 0.98;
+    g.add(balloon);
 
-    const hazard = new THREE.Mesh(
-      new THREE.BoxGeometry(1.14, 0.04, 0.08),
-      new THREE.MeshBasicMaterial({ color: 0xffea00 })
+    // 口の結び目
+    const knot = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.14, 10),
+      new THREE.MeshStandardMaterial({ color: 0xe8213a, roughness: 0.25 })
     );
-    hazard.position.set(0, 0.49, 0.52);
-    g.add(hazard);
+    knot.rotation.x = Math.PI;
+    knot.position.y = 0.3;
+    g.add(knot);
 
     return g;
   }

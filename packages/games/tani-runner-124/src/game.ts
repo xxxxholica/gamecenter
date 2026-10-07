@@ -19,6 +19,7 @@ import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
+import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
@@ -128,8 +129,24 @@ export class Game {
 
     this.cacheDOMElements();
     this.setupEventListeners();
-    this.initArcadeTitleScreen();
-    this.showTitleGuide();
+
+    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    if (isPreview) {
+      const titleElem = document.getElementById('screen-title');
+      if (titleElem) titleElem.style.display = 'none';
+      const guideElem = document.querySelector('.agc-root');
+      if (guideElem) (guideElem as HTMLElement).style.display = 'none';
+      this.startGame();
+      this.countdown?.cancel();
+      this.state = 'RUNNING';
+      this.currentCredits = 36;
+      this.crowd.reset(36);
+      this.playerZ = -20;
+      if (this.hudElem) this.hudElem.style.display = 'none';
+    } else {
+      this.initArcadeTitleScreen();
+      this.showTitleGuide();
+    }
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -198,7 +215,7 @@ export class Game {
       if (btn) {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          window.location.href = '../../';
+          returnToHub();
         });
       }
     }
@@ -258,7 +275,8 @@ export class Game {
   private showRunGuide(): void {
     mountArcadeGuide({
       moveLabel: '←→ 隊列操作 / ↓ 隊列を絞る',
-      buttons: [{ indices: [0, 1, 7], label: 'ジャンプのタイミング・加速' }],
+      keyMoveLabel: 'A/D/←→ 隊列操作 / S/↓ 絞る',
+      buttons: [{ indices: [0, 1, 7], label: 'ジャンプのタイミング・加速', keyLabel: 'Space / Enter' }],
       showHomeHint: true,
     });
   }
@@ -395,7 +413,10 @@ export class Game {
   private updateRunning(dt: number, input: ReturnType<typeof inputManager.poll>): void {
     this.playerZ -= this.forwardSpeed * dt;
     this.crowd.groupZ = this.playerZ;
-    this.crowd.updateRunning(dt, input.moveX);
+    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const mx = isPreview ? Math.sin(performance.now() * 0.003) * 0.4 : input.moveX;
+    this.crowd.updateRunning(dt, mx);
+    if (isPreview && this.hudElem) this.hudElem.style.display = 'none';
 
     // Gate collision checking: individual student boundary detection!
     for (const gatePair of this.world.gates) {

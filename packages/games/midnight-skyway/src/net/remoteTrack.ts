@@ -50,6 +50,8 @@ export class RemoteTrack {
 
   private snaps: Snapshot[] = [];
   private lastRecv = 0;
+  /** 直近に取り込んだ送信時刻(sentAt)。再送の判別用 */
+  private lastSent = -Infinity;
   private lastUpdate: number | null = null;
   /** 受信から推定した送信間隔(ms) */
   private intervalMs = SNAP_INTERVAL_MS;
@@ -61,7 +63,30 @@ export class RemoteTrack {
     return now - this.lastRecv;
   }
 
-  public push(s: CarState, now: number): void {
+  /**
+   * sentAt: 送信側が付けた送信時刻(この端末の now と同じ時計に直したもの)。あれば、受信時刻のばらつきや、まとめて届いた分に
+   * 左右されず、送信間隔どおりの時刻をつける。直近でいちばん早く届いたもの(遅れが最小)に遅れを合わせて、通信の揺らぎはバッファで吸収する。
+   * 同じ送信時刻の再送(サーバーは更新のない車の最新値も毎回送る)は捨てる。無ければ受信時刻から予定表を推定する。
+   */
+  public push(s: CarState, now: number, sentAt?: number): void {
+    if (sentAt !== undefined && Number.isFinite(sentAt) && Math.abs(now - sentAt) < 5000) {
+      if (sentAt <= this.lastSent) return;
+      this.lastSent = sentAt;
+      this.lags.push(now - sentAt);
+      if (this.lags.length > LAG_WINDOW) this.lags.shift();
+      const prevSnap = this.snaps[this.snaps.length - 1];
+      let ts = sentAt + Math.min(...this.lags);
+      if (ts > now) ts = now;
+      if (prevSnap && ts <= prevSnap.t) ts = prevSnap.t + 1;
+      this.snaps.push({ t: ts, s });
+      this.lastRecv = now;
+      while (this.snaps.length > 2 && ts - this.snaps[0].t > KEEP_MS) this.snaps.shift();
+      return;
+    }
+    this.pushByArrival(s, now);
+  }
+
+  private pushByArrival(s: CarState, now: number): void {
     // 受信時刻は通信の揺らぎでばらつき、止まったあとはまとめて届く。受信時刻をそのまま補間に使うと、速度が伸び縮みし、
     // まとめて届いた分が一瞬に潰れて車が止まる・戻るように見える。
     // 送信はほぼ等間隔なので、各スナップショットには「送信の予定表」に沿った時刻をつける:

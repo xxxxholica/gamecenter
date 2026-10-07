@@ -1,5 +1,5 @@
 import { GameEngine } from './game/GameEngine';
-import { installHomeReturn } from '../../../shared/homeReturn';
+import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 
 installHomeReturn();
 
@@ -54,15 +54,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Prevent right-click context menu
   window.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  // Escapeでホーム(ゲームセンターハブ)へ戻る。games/<slug>/配下からルートへは2階層上。
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Escape') {
-      if (engine.state === 'TITLE' || engine.state === 'RESULT') {
-        window.location.href = '../../';
-      }
-    }
-  });
 
   // Game Loop
   let lastTime = performance.now();

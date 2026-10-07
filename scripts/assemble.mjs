@@ -18,9 +18,10 @@ if (!existsSync(hubDist)) {
 }
 // コピーではなく移動する(midnight-skyway は約300MBあり、コピーだとディスクを二重に使うため)
 renameSync(hubDist, outDir);
-// 非表示のゲームはハブに出ないので、サムネイルも配置しない
+// 非表示のゲームはハブに出ないので、サムネイルやプレビューも配置しない
 for (const slug of hiddenSlugs) {
   rmSync(path.join(outDir, 'thumbnails', `${slug}.webp`), { force: true });
+  rmSync(path.join(outDir, 'previews', `${slug}.webm`), { force: true });
 }
 
 for (const slug of readdirSync(gamesDir)) {

@@ -1,4 +1,4 @@
-import { games } from './games';
+import { games, GameEntry } from './games';
 import { createArcadeInput } from './arcadeInput';
 import { mountArcadeGuide } from '../../shared/arcadeGuide';
 import { mountFullscreenKey } from '../../shared/fullscreenKey';
@@ -18,36 +18,22 @@ import {
   LeaderboardEntry,
   escapeHtml,
 } from '../../shared/arcadeLeaderboard';
+import { fetchAllOnlineStatuses } from '../../shared/online/onlineStatus';
+import type { PublicStatus } from '../../shared/online/core';
 
 // ゲームのiframeの中に読み込まれたハブは、親にゲームを閉じさせるだけで何もしない
-if (isFramedHub) initFramedHub();
-listenGameFrameMessages();
-mountFullscreenKey();
+if (isFramedHub) {
+  initFramedHub();
+} else {
+  listenGameFrameMessages();
+  mountFullscreenKey();
 
-mountArcadeGuide({
-  moveLabel: '選ぶ',
-  // 決定は攻撃ボタン(0〜7)とSTART(9)のどれでもよいが、アイコンにはSTARTを代表として出す
-  buttons: [{ indices: [9], label: '決定' }],
-});
-
-// ゲームから戻ったときに直前に遊んだゲームを選択状態で復元するためのキー
-const LAST_GAME_KEY = 'gamecenter:lastGame';
-
-function readLastGame(): string | null {
-  try {
-    return sessionStorage.getItem(LAST_GAME_KEY);
-  } catch {
-    return null;
-  }
+  mountArcadeGuide({
+    moveLabel: '選ぶ',
+    buttons: [{ indices: [9], label: '決定' }],
+  });
 }
 
-function rememberLastGame(slug: string) {
-  try {
-    sessionStorage.setItem(LAST_GAME_KEY, slug);
-  } catch {
-    // 保存できなくても選択位置が復元されないだけなので無視する
-  }
-}
 
 // ===== ランキングHTML生成 =====
 /** クリアした記録は、名前のすぐ右に ★ を付けて表示する */
@@ -64,7 +50,7 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
       return `
         <div class="ranking-row">
           <span class="rank-pos ${posClasses[idx] ?? ''}">${posLabels[idx] ?? `${idx + 1}TH`}</span>
-          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}${e.dev ? '<span class="rank-dev-mark">♛</span>' : ''}</span>
+          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}</span>
           <span class="rank-score ${isEmpty ? 'is-empty' : ''}">${safeScore}</span>
         </div>
       `;
@@ -72,15 +58,19 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
     .join('');
 }
 
-// ランキングはサーバーから取得する。取得するまで・失敗したときは「記録なし」の枠で表示する
 let boards: Record<string, LeaderboardEntry[]> = {};
 
 function entriesFor(slug: string, variantId?: string): LeaderboardEntry[] {
   return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 3);
 }
 
-// ===== 全ゲーム一覧 =====
-const list = document.querySelector<HTMLDivElement>('#game-list')!;
+// ===== セクション要素 =====
+const secOnline = document.querySelector<HTMLElement>('#section-online')!;
+const gridOnline = document.querySelector<HTMLDivElement>('#grid-online')!;
+const secRanking = document.querySelector<HTMLElement>('#section-ranking')!;
+const gridRanking = document.querySelector<HTMLDivElement>('#grid-ranking')!;
+const secOther = document.querySelector<HTMLElement>('#section-other')!;
+const gridOther = document.querySelector<HTMLDivElement>('#grid-other')!;
 
 // コース/難易度バリアントを持つカードのローテーション管理
 interface VariantRotator {
@@ -91,9 +81,13 @@ interface VariantRotator {
 }
 const rotators: VariantRotator[] = [];
 
-games.forEach((game) => {
+// 全カード一覧（DOM順）
+let cards: HTMLDivElement[] = [];
+
+function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDivElement {
   const card = document.createElement('div');
   card.className = 'card';
+  card.dataset.slug = game.slug;
   card.style.setProperty('--accent', game.accent);
 
   const def = GAME_LEADERBOARD_DEFS[game.slug];
@@ -103,7 +97,6 @@ games.forEach((game) => {
     const hasVariants = def.variants && def.variants.length > 0;
     const initialVariant = hasVariants ? def.variants![0] : undefined;
     const entries = entriesFor(game.slug, initialVariant?.id);
-    // 見出しの右の小さなタグは、バリエーション(コース/難易度)の名前
     const variantTagHtml = hasVariants
       ? `<span class="ranking-variant-tag" id="tag-${game.slug}">${initialVariant!.label}</span>`
       : '';
@@ -120,23 +113,34 @@ games.forEach((game) => {
       </div>
     `;
   } else {
-    // スコアリングなし(対戦専用): ランキングボードを表示しつつグレーアウト
-    const entries = entriesFor(game.slug);
+    // ランキングなし: 枠はそのままで中央に「ランキングは利用不可」と表示
     rankingHtml = `
       <div class="card-ranking-container is-disabled" data-slug="${game.slug}">
-        <div class="ranking-header">
-          <span class="ranking-title">ランキング</span>
-        </div>
-        <div class="ranking-rows" id="rows-${game.slug}">
-          ${renderRowsHtml(entries)}
-        </div>
+        <span class="ranking-unavailable">ランキングは利用不可</span>
       </div>
     `;
   }
 
+  // オンライン開催中のバッジ (黒ボックス白文字: 試合進行中なら「対戦中」、待機・ロビーなら「募集中」)
+  let onlineBadgeHtml = '';
+  if (onlineStatus && onlineStatus.open) {
+    const isPlaying = onlineStatus.phase === 'racing' || onlineStatus.players >= onlineStatus.max;
+    const badgeText = isPlaying ? '対戦中' : `対戦相手を募集中(${onlineStatus.players}/${onlineStatus.max})`;
+    onlineBadgeHtml = `
+      <div class="card-online-badge">${badgeText}</div>
+    `;
+  }
+
+
+
+
   card.innerHTML = `
     <a class="card-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
-    <img class="card-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
+    <div class="card-thumb-wrap">
+      ${onlineBadgeHtml}
+      <img class="card-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
+      <video class="card-preview" src="previews/${game.slug}.webm" loop muted playsinline preload="none"></video>
+    </div>
     <div class="card-body">
       ${
         game.logo
@@ -152,15 +156,27 @@ games.forEach((game) => {
       ${rankingHtml}
     </div>
   `;
+
+  const previewVideo = card.querySelector<HTMLVideoElement>('.card-preview');
+  if (previewVideo) {
+    card.addEventListener('mouseenter', () => {
+      if (!document.body.classList.contains('pad-mode')) {
+        previewVideo.currentTime = 0;
+        previewVideo.play().catch(() => {});
+      }
+    });
+    card.addEventListener('mouseleave', () => {
+      previewVideo.pause();
+      previewVideo.currentTime = 0;
+    });
+  }
+
   card.querySelector('.card-link')!.addEventListener('click', (e) => {
-    rememberLastGame(game.slug);
-    // 全画面中はページ移動で解除されないよう、iframeで開く
     if (shouldOpenInFrame()) {
       e.preventDefault();
       launchSelected(game.slug);
     }
   });
-  list.appendChild(card);
 
   // バリアント切り替え対象ならローテーターに登録
   if (def && def.variants && def.variants.length > 1) {
@@ -175,9 +191,11 @@ games.forEach((game) => {
       });
     }
   }
-});
 
-// 取得したランキングで、全カードの表示を更新する(バリアントのあるカードは、いま出しているバリアントの分)
+  return card;
+}
+
+// 取得したランキングで、全カードの表示を更新する
 async function refreshBoards() {
   boards = await loadAllLeaderboards();
   for (const game of games) {
@@ -190,9 +208,74 @@ async function refreshBoards() {
     rowsEl.innerHTML = renderRowsHtml(entriesFor(game.slug, variant?.id));
   }
 }
-void refreshBoards();
 
-// ===== 時間経過でコース/難易度ランキングをローテーション切替 (4秒間隔) =====
+// ===== セクション描画 =====
+let isRendering = false;
+async function renderSections(targetSlug?: string | null, shouldScroll = false) {
+  if (isRendering) return;
+  isRendering = true;
+
+  try {
+    const statuses = await fetchAllOnlineStatuses();
+
+    // 1. オンライン開催中のゲーム
+    const onlineGames = games.filter((g) => statuses[g.slug]?.open === true);
+    const onlineSlugs = new Set(onlineGames.map((g) => g.slug));
+
+    // 2. ランキング対応ゲーム（オンライン開催中以外で hasScore: true）
+    const rankingGames = games.filter(
+      (g) => !onlineSlugs.has(g.slug) && GAME_LEADERBOARD_DEFS[g.slug]?.hasScore
+    );
+    const rankingSlugs = new Set(rankingGames.map((g) => g.slug));
+
+    // 3. その他ゲーム（上記以外）
+    const otherGames = games.filter(
+      (g) => !onlineSlugs.has(g.slug) && !rankingSlugs.has(g.slug)
+    );
+
+    // 再描画前の選択中ゲームのslugを保持（再描画後に選択位置を確実に復元するため）
+    const prevSelectedSlug = cards[current]?.dataset.slug;
+
+    // グリッドとローテーターを初期化
+    gridOnline.innerHTML = '';
+    gridRanking.innerHTML = '';
+    gridOther.innerHTML = '';
+    rotators.length = 0;
+
+    // オンライン対戦対応セクション（開催中ゲームがある時のみ表示）
+    if (onlineGames.length > 0) {
+      secOnline.style.display = '';
+      onlineGames.forEach((g) => gridOnline.appendChild(createCard(g, statuses[g.slug])));
+    } else {
+      secOnline.style.display = 'none';
+    }
+
+    // ランキング対応セクション
+    secRanking.style.display = rankingGames.length > 0 ? '' : 'none';
+    rankingGames.forEach((g) => gridRanking.appendChild(createCard(g)));
+
+    // その他セクション
+    secOther.style.display = otherGames.length > 0 ? '' : 'none';
+    otherGames.forEach((g) => gridOther.appendChild(createCard(g)));
+
+
+    cards = Array.from(document.querySelectorAll<HTMLDivElement>('.card'));
+    await refreshBoards();
+
+    // 選択位置の復元 (明示的な targetSlug または既存選択を維持。初回・リロード時は先頭カード)
+    const preferredSlug = targetSlug ?? prevSelectedSlug;
+    let preferredIndex = preferredSlug ? cards.findIndex((c) => c.dataset.slug === preferredSlug) : 0;
+    if (preferredIndex < 0) preferredIndex = 0;
+    goTo(preferredIndex);
+    if (shouldScroll) {
+      scrollCardIntoView(preferredIndex);
+    }
+  } finally {
+    isRendering = false;
+  }
+}
+
+// ===== 時間経過でコース/難易度ランキングをローテーション切替 =====
 const ROTATION_INTERVAL_MS = 4000;
 let rotationTimer: number | null = null;
 
@@ -201,7 +284,6 @@ function rotateVariants() {
     const def = GAME_LEADERBOARD_DEFS[rotator.slug];
     if (!def || !def.variants || def.variants.length <= 1) return;
 
-    // フェードアウト
     rotator.rowsEl.classList.add('fading');
     rotator.tagEl.style.opacity = '0';
 
@@ -213,7 +295,6 @@ function rotateVariants() {
       rotator.tagEl.textContent = curVariant.label;
       rotator.rowsEl.innerHTML = renderRowsHtml(entries);
 
-      // フェードイン
       rotator.rowsEl.classList.remove('fading');
       rotator.tagEl.style.opacity = '1';
     }, 220);
@@ -233,93 +314,154 @@ function stopRotation() {
   }
 }
 
-// 画面がアクティブな時だけタイマーを動かす
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopRotation();
-  else {
-    startRotation();
-    void refreshBoards();   // ゲームで記録した後に戻ってきたときのため
-  }
-});
-// 戻るボタン(bfcache)で復元されたときも最新にする
-window.addEventListener('pageshow', (e) => {
-  if (e.persisted) void refreshBoards();
-});
-startRotation();
-
-const cards = Array.from(list.querySelectorAll<HTMLDivElement>('.card'));
-
-// ===== 選択状態 =====
+// ===== 選択状態管理 =====
 let current = 0;
 
 function setPressed(pressed: boolean) {
   cards[current]?.classList.toggle('pressed', pressed);
 }
 
-function goTo(index: number) {
-  // 決定ボタンを押したままレバーを動かしたときは、押下演出も新しい選択先へ移す
-  const pressed = cards[current]?.classList.contains('pressed') ?? false;
-  setPressed(false);
-  current = (index + games.length) % games.length;
-  setPressed(pressed);
-  cards.forEach((card, i) => card.classList.toggle('selected', i === current));
+function scrollCardIntoView(index: number) {
+  const card = cards[index];
+  if (!card) return;
+  // 最上段(最初の行)のカードの場合はページ最上部までスクロールして「オンライン対戦対応」見出しを完全に見せる
+  const firstCardTop = cards[0]?.offsetTop ?? 0;
+  if (card.offsetTop <= firstCardTop + 15) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else {
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 
-const lastIndex = games.findIndex((game) => game.slug === readLastGame());
-goTo(lastIndex >= 0 ? lastIndex : 0);
-if (lastIndex > 0) {
-  cards[current]?.scrollIntoView({ block: 'nearest' });
+function goTo(index: number) {
+
+  if (cards.length === 0) return;
+  const pressed = cards[current]?.classList.contains('pressed') ?? false;
+  setPressed(false);
+  const prev = current;
+  current = (index + cards.length) % cards.length;
+  setPressed(pressed);
+  cards.forEach((card, i) => card.classList.toggle('selected', i === current));
+
+  if (document.body.classList.contains('pad-mode')) {
+    const prevVid = cards[prev]?.querySelector<HTMLVideoElement>('.card-preview');
+    if (prevVid) {
+      prevVid.pause();
+      prevVid.currentTime = 0;
+    }
+    const curVid = cards[current]?.querySelector<HTMLVideoElement>('.card-preview');
+    if (curVid) {
+      curVid.currentTime = 0;
+      curVid.play().catch(() => {});
+    }
+  }
 }
 
 // ===== アケコン / キーボード操作 =====
-// マウスを動かすと通常表示に戻す。アケコン/キー操作中はカーソルとhover表現を消して選択枠を出す。
 function setPadMode(on: boolean) {
+  const wasPadMode = document.body.classList.contains('pad-mode');
   document.body.classList.toggle('pad-mode', on);
+  if (wasPadMode !== on) {
+    const curVid = cards[current]?.querySelector<HTMLVideoElement>('.card-preview');
+    if (curVid) {
+      if (on) {
+        curVid.currentTime = 0;
+        curVid.play().catch(() => {});
+      } else {
+        curVid.pause();
+        curVid.currentTime = 0;
+      }
+    }
+  }
 }
 
 window.addEventListener('mousemove', (e) => {
-  // 一部ブラウザはカーソル表示切替やスクロール時にも移動量0のmousemoveを送るため、実際に動いたときだけ解除する
   if (e.movementX !== 0 || e.movementY !== 0) setPadMode(false);
 });
 
-// 一覧は画面幅で列数が変わるため、上下移動の幅は実際のレイアウトから数える
-function gridColumns(): number {
-  const top = cards[0]?.offsetTop;
-  const cols = cards.filter((card) => card.offsetTop === top).length;
-  return Math.max(1, cols);
-}
-
+// セクション分割後も自然に移動できる幾何ナビゲーション
 function moveSelection(dx: number, dy: number) {
+  if (cards.length === 0) return;
   setPadMode(true);
+
   if (dx !== 0) {
     goTo(current + dx);
   } else if (dy !== 0) {
-    const next = current + dy * gridColumns();
-    // 縦方向は折り返さず端で止める
-    if (next >= 0 && next < games.length) goTo(next);
+    const curCard = cards[current];
+    if (!curCard) return;
+    const curRect = curCard.getBoundingClientRect();
+    const curCenterX = curRect.left + curRect.width / 2;
+
+    if (dy > 0) {
+      // 下へ移動: 現在のカードの下端より下にあるカード群
+      const belowCards = cards
+        .map((c, i) => ({ card: c, index: i, rect: c.getBoundingClientRect() }))
+        .filter((item) => item.rect.top > curRect.top + 20);
+
+      if (belowCards.length > 0) {
+        const minTop = Math.min(...belowCards.map((b) => b.rect.top));
+        const nextRowCards = belowCards.filter((b) => Math.abs(b.rect.top - minTop) < 35);
+        nextRowCards.sort((a, b) => {
+          const distA = Math.abs(a.rect.left + a.rect.width / 2 - curCenterX);
+          const distB = Math.abs(b.rect.left + b.rect.width / 2 - curCenterX);
+          return distA - distB;
+        });
+        goTo(nextRowCards[0].index);
+      }
+    } else {
+      // 上へ移動: 現在のカードの上端より上にあるカード群
+      const aboveCards = cards
+        .map((c, i) => ({ card: c, index: i, rect: c.getBoundingClientRect() }))
+        .filter((item) => item.rect.bottom < curRect.bottom - 20);
+
+      if (aboveCards.length > 0) {
+        const maxTop = Math.max(...aboveCards.map((a) => a.rect.top));
+        const prevRowCards = aboveCards.filter((a) => Math.abs(a.rect.top - maxTop) < 35);
+        prevRowCards.sort((a, b) => {
+          const distA = Math.abs(a.rect.left + a.rect.width / 2 - curCenterX);
+          const distB = Math.abs(b.rect.left + b.rect.width / 2 - curCenterX);
+          return distA - distB;
+        });
+        goTo(prevRowCards[0].index);
+      }
+    }
   }
-  cards[current].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  scrollCardIntoView(current);
 }
 
-// ブラウザの「戻る」で bfcache から復元されたときに押下演出が残らないようにする
+
 window.addEventListener('pageshow', (e) => {
-  if (e.persisted) setPressed(false);
+  if (e.persisted) {
+    setPressed(false);
+    void renderSections();
+  }
 });
 
-function launchSelected(slug = games[current].slug) {
-  rememberLastGame(slug);
-  const url = `games/${slug}/`;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopRotation();
+  } else {
+    startRotation();
+    void renderSections();
+  }
+});
+
+function launchSelected(slug?: string) {
+  const targetSlug = slug ?? cards[current]?.dataset.slug;
+  if (!targetSlug) return;
+  const url = `games/${targetSlug}/`;
   if (shouldOpenInFrame()) {
     openGameFrame(url, () => {
       setPressed(false);
-      void refreshBoards();   // ゲームで記録した分を反映する
+      void renderSections(targetSlug, true);
     });
   } else {
     window.location.href = url;
   }
 }
 
-// ゲームをiframeで開いている間は、ゲーム側の操作(アケコン・キー)にハブが反応しないようにする
+// ゲームをiframeで開いている間はハブ側入力を抑制
 if (!isFramedHub) {
   createArcadeInput({
     onActivate() {
@@ -336,5 +478,70 @@ if (!isFramedHub) {
     onConfirmUp() {
       if (!isGameFrameOpen()) launchSelected();
     },
+  });
+}
+
+// オンライン開催状況の定期差分更新 (セクション構成が変わらない限りDOMを再生成せず、バッジの文字のみ更新)
+// ユーザーのスクロール位置を絶対に勝手に戻さない
+async function updateOnlineStatuses() {
+  try {
+    const statuses = await fetchAllOnlineStatuses();
+    const onlineGames = games.filter((g) => statuses[g.slug]?.open === true);
+    const newOnlineSlugs = new Set(onlineGames.map((g) => g.slug));
+
+    const currentOnlineCards = Array.from(gridOnline.querySelectorAll<HTMLDivElement>('.card'));
+    const currentOnlineSlugs = new Set(currentOnlineCards.map((c) => c.dataset.slug));
+
+    const changed =
+      newOnlineSlugs.size !== currentOnlineSlugs.size ||
+      [...newOnlineSlugs].some((s) => !currentOnlineSlugs.has(s));
+
+    if (changed) {
+      // 開催状態が変わった場合のみ再描画 (自動スクロールは一切しない)
+      await renderSections(null, false);
+    } else {
+      // 構成が変わらない通常時は、バッジのテキストだけをインプレース更新
+      currentOnlineCards.forEach((card) => {
+        const slug = card.dataset.slug;
+        if (!slug) return;
+        const status = statuses[slug];
+        const badge = card.querySelector<HTMLElement>('.card-online-badge');
+        if (badge && status) {
+          const isPlaying = status.phase === 'racing' || status.players >= status.max;
+          badge.textContent = isPlaying ? '対戦中' : `対戦相手を募集中(${status.players}/${status.max})`;
+        }
+      });
+    }
+  } catch {
+    // 通信エラー時は無視
+  }
+}
+
+if (!isFramedHub) {
+  // ブラウザのリロード時スクロール復元を抑止し、常にページの最上部から表示
+  if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+  }
+  window.scrollTo(0, 0);
+
+  // 初回描画とローテーション開始（リロード・初期表示時は常に最上部・先頭カードから表示）
+  void renderSections(null, false).then(() => {
+    window.scrollTo(0, 0);
+    startRotation();
+  });
+
+  // オンライン開催状況の定期ポーリング (5秒毎)
+  // 定期更新時はインプレース更新を行い、メニュー上部への自動スクロールを根絶
+  setInterval(() => {
+    if (!document.hidden && !isGameFrameOpen()) {
+      void updateOnlineStatuses();
+    }
+  }, 5000);
+
+  // ウィンドウフォーカス復帰時にも即座にステータスをチェック
+  window.addEventListener('focus', () => {
+    if (!isGameFrameOpen()) {
+      void updateOnlineStatuses();
+    }
   });
 }

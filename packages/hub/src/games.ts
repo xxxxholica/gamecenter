@@ -50,7 +50,7 @@ const allGames: GameEntry[] = [
     title: 'ストリートストライカー',
     englishTitle: 'STREET STRIKER',
     description:
-      '本格2D対戦格闘ゲーム。弱・中・強の通常技と投げに加え、ブレイクショック、パリィ、強化技、超必殺技を駆使して戦う。個性豊かな6人のファイターから選び、CPU戦や2P対戦で白熱の攻防を繰り広げろ！',
+      'パンチやキックで戦う2D対戦格闘ゲーム。個性いっぱいの6人から好きなファイターを選んで、CPUや友だちと1対1で勝負しよう。必殺技が決まると気持ちいい！',
     thumbnail: 'thumbnails/phaser-fighter.webp',
     logo: 'logos/phaser-fighter.webp',
     accent: '#00f0ff',
@@ -61,7 +61,7 @@ const allGames: GameEntry[] = [
     title: '剛体大相撲',
     englishTitle: 'SUMO SMASH 3D',
     description:
-      '土俵の上で力士同士がぶつかり合う3D相撲アクション。張り手や掴みで相手を吹き飛ばし、土俵の外へ押し出せ。CPU戦と2人対戦に対応。',
+      'ぶつかって、つかんで、土俵の外へ押し出せ！ひとりならCPUと取り組み、オンラインなら最大4人で大乱闘。ふっ飛ばされる悔しさも楽しさのうち。',
     thumbnail: 'thumbnails/sumo-smash-3d.webp',
     logo: 'logos/sumo-smash-3d.webp',
     accent: '#e63946',
@@ -72,7 +72,7 @@ const allGames: GameEntry[] = [
     title: 'テンパレラン',
     englishTitle: 'TEMPALE RUN',
     description:
-      '放課後の校舎を全力疾走。追いかけてくる先生の目を盗み、手裏剣と辞書ボムで妨害物を破壁しながら校門突破を目指すエンドレスランナー。廊下に潜む罠や障害物をかわして距離を稼ぎ、パワーアップを拾ってハイスコアに挑め。',
+      '放課後の校舎をダッシュ！追いかけてくる先生から逃げながら、手裏剣や辞書ボムで障害物を吹き飛ばそう。どこまで走れるかハイスコアに挑戦。',
     thumbnail: 'thumbnails/school-corridor-runner.webp',
     logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
@@ -83,7 +83,7 @@ const allGames: GameEntry[] = [
     title: 'ストリートビーボーイ',
     englishTitle: 'STREET B-BOY',
     description:
-      'ブレイクダンス少年が街を駆け抜けるアーケード2.5Dプラットフォーマー。スピン攻撃で段ボールやレーザーを蹴散らし、レールグラインドやサブウーファーのバウンドを駆使してゴールドカセットを狙え。',
+      'ブレイクダンスの少年が街を駆け抜けるアクション。回転で障害物を蹴散らして、レールをすべり、スピーカーで跳ねて、ゴールドカセットを集めよう。',
     thumbnail: 'thumbnails/street-b-boy.webp',
     logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
@@ -94,7 +94,7 @@ const allGames: GameEntry[] = [
     title: 'ミッドナイト・スカイウェイ',
     englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
     description:
-      '夜の都市に浮かぶ架空の高架高速を駆け抜けるタイムアタック。PLATEAUの3D都市モデルで再現したヘルシンキと東京丸の内の2ステージを、3台のマシンから選んで走り、自己ベストを更新しろ。',
+      '夜の高架高速を走るタイムアタック。PLATEAUの3D都市モデルで作ったヘルシンキと東京・丸の内を、好きなマシンで駆け抜けよう。オンラインなら最大4人でレース！',
     thumbnail: 'thumbnails/midnight-skyway.webp',
     logo: 'logos/midnight-skyway.webp',
     accent: '#00e5ff',
@@ -105,7 +105,7 @@ const allGames: GameEntry[] = [
     title: '単位増殖ラン',
     englishTitle: 'TANI RUNNER 124',
     description:
-      '微積分・線形代数のゲートを潜り抜けて単位を増殖させ、卒業要件124単位を目指す群衆ランナー。青ゲートで爆増、赤ゲートで激減。最後は余剰単位を射出してボーナス倍率を稼げ。',
+      'ゲートをくぐって単位を増やし、卒業に必要な124単位を目指そう。青いゲートで一気に増えて、赤いゲートは減ってしまう。最後は余った単位を発射してボーナス！',
     thumbnail: 'thumbnails/tani-runner-124.webp',
     logo: 'logos/tani-runner-124.webp',
     accent: '#ffe600',
@@ -116,7 +116,7 @@ const allGames: GameEntry[] = [
     title: 'えんにち射的',
     englishTitle: 'ARCADE CORK SHOOTER',
     description:
-      'むげん連射のお祭りアクション。コルク銃を撃ちまくって縁日の屋台に並ぶ景品を狙い撃ち、爆弾で一掃コンボも決めろ。制限時間内に獲得した景品の総重量でハイスコアを競う射的シューティング。',
+      'お祭りの屋台で、コルク銃を撃ちまくる射的ゲーム。景品をたくさん撃ち落として、集めた重さでハイスコアを競おう。爆弾で一気に倒すとスカッとする！',
     thumbnail: 'thumbnails/ennichi-shateki.webp',
     logo: 'logos/ennichi-shateki.webp',
     accent: '#ff8c00',
@@ -127,7 +127,7 @@ const allGames: GameEntry[] = [
     title: '極限ギリギリ選手権',
     englishTitle: 'EXTREME GIRI-GIRI ARCADE',
     description:
-      'ドリンクバー、目覚まし時計、スマホ充電など、日常に潜むギリギリを攻略する連続チャレンジ。レバー上だけのシンプルな操作で、あふれる寸前・止まる寸前の絶妙なタイミングを狙い、ギリギリ度の偏差値で競え。',
+      'ドリンクを注ぐ、時計を止める、風船をふくらませる…。日常のちょっとしたギリギリを、ボタンひとつのタイミングで攻めよう。あふれる寸前、割れる寸前が勝負！',
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
     logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',
@@ -138,7 +138,7 @@ const allGames: GameEntry[] = [
     title: 'サバイバー・スコアバトル',
     englishTitle: 'SURVIVOR SCORE BATTLE',
     description:
-      'プレイヤー1人 vs 7人のCPUによるエンドレス・サバイバル。周囲を回転するブレード武器と、フィールド上の剣を奪い合い、群がる敵とボスを倒してスコアを稼げ。',
+      '自分ひとり対CPU7人のサバイバル。回るブレードで敵を倒して、フィールドの剣を奪い合おう。ボスも登場。どこまで生き残ってスコアを伸ばせるか！',
     thumbnail: 'thumbnails/survivor-score-battle.webp',
     logo: 'logos/survivor-score-battle.webp',
     accent: '#00e5ff',

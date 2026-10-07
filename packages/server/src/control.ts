@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { GameStatus, OpenOptions } from './host.ts';
 import { RANDOM } from './vote.ts';
 
-export const DEFAULT_SOCKET = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'control.sock');
+export const DEFAULT_SOCKET = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'control.sock');   // data/ はサービスが書き込める唯一の場所
 
 /** 開放時間のランダムは、この中(分)から開放した時に1回だけ選ぶ。 */
 export const RANDOM_MINUTES = [60, 120, 180, 360];
@@ -96,6 +96,7 @@ export function handleAdminRequest(h: ControlHandlers, method: string, url: URL)
 }
 
 export function startControl(socketPath: string, h: ControlHandlers): http.Server {
+  fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
   try {
     fs.unlinkSync(socketPath);              // 前回の異常終了で残ったソケット
   } catch { /* なければ何もしない */ }
@@ -104,8 +105,15 @@ export function startControl(socketPath: string, h: ControlHandlers): http.Serve
     const r = url ? handleAdminRequest(h, req.method ?? 'GET', url) : { code: 400, body: { error: 'bad_request' } };
     res.writeHead(r.code, { 'content-type': 'application/json' }).end(JSON.stringify(r.body));
   });
-  server.listen(socketPath, () => {
-    fs.chmodSync(socketPath, 0o600);        // 所有ユーザーだけが接続できる
-  });
+  // ソケットファイルは作られた瞬間から所有者専用にする(listen 後の chmod だけだと、その間は umask 次第で他ユーザーが繋げる)。
+  // umask はプロセス全体に効くので、同期的に listen を始めた直後に元へ戻す(ソケットの作成は listen 呼び出し内で行われる)。
+  const prevUmask = process.umask(0o177);
+  try {
+    server.listen(socketPath, () => {
+      fs.chmodSync(socketPath, 0o600);      // 念のため明示する
+    });
+  } finally {
+    process.umask(prevUmask);
+  }
   return server;
 }

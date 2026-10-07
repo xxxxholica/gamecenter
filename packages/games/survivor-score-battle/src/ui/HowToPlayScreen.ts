@@ -1,5 +1,6 @@
 import { InputState } from '../types';
 import { SoundManager } from '../audio/SoundManager';
+import { getInputMode } from '../../../../shared/arcadeGuide';
 
 export class HowToPlayScreen {
   public update(input: InputState, soundManager: SoundManager): boolean {
@@ -28,13 +29,21 @@ export class HowToPlayScreen {
     ctx.fillText('遊び方', width / 2, 40);
     ctx.shadowBlur = 0;
 
+    const isPad = getInputMode() === 'gamepad';
+    const moveDesc = isPad
+      ? 'レバーまたは十字キーで8方向移動。通常弾攻撃は完全自動！敵の位置を把握し、回避と位置取りに集中せよ。'
+      : 'WASD または 矢印キーで8方向移動。通常弾攻撃は完全自動！敵の位置を把握し、回避と位置取りに集中せよ。';
+    const specialDesc = isPad
+      ? 'ゲージ100%で必殺技ボタン(Y/LB/RB/RT)！超巨大化した無数の剣が超高速回転し、周囲の敵群とライバルを一瞬で薙ぎ払う！'
+      : 'ゲージ100%で必殺技キー(Shift/Space)！超巨大化した無数の剣が超高速回転し、周囲の敵群とライバルを一瞬で薙ぎ払う！';
+
     // 4 Explanation Cards
     const cardW = 380;
     const cardH = 340;
     const cards = [
       {
         title: '基本操作 & 自動攻撃',
-        desc: 'レバー/十字キー/WASDで8方向移動。通常弾攻撃は完全自動！敵の位置を把握し、回避と位置取りに集中せよ。',
+        desc: moveDesc,
       },
       {
         title: 'エンドレス PvPvE 斬り合い',
@@ -46,7 +55,7 @@ export class HowToPlayScreen {
       },
       {
         title: '必殺技 SWORD STORM',
-        desc: 'ゲージ100%で必殺技ボタン！超巨大化した無数の剣が超高速回転し、周囲の敵群とライバルを一瞬で薙ぎ払う！',
+        desc: specialDesc,
       },
     ];
 

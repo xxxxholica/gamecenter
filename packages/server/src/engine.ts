@@ -14,13 +14,13 @@ export interface Peer {
   close(code: number): void;
 }
 
-export interface Member {
+export interface Member<D = unknown> {
   peer: Peer;
   /** 参加順の空き番号で自動採番(PLAYER 1〜) */
   name: string;
   loaded: boolean;
-  /** ゲーム固有のデータ(GameModule が自由に使う) */
-  data: any;
+  /** ゲーム固有のデータ(GameModule<D> が onJoin で初期化して使う) */
+  data: D;
 }
 
 /** 管理画面に出すゲーム固有の設定項目(選択肢の中から選ぶ)。 */
@@ -32,36 +32,37 @@ export interface ConfigField {
 
 export type RoomPhase = 'lobby' | 'loading' | 'racing';
 
-export interface GameModule {
+/** D: 参加者ごとのゲーム固有データ(Member.data)の型 */
+export interface GameModule<D = any> {
   readonly id: string;
   readonly maxPlayers: number;
   /** 実行(racing)の最大時間。誰も終わらせなくても、この時間で強制終了して空に戻す */
   readonly maxPlayMs: number;
   readonly config: ConfigField[];
-  /** 参加者に割り当てる名前の候補リスト。未指定なら PLAYER 1〜4 */
+  /** 参加者に割り当てる名前の候補リスト(使われていない名前からランダムに選ぶ)。未指定なら PLAYER 1〜4 */
   readonly playerNames?: string[];
-  attach(room: Room): void;
+  attach(room: Room<D>): void;
   getConfig(): Record<string, string>;
   /** 主催者の設定を反映する(不正な値は無視する) */
   setConfig(cfg: Record<string, string>): void;
   /** 次のレースの確定値(ランダムを引いた結果など)。管理画面の表示用 */
   resolved(): Record<string, string>;
-  onJoin(m: Member): void;
-  onLeave(m: Member): void;
+  onJoin(m: Member<D>): void;
+  onLeave(m: Member<D>): void;
   /** 参加者を全員外して空に戻った */
   onReset(): void;
   /** 待機表示に出す参加者ごとの情報(名前以外) */
-  playerInfo(m: Member): object;
+  playerInfo(m: Member<D>): object;
   /** 待機表示に出す全体の情報 */
   roomExtra(): object;
   /** 待機中の希望。エラーコード(クライアントへ error として返す)か null */
-  onPref(m: Member, msg: Msg): string | null;
+  onPref(m: Member<D>, msg: Msg): string | null;
   /** 開始の確定(未選択の自動決定など)。全員へ送る start メッセージを返す */
   prepareStart(): Msg;
   /** 全員のロードが揃った(または待ち切れた)。全員へ送る go メッセージを返す */
   onGo(): Msg;
   /** 実行中のメッセージ(state/finish など)。不正な値は黙って捨てる */
-  onPlayMessage(m: Member, msg: Msg): void;
+  onPlayMessage(m: Member<D>, msg: Msg): void;
   /** 実行が完了した(全員ゴールなど)か。メッセージ処理・退出のたびに確認される */
   isDone(): boolean;
   /** 最終の結果メッセージ */
@@ -73,16 +74,16 @@ const AUTO_START_MS = (Number(process.env.ONLINE_AUTO_START_SEC) || 30) * 1000;
 /** ロードが終わらない参加者を待つ上限。超えたら待たずに始める。 */
 const LOAD_WAIT_MS = 30000;
 
-export class Room {
-  readonly game: GameModule;
+export class Room<D = any> {
+  readonly game: GameModule<D>;
   phase: RoomPhase = 'lobby';
   countdownEnd: number | null = null;
-  readonly members = new Map<number, Member>();
+  readonly members = new Map<number, Member<D>>();
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   private countdownTimer: ReturnType<typeof setTimeout> | null = null;
   private maxPlayTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(game: GameModule) {
+  constructor(game: GameModule<D>) {
     this.game = game;
     game.attach(this);
   }
@@ -99,7 +100,9 @@ export class Room {
     let name: string | undefined;
     const pool = this.game.playerNames;
     if (pool && pool.length > 0) {
-      name = pool.find((candidate) => !taken.has(candidate));
+      // 参加順ではなく、まだ使われていない名前からランダムに選ぶ
+      const free = pool.filter((candidate) => !taken.has(candidate));
+      if (free.length > 0) name = free[Math.floor(Math.random() * free.length)];
       if (!name) {
         let n = 1;
         while (taken.has(`${pool[0]} ${n}`)) n++;
@@ -111,7 +114,7 @@ export class Room {
       while (taken.has(`PLAYER ${n}`)) n++;
       name = `PLAYER ${n}`;
     }
-    const m: Member = { peer, name, loaded: false, data: null };
+    const m: Member<D> = { peer, name, loaded: false, data: undefined as D };   // data は直後の onJoin で初期化される
     this.members.set(peer.id, m);
     this.game.onJoin(m);
     log(`${this.game.id} join id=${peer.id} name=${m.name} players=${this.members.size}`);

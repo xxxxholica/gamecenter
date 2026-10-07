@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" fill="none">
+  <!-- 白いメモ帳の控えめな落書き (かなり数を減らした余白重視の配置) -->
+
+  <!-- 1. 黄色い小さな星 ★ (左上) -->
+  <g transform="translate(140, 150) rotate(-6)">
+    <path d="M12 2 L15 8 L22 9 L17 14 L18 21 L12 17 L6 21 L7 14 L2 9 L9 8 Z" fill="#fef08a" stroke="#eab308" stroke-width="1.8" stroke-linejoin="round"/>
+  </g>
+
+  <!-- 2. ピンクの小さな音符 ♪ (右上) -->
+  <g transform="translate(620, 160) rotate(12)">
+    <circle cx="7" cy="19" r="5" fill="#fbcfe8" stroke="#ec4899" stroke-width="1.8"/>
+    <path d="M12 19 V5 C12 5 19 3 20 9" stroke="#ec4899" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- 3. ミントグリーンの紙飛行機 ✈ (中央左) -->
+  <g transform="translate(260, 430) rotate(-18)">
+    <path d="M0 10 L26 0 L15 24 L12 13 Z" fill="#d1fae5" stroke="#10b981" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M12 13 L26 0" stroke="#10b981" stroke-width="1.4"/>
+  </g>
+
+  <!-- 4. パープルの小さなゲームコントローラー 🎮 (中央右) -->
+  <g transform="translate(670, 480) rotate(-8)">
+    <rect x="0" y="3" width="28" height="16" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.8"/>
+    <path d="M6 11 H12 M9 8 V14" stroke="#6366f1" stroke-width="1.6" stroke-linecap="round"/>
+    <circle cx="19" cy="9.5" r="1.4" fill="#ec4899"/>
+    <circle cx="23" cy="12.5" r="1.4" fill="#eab308"/>
+  </g>
+
+  <!-- 5. コーラルピンクの小さなハート ♥ (左下) -->
+  <g transform="translate(180, 680) rotate(10)">
+    <path d="M11 19 C11 19 1 12 1 6 C1 2 5 1 8 3 C9 4 11 6 11 6 C11 6 13 4 14 3 C17 1 21 2 21 6 C21 12 11 19 11 19 Z" fill="#fecdd3" stroke="#f43f5e" stroke-width="1.8" stroke-linejoin="round"/>
+  </g>
+
+  <!-- 6. シアンの小さなキラキラ ✦ (右下) -->
+  <g transform="translate(520, 710)">
+    <path d="M10 0 C10 5 15 10 20 10 C15 10 10 15 10 20 C10 15 5 10 0 10 C5 10 10 5 10 0 Z" fill="#cffafe" stroke="#06b6d4" stroke-width="1.8"/>
+  </g>
+</svg>

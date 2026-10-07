@@ -153,7 +153,7 @@ export class InputManager {
       confirm = true;
     }
 
-    if (this.keysDown.has('Escape') || this.keysDown.has('KeyX')) {
+    if (this.keysDown.has('Backspace') || this.keysDown.has('Escape') || this.keysDown.has('KeyX')) {
       cancel = true;
     }
 
@@ -168,7 +168,7 @@ export class InputManager {
       special = true;
     }
 
-    if (this.keysDown.has('KeyP') || this.keysDown.has('Escape')) {
+    if (this.keysDown.has('KeyP') || this.keysDown.has('Backspace') || this.keysDown.has('Escape')) {
       pause = true;
     }
 
@@ -223,6 +223,7 @@ export class InputManager {
     }
     if (action === 'cancel') {
       return (
+        this.prevKeysDown.has('Backspace') ||
         this.prevKeysDown.has('Escape') ||
         this.prevKeysDown.has('KeyX') ||
         !!this.prevGamepadButtons[1]
@@ -245,6 +246,7 @@ export class InputManager {
     if (action === 'pause') {
       return (
         this.prevKeysDown.has('KeyP') ||
+        this.prevKeysDown.has('Backspace') ||
         this.prevKeysDown.has('Escape') ||
         !!this.prevGamepadButtons[9] ||
         !!this.prevGamepadButtons[8]

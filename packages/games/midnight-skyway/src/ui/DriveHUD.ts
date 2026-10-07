@@ -1,5 +1,6 @@
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
+import { returnToHub } from '../../../../shared/homeReturn';
 import * as THREE from 'three';
 import { setText, setWidth, setDisplay } from '../../../../shared/hudDom';
 import { MapBase } from '../maps/MapBase';
@@ -281,7 +282,7 @@ export class DriveHUD {
 
     // Result modal buttons
     document.getElementById('res-btn-exit')?.addEventListener('click', () => {
-      window.location.href = '../../';
+      returnToHub();
     });
     document.getElementById('res-btn-retry')?.addEventListener('click', () => {
       this.hideResultModal();
@@ -586,7 +587,7 @@ export class DriveHUD {
     else if (p.any(0)) this.menuButtons(modal)[this.padFocus]?.click();
     else if (p.any(1)) {
       if (modal === this.pauseModalEl) this.hidePauseModal();
-      else if (modal === this.resultModalEl) window.location.href = '../../';
+      else if (modal === this.resultModalEl) returnToHub();
     }
   }
 
@@ -612,9 +613,9 @@ export class DriveHUD {
       if (modal === this.pauseModalEl) {
         e.preventDefault();
         this.hidePauseModal();
-      } else if (modal === this.resultModalEl) {
+      } else if (modal === this.resultModalEl && e.code === 'Escape') {  // Backspace は長押しでホームへ(共通)
         e.preventDefault();
-        window.location.href = '../../';
+        returnToHub();
       }
     }
   }

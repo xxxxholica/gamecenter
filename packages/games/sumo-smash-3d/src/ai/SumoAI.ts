@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SumoFighter, FighterActions, FighterMoveInput } from '../entities/SumoFighter';
+import type { SimFighter, FighterActions, FighterMoveInput } from '../../../../shared/sumoSim/SimFighter';
 
 export interface AiPlan {
   move: FighterMoveInput;
@@ -11,7 +11,7 @@ export interface AiPlan {
  * 三すくみ(張り手 > タメ、タメ > つかみ、つかみ > 張り手)を意識して手を選ぶ。
  */
 export class SumoAI {
-  private fighter: SumoFighter;
+  private fighter: SimFighter;
   private thinkTimer: number = 0;
 
   private move: FighterMoveInput = { x: 0, z: 0, isMoving: false };
@@ -25,11 +25,11 @@ export class SumoAI {
   private chargeTimer: number = 0;
   private targetChargeDuration: number = 0.5;
 
-  constructor(fighter: SumoFighter) {
+  constructor(fighter: SimFighter) {
     this.fighter = fighter;
   }
 
-  public update(dt: number, opponent: SumoFighter): AiPlan {
+  public update(dt: number, opponent: SimFighter): AiPlan {
     this.thinkTimer += dt;
 
     const myPos = new THREE.Vector3(this.fighter.body.position.x, 0, this.fighter.body.position.z);
@@ -76,7 +76,7 @@ export class SumoAI {
     this.move = { x: dir.x, z: dir.z, isMoving: true };
   }
 
-  private plan(myPos: THREE.Vector3, oppPos: THREE.Vector3, opp: SumoFighter) {
+  private plan(myPos: THREE.Vector3, oppPos: THREE.Vector3, opp: SimFighter) {
     const me = this.fighter;
     this.move = { x: 0, z: 0, isMoving: false };
 

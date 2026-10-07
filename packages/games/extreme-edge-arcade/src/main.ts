@@ -53,21 +53,6 @@ function initApp() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // Fullscreen toggle on 'F'
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyF') {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-    if (e.code === 'Escape') {
-      // ホーム(ゲームセンターハブ)へ戻る。games/<slug>/配下からルートへは2階層上。
-      window.location.href = '../../';
-    }
-  });
-
   // Animation Loop
   const clock = new THREE.Clock();
 
