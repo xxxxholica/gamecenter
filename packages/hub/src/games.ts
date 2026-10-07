@@ -144,6 +144,17 @@ const allGames: GameEntry[] = [
     accent: '#00e5ff',
     developer: KURENAI_BEAT,
   },
+  {
+    slug: 'tower-stack',
+    title: 'グラグラタワー',
+    englishTitle: 'TOWER STACK',
+    description:
+      '落ちてくるブロックを積み上げて高さを競う物理パズル。3個落としたらゲームオーバー。突風やいん石などの邪魔イベントを、ツタ・セメント・バリア・回復のアイテムで乗り切れ。',
+    thumbnail: 'thumbnails/tower-stack.webp',
+    logo: 'logos/tower-stack.webp',
+    accent: '#ffd166',
+    developer: THOUSANDL000,
+  },
 ];
 
 export const games: GameEntry[] = allGames.filter((game) => !game.hidden);

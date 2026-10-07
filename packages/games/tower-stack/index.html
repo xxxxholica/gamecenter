@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>グラグラタワー - TOWER STACK</title>
+    <style>
+      :root { --accent: #ffd166; }
+      * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; color: #fff;
+        font-family: system-ui, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+
+      /* ── プレイ中のHUD ── */
+      #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+      .panel { position: absolute; padding: 12px 16px; background: rgba(8, 8, 14, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.14); border-left: 4px solid var(--accent);
+        border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+      .label { font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: var(--accent); }
+      .value { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: 34px;
+        font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: 0.02em; }
+      .value small { font-size: 16px; margin-left: 4px; }
+      #left { top: 14px; left: 14px; min-width: 180px; }
+      #left .row + .row { margin-top: 10px; }
+      #right { top: 14px; right: 14px; width: 180px; }
+      #right .row + .row { margin-top: 12px; }
+
+      #drops { display: flex; gap: 6px; margin-top: 5px; }
+      #drops i { width: 26px; height: 26px; border-radius: 5px; background: var(--accent);
+        border: 2px solid rgba(255, 255, 255, 0.85); }
+      #drops i.lost { background: transparent; border-color: rgba(255, 255, 255, 0.28); }
+
+      #next { display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(2, 20px);
+        gap: 2px; margin-top: 6px; }
+      #next i { border-radius: 3px; }
+
+      #items { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; min-height: 96px; }
+      .item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px;
+        font-size: 14px; font-weight: 800; color: #111; opacity: 0.5; }
+      .item:first-child { opacity: 1; outline: 2px solid #fff; }
+      .item.glue { background: #7ddc6a; }
+      .item.cement { background: #cfd6dd; }
+      .item.shield { background: #7bdff2; }
+      .item.heal { background: #ff8fa3; }
+      .empty { font-size: 12px; opacity: 0.6; line-height: 1.5; }
+      #status { font-size: 12px; font-weight: 700; line-height: 1.5; min-height: 18px; color: var(--accent); }
+
+      #banner { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); padding: 10px 32px 12px;
+        font-family: 'Impact', 'Arial Black', system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+        font-size: 30px; letter-spacing: 0.06em; white-space: nowrap; text-align: center;
+        background: rgba(8, 8, 14, 0.88); border-top: 3px solid #e63946; border-bottom: 3px solid #e63946;
+        color: #ff8a93; display: none; }
+      #banner.good { border-color: #4fd6a0; color: #9af0cf; }
+      #banner small { display: block; margin-top: 2px; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+        font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
+
+      /* ── リザルト ── */
+      #result-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(5, 7, 18, 0.72); z-index: 100; }
+      #result-modal.show { display: flex; }
+      .result-content { width: min(92vw, 460px); padding: clamp(14px, 3vh, 28px) 24px; text-align: center;
+        background: rgba(8, 8, 14, 0.94); border: 2px solid var(--accent);
+        box-shadow: 0 0 34px rgba(255, 209, 102, 0.35); animation: resultPop 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+      @keyframes resultPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      .result-badge { font-size: 12px; font-weight: 700; letter-spacing: 0.3em; color: var(--accent); }
+      .result-title { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(30px, 6vh, 46px);
+        letter-spacing: 0.06em; margin-top: 4px; }
+      .result-label { margin-top: clamp(6px, 1.6vh, 14px); font-size: 12px; font-weight: 700; letter-spacing: 0.24em; opacity: 0.7; }
+      #result-score { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(44px, 10vh, 76px);
+        line-height: 1.05; color: var(--accent); font-variant-numeric: tabular-nums; }
+      #result-detail { font-size: 15px; font-weight: 700; }
+      #result-record { min-height: 22px; margin: 4px 0 clamp(8px, 2vh, 18px); font-size: 14px; font-weight: 700; opacity: 0.85; }
+      #result-record.new { color: #7ddc6a; opacity: 1; }
+      #result-ranking { margin: 0 auto clamp(8px, 2vh, 16px); width: min(100%, 340px); font-size: 14px; }
+      .rank-head { font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); margin-bottom: 4px; }
+      .rank-row { display: flex; align-items: center; gap: 10px; padding: 3px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        font-weight: 700; font-variant-numeric: tabular-nums; }
+      .rank-row .rank-no { width: 2.6em; text-align: left; }
+      .rank-row.r1 .rank-no { color: #ffd700; }
+      .rank-row.r2 .rank-no { color: #d0e0f0; }
+      .rank-row.r3 .rank-no { color: #cd7f32; }
+      .rank-row .rank-name { flex: 1; text-align: left; }
+      .rank-row.empty { opacity: 0.45; justify-content: center; }
+      .rank-row.empty .rank-name { text-align: left; }
+      .rank-row.me { background: rgba(255, 209, 102, 0.22); outline: 1px solid var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <div id="left" class="panel">
+        <div class="row"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
+        <div class="row"><div class="label">いまの高さ</div><div class="value"><span id="height">0.0</span><small>m</small></div></div>
+        <div class="row"><div class="label">残機</div><div id="drops"><i></i><i></i><i></i></div></div>
+      </div>
+      <div id="right" class="panel">
+        <div class="row"><div class="label">NEXT</div><div id="next"></div></div>
+        <div class="row"><div class="label">アイテム</div><div id="items"></div></div>
+        <div class="row"><div id="status"></div></div>
+      </div>
+      <div id="banner"></div>
+    </div>
+
+    <div id="result-modal">
+      <div class="result-content">
+        <div class="result-badge">◆ ブロックを3個落とした ◆</div>
+        <h2 class="result-title">GAME OVER</h2>
+        <div class="result-label">SCORE</div>
+        <div id="result-score">0</div>
+        <div id="result-detail"></div>
+        <div id="result-record"></div>
+        <div id="result-ranking"></div>
+        <div id="result-menu">
+          <button id="result-btn-retry">再挑戦</button>
+          <button id="result-btn-title">タイトルに戻る</button>
+          <button id="result-btn-exit">ゲームを終了</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

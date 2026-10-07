@@ -8,6 +8,7 @@ import schoolRunnerLogo from './logos/school-corridor-runner.webp';
 import streetBBoyLogo from './logos/street-b-boy.webp';
 import sumoSmashLogo from './logos/sumo-smash-3d.webp';
 import taniRunnerLogo from './logos/tani-runner-124.webp';
+import towerStackLogo from './logos/tower-stack.webp';
 
 export const GAME_LOGOS: Record<string, string> = {
   'ennichi-shateki': ennichiLogo,
@@ -17,6 +18,7 @@ export const GAME_LOGOS: Record<string, string> = {
   'street-b-boy': streetBBoyLogo,
   'sumo-smash-3d': sumoSmashLogo,
   'tani-runner-124': taniRunnerLogo,
+  'tower-stack': towerStackLogo,
 };
 
 export interface ArcadeTitleScreenOptions {

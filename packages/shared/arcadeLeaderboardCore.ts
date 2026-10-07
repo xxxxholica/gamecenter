@@ -159,6 +159,13 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
   },
+  'tower-stack': {
+    slug: 'tower-stack',
+    hasScore: true,
+    scoreOrder: 'desc',
+    unit: 'pts',
+    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
+  },
   'phaser-fighter': {
     slug: 'phaser-fighter',
     hasScore: false,
