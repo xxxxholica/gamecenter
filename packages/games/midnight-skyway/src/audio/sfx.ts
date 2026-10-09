@@ -226,4 +226,49 @@ export class Sfx {
       e.skidGain.disconnect();
     }, 400);
   }
+
+  /** マシンガン発射音 (バースト射撃) */
+  public machineGun(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.06, 'bandpass', 1200, 300, 0.35, 0.002);
+    this.tone('sawtooth', 160, 40, t, 0.05, 0.25);
+  }
+
+  /** ミサイル発射音 (ロケット点火 & 推進シュォォ音) */
+  public missileLaunch(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.35, 'bandpass', 600, 1800, 0.45, 0.03);
+    this.tone('triangle', 180, 420, t, 0.3, 0.3);
+  }
+
+  /** 被弾音 (金属スパーク・打撃) */
+  public bulletHit(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.08, 'highpass', 2000, 800, 0.3, 0.001);
+    this.tone('square', 320, 110, t, 0.06, 0.2);
+  }
+
+  /** 爆発音 (ズドォォン！) */
+  public explosion(heavy = false): void {
+    const t = this.ctx.currentTime;
+    const dur = heavy ? 1.4 : 0.8;
+    const vol = heavy ? 0.7 : 0.5;
+    this.noiseHit(t, dur, 'lowpass', 450, 40, vol, 0.01);
+    this.tone('sine', 120, 25, t, dur * 0.7, vol * 0.8);
+    this.tone('triangle', 80, 20, t, dur * 0.9, vol * 0.6);
+  }
+
+  /** 道路崩落音 (ゴゴゴ…ガラガラ…) */
+  public roadCollapse(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 1.6, 'lowpass', 280, 60, 0.6, 0.08);
+    this.tone('sawtooth', 65, 25, t, 1.2, 0.4);
+  }
+
+  /** 道路回復音 (キラララ…) */
+  public roadRestore(): void {
+    const t = this.ctx.currentTime;
+    this.tone('sine', 380, 760, t, 0.35, 0.25);
+    this.tone('triangle', 580, 1160, t + 0.1, 0.4, 0.2);
+  }
 }

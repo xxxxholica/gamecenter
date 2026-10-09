@@ -20,6 +20,10 @@ import {
 } from '../../shared/arcadeLeaderboard';
 import { fetchAllOnlineStatuses } from '../../shared/online/onlineStatus';
 import type { PublicStatus } from '../../shared/online/core';
+import { initHubMobileBlock, isMobileDevice } from '../../shared/mobileBlock';
+
+// モバイル端末（スマホ・タブレット）アクセス制限の適用
+initHubMobileBlock();
 
 // ゲームのiframeの中に読み込まれたハブは、親にゲームを閉じさせるだけで何もしない
 if (isFramedHub) {
@@ -38,11 +42,11 @@ if (isFramedHub) {
 // ===== ランキングHTML生成 =====
 /** クリアした記録は、名前のすぐ右に ★ を付けて表示する */
 function renderRowsHtml(entries: LeaderboardEntry[]): string {
-  const top3 = entries.slice(0, 3);
-  const posLabels = ['1ST', '2ND', '3RD'];
-  const posClasses = ['gold', 'silver', 'bronze'];
+  const top5 = entries.slice(0, 5);
+  const posLabels = ['1ST', '2ND', '3RD', '4TH', '5TH'];
+  const posClasses = ['gold', 'silver', 'bronze', 'fourth', 'fifth'];
 
-  return top3
+  return top5
     .map((e, idx) => {
       const isEmpty = e.name === '記録なし';
       const safeName = escapeHtml(e.name);
@@ -61,7 +65,7 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
 let boards: Record<string, LeaderboardEntry[]> = {};
 
 function entriesFor(slug: string, variantId?: string): LeaderboardEntry[] {
-  return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 3);
+  return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 5);
 }
 
 // ===== セクション要素 =====
@@ -448,6 +452,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function launchSelected(slug?: string) {
+  if (isMobileDevice()) {
+    return;
+  }
   const targetSlug = slug ?? cards[current]?.dataset.slug;
   if (!targetSlug) return;
   const url = `games/${targetSlug}/`;

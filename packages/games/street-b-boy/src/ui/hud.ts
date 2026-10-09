@@ -162,6 +162,7 @@ export class HudManager {
   public onNameEntryClosed?: () => void;
 
   public showResult(status: 'clear' | 'gameover', score: number): void {
+    this.hideCenterBanner();
     this.elResultOverlay.style.display = 'flex';
     if (status === 'clear') {
       this.elResultStatusTitle.textContent = 'ALL CLEAR!';
@@ -177,12 +178,13 @@ export class HudManager {
       score,
       modal: { title: 'ダンス記録', scoreDisplay: `${score.toLocaleString()} pts`, themeClass: 'theme-street', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
-      onName: (name) => void saveLeaderboardScore('street-b-boy', score, name, undefined, undefined, { cleared: status === 'clear' }),
+      onName: (name) => saveLeaderboardScore('street-b-boy', score, name, undefined, undefined, { cleared: status === 'clear' }),
       onClosed: () => this.onNameEntryClosed?.(),
     });
   }
 
   public hideResult(): void {
+    this.hideCenterBanner();
     this.elResultOverlay.style.display = 'none';
   }
 

@@ -34,7 +34,7 @@ export interface ArcadeNameEntryModalOptions {
   initialName?: string;
   /** 表示までの待ち時間(ms)。リザルトのスコアを先に見せたいときに指定する。 */
   delayMs?: number;
-  onComplete: (name: string) => void;
+  onComplete: (name: string) => Promise<unknown> | void;
 }
 
 let stylesInjected = false;
@@ -835,24 +835,35 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   };
 
   let isFinishing = false;
-  const finishAndSubmit = (name: string) => {
+  const finishAndSubmit = async (name: string) => {
     if (isFinishing) return;
     isFinishing = true;
 
     core?.destroy();
 
     const completeLayer = document.getElementById('ane-complete-layer');
+    const completeTitleEl = completeLayer?.querySelector<HTMLElement>('.ane-complete-title');
     const completeNameEl = document.getElementById('ane-complete-name-val');
     if (completeLayer && completeNameEl) {
       completeNameEl.textContent = name;
       completeLayer.style.display = 'flex';
     }
 
-    // 0.85秒表示してからモーダルを破棄し、コールバックを呼ぶ
-    window.setTimeout(() => {
+    // 通信の完了と最低限のアニメーション表示(850ms)の両方を待つ。
+    // 通信中に画面遷移(iframeの破棄)が起きてWebKit/Safari等でリクエストが強制切断されるのを防ぐ。
+    const minWait = new Promise((resolve) => window.setTimeout(resolve, 850));
+    try {
+      const [, res] = await Promise.all([minWait, Promise.resolve(options.onComplete(name))]);
+      // 同時に他のプレイヤーが登録して枠外に押し出された場合(rank <= 0)のフィードバック
+      if (res && typeof res === 'object' && 'rank' in res && (res as { rank: number }).rank <= 0) {
+        if (completeTitleEl) completeTitleEl.textContent = '枠外となりました';
+        await new Promise((resolve) => window.setTimeout(resolve, 800));
+      }
+    } catch (e) {
+      console.warn('Name entry onComplete error:', e);
+    } finally {
       cleanup();
-      options.onComplete(name);
-    }, 850);
+    }
   };
 
   let core: ArcadeNameEntryCore | null = null;
@@ -996,8 +1007,8 @@ export interface HighScoreEntryFlowOptions {
   modal: Omit<ArcadeNameEntryModalOptions, 'rankDisplay' | 'onComplete'>;
   /** 順位の確認中と名前入力中は true、それ以外は false。結果画面の操作を止めるために使う */
   setBlocked: (blocked: boolean) => void;
-  /** 名前が決まったとき(ランキングへの登録はここで行う) */
-  onName: (name: string) => void;
+  /** 名前が決まったとき(ランキングへの登録はここで行う)。Promise を返すと通信完了まで操作ブロックを維持する */
+  onName: (name: string) => Promise<unknown> | void;
   /** 名前入力が閉じたあと(操作の受付を戻した後)。決定ボタンの誤爆防止の待ちなどに使う */
   onClosed?: () => void;
 }
@@ -1018,10 +1029,13 @@ export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): void 
     mountNameEntryModal({
       ...modal,
       rankDisplay: `第${check.rank}位`,
-      onComplete: (name) => {
-        setBlocked(false);
-        onClosed?.();
-        onName(name);
+      onComplete: async (name) => {
+        try {
+          return await onName(name);
+        } finally {
+          setBlocked(false);
+          onClosed?.();
+        }
       },
     });
   });

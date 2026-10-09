@@ -1,9 +1,10 @@
 import { CarSpecs } from '../models/CarBase';
 import { CAR_PALETTES, type CarType, type ColorPreset } from '../../../../shared/carPalette';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
+import { carOutlineSvg } from './carOutline';
 
 export interface CarSelectEvents {
-  onSelectCar: (carType: 'trail_j' | 'cross_j' | 'truck_j') => void;
+  onSelectCar: (carType: CarType) => void;
   onColorChange: (bodyColor: number, roofColor?: number) => void;
   onToggleLights?: (enabled: boolean) => void;
   onToggleTurntable?: (enabled: boolean) => void;
@@ -16,16 +17,87 @@ export interface CarSelectEvents {
 
 export type { ColorPreset };
 
+interface GaugeData {
+  label: string;
+  value: number; // 0..5
+  colorClass: 'cyan' | 'gold' | 'red';
+}
+
+interface CarCardData {
+  id: CarType;
+  num: string;
+  name: string;
+  sub: string;
+  gauges: GaugeData[];
+  specMain: string;
+}
+
+const CAR_CARDS: CarCardData[] = [
+  {
+    id: 'trail_j',
+    num: 'MACHINE 01',
+    name: 'Trail J',
+    sub: '本格軽4WD ターボ',
+    gauges: [
+      { label: '最高速', value: 4, colorClass: 'cyan' },
+      { label: '旋回力', value: 4, colorClass: 'cyan' },
+      { label: '耐久力', value: 5, colorClass: 'cyan' },
+      { label: '攻撃力', value: 0, colorClass: 'cyan' },
+    ],
+    specMain: '高剛性・タフネス安定',
+  },
+  {
+    id: 'cross_j',
+    num: 'MACHINE 02',
+    name: 'Cross J',
+    sub: '軽クロスオーバー 4WD',
+    gauges: [
+      { label: '最高速', value: 5, colorClass: 'gold' },
+      { label: '旋回力', value: 5, colorClass: 'gold' },
+      { label: '耐久力', value: 2, colorClass: 'cyan' },
+      { label: '攻撃力', value: 0, colorClass: 'cyan' },
+    ],
+    specMain: '超軽量・最高速特化',
+  },
+  {
+    id: 'combat_sedan',
+    num: 'MACHINE 03',
+    name: 'Combat Sedan',
+    sub: '重装甲 強化AWD',
+    gauges: [
+      { label: '最高速', value: 4, colorClass: 'gold' },
+      { label: '旋回力', value: 2, colorClass: 'cyan' },
+      { label: '耐久力', value: 4, colorClass: 'gold' },
+      { label: '攻撃力', value: 4, colorClass: 'red' },
+    ],
+    specMain: 'ツイン機関銃・重装甲突撃',
+  },
+  {
+    id: 'missile_truck_j',
+    num: 'MACHINE 04',
+    name: 'Truck J MLRS',
+    sub: '8連装MLRS アゲトラ',
+    gauges: [
+      { label: '最高速', value: 3, colorClass: 'cyan' },
+      { label: '旋回力', value: 2, colorClass: 'cyan' },
+      { label: '耐久力', value: 3, colorClass: 'cyan' },
+      { label: '攻撃力', value: 5, colorClass: 'red' },
+    ],
+    specMain: '8連装ミサイル・長距離砲撃',
+  },
+];
+
 export class CarSelectScreen {
   private container: HTMLElement;
   private events: CarSelectEvents;
-  private currentCarType: 'trail_j' | 'cross_j' | 'truck_j' = 'trail_j';
-  private readonly carTypes: ('trail_j' | 'cross_j' | 'truck_j')[] = ['trail_j', 'cross_j', 'truck_j'];
+  private currentCarType: CarType = 'trail_j';
+  private readonly carTypes: CarType[] = ['trail_j', 'cross_j', 'combat_sedan', 'missile_truck_j'];
 
-  private selectedColorIndex: Record<'trail_j' | 'cross_j' | 'truck_j', number> = {
+  private selectedColorIndex: Record<CarType, number> = {
     trail_j: 0,
     cross_j: 0,
-    truck_j: 0,
+    combat_sedan: 0,
+    missile_truck_j: 0,
   };
 
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -52,74 +124,34 @@ export class CarSelectScreen {
         <div class="arcade-title-main">マシン選択</div>
       </div>
 
-      <div class="car-select-content-arcade">
-        <!-- Center area: 100% open showcase for 3D car -->
-        <div class="car-center-showcase-spacer"></div>
-      </div>
-
       <!-- Machine buttons: bottom centre, below the car -->
       <div class="car-select-bottom">
           <!-- Machine cards -->
           <div class="car-card-list-arcade">
-            <div class="car-card-arcade active" data-car="trail_j" tabindex="0">
-              <div class="car-card-focus-bar"></div>
-              <div class="car-card-inner">
-                <div class="car-badge-arcade">本格4WD ターボ</div>
-                <div class="car-name-arcade">Trail J</div>
-                <div class="arcade-gauges">
-                  <div class="gauge-row">
-                    <span class="g-lbl">最高速</span>
-                    <div class="g-blocks"><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span></div>
-                  </div>
-                  <div class="gauge-row">
-                    <span class="g-lbl">加速力</span>
-                    <div class="g-blocks"><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span></div>
-                  </div>
-                </div>
-                <div class="car-chips"><span>パートタイム4WD</span><span>1,040 kg</span></div>
-                <p class="car-desc-arcade">本格派の軽オフローダー。どっしりした車重が持ち味。</p>
-              </div>
-            </div>
+            ${CAR_CARDS.map((c) => `
+            <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}" data-car="${c.id}" tabindex="0">
+              <div class="car-num-badge">${c.num}</div>
+              ${carOutlineSvg(c.id)}
+              <div class="car-card-title-arcade">${c.name}</div>
+              <div class="car-card-sub-arcade">${c.sub}</div>
 
-            <div class="car-card-arcade" data-car="cross_j" tabindex="0">
-              <div class="car-card-focus-bar"></div>
-              <div class="car-card-inner">
-                <div class="car-badge-arcade">スポーティFF ターボ</div>
-                <div class="car-name-arcade">Cross J</div>
-                <div class="arcade-gauges">
-                  <div class="gauge-row">
-                    <span class="g-lbl">最高速</span>
-                    <div class="g-blocks"><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span></span></div>
+              <div class="arcade-gauges">
+                ${c.gauges.map((g) => `
+                <div class="gauge-row">
+                  <span class="g-lbl">${g.label}</span>
+                  <div class="g-blocks">
+                    ${Array.from({ length: 5 }, (_, i) => `<span class="${i < g.value ? `on ${g.colorClass}` : ''}"></span>`).join('')}
                   </div>
-                  <div class="gauge-row">
-                    <span class="g-lbl">加速力</span>
-                    <div class="g-blocks"><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span></span></div>
-                  </div>
-                </div>
-                <div class="car-chips"><span>フルタイム4WD</span><span>870 kg</span></div>
-                <p class="car-desc-arcade">街でも山道でも扱いやすい、軽クロスオーバー。</p>
+                </div>`).join('')}
               </div>
-            </div>
 
-            <div class="car-card-arcade" data-car="truck_j" tabindex="0">
-              <div class="car-card-focus-bar"></div>
-              <div class="car-card-inner">
-                <div class="car-badge-arcade">超軽量FR ミッドシップ</div>
-                <div class="car-name-arcade">Truck J</div>
-                <div class="arcade-gauges">
-                  <div class="gauge-row">
-                    <span class="g-lbl">最高速</span>
-                    <div class="g-blocks"><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span></span></div>
-                  </div>
-                  <div class="gauge-row">
-                    <span class="g-lbl">加速力</span>
-                    <div class="g-blocks"><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span><span class="on gold"></span></div>
-                  </div>
+              <div class="car-spec-arcade">
+                <div class="spec-header-row">
+                  <span class="spec-badge">特性</span>
                 </div>
-                <div class="car-chips"><span>4WD / 5MT</span><span>790 kg</span></div>
-                <p class="car-desc-arcade">3台で最も軽い、小回りの利く軽トラック。</p>
+                <div class="spec-main-digital">${c.specMain}</div>
               </div>
-            </div>
+            </div>`).join('')}
           </div>
       </div>
 
@@ -145,7 +177,7 @@ export class CarSelectScreen {
     const cards = this.container.querySelectorAll<HTMLElement>('.car-card-arcade');
     cards.forEach((card) => {
       card.addEventListener('click', () => {
-        const carType = card.dataset.car as 'trail_j' | 'cross_j' | 'truck_j';
+        const carType = card.dataset.car as CarType;
         if (carType && carType !== this.currentCarType) {
           this.setCarType(carType);
         }
@@ -196,7 +228,7 @@ export class CarSelectScreen {
     this.setCarType(this.carTypes[prevIdx]);
   }
 
-  public setCarType(carType: 'trail_j' | 'cross_j' | 'truck_j'): void {
+  public setCarType(carType: CarType): void {
     this.currentCarType = carType;
     const cards = this.container.querySelectorAll<HTMLElement>('.car-card-arcade');
     cards.forEach((c) => {
@@ -319,7 +351,9 @@ export class CarSelectScreen {
         } else if (e.code === 'Digit2') {
           this.setCarType('cross_j');
         } else if (e.code === 'Digit3') {
-          this.setCarType('truck_j');
+          this.setCarType('combat_sedan');
+        } else if (e.code === 'Digit4') {
+          this.setCarType('missile_truck_j');
         }
       };
       window.addEventListener('keydown', this.keyHandler);

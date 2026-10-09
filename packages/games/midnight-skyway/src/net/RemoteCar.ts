@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { CarBase } from '../models/CarBase';
 import { TrailJModel } from '../models/TrailJModel';
 import { CrossJModel } from '../models/CrossJModel';
-import { TruckJModel } from '../models/TruckJModel';
+import { CombatSedanModel } from '../models/CombatSedanModel';
+import { MissileTruckModel } from '../models/MissileTruckModel';
 import type { CarSpec, CarState } from '../../../../shared/netProtocol';
 import { RemoteTrack } from './remoteTrack';
 
@@ -11,7 +12,8 @@ export const STALE_MS = 1500;
 
 export function createCarModel(type: string): CarBase {
   if (type === 'cross_j') return new CrossJModel();
-  if (type === 'truck_j') return new TruckJModel();
+  if (type === 'combat_sedan') return new CombatSedanModel();
+  if (type === 'missile_truck_j' || type === 'truck_j') return new MissileTruckModel();
   return new TrailJModel();
 }
 

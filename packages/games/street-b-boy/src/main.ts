@@ -8,6 +8,7 @@ import { Stage, STAGE_CONFIGS, FINAL_STAGE, DEFAULT_BACKGROUND, DEFAULT_FOG_DENS
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock } from './entities/objects';
+import { SurveillanceDrone } from './entities/enemies';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
@@ -28,6 +29,8 @@ mountArcadeGuide({
 
 /** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
 const RESPAWN_MIN_TIME = 30;
+/** スピンがドローンに届く、本体の上下の余裕(m)。どの角度からでも落とせるようにする */
+const DRONE_SPIN_REACH = 0.6;
 
 /** タイトルのダンサーを足場の手前の縁(奥行き±1.4)近くに立たせ、縁のラインが足元の床に見えるようにする */
 const TITLE_DANCER_Z = 1.1;
@@ -76,6 +79,15 @@ class StreetBBoyGame {
   private comboTimer: number = 0;
   private lastGrindSoundTime: number = 0;
 
+  // 縦穴を落ちて1面の舞台へ戻る演出の進み具合(0=天国〜1=1面の夜の街)
+  private returnBlend: number = 0;
+  // 1面の街が現れてから、操作が効かず、自動でゴールまで走っている間
+  private homecoming: boolean = false;
+  // ゴールの爆発の続き(秒)。ゴール後しばらく、花火と火花を連続して上げる
+  private goalBlastTimer: number = 0;
+  private goalBlastTick: number = 0;
+  private goalFlashEl: HTMLDivElement | null = null;
+
   // 最後に通過したチェックポイント(ミスした時の再開地点)
   private checkpoint: { x: number; y: number } | null = null;
 
@@ -110,7 +122,6 @@ class StreetBBoyGame {
 
     if (CollisionDebugOverlay.isRequested()) {
       this.collisionDebug = new CollisionDebugOverlay(this.scene);
-      (window as unknown as { __sbb?: StreetBBoyGame }).__sbb = this; // 開発時の検証用フック
     }
 
     this.setupEventListeners();
@@ -307,12 +318,16 @@ class StreetBBoyGame {
     this.hud.updateLives(this.lives);
 
     this.stage = new Stage(this.scene, this.currentStage);
+    this.setupStageHooks(this.stage);
     this.checkpoint = null;
+    this.homecoming = false;
+    this.returnBlend = 0;
     this.sound.setBaseTempo(this.stage.config.tempo);
     this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     this.player = new Player();
     this.player.reset(1.5, 0.5);
     this.scene.add(this.player.mesh);
+    this.camera.position.set(1.5, 2.5, 13.0);
 
     this.hud.showTitle(false);
     this.hud.showRanking(false);
@@ -343,6 +358,7 @@ class StreetBBoyGame {
   }
 
   private cleanupGameplay(): void {
+    this.goalBlastTimer = 0;
     this.countdownHandle?.cancel();
     this.countingDown = false;
     if (this.player) {
@@ -375,12 +391,16 @@ class StreetBBoyGame {
     this.hud.updateTime(this.timeLeft);
 
     this.stage = new Stage(this.scene, this.currentStage);
+    this.setupStageHooks(this.stage);
     this.checkpoint = null;
+    this.homecoming = false;
+    this.returnBlend = 0;
     this.sound.setBaseTempo(this.stage.config.tempo);
     this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     if (this.player) {
       this.player.reset(1.5, 0.5);
     }
+    this.camera.position.set(1.5, 2.5, 13.0);
 
     this.state = 'playing';
     this.stateTimer = 0;
@@ -388,6 +408,14 @@ class StreetBBoyGame {
 
     this.sound.startBgm();
     this.sound.setGoldMode(false);
+  }
+
+  private setupStageHooks(stage: Stage): void {
+    stage.onVerticalLaserFired = (x) => {
+      if (this.player && Math.abs(this.player.x - x) < 28) {
+        this.sound.playShoot();
+      }
+    };
   }
 
   /** 「STAGE n」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
@@ -617,6 +645,13 @@ class StreetBBoyGame {
       return;
     }
 
+    // 縦穴を通過して地上へ帰還したことを記録
+    const dropShaft = this.stage.dropShaft;
+    if (dropShaft && !this.homecoming && this.player.x > dropShaft.x0 && this.player.x < dropShaft.x1 && this.player.y < dropShaft.revealY) {
+      this.homecoming = true;
+      this.stage.vanishShaft();
+    }
+
     // Spin attack trigger
     if (input.spinPressed && this.player.triggerSpin()) {
       this.sound.playSpin();
@@ -625,6 +660,9 @@ class StreetBBoyGame {
     }
 
     // Update player movement & physics
+    // 縦穴の中では、落下速度に上限をつけて、ゆっくり舞い降りる(レーザーを避ける時間をつくる)
+    const shaft = this.stage?.dropShaft;
+    this.player.fallSpeedLimit = shaft && this.player.x > shaft.x0 && this.player.x < shaft.x1 ? shaft.fallSpeedLimit : 24;
     const { spawnedSmoke, jumped } = this.player.update(dt, input);
     if (jumped) {
       this.sound.playJump();
@@ -876,18 +914,14 @@ class StreetBBoyGame {
     for (const laser of this.stage.laserGrids) {
       const beamBox = laser.getBeamAABB();
       if (this.checkAABB(pBox, beamBox)) {
-        if (this.player.isCrouching || this.player.spawnShieldTimer > 0) {
-          if (Math.random() < 0.2) {
-            this.stage.particleSystem.spawnSparkles(this.player.x, this.player.y + 0.3, 2, 0x00f0ff);
-          }
-        } else {
-          if (this.player.isDead) return;
-          this.sound.playLaserWarning();
-          this.stage.particleSystem.spawnSparkles(this.player.x, this.player.y + 1.0, 18, 0xff0033);
-          this.triggerCameraShake(0.45, 0.4);
-          this.handlePlayerDeath();
-          return;
-        }
+        // リスポーン直後の無敵やしゃがみでも、レーザーは防げない。しゃがんで潜れるかは、
+        // しゃがんだ体(高さ0.95)がビームの帯に重なるかどうかだけで決まる(低いビームは潜れない)
+        if (this.player.isDead) return;
+        this.sound.playLaserWarning();
+        this.stage.particleSystem.spawnSparkles(this.player.x, this.player.y + 1.0, 18, 0xff0033);
+        this.triggerCameraShake(0.45, 0.4);
+        this.handlePlayerDeath();
+        return;
       }
     }
 
@@ -908,7 +942,11 @@ class StreetBBoyGame {
       const eBox = enemy.getAABB();
 
       // Attack Box check (Spin or Gold Invincible)
-      if (attackBox && this.checkAABB(attackBox, eBox)) {
+      // 浮遊する敵(ドローン)は、上でも下でも横でも、スピンが近くをかすめれば落とせる(判定を上下に広げる)
+      const hurtBox = enemy instanceof SurveillanceDrone
+        ? { x: eBox.x, y: eBox.y - DRONE_SPIN_REACH, w: eBox.w, h: eBox.h + DRONE_SPIN_REACH * 2 }
+        : eBox;
+      if (attackBox && this.checkAABB(attackBox, hurtBox)) {
         enemy.defeat(this.player.isFacingRight ? 8 : -8, 10);
         this.sound.playSmash();
         this.stage.particleSystem.spawnSparkles(enemy.x, enemy.y + 0.5, 12, 0xff1a1a);
@@ -920,7 +958,7 @@ class StreetBBoyGame {
 
       // Normal Player Contact Check
       if (this.checkAABB(pBox, eBox)) {
-        // Stomp from above (Player is falling and hits top 35% of enemy)
+        // Stomp from above (Player is falling and the feet are in the top half of the enemy)
         if (this.player.vy < 0 && pBox.y >= eBox.y + eBox.h * 0.5) {
           enemy.defeat(4, 6);
           this.player.bounceOnEnemy();
@@ -1006,6 +1044,10 @@ class StreetBBoyGame {
     // Goal Reach Check (Turntable stage at end of level)
     const goalBox = this.stage.getGoalAABB();
     if (this.checkAABB(pBox, goalBox)) {
+      // 自由落下の縦穴があるステージ(FINAL)では、落下シーケンス(homecoming)を正規に通過していなければゴール無効
+      if (this.stage.dropShaft && !this.homecoming) {
+        return;
+      }
       this.handleGoalClear();
       return;
     }
@@ -1014,6 +1056,7 @@ class StreetBBoyGame {
     this.player.mesh.position.set(this.player.x, this.player.y, 0);
 
     // Update Stage World
+    this.updateReturnBlend(dt);
     this.stage.update(dt, time * 0.001, this.camera.position.x);
 
     // 2.5D Camera Tracking
@@ -1023,14 +1066,36 @@ class StreetBBoyGame {
   // -------------------------------------------------------------
   // 2.5D CAMERA TRACKING
   // -------------------------------------------------------------
+  /** 縦穴を落ちるあいだ、天国から1面の夜の街へ景色を移す(縦穴の上の台にいる間・リスポーン直後は天国のまま) */
+  private updateReturnBlend(dt: number): void {
+    if (!this.stage || !this.player) return;
+    const shaft = this.stage.dropShaft;
+    let target = 0;
+    if (shaft && this.player.x > shaft.x0 - 0.5) {
+      const from = shaft.topY;
+      const to = 3.5;
+      target = Math.min(1, Math.max(0, (from - this.player.y) / (from - to)));
+    }
+    this.returnBlend += (target - this.returnBlend) * Math.min(1, dt * 6);
+    this.stage.setReturnBlend(this.returnBlend);
+  }
+
   private updateCamera(dt: number): void {
     if (!this.player) return;
 
     const lookAhead = this.player.isFacingRight ? 3.0 : -1.5;
-    const targetX = this.player.x + lookAhead;
-    const targetY = Math.max(3.2, this.player.y + 2.0);
+    let targetX = this.player.x + lookAhead;
+    let targetY = Math.max(3.2, this.player.y + 2.0);
+    let lerpSpeed = 4.5 * dt;
 
-    const lerpSpeed = 4.5 * dt;
+    // 縦穴: 穴の真ん中を映し、落ちる速さの分だけ先(下)を映す。台の上にいるときは、穴の中が見えるまで下げる
+    const shaft = this.stage?.dropShaft;
+    if (shaft && this.player.x > shaft.x0 - 6 && this.player.x < shaft.x1 + 1) {
+      targetX = (shaft.x0 + shaft.x1) / 2;
+      const falling = Math.min(0, this.player.vy) * 0.35;
+      targetY = Math.max(3.2, Math.min(this.player.y + 2.0 + falling, shaft.topY - 2.5));
+      lerpSpeed = 10 * dt;
+    }
     this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetX, lerpSpeed);
     this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, targetY, lerpSpeed);
     this.camera.position.z = 13.0;
@@ -1071,6 +1136,9 @@ class StreetBBoyGame {
     const stageBonus = (this.currentStage === FINAL_STAGE) ? 10000 : 3000;
     this.addScore(timeBonus + stageBonus);
 
+    // 縦穴を落ちてきたゴールは、爆発で華々しく飾る
+    if (this.stage.dropShaft) this.startGoalExplosion();
+
     if (this.currentStage === FINAL_STAGE) {
       this.hud.showCenterBanner('allclear');
     } else {
@@ -1078,8 +1146,53 @@ class StreetBBoyGame {
     }
   }
 
+  /** 落下のゴールの爆発: 一瞬の閃光、衝撃波、火花と花火の連発、大きな画面の揺れと爆発音 */
+  private startGoalExplosion(): void {
+    if (!this.stage) return;
+    const gx = this.stage.goalX;
+    const gy = this.stage.goalY;
+    const ps = this.stage.particleSystem;
+    for (const dy of [0.3, 1.5, 3]) ps.spawnShockwave(gx, gy + dy);
+    ps.spawnSparkles(gx, gy + 1, 70, 0xff7a1a);
+    ps.spawnSparkles(gx, gy + 1.5, 60, 0xffe600);
+    ps.spawnSparkles(gx, gy + 2, 50, 0xffffff);
+    ps.spawnSparkles(gx, gy + 2.5, 40, 0x00f0ff);
+    for (let i = 0; i < 8; i++) {
+      ps.spawnFireworks(gx + (Math.random() - 0.5) * 10, gy + 2 + Math.random() * 6);
+    }
+    this.triggerCameraShake(0.9, 0.9);
+    this.sound.playSmash();
+    setTimeout(() => this.sound.playSmash(), 140);
+    setTimeout(() => this.sound.playSmash(), 300);
+    this.goalBlastTimer = 1.6;
+    this.goalBlastTick = 0;
+
+    // 画面全体の白い閃光
+    if (!this.goalFlashEl) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8;';
+      document.body.appendChild(el);
+      this.goalFlashEl = el;
+    }
+    this.goalFlashEl.animate([{ opacity: 0.95 }, { opacity: 0.35, offset: 0.25 }, { opacity: 0 }], { duration: 1100, easing: 'ease-out' });
+  }
+
   private updateClear(dt: number, time: number, input: InputState): void {
     this.stateTimer += dt;
+
+    // ゴールの爆発の続き(0.12秒ごとに、花火と火花を上げて、少し揺らす)
+    if (this.goalBlastTimer > 0 && this.stage) {
+      this.goalBlastTimer -= dt;
+      this.goalBlastTick -= dt;
+      if (this.goalBlastTick <= 0) {
+        this.goalBlastTick = 0.12;
+        const gx = this.stage.goalX + (Math.random() - 0.5) * 8;
+        const gy = this.stage.goalY + 1 + Math.random() * 7;
+        this.stage.particleSystem.spawnFireworks(gx, gy);
+        this.stage.particleSystem.spawnSparkles(gx, gy, 18, Math.random() < 0.5 ? 0xff7a1a : 0xffe600);
+        this.triggerCameraShake(0.3, 0.15);
+      }
+    }
 
     if (this.stage) {
       this.stage.update(dt, time * 0.001, this.camera.position.x);

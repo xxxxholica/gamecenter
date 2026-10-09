@@ -157,3 +157,47 @@ export function buildHeavenBackdrop(group: THREE.Group, levelEndX: number): Heav
 
   return { halos };
 }
+
+/**
+ * 天国の空から、1面の夜の街の空へ、k(0〜1)で移り変わる背景。
+ * ファイナルの縦穴を落ちて、1面の舞台(地上)へ戻ってくる演出に使う。setBlend は k が変わったときだけ描き直す。
+ */
+export function createReturnSky(night: number): { texture: THREE.CanvasTexture; setBlend: (k: number) => void } {
+  const W = 256, H = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  const heaven: [number, string][] = [[0, '#5aa6f2'], [0.35, '#9fcdfa'], [0.68, '#ffe9c0'], [1, '#fff6dc']];
+  const nightTop = new THREE.Color(night);
+  const nightBottom = new THREE.Color(night).lerp(new THREE.Color(0x1a2438), 0.6);
+  const tmp = new THREE.Color();
+  let last = -1;
+
+  const setBlend = (k: number): void => {
+    const v = Math.min(1, Math.max(0, k));
+    if (Math.abs(v - last) < 0.004) return;
+    last = v;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    for (const [t, hex] of heaven) {
+      tmp.set(hex).lerp(t < 0.5 ? nightTop : nightBottom, v);
+      grad.addColorStop(t, `#${tmp.getHexString()}`);
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    const sun = ctx.createRadialGradient(W * 0.5, H * 0.34, 0, W * 0.5, H * 0.34, W * 0.62);
+    const a = 1 - v;
+    sun.addColorStop(0, `rgba(255,255,255,${0.95 * a})`);
+    sun.addColorStop(0.18, `rgba(255,244,200,${0.7 * a})`);
+    sun.addColorStop(0.5, `rgba(255,225,160,${0.25 * a})`);
+    sun.addColorStop(1, 'rgba(255,225,160,0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(0, 0, W, H);
+    texture.needsUpdate = true;
+  };
+  setBlend(0);
+  return { texture, setBlend };
+}

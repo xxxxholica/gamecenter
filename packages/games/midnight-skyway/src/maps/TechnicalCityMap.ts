@@ -8,6 +8,7 @@ import { buildRoadSigns, buildCurveSigns, SignSpec, SignStyle } from './RoadSign
 import { RoadTube } from './RoadTube';
 import { GoalHologram } from './GoalHologram';
 import { buildStreetLights, StreetLights } from './StreetLights';
+import { Traffic } from '../core/Traffic';
 import { SECTOR_FRACTIONS } from '../core/Ghost';
 
 /** A designed course as written by the design scripts: rows [x, deckY, z, supportY] ~2 m apart (closed loop). */
@@ -126,6 +127,14 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
     const a = this.road[gi % n], b = this.road[(gi + 1) % n];
     this.goal = new GoalHologram(a.clone().lerp(b, gu), Math.atan2(b.x - a.x, b.z - a.z), W);
     this.group.add(this.goal.group);
+
+    // Traffic NPCs along the technical circuit
+    const npcCount = Math.max(14, Math.round(routeLength(this.road) / 140));
+    this.traffic = new Traffic(W, {
+      forwardRoute: this.road,
+      forwardCount: npcCount,
+    });
+    this.group.add(this.traffic.group);
 
     this.baseMat = new THREE.MeshBasicMaterial({ color: c.ground.color });
     const base = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), this.baseMat);

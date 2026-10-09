@@ -124,8 +124,8 @@ class SumoGame {
   private readonly worldMoveTmp = new THREE.Vector3();
   private camRight: THREE.Vector3 = new THREE.Vector3();
 
-  // 客席の爆破(1ラウンドに1回まで)
-  private seatBlastDone: boolean = false;
+  // 力士ごとの爆破管理(1力士につき1回の落下/客席爆破)
+  private readonly blastedFighters = new Set<number>();
 
   private roundState: RoundState = 'standby';
   private isRoundActive: boolean = false;
@@ -199,7 +199,7 @@ class SumoGame {
       sound: this.soundManager,
       particle: this.particleManager,
       showBanner: (m, s, ms) => this.uiManager.showBanner(m, s, ms),
-      blast: (c, r) => this.megaBlast(c, r),
+      blast: (c, r) => this.onBlastEvent(c, r),
     };
     this.inputManager = new InputManager();
     this.uiManager = new UIManager();
@@ -387,7 +387,7 @@ class SumoGame {
     this.soundManager.playBgm('battle');
 
     this.isRoundActive = false;
-    this.seatBlastDone = false;
+    this.blastedFighters.clear();
     this.lastRc = -1;
     this.modalShown = false;
 
@@ -774,7 +774,7 @@ class SumoGame {
     if (snaps) {
       if (rc !== this.lastRc) {
         this.lastRc = rc;
-        this.seatBlastDone = false;                           // 仕切り直し: 客席の爆破を再び可能にする
+        this.blastedFighters.clear();                         // 仕切り直し: 各力士の爆破を再び可能にする
       }
       // 結果を出している間は、局面を結果のまま保つ
       if (this.roundState !== 'match_over' || !this.uiManager.isVictoryModalOpen()) this.roundState = phase;
@@ -858,11 +858,9 @@ class SumoGame {
 
   /**
    * 場外・客席への落下の大爆発。画面の大半を炎と煙が埋める。
-   * audienceRadius > 0 なら、その範囲の観客も吹き飛ばす。1ラウンドに1回だけ。
+   * audienceRadius > 0 なら、その範囲の観客も吹き飛ばす。
    */
-  private megaBlast(center: THREE.Vector3, audienceRadius: number) {
-    if (this.seatBlastDone) return;
-    this.seatBlastDone = true;
+  private triggerMegaBlast(center: THREE.Vector3, audienceRadius: number) {
     if (audienceRadius > 0) this.audience.explodeAt(center, audienceRadius);
     this.particleManager.spawnMegaBlast(center, 14);
     this.particleManager.spawnBurn(center, 7, 2.6);
@@ -871,12 +869,41 @@ class SumoGame {
   }
 
   /**
+   * サーバーまたはシミュレータからの爆発イベント。
+   * 各力士の落下ごとに発生する。既に客席突入で爆破済みの力士は二重発火を防止。
+   */
+  private onBlastEvent(center: THREE.Vector3, audienceRadius: number) {
+    let nearestIdx = -1;
+    let minDist = Infinity;
+    for (let i = 0; i < this.activeCount; i++) {
+      const f = this.views[i];
+      const d = Math.hypot(f.position.x - center.x, f.position.z - center.z);
+      if (d < minDist) {
+        minDist = d;
+        nearestIdx = i;
+      }
+    }
+
+    // 既に客席突入で爆破済みならスキップ
+    if (nearestIdx >= 0 && minDist < 5.0 && this.blastedFighters.has(nearestIdx)) {
+      return;
+    }
+    if (nearestIdx >= 0) {
+      this.blastedFighters.add(nearestIdx);
+    }
+    const r = Math.hypot(center.x, center.z);
+    const effRadius = audienceRadius > 0 ? audienceRadius : (r >= this.dohyo.radius ? 7 : 0);
+    this.triggerMegaBlast(center, effRadius);
+  }
+
+  /**
    * 力士が客席に突っ込んだら、その場で客席を爆破する(観客と座布団が吹き飛ぶ)
+   * 複数人対戦でも、突っ込んだ各力士ごとに爆破が発生する。
    */
   private checkSeatBlast() {
-    if (this.seatBlastDone) return;
     const seatInner = this.dohyo.radius + 1.4;
     for (let i = 0; i < this.activeCount; i++) {
+      if (this.blastedFighters.has(i)) continue;
       const f = this.views[i];
       if (f.gone) continue;
       const r = Math.hypot(f.position.x, f.position.z);
@@ -885,8 +912,8 @@ class SumoGame {
       if (f.position.y > floor + 0.9) continue; // まだ客席の上を飛んでいる
 
       // 客席ごと大爆破(観客と座布団が吹き飛ぶ)
-      this.megaBlast(new THREE.Vector3(f.position.x, floor + 0.7, f.position.z), 9);
-      return;
+      this.blastedFighters.add(i);
+      this.triggerMegaBlast(new THREE.Vector3(f.position.x, floor + 0.7, f.position.z), 9);
     }
   }
 

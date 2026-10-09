@@ -16,7 +16,17 @@ import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCo
 export * from './arcadeLeaderboardCore.ts';
 
 const API = '/api';
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 8000;
+
+function safeTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  return controller.signal;
+}
 
 /** loadAllLeaderboards の結果のキー */
 export const getLeaderboardKey = leaderboardBoardKey;
@@ -25,12 +35,32 @@ const boardPath = (slug: string, variantId?: string) =>
   `${API}/leaderboard/${encodeURIComponent(slug)}${variantId ? `/${encodeURIComponent(variantId)}` : ''}`;
 
 async function request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
-  const res = await fetch(path, {
-    method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  const jsonBody = body === undefined ? undefined : JSON.stringify(body);
+  // Safari/ブラウザの keepalive クォータ(約64KB)未満なら keepalive を有効化し、ページ遷移・iframe破棄時の切断を防ぐ
+  const canKeepalive = method === 'POST' && jsonBody !== undefined && jsonBody.length < 60 * 1024;
+
+  const doFetch = (keepalive: boolean) =>
+    fetch(path, {
+      method,
+      headers: jsonBody === undefined ? undefined : { 'content-type': 'application/json' },
+      body: jsonBody,
+      cache: 'no-store',
+      keepalive: keepalive ? true : undefined,
+      signal: safeTimeoutSignal(TIMEOUT_MS),
+    });
+
+  let res: Response;
+  try {
+    res = await doFetch(canKeepalive);
+  } catch (err) {
+    if (canKeepalive) {
+      // keepalive クォータ超過等の例外時は通常 fetch で再試行
+      res = await doFetch(false);
+    } else {
+      throw err;
+    }
+  }
+
   if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
   return res.json();
 }
@@ -78,7 +108,7 @@ export async function loadRawScores(slug: string, variantId?: string): Promise<L
 }
 
 /** 表示用ランキングを取得する(実記録が minCount 未満なら「記録なし」の枠で埋める) */
-export async function loadLeaderboard(slug: string, variantId?: string, minCount = 3): Promise<LeaderboardEntry[]> {
+export async function loadLeaderboard(slug: string, variantId?: string, minCount = 5): Promise<LeaderboardEntry[]> {
   const def = GAME_LEADERBOARD_DEFS[slug];
   const raw = await loadRawScores(slug, variantId);
   return padEmptyEntries(def, raw, minCount);
@@ -108,7 +138,7 @@ export async function loadLeaderboardAndCheck(
   slug: string,
   score: number,
   variantId?: string,
-  minCount = 3,
+  minCount = 5,
   maxEntries = LEADERBOARD_MAX_ENTRIES,
 ): Promise<{ list: LeaderboardEntry[]; isRankIn: boolean; rank: number }> {
   const def = GAME_LEADERBOARD_DEFS[slug];
@@ -161,7 +191,7 @@ export async function saveLeaderboardScore(
       cleared: options.cleared === true ? true : undefined,
       ghost: options.ghost,
     });
-    const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 3);
+    const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
     return { rank: typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1, list };
   } catch (e) {
     console.warn('Failed to save leaderboard', e);

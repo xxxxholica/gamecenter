@@ -3,16 +3,17 @@ import { BoundingBox2D } from '../entities/player';
 import {
   CassetteTape, StageBlock, StreetObstacle, ParticleSystem,
   GrindRail, FireHydrant, SubwooferPad, SteamVent, LaserGrid, MovingPlatform,
-  CrumblingPlatform, Checkpoint
+  CrumblingPlatform, Checkpoint, VerticalLaserTrap
 } from '../entities/objects';
-import { BaseEnemy, SecurityBot, SkaterDog, SurveillanceDrone, EnemyProjectile, DOG_HORDE } from '../entities/enemies';
+import { BaseEnemy, SkaterDog, EnemyProjectile, DOG_HORDE } from '../entities/enemies';
 import type { DogTerrain } from '../entities/enemies';
 import { HordeSpawner, FINAL_HORDE } from '../entities/horde';
-import { buildHeavenBackdrop, createHeavenSkyTexture } from './heaven';
+import { buildHeavenBackdrop, createReturnSky } from './heaven';
 import type { HordeConfig } from '../entities/horde';
 import { BoomboxModel } from './boombox';
 import { TextureGenerator } from './textures';
 import { CollisionShape, ONE_WAY_MAX_THICKNESS } from '../engine/collision';
+import { buildStage1, buildStage2, buildStage3, buildStage4, buildStage5 } from './stageLayouts';
 
 export interface Platform {
   x: number;
@@ -56,6 +57,10 @@ export interface StageConfig {
   bgm?: 'heaven';
   /** 環境光・半球光・太陽の強さにかける倍率(無ければ1)。明るい色の空間で白飛びしないように下げる */
   lightScale?: number;
+  /** ゴール裏の巨大ラジカセの大きさ(既定 1.8)。縦穴のように狭い所では小さくして、レーザーが見えるようにする */
+  goalBoomboxScale?: number;
+  /** 縦穴を落ちた先に、1面の舞台(夜の街)が現れる。街の背景を置き始める X。省略すると無し */
+  homeStreetX?: number;
 }
 
 export const STAGE_CONFIGS: Record<number, StageConfig> = {
@@ -84,11 +89,11 @@ export const STAGE_CONFIGS: Record<number, StageConfig> = {
     platformColor: 0x2b323d
   },
   5: {
-    title: 'FINAL: HEAVEN RUSH', theme: 'heaven', goalX: 304, goalY: 2.0, timeLimit: 100, tempo: 124,
+    title: 'FINAL: HEAVEN RUSH', theme: 'heaven', goalX: 362, goalY: 0, timeLimit: 100, tempo: 124,
     // 眩しい白金の光に包まれた天国。環境光は明るい白金、太陽は温かい金色
     ambientHex: 0xfff1d0, hemiSky: 0xffffff, hemiGround: 0xffe3a8, moonHex: 0xfff0c0,
     glowColor: 0xffd54a, dustColor: 0xfff2a0, lampXs: [], lampStyle: 'pole',
-    platformColor: 0xe8dcc0, horde: FINAL_HORDE, sky: { fogColor: 0xfff0d0, fogDensity: 0.004 }, bgm: 'heaven', lightScale: 0.55
+    platformColor: 0xe8dcc0, horde: FINAL_HORDE, sky: { fogColor: 0xfff0d0, fogDensity: 0.004 }, bgm: 'heaven', lightScale: 0.55, homeStreetX: 338.5
   }
 };
 
@@ -111,6 +116,7 @@ export class Stage implements DogTerrain {
   public subwoofers: SubwooferPad[] = [];
   public steamVents: SteamVent[] = [];
   public laserGrids: LaserGrid[] = [];
+  public verticalLaserTraps: VerticalLaserTrap[] = [];
   public movingPlatforms: MovingPlatform[] = [];
   public crumblingPlatforms: CrumblingPlatform[] = [];
   public checkpoints: Checkpoint[] = [];
@@ -121,6 +127,18 @@ export class Stage implements DogTerrain {
 
   // 後ろから追ってくる犬の大群(ファイナルのみ)
   private horde: HordeSpawner | null = null;
+  private hordeEndX = Infinity;
+  /** 縦穴(落下してゴールする区間)。あればカメラがその区間では穴を映して、落下の先を見せる */
+  public dropShaft: {
+    x0: number; x1: number; topY: number;
+    /** 縦穴の中の落下速度の上限(m/s) */
+    fallSpeedLimit: number;
+    /** これより下へ落ちると、1面の街が現れて、操作が効かなくなり、壁が消える */
+    revealY: number;
+    /** 消える壁(最上段の台と右の壁)の左端の X */
+    wallXs: number[];
+  } | null = null;
+  private shaftVanished = false;
   private hordeDogs: SkaterDog[] = [];
 
   // Goal turntable & giant boombox
@@ -130,7 +148,8 @@ export class Stage implements DogTerrain {
   public goalY: number = 3.5;
 
   // Background meshes for parallax
-  private bgGroup: THREE.Group;
+  /** レイアウト(stageLayouts.ts)からも使う */
+  public bgGroup: THREE.Group;
   private dustPoints: THREE.Points;
   // 街灯ごとにスポットライトを置くと、画面外の街灯の分まで全画素で光源計算が増える。
   // 同時に画面に映る街灯は多くても2本なので、2灯だけ用意してカメラに近い街灯へ付け替える
@@ -141,6 +160,13 @@ export class Stage implements DogTerrain {
   private heavenHalos: THREE.Mesh[] = [];
   /** 天国の空(画面全体の背景)。dispose で解放する */
   private skyTexture: THREE.Texture | null = null;
+  private returnSky: { setBlend: (k: number) => void } | null = null;
+  /** 天国の背景(雲・柱・光の輪)。1面の街へ戻るとき、上へ遠ざける */
+  private heavenGroup: THREE.Group | null = null;
+  /** 1面の街の背景(ビル群・壁・街灯)。戻るとき、下から せり上がる */
+  private homeGroup: THREE.Group | null = null;
+  private returnLights: { ambient: THREE.AmbientLight; hemi: THREE.HemisphereLight; moon: THREE.DirectionalLight } | null = null;
+  private returnFog: { heaven: THREE.Color; night: THREE.Color; heavenDensity: number } | null = null;
   /** 背景・ダストを敷く範囲の右端(ゴールの少し先まで。短いステージでは従来の190) */
   private get levelEndX(): number {
     return Math.max(190, this.goalX + 30);
@@ -161,6 +187,7 @@ export class Stage implements DogTerrain {
     this.goalX = cfg.goalX;
     this.goalY = cfg.goalY;
     this.horde = cfg.horde ? new HordeSpawner(cfg.horde) : null;
+    this.hordeEndX = cfg.horde?.endX ?? Infinity;
     this.applySky();
 
     // Goal stage setup
@@ -176,8 +203,9 @@ export class Stage implements DogTerrain {
     this.scene.add(this.goalTurntable);
 
     // Giant Boombox behind the turntable
-    this.goalBoombox = new BoomboxModel(1.8);
-    this.goalBoombox.mesh.position.set(this.goalX, this.goalY + 2.5, -2.5);
+    const boomboxScale = cfg.goalBoomboxScale ?? 1.8;
+    this.goalBoombox = new BoomboxModel(boomboxScale);
+    this.goalBoombox.mesh.position.set(this.goalX, this.goalY + boomboxScale * (2.5 / 1.8), -2.5);
     this.scene.add(this.goalBoombox.mesh);
 
     // Ambient dust / spark particles
@@ -214,10 +242,13 @@ export class Stage implements DogTerrain {
     const sky = this.config.sky;
     if (!sky) return;
     if (this.config.theme === 'heaven') {
-      this.skyTexture = createHeavenSkyTexture();
+      const sky1 = createReturnSky(DEFAULT_BACKGROUND);
+      this.skyTexture = sky1.texture;
+      this.returnSky = sky1;
       this.scene.background = this.skyTexture;
     }
     this.scene.fog = new THREE.FogExp2(sky.fogColor, sky.fogDensity);
+    this.returnFog = { heaven: new THREE.Color(sky.fogColor), night: new THREE.Color(DEFAULT_BACKGROUND), heavenDensity: sky.fogDensity };
   }
 
   private buildLighting(): void {
@@ -233,6 +264,7 @@ export class Stage implements DogTerrain {
     const moonLight = new THREE.DirectionalLight(cfg.moonHex, 2.2 * k);
     moonLight.position.set(50, 60, 40);
     this.bgGroup.add(moonLight);
+    this.returnLights = { ambient: ambientLight, hemi: hemiLight, moon: moonLight };
 
     cfg.lampXs.forEach((lx) => {
       this.createLampFixture(lx);
@@ -333,7 +365,10 @@ export class Stage implements DogTerrain {
         this.buildNeonBackdrop();
         break;
       case 'heaven':
-        this.heavenHalos = buildHeavenBackdrop(this.bgGroup, this.levelEndX).halos;
+        this.heavenGroup = new THREE.Group();
+        this.bgGroup.add(this.heavenGroup);
+        this.heavenHalos = buildHeavenBackdrop(this.heavenGroup, this.levelEndX).halos;
+        if (this.config.homeStreetX !== undefined) this.buildHomeStreetBackdrop(this.config.homeStreetX);
         break;
       default:
         this.buildBronxBackdrop();
@@ -410,16 +445,16 @@ export class Stage implements DogTerrain {
   }
 
   /** 背景の壁。プレイ面の足場(x = -6から開始)と左端を完全に一致させる */
-  private addMidgroundWall(height: number, material: (x: number) => THREE.Material, startX: number = -6): void {
+  private addMidgroundWall(height: number, material: (x: number) => THREE.Material, startX: number = -6, z: number = -2.6): void {
     for (let x = startX; x < this.levelEndX; x += 18) {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(18, height, 0.6), material(x));
-      wall.position.set(x + 9, height / 2, -2.6);
+      wall.position.set(x + 9, height / 2, z);
       this.bgGroup.add(wall);
     }
     // 左端(x = -6)の終端を綺麗に見せるエンドピラー(境界の柱)
     const endPillarMat = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.8 });
     const endPillar = new THREE.Mesh(new THREE.BoxGeometry(0.8, height + 1.0, 1.2), endPillarMat);
-    endPillar.position.set(startX, (height + 1.0) / 2, -2.5);
+    endPillar.position.set(startX, (height + 1.0) / 2, z + 0.1);
     this.bgGroup.add(endPillar);
   }
 
@@ -465,6 +500,102 @@ export class Stage implements DogTerrain {
       roughness: 0.8
     }));
     this.addWallMountedHvac([15, 52, 98, 132], 5.8);
+  }
+
+  /**
+   * 縦穴の底に現れる、1面(BRONX STREET)と同じ夜の街: 遠景のビル群・落書きのレンガ壁・街灯。
+   */
+  private buildHomeStreetBackdrop(x0: number): void {
+    const before = this.bgGroup.children.length;
+    this.buildSkyline({ z: -24, minH: 25, varH: 35, minW: 10, varW: 8, xFrom: x0, xTo: this.levelEndX + 10, stepBase: 14, windowChance: 0.55, color: 0x090c14 });
+    const graffitiTags = ['STREET B-BOY', 'HIP HOP', 'BREAK', 'BRONX'];
+    this.addMidgroundWall(9, (x) => new THREE.MeshStandardMaterial({
+      map: TextureGenerator.getBrickWallWithGraffiti(graffitiTags[Math.abs(Math.floor(x / 18)) % graffitiTags.length]),
+      color: 0x8a8a8a,
+      roughness: 0.8
+    }), x0, -6.2);
+    for (const lx of [x0 + 24, x0 + 36]) this.createLampFixture(lx);
+    const home = new THREE.Group();
+    for (const child of this.bgGroup.children.slice(before)) home.add(child);
+    home.position.y = 0;
+    home.visible = false;
+    this.bgGroup.add(home);
+    this.homeGroup = home;
+  }
+
+  /** 1面の街へ到達したとき: 通り抜けたレーザーとトラップを消灯する(足場や壁は落下によって画面上外へ自然に見切れる) */
+  public vanishShaft(): void {
+    const shaft = this.dropShaft;
+    if (!shaft || this.shaftVanished) return;
+    this.shaftVanished = true;
+    for (const laser of this.laserGrids) this.scene.remove(laser.mesh);
+    this.laserGrids = [];
+    for (const trap of this.verticalLaserTraps) {
+      this.scene.remove(trap.mesh);
+      trap.dispose();
+    }
+    this.verticalLaserTraps = [];
+  }
+
+  private setGroupFade(group: THREE.Group, alpha: number): void {
+    if (alpha <= 0.001) {
+      group.visible = false;
+      return;
+    }
+    group.visible = true;
+    group.traverse((obj) => {
+      if (obj instanceof THREE.Sprite && obj.material) {
+        if (obj.userData.baseOpacity === undefined) {
+          obj.userData.baseOpacity = obj.material.opacity;
+        }
+        obj.material.transparent = true;
+        obj.material.opacity = obj.userData.baseOpacity * alpha;
+      } else if (obj instanceof THREE.Mesh && obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const mat of mats) {
+          if (mat.userData.baseOpacity === undefined) {
+            mat.userData.baseOpacity = mat.opacity !== undefined ? mat.opacity : 1.0;
+          }
+          mat.transparent = true;
+          mat.opacity = mat.userData.baseOpacity * alpha;
+        }
+      }
+    });
+  }
+
+  /**
+   * 縦穴を落ちて1面の舞台へ戻る演出。k=0 が天国、k=1 が1面の夜の街。
+   * 背景オブジェクトを急激に上下ワープさせず、滑らかなクロスフェードと空・霧のグラデーションで行う。
+   */
+  public setReturnBlend(k: number): void {
+    if (!this.homeGroup || !this.heavenGroup) return;
+    const v = Math.min(1, Math.max(0, k));
+    const ease = v * v * (3 - 2 * v);
+
+    this.heavenGroup.position.y = 0;
+    this.homeGroup.position.y = 0;
+
+    this.setGroupFade(this.heavenGroup, Math.max(0, Math.min(1, 1 - ease * 1.15)));
+    this.setGroupFade(this.homeGroup, Math.max(0, Math.min(1, ease * 1.15)));
+
+    this.returnSky?.setBlend(ease);
+    const cfg = this.config;
+    const night = STAGE_CONFIGS[1];
+    if (this.returnLights) {
+      const heavenK = cfg.lightScale ?? 1;
+      const { ambient, hemi, moon } = this.returnLights;
+      ambient.color.set(cfg.ambientHex).lerp(new THREE.Color(night.ambientHex), ease);
+      ambient.intensity = 2.3 * (heavenK + (1 - heavenK) * ease);
+      hemi.color.set(cfg.hemiSky).lerp(new THREE.Color(night.hemiSky), ease);
+      hemi.groundColor.set(cfg.hemiGround).lerp(new THREE.Color(night.hemiGround), ease);
+      hemi.intensity = 1.4 * (heavenK + (1 - heavenK) * ease);
+      moon.color.set(cfg.moonHex).lerp(new THREE.Color(night.moonHex), ease);
+      moon.intensity = 2.2 * (heavenK + (1 - heavenK) * ease);
+    }
+    if (this.returnFog && this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.copy(this.returnFog.heaven).lerp(this.returnFog.night, ease);
+      this.scene.fog.density = this.returnFog.heavenDensity + (DEFAULT_FOG_DENSITY - this.returnFog.heavenDensity) * ease;
+    }
   }
 
   private buildSubwayBackdrop(): void {
@@ -566,15 +697,15 @@ export class Stage implements DogTerrain {
    * 足場を追加する。厚み0.6以下の板は一方通行(下から通り抜け・上から着地)。
    * 一方通行の板には縁に水色の線を、ネオン面のソリッドな足場には上面にテーマ色の線を入れて、見た目で区別できるようにする。
    */
-  public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false, oneWay: boolean = h <= ONE_WAY_MAX_THICKNESS): void {
+  public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false, oneWay: boolean = h <= ONE_WAY_MAX_THICKNESS, street: boolean = false): void {
     // 粗いローポリ直方体から、セグメント分割された高品位ジオメトリに強化
     const widthSegs = Math.max(1, Math.min(64, Math.round(w * 1.5)));
     const heightSegs = Math.max(1, Math.min(16, Math.round(h * 2)));
     const geo = new THREE.BoxGeometry(w, h, 2.8, widthSegs, heightSegs, 2);
     let mat: THREE.Material;
 
-    if (this.config.theme === 'heaven') {
-      // 天国の足場は、金の縁取りのある白い大理石
+    if (this.config.theme === 'heaven' && !street) {
+      // 天国の足場は、金の縁取りのある白い大理石(street=true なら、1面と同じアスファルトの道にする)
       mat = new THREE.MeshStandardMaterial({ color: this.config.platformColor, roughness: 0.3, metalness: 0.05, emissive: 0x6a6048, emissiveIntensity: 0.6 });
     } else if (isAsphalt) {
       const tex = TextureGenerator.getAsphaltRoadTexture();
@@ -717,6 +848,20 @@ export class Stage implements DogTerrain {
     this.scene.add(grid.mesh);
   }
 
+  public onVerticalLaserFired?: (x: number, y: number) => void;
+
+  public addVerticalLaserTrap(trap: VerticalLaserTrap): void {
+    trap.onFire = (t) => {
+      const proj = new EnemyProjectile(t.x, t.y + 0.6, 0, t.speed, true);
+      this.projectiles.push(proj);
+      this.scene.add(proj.mesh);
+      this.particleSystem.spawnSparks(t.x, t.y + 0.6, 6);
+      this.onVerticalLaserFired?.(t.x, t.y);
+    };
+    this.verticalLaserTraps.push(trap);
+    this.scene.add(trap.mesh);
+  }
+
   public addMovingPlatform(platform: MovingPlatform): void {
     this.movingPlatforms.push(platform);
     this.scene.add(platform.mesh);
@@ -754,481 +899,21 @@ export class Stage implements DogTerrain {
   private buildLevelContent(): void {
     switch (this.stageNumber) {
       case 2:
-        this.buildStage2();
+        buildStage2(this);
         break;
       case 3:
-        this.buildStage3();
+        buildStage3(this);
         break;
       case 4:
-        this.buildStage4();
+        buildStage4(this);
         break;
       case 5:
-        this.buildStage5();
+        buildStage5(this);
         break;
       default:
-        this.buildStage1();
+        buildStage1(this);
         break;
     }
-  }
-
-  private addSign(x: number, y: number, text: string): void {
-    const sign = new THREE.Mesh(
-      new THREE.BoxGeometry(3.4, 1.7, 0.2),
-      new THREE.MeshStandardMaterial({ map: TextureGenerator.getNeonBillboardTexture(text), roughness: 0.4 })
-    );
-    sign.position.set(x, y, -1.9);
-    this.bgGroup.add(sign);
-  }
-
-  // -------------------------------------------------------------
-  // STAGE 1: BRONX STREET (基本の動きを覚える面: 看板つきの導入、レール、ドローン、消火栓)
-  // -------------------------------------------------------------
-  private buildStage1(): void {
-    // Road 1: X -6 to 24
-    this.addPlatform(-6, 0, 30, 4, true);
-
-    // チュートリアルの看板(背景)
-    this.addSign(4, 4.4, 'JUMP: Z/SPACE');
-    this.addSign(15, 4.4, 'SPIN: X/K');
-    this.addSign(23, 4.4, 'HIT HYDRANT!');
-
-    // Intro Question & Brick Blocks
-    this.addBlock(new StageBlock(8, 3.2, 'question'));
-    this.addBlock(new StageBlock(10, 3.2, 'brick'));
-    this.addBlock(new StageBlock(12, 3.2, 'question'));
-    this.addBlock(new StageBlock(14, 3.2, 'brick'));
-
-    // Patrolling enemy first, then a cardboard box to spin through
-    this.addEnemy(new SecurityBot(17.5, 0, 2.0));
-    this.addObstacle(new StreetObstacle(20.5, 0, 'cardboard'));
-
-    // Fire hydrant launches to a gold cassette
-    this.addFireHydrant(new FireHydrant(23, 0));
-    this.addCassette(new CassetteTape(23, 6.2, true));
-
-    // Pit 1: X 24 to 29 (Gap 5.0 units - requires run jump or grind rail)
-    this.addGrindRail(new GrindRail(24.5, 1.4, 7.5));
-
-    // Road 2: X 29 to 50
-    this.addPlatform(29, 0, 21, 4, true);
-    this.addCheckpoint(new Checkpoint(30.5, 0));
-
-    // Steam Vent & aggressive Skater Dog
-    this.addSteamVent(new SteamVent(32, 0));
-    this.addEnemy(new SkaterDog(35, 0, 5));
-
-    // Elevated scaffolding platform (一方通行)
-    this.addPlatform(36, 2.6, 8, 0.5);
-    this.addCassette(new CassetteTape(38, 3.8));
-    this.addCassette(new CassetteTape(40, 3.8));
-    this.addCassette(new CassetteTape(42, 3.8));
-    this.addEnemy(new SecurityBot(40, 2.6, 2.5));
-
-    this.addObstacle(new StreetObstacle(46, 0, 'trash_can'));
-
-    // Pit 2: X 50 to 55 (Gap 5.0 units)
-    // Road 3: X 55 to 77
-    this.addPlatform(55, 0, 22, 4, true);
-    this.addCheckpoint(new Checkpoint(56.5, 0));
-
-    // Stepping subway entrance stairs guarded by Drone & Security Bot
-    this.addPlatform(58, 1.6, 5, 1.6);
-    this.addPlatform(63, 3.0, 5, 3.0);
-    this.addEnemy(new SurveillanceDrone(61, 4.8, 5));
-    this.addEnemy(new SecurityBot(66, 3.0, 2.5));
-
-    // High secret route blocks
-    this.addBlock(new StageBlock(68, 6.2, 'brick'));
-    this.addBlock(new StageBlock(70, 6.2, 'question'));
-    this.addBlock(new StageBlock(72, 6.2, 'brick'));
-
-    // Intermittent security laser grid before pit 3
-    this.addLaserGrid(new LaserGrid(74, 0, 3.0, 1.15, true));
-
-    // Pit 3: X 77 to 82 (Gap 5.0 units)
-    // Road 4: X 82 to 112
-    this.addPlatform(82, 0, 30, 4, true);
-    this.addCheckpoint(new Checkpoint(83.5, 0));
-
-    this.addEnemy(new SkaterDog(90, 0, 6));
-    this.addEnemy(new SurveillanceDrone(96, 4.5, 6));
-
-    // Trash can obstacle & Grind Rail 2
-    this.addObstacle(new StreetObstacle(86, 0, 'trash_can'));
-    this.addGrindRail(new GrindRail(88, 1.2, 8.0));
-
-    // Brick stairs & Cassettes
-    this.addBlock(new StageBlock(98, 3.2, 'brick'));
-    this.addBlock(new StageBlock(99, 3.2, 'question'));
-    this.addBlock(new StageBlock(100, 3.2, 'brick'));
-
-    this.addEnemy(new SecurityBot(106, 0, 3));
-
-    // Subwoofer Bounce Pad before goal!
-    this.addSubwoofer(new SubwooferPad(110, 0));
-
-    // Raised stage platforms leading to goal turntable (solid steps)
-    this.addPlatform(115, 1.5, 8, 1.5);
-    this.addPlatform(123, 2.8, 8, 2.8);
-    this.addPlatform(131, 3.5, 14, 3.5);
-  }
-
-  // -------------------------------------------------------------
-  // STAGE 2: SUBWAY CYPHER (線路と停車中の電車。3つ目の線路はレールカートで渡る)
-  // -------------------------------------------------------------
-  private buildStage2(): void {
-    // Station Platform 1: X -6 to 24
-    this.addPlatform(-6, 0, 30, 4);
-
-    this.addBlock(new StageBlock(8, 3.2, 'question'));
-    this.addBlock(new StageBlock(10, 3.2, 'question'));
-    this.addBlock(new StageBlock(12, 3.2, 'brick'));
-
-    // Steam vent & initial patrol bot
-    this.addSteamVent(new SteamVent(14, 0));
-    this.addObstacle(new StreetObstacle(17, 0, 'trash_can'));
-    this.addEnemy(new SecurityBot(20, 0, 3));
-
-    // Sunken railway track 1 (safe floor at y = -1.0) with fast Skater Dog!
-    this.addPlatform(24, -1.0, 14, 3);
-    this.addEnemy(new SkaterDog(28, -1.0, 5));
-
-    // Parked Subway Train 1 (y = 1.8)
-    this.addPlatform(26, 1.8, 10, 2.8);
-    this.addGrindRail(new GrindRail(27, 2.8, 8.0));
-    this.addCassette(new CassetteTape(30, 4.0));
-    this.addCassette(new CassetteTape(32, 4.0));
-
-    // Station Platform 2: X 38 to 64
-    this.addPlatform(38, 0, 26, 4);
-    this.addCheckpoint(new Checkpoint(39.5, 0));
-
-    // SECURITY LASER GRID guarded by Drone!
-    this.addLaserGrid(new LaserGrid(43, 0, 3.5, 1.15, false));
-    this.addEnemy(new SurveillanceDrone(45, 4.2, 5));
-    this.addEnemy(new SecurityBot(50, 0, 3.5));
-    this.addEnemy(new SkaterDog(56, 0, 5));
-
-    // Overhead Walkway (一方通行)
-    this.addPlatform(49, 2.6, 7, 0.5);
-    this.addBlock(new StageBlock(51, 5.6, 'question', true)); // Hidden Gold Cassette!
-    this.addBlock(new StageBlock(53, 5.6, 'brick'));
-
-    // Sunken track 2: X 64 to 76 with patrolling Skater Dog!
-    this.addPlatform(64, -1.0, 12, 3);
-    this.addEnemy(new SkaterDog(68, -1.0, 4.5));
-
-    // Parked Subway Train 2:
-    this.addPlatform(66, 1.8, 8, 2.8);
-    this.addEnemy(new SurveillanceDrone(70, 4.2, 4));
-
-    // Station Platform 3: X 76 to 104
-    this.addPlatform(76, 0, 28, 4);
-    this.addCheckpoint(new Checkpoint(77.5, 0));
-
-    this.addBlock(new StageBlock(82, 3.2, 'question'));
-    this.addBlock(new StageBlock(84, 3.2, 'brick'));
-    this.addBlock(new StageBlock(86, 3.2, 'question'));
-
-    this.addEnemy(new SecurityBot(88, 0, 3.5));
-    this.addLaserGrid(new LaserGrid(92, 0, 3.2, 1.15, true));
-
-    // Subwoofer Bounce Pad
-    this.addSubwoofer(new SubwooferPad(98, 0));
-
-    // Sunken track 3: X 104 to 118。レールと床を撤去し、動く床のみの奈落エリアにする(落ちたらデス)
-    this.addMovingPlatform(new MovingPlatform(108, 0.5, 5.0, 4.0, 0, 1.9, 'gondola'));
-
-    // Final Concourse Platform: X 118 to 150
-    this.addPlatform(118, 0, 32, 4);
-    this.addCheckpoint(new Checkpoint(119.5, 0));
-    // Double Laser Grid: one crouch slide, one high barrier
-    this.addLaserGrid(new LaserGrid(123, 0, 3.2, 1.15, true));
-    this.addLaserGrid(new LaserGrid(129, 0, 3.2, 2.3, false));
-    this.addEnemy(new SecurityBot(126, 0, 3.0));
-    this.addEnemy(new SkaterDog(134, 0, 5));
-
-    this.addPlatform(136, 1.5, 8, 1.5);
-    this.addPlatform(144, 3.5, 12, 3.5);
-
-    this.addTrackRails([[24, 38], [64, 76]], -1.0);
-  }
-
-  /** 線路の飾り(判定なし)。ソリッドな床の上に細いレールを2本敷く */
-  private addTrackRails(spans: [number, number][], floorY: number): void {
-    const railMat = new THREE.MeshStandardMaterial({ color: 0x6b7378, metalness: 0.8, roughness: 0.4 });
-    for (const [x0, x1] of spans) {
-      for (const z of [-0.7, 0.7]) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.06, 0.08), railMat);
-        rail.position.set((x0 + x1) / 2, floorY + 0.03, z);
-        this.bgGroup.add(rail);
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // STAGE 3: ROOFTOP SKYLINE (ビルの谷間。崩れる足場板とゴンドラで渡る縦の動きの面)
-  // -------------------------------------------------------------
-  private buildStage3(): void {
-    // Rooftop 1: X -6 to 22
-    this.addPlatform(-6, 0, 28, 4);
-
-    this.addBlock(new StageBlock(7, 3.2, 'question'));
-    this.addBlock(new StageBlock(9, 3.2, 'brick'));
-    this.addBlock(new StageBlock(11, 3.2, 'question'));
-
-    this.addObstacle(new StreetObstacle(15, 0, 'cardboard'));
-    this.addEnemy(new SecurityBot(17, 0, 3));
-    this.addFireHydrant(new FireHydrant(20, 0));
-
-    // 崩れる足場板 X 24〜32(面3の固有ギミック)。乗ると約0.5秒で落ちるので立ち止まらずに渡る
-    this.addCrumblingPlatform(new CrumblingPlatform(24, 1.6, 2.4));
-    this.addCrumblingPlatform(new CrumblingPlatform(27.6, 1.6, 2.4));
-    this.addCrumblingPlatform(new CrumblingPlatform(31.2, 1.6, 2.4));
-    this.addEnemy(new SurveillanceDrone(27, 4.4, 4));
-    this.addCassette(new CassetteTape(26, 2.8));
-    this.addCassette(new CassetteTape(28, 2.8));
-    this.addCassette(new CassetteTape(30, 2.8));
-
-    // Rooftop 2: X 34 to 51 (動く床とめり込まないよう長さを調整)
-    this.addPlatform(34, 2.4, 17, 5);
-    this.addCheckpoint(new Checkpoint(35.5, 2.4));
-    this.addEnemy(new SkaterDog(40, 2.4, 5));
-
-    // Grind Rail along rooftop parapet
-    this.addGrindRail(new GrindRail(36, 3.6, 8.0));
-
-    // High air duct route with Gold Cassette! (一方通行)
-    this.addPlatform(42, 5.0, 6, 0.6);
-    this.addBlock(new StageBlock(44, 8.0, 'question', true));
-    this.addBlock(new StageBlock(46, 8.0, 'brick'));
-
-    this.addEnemy(new SecurityBot(48, 2.4, 3));
-
-    // Fast Moving Gondola Platform over abyss (めり込みを解消した配置: X 55.5〜62.5)
-    this.addMovingPlatform(new MovingPlatform(59, 2.2, 5.0, 3.5, 0, 2.3));
-    this.addEnemy(new SurveillanceDrone(60, 5.0, 5));
-
-    // Rooftop 3: X 68 to 90
-    this.addPlatform(68, 1.5, 22, 5);
-    this.addCheckpoint(new Checkpoint(69.5, 1.5));
-    this.addBlock(new StageBlock(74, 4.7, 'question'));
-    this.addBlock(new StageBlock(76, 4.7, 'brick'));
-    this.addEnemy(new SecurityBot(75, 1.5, 3));
-    this.addLaserGrid(new LaserGrid(80, 1.5, 3.2, 1.15, true));
-    this.addEnemy(new SkaterDog(84, 1.5, 5));
-
-    // Subwoofer Bounce Pad on Rooftop 3!
-    this.addSubwoofer(new SubwooferPad(87, 1.5));
-
-    // High Vertical Moving Gondola Platform (床の間に収まる自然な上下動)
-    this.addMovingPlatform(new MovingPlatform(93, 2.8, 5.0, 0, 1.6, 2.3));
-    this.addEnemy(new SurveillanceDrone(95, 5.2, 5));
-
-    // Rooftop 4: X 101 to 124
-    this.addPlatform(101, 2.0, 23, 5);
-    this.addCheckpoint(new Checkpoint(102.5, 2.0));
-    this.addObstacle(new StreetObstacle(106, 2.0, 'cardboard'));
-    this.addEnemy(new SkaterDog(108, 2.0, 5));
-    this.addObstacle(new StreetObstacle(112, 2.0, 'cardboard'));
-    this.addEnemy(new SecurityBot(118, 2.0, 3));
-
-    // High Grind Rail into Helipad
-    this.addGrindRail(new GrindRail(124, 2.4, 10.0));
-
-    // Penthouse Helipad & DJ Stage: X 136 to 158
-    this.addPlatform(136, 1.5, 22, 4);
-    this.addCheckpoint(new Checkpoint(137.5, 1.5));
-    this.addEnemy(new SecurityBot(140, 1.5, 2.5));
-    this.addPlatform(144, 2.8, 12, 2.8);
-  }
-
-  // -------------------------------------------------------------
-  // STAGE 4: NEON BLOCK PARTY (ビートに合わせて交互に点滅するレーザーが主役の総まとめ)
-  // -------------------------------------------------------------
-  private buildStage4(): void {
-    // BGMのテンポに合わせ、4拍(2.5秒)を1周期にする
-    const BEAT_PERIOD = 2.5;
-
-    // Neon Boulevard 1: X -6 to 24
-    this.addPlatform(-6, 0, 30, 4, true);
-
-    this.addBlock(new StageBlock(6, 3.2, 'question'));
-    this.addBlock(new StageBlock(8, 3.2, 'question'));
-    this.addBlock(new StageBlock(10, 3.2, 'question'));
-    this.addBlock(new StageBlock(12, 3.2, 'brick'));
-
-    this.addFireHydrant(new FireHydrant(15, 0));
-    this.addEnemy(new SkaterDog(16, 0, 5));
-    this.addObstacle(new StreetObstacle(19, 0, 'cardboard'));
-    this.addEnemy(new SecurityBot(21, 0, 2.5));
-
-    // High Neon Speaker Stack with Grind Rail
-    this.addPlatform(26, 1.8, 8, 1.8);
-    this.addGrindRail(new GrindRail(27, 2.8, 6.0));
-    this.addEnemy(new SurveillanceDrone(30, 4.6, 4));
-
-    // Neon Boulevard 2: X 36 to 62
-    this.addPlatform(36, 0, 26, 4, true);
-    this.addCheckpoint(new Checkpoint(37.5, 0));
-
-    // ビート同期レーザー(交互に点滅する2連)
-    this.addLaserGrid(new LaserGrid(40, 0, 3.5, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(52, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-    this.addEnemy(new SecurityBot(44, 0, 3));
-
-    // Gimmick: Steam Vent & High Secret Gold Cassette (一方通行)
-    this.addSteamVent(new SteamVent(46, 0));
-    this.addPlatform(48, 2.8, 6, 0.6);
-    this.addBlock(new StageBlock(50, 5.8, 'question', true));
-
-    this.addEnemy(new SkaterDog(57, 0, 3));
-    this.addEnemy(new SurveillanceDrone(58, 4.6, 5));
-
-    // Fast Moving Gondola Platform over Neon Abyss
-    this.addMovingPlatform(new MovingPlatform(64, 2.0, 7.0, 4.5, 0, 2.8));
-
-    // Neon Boulevard 3: X 76 to 106
-    this.addPlatform(76, 0, 30, 4, true);
-    this.addCheckpoint(new Checkpoint(77.5, 0));
-
-    this.addBlock(new StageBlock(82, 3.2, 'question'));
-    this.addBlock(new StageBlock(84, 3.2, 'brick'));
-    this.addBlock(new StageBlock(86, 3.2, 'question'));
-
-    this.addEnemy(new SecurityBot(82, 0, 3));
-    this.addEnemy(new SkaterDog(88, 0, 5));
-
-    // Subwoofer Bounce Pad launch!
-    this.addSubwoofer(new SubwooferPad(90, 0));
-
-    // High Grind Rail over dual pulsing lasers (ビート同期・交互点滅)
-    this.addGrindRail(new GrindRail(93, 2.8, 12.0));
-    this.addLaserGrid(new LaserGrid(96, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(102.5, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-
-    // レール上空に浮遊の敵(ドローン)を追加して、上のレールルートも適正なスリル・難易度にする
-    this.addEnemy(new SurveillanceDrone(96.5, 3.9, 3.5));
-    this.addEnemy(new SurveillanceDrone(100.5, 4.1, 4.0));
-    this.addEnemy(new SurveillanceDrone(105, 4.6, 5));
-
-    // スピーカーの島(X 108〜112): サブウーファーが宙に浮かないよう足場を置く。
-    // 島の上のサブウーファーで高く跳ぶと、上空のカセットを取れる。
-    this.addPlatform(108, 0, 4, 4, true);
-    this.addSubwoofer(new SubwooferPad(110, 0));
-    this.addCassette(new CassetteTape(109, 8.0));
-    this.addCassette(new CassetteTape(111, 8.0));
-
-    // Stepped Champion Pyramid leading to Grandmaster Turntable (solid steps)
-    this.addPlatform(116, 1.5, 8, 1.5);
-    this.addEnemy(new SkaterDog(118, 1.5, 3.5));
-    this.addPlatform(126, 2.8, 8, 2.8);
-    this.addEnemy(new SecurityBot(128, 2.8, 2.5));
-    this.addPlatform(136, 3.8, 8, 3.8);
-    this.addCassette(new CassetteTape(138, 5.0));
-    this.addCassette(new CassetteTape(140, 5.0));
-
-    // Final Grand Stage
-    this.addPlatform(146, 2.0, 14, 2.0);
-    this.addPlatform(154, 4.0, 14, 4.0);
-  }
-
-  // -------------------------------------------------------------
-  // STAGE 5 (FINAL): DOG PACK RUSH (後ろから大量の犬が追ってくる。立ち止まれない縦横無尽のパルクール)
-  // 穴は最大でも走り幅跳びの限界(約10m)の7割台、段差は跳躍の高さ(約4m)の7割台までに収め、
-  // 犬の大群も同じ道を通れるようにする(穴は10m未満、段差は犬の跳躍3.6m未満)。
-  // -------------------------------------------------------------
-  private buildStage5(): void {
-    // BGM(124BPM)の4拍 = 約1.94秒を、ビート同期レーザーの1周期にする
-    const BEAT_PERIOD = 1.94;
-
-    // A. スタートの直線: X -6 to 28
-    this.addPlatform(-6, 0, 34, 4, true);
-    this.addObstacle(new StreetObstacle(13, 0, 'cardboard'));
-    this.addFireHydrant(new FireHydrant(20, 0));
-    this.addCassette(new CassetteTape(9, 2.6));
-    this.addCassette(new CassetteTape(24, 2.6));
-
-    // B. 7mの穴を越えた先のレーザー通路: X 35 to 51
-    this.addPlatform(35, 0, 16, 4, true);
-    this.addCheckpoint(new Checkpoint(36.5, 0));
-    this.addLaserGrid(new LaserGrid(41, 0, 3.5, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(46.5, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-
-    // C. 7mの穴の先から、3段の駆け上がり(段差1.5 → 1.5 → 1.2、間は3m)
-    this.addPlatform(58, 1.5, 6, 1.5);
-    this.addEnemy(new SecurityBot(61, 1.5, 2.0));
-    this.addPlatform(67, 3.0, 6, 3.0);
-    this.addPlatform(76, 4.2, 6, 4.2);
-    this.addEnemy(new SurveillanceDrone(70, 6.4, 4));
-
-    // D. 崩れる足場の橋(約0.5秒で落ちる。立ち止まらずに渡る)
-    this.addCrumblingPlatform(new CrumblingPlatform(85, 4.2, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(88.4, 4.2, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(91.8, 4.4, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(95.2, 4.4, 2.0));
-    this.addCassette(new CassetteTape(89, 5.6));
-    this.addCassette(new CassetteTape(93, 5.8));
-
-    // E. 休憩の足場(チェックポイント)から、動く足場で奈落を渡る
-    this.addPlatform(99, 3.4, 10, 3.4);
-    this.addCheckpoint(new Checkpoint(100.5, 3.4));
-    this.addEnemy(new SecurityBot(105, 3.4, 2.5));
-    // 動く足場は出発点を中心に ±deltaX で往復する。両端の足場(X 109 と 124)に食い込まない範囲 X 110.1〜123.1 に収める。
-    // 最大の速さ = deltaX × speed = 7.2m/s(走る速さ9.8m/sより遅く、乗って渡れる)
-    this.addMovingPlatform(new MovingPlatform(114.1, 3.0, 5.0, 4.0, 0, 1.8));
-    this.addEnemy(new SurveillanceDrone(116, 6.0, 4.5));
-
-    // F. 動く足場の向こうの広場: X 124 to 138
-    this.addPlatform(124, 3.2, 14, 3.2);
-    this.addCheckpoint(new Checkpoint(125.5, 3.2));
-    this.addSubwoofer(new SubwooferPad(132, 3.2));
-    this.addCassette(new CassetteTape(132, 10.0));
-
-    // G. 地上へ降りて、ビートに合わせて交互に点滅するレーザーとレール: X 142 to 186
-    this.addPlatform(142, 0, 44, 4, true);
-    this.addCheckpoint(new Checkpoint(143.5, 0));
-    this.addLaserGrid(new LaserGrid(149, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(155, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-    this.addEnemy(new SecurityBot(152, 0, 2.5));
-    this.addGrindRail(new GrindRail(161, 2.8, 12.0));
-    this.addLaserGrid(new LaserGrid(164, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(170.5, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-    this.addEnemy(new SurveillanceDrone(165, 4.2, 4));
-    this.addEnemy(new SurveillanceDrone(171, 4.4, 4.5));
-    this.addObstacle(new StreetObstacle(178, 0, 'cardboard'));
-
-    // H. 8mの穴の先の、もう一度レーザー通路: X 194 to 216
-    this.addPlatform(194, 0, 22, 4, true);
-    this.addCheckpoint(new Checkpoint(195.5, 0));
-    this.addLaserGrid(new LaserGrid(200, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0 }));
-    this.addLaserGrid(new LaserGrid(206, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0.5 }));
-    this.addEnemy(new SecurityBot(210, 0, 2.5));
-    this.addObstacle(new StreetObstacle(213.5, 0, 'cardboard'));
-
-    // I. 8mの穴の先から、崩れる足場の階段で屋上へ(1段あがるごとに0.8m)
-    this.addPlatform(224, 1.5, 4, 1.5);
-    this.addCrumblingPlatform(new CrumblingPlatform(231, 2.8, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(234.4, 3.6, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(237.8, 4.4, 2.0));
-    this.addCrumblingPlatform(new CrumblingPlatform(241.2, 5.2, 2.0));
-    this.addCassette(new CassetteTape(236, 5.8));
-    this.addPlatform(245, 5.2, 8, 5.2);
-    this.addCheckpoint(new Checkpoint(246.5, 5.2));
-    this.addEnemy(new SurveillanceDrone(249, 7.6, 3.5));
-
-    // J. 屋上から降りて、動く足場でもう一度奈落を渡る
-    this.addPlatform(258, 2.0, 6, 2.0);
-    // 往復の範囲は X 265.2〜279.2(両端の足場 X 264 と 280 に食い込まない)。最大の速さ 4.5 × 1.8 = 8.1m/s
-    this.addMovingPlatform(new MovingPlatform(269.7, 2.0, 5.0, 4.5, 0, 1.8));
-    this.addEnemy(new SurveillanceDrone(272, 4.6, 5));
-    this.addPlatform(280, 2.0, 12, 2.0);
-    this.addCheckpoint(new Checkpoint(281.5, 2.0));
-    this.addSubwoofer(new SubwooferPad(287, 2.0));
-    this.addCassette(new CassetteTape(287, 9.0));
-
-    // K. ゴールの台(ターンテーブルは半径2.8、中心 X 304)
-    this.addPlatform(296, 2.0, 18, 2.0);
   }
 
   // -------------------------------------------------------------
@@ -1256,6 +941,7 @@ export class Stage implements DogTerrain {
     this.cassettes.forEach((c) => c.update(dt));
     this.subwoofers.forEach((s) => s.update(dt));
     this.laserGrids.forEach((l) => l.update(dt));
+    this.verticalLaserTraps.forEach((t) => t.update(dt));
     this.movingPlatforms.forEach((m) => m.update(dt));
     this.crumblingPlatforms.forEach((c) => c.update(dt));
     this.checkpoints.forEach((c) => c.update(dt));
@@ -1304,6 +990,16 @@ export class Stage implements DogTerrain {
   // 犬のための地形と、後ろから追ってくる大群
   // -------------------------------------------------------------
 
+  /** DogTerrain: x の位置で、高さ fromY〜toY にある最も低い足場の下面(頭上の天井)。無ければ null */
+  public ceilingBottom(x: number, fromY: number, toY: number): number | null {
+    let best: number | null = null;
+    for (const p of this.platforms) {
+      const bottom = p.y - p.h;
+      if (x >= p.x && x <= p.x + p.w && bottom >= fromY && bottom <= toY && (best === null || bottom < best)) best = bottom;
+    }
+    return best;
+  }
+
   /** DogTerrain: x の位置で、高さ maxY 以下にある最も高い足場の上面(足場・箱・缶・動く足場など)。無ければ null */
   public supportTop(x: number, maxY: number): number | null {
     let best: number | null = null;
@@ -1348,9 +1044,13 @@ export class Stage implements DogTerrain {
    */
   public updateEnemies(dt: number, playerX: number, playerY: number): void {
     this.hordeDogs = this.hordeDogs.filter((d) => !d.isDead);
-    if (this.horde) {
+    if (this.horde && playerX <= this.hordeEndX) {
       const n = this.horde.update(dt, this.hordeDogs.length);
       if (n > 0) this.spawnHordeDogs(n, playerX, playerY);
+    }
+    // ゴール前の登りと縦穴には、大群を入れない(穴に落ちてきてゴールの邪魔をしないように)
+    for (const d of this.hordeDogs) {
+      if (d.x > this.hordeEndX + 8) d.defeat(0, 0);
     }
 
     // 倒されて飛んでいった・落ちた敵は、しばらく見せてから取り除く(増え続けて重くならないように)
@@ -1367,8 +1067,11 @@ export class Stage implements DogTerrain {
     // ステージ最初の足場の左端より左には出さない(出現できる地面がある所だけ)
     const leftmost = this.platforms.reduce((m, p) => Math.min(m, p.x), Infinity);
     for (let i = 0; i < count; i++) {
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const x = Math.max(playerX - 24 - Math.random() * 10 - i * 1.4, leftmost + 1);
+      const baseX = playerX - 24 - Math.random() * 10 - i * 1.4;
+      // 真後ろが奈落(崩れた足場・動く足場の区間)なら、足場のある所まで後ろへさかのぼって出す。
+      // 終盤の足場の渡りでも、大群が途切れないようにする
+      for (let back = 0; back < 12; back++) {
+        const x = Math.max(baseX - back * 4, leftmost + 1);
         // プレイヤーの高さ付近の足場(遠くの高い屋根の上などには出さない)
         const top = this.supportTop(x, playerY + 4);
         if (top === null) continue;
@@ -1698,6 +1401,11 @@ export class Stage implements DogTerrain {
     this.laserGrids.forEach((l) => {
       this.scene.remove(l.mesh);
     });
+    this.verticalLaserTraps.forEach((t) => {
+      this.scene.remove(t.mesh);
+      t.dispose();
+    });
+    this.verticalLaserTraps = [];
     this.movingPlatforms.forEach((m) => {
       this.scene.remove(m.mesh);
     });

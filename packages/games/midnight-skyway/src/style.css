@@ -381,6 +381,11 @@ html, body {
   box-shadow: 0 0 6px #ffcc00;
 }
 
+.g-blocks span.on.red {
+  background: #ff3344;
+  box-shadow: 0 0 7px #ff3344;
+}
+
 .g-val {
   font-size: 10px;
   font-weight: 800;
@@ -627,11 +632,40 @@ html, body {
   border: none;
 }
 
+/* Top Center: Pure Digital Lap Timer (where TIME LEFT originally was, no LAP or BEST label) */
+.hud-timer-arcade {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%) skewX(-8deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 24px;
+  background: linear-gradient(135deg, rgba(8, 14, 24, 0.85) 0%, rgba(14, 22, 36, 0.92) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 240, 255, 0.25);
+  pointer-events: none;
+  z-index: 30;
+}
+
+.hud-time-main {
+  font-size: 34px;
+  font-weight: 900;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-shadow: 0 0 14px rgba(0, 240, 255, 0.75);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Top Right: Course / Open Data Credit Notation (Plain White Text) */
 #hud-attribution, .hud-attribution-plain {
   position: absolute;
-  top: 16px;
-  right: 20px;
+  top: 18px;
+  right: 24px;
   color: #ffffff;
   font-size: 11px;
   font-weight: 500;
@@ -644,13 +678,14 @@ html, body {
   line-height: 1.4;
 }
 
-/* Sector Banner Anchor (Floats above bottom-right cluster) */
+/* Sector Banner Anchor (Floats directly underneath the top-center lap timer) */
 .hud-sector-banner-anchor {
   position: absolute;
-  bottom: 185px;
-  right: 24px;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
   pointer-events: none;
-  text-align: right;
+  text-align: center;
   z-index: 100;
 }
 
@@ -675,155 +710,73 @@ html, body {
   box-shadow: 0 0 12px rgba(255, 0, 68, 0.7);
 }
 
-/* Bottom Right: Unified Racing Telemetry Cluster (Time, Best, Speed, Gear, Tachometer) */
+/* Bottom Right: Large 1/4 Circle (Quadrant) Floating Speedometer (No box, no gear) */
 .hud-speedo-arcade {
   position: absolute;
-  bottom: 24px;
+  bottom: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  transform: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* 1/4 Circle Meter Container (Prominent Arcade Scale) */
+.hybrid-meter-container {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.meter-dial-svg {
+  width: 220px;
+  height: 220px;
+  overflow: visible;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.95));
+}
+
+.meter-dial-svg text {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 1.0);
+  user-select: none;
+}
+
+/* Compact Digital Speed Readout (inside 1/4 circle corner) */
+.speedo-digital-quarter {
+  position: absolute;
   right: 24px;
-  background: linear-gradient(135deg, rgba(8, 12, 20, 0.86) 0%, rgba(14, 20, 32, 0.94) 100%);
-  border-right: 4px solid #00f0ff;
-  border-top: 1px solid rgba(0, 240, 255, 0.4);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
-  padding: 12px 20px 10px 20px;
-  transform: skewX(-12deg);
-  border-radius: 4px;
-  min-width: 250px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.25);
-  transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
-}
-
-/* Top row: Lap Time & Best Time */
-.cluster-time-row {
+  bottom: 22px;
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  padding-bottom: 6px;
-  margin-bottom: 8px;
-}
-
-.time-block {
-  display: flex;
-  align-items: baseline;
-}
-
-.time-tag {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: #ffaa00;
-  margin-right: 5px;
-}
-
-.hud-time-main {
-  font-size: 26px;
-  font-weight: 900;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  color: #ffffff;
-  letter-spacing: 1px;
-  text-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
-  line-height: 1;
-}
-
-.best-time-block {
-  display: flex;
-  align-items: baseline;
-}
-
-.best-tag {
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: #00f0ff;
-  margin-right: 4px;
-}
-
-.hud-best-time-arcade {
-  font-size: 14px;
-  font-weight: 800;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  color: #00f0ff;
-  letter-spacing: 0.5px;
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
-  line-height: 1;
-}
-
-/* Middle row: Speed & Gear */
-.speedo-header-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.speedo-primary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+  gap: 3px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .speedo-num {
-  font-size: 58px;
+  font-size: 54px;
   font-weight: 900;
   font-style: italic;
   font-family: ui-monospace, Menlo, Consolas, monospace;
   color: #00f0ff;
-  line-height: 0.95;
-  text-shadow: 0 0 20px rgba(0, 240, 255, 0.7);
+  line-height: 0.88;
+  text-shadow: 0 0 18px rgba(0, 240, 255, 0.8), 0 2px 8px rgba(0, 0, 0, 0.9);
+  letter-spacing: -2px;
 }
 
 .speedo-unit {
   font-size: 13px;
   font-weight: 900;
-  color: #7b8eab;
-  letter-spacing: 1px;
-}
-
-.speedo-gear-box {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.gear-tag {
-  font-size: 9px;
-  font-weight: 900;
-  color: #64748b;
-  letter-spacing: 1px;
-  transition: all 0.15s;
-}
-
-.speedo-gear {
-  font-size: 24px;
-  font-weight: 900;
-  color: #ffcc00;
-  text-shadow: 0 0 10px rgba(255, 204, 0, 0.6);
-  line-height: 1;
-}
-
-.speedo-tacho-wrap {
-  margin-top: 8px;
-}
-
-.speedo-tacho {
-  width: 100%;
-  height: 7px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.tacho-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #00f0ff 0%, #ffcc00 70%, #ff0055 100%);
-  transition: width 0.05s linear;
-}
-
-.tacho-fill.redline {
-  background: #ff0044;
-  box-shadow: 0 0 10px #ff0044;
+  color: #8ba0c0;
+  letter-spacing: 0.8px;
 }
 
 /* Center Countdown */
@@ -1143,9 +1096,10 @@ html, body {
   pointer-events: none;
   z-index: 30;
 }
-.hud-drift-line { font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
-.hud-drift-tag { font-size: 11px; letter-spacing: 2px; color: #ff0055; }
-.hud-drift-chain { color: #ffcc00; }
+.hud-drift-line { font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 8px; }
+.hud-drift-tag { font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #ff0055; text-shadow: 0 0 10px rgba(255, 0, 85, 0.6); transition: all 0.15s ease-out; }
+.hud-drift-tag.ready { color: #00f0ff; text-shadow: 0 0 12px #00f0ff, 0 0 24px rgba(0, 240, 255, 0.85); }
+.hud-drift-chain { color: #ffcc00; font-size: 18px; font-weight: 900; text-shadow: 0 0 10px rgba(255, 204, 0, 0.7); }
 .hud-boost-bar { width: 240px; height: 8px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); transform: skewX(-20deg); }
 .hud-boost-fill { height: 100%; width: 0; background: linear-gradient(90deg, #00f0ff, #ffffff); }
 .hud-drift.boosting .hud-boost-fill { box-shadow: 0 0 12px #00f0ff; }
@@ -1182,7 +1136,97 @@ html, body {
 .hud-result-side .stat-line { color: #cbd5e1; }
 .hud-result-side .hud-arcade-result-buttons { flex-direction: column; align-items: stretch; gap: 8px; }
 .hud-result-side .hud-arcade-result-buttons button { background: rgba(24, 34, 51, 0.7); }
-.result-open .hud-minimap-arcade, .result-open .hud-race-top, .result-open .hud-drift { opacity: 0; transition: opacity 0.3s; }
+.result-open .hud-minimap-arcade, .result-open .hud-race-top, .result-open .hud-drift, .result-open .hud-combat-panel { opacity: 0; transition: opacity 0.3s; }
+
+/* ---------- Combat & Weapons HUD Panel ---------- */
+.hud-combat-panel {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 35;
+}
+.hud-hp-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: rgba(10, 16, 26, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  border-radius: 4px;
+  transform: skewX(-10deg);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+}
+.hud-hp-tag {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #00f0ff;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+}
+.hud-hp-blocks {
+  display: flex;
+  gap: 5px;
+}
+.hp-block {
+  width: 24px;
+  height: 9px;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+.hp-block.full {
+  background: #00f0ff;
+  box-shadow: 0 0 10px #00f0ff;
+}
+.hp-block.empty {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.hud-lockon-wrap {
+  display: flex;
+  align-items: center;
+  padding: 3px 14px;
+  background: rgba(20, 10, 12, 0.88);
+  border: 1px solid rgba(255, 50, 70, 0.6);
+  border-radius: 4px;
+  transform: skewX(-8deg);
+  animation: lockonGlow 0.8s alternate infinite;
+}
+@keyframes lockonGlow {
+  0% { box-shadow: 0 0 6px rgba(255, 50, 70, 0.2); }
+  100% { box-shadow: 0 0 16px rgba(255, 50, 70, 0.6); }
+}
+.hud-lockon-indicator {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #ff9999;
+}
+.hud-lockon-indicator.locked {
+  color: #ff3344;
+  text-shadow: 0 0 8px rgba(255, 50, 70, 0.9);
+  animation: lockBlink 0.35s steps(2) infinite;
+}
+.hud-lockon-indicator.warning {
+  color: #ffaa00;
+  text-shadow: 0 0 8px rgba(255, 170, 0, 0.8);
+}
+.hud-lockon-indicator.threat {
+  color: #ff1133;
+  text-shadow: 0 0 12px rgba(255, 0, 50, 1.0);
+  background: rgba(255, 0, 40, 0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+  animation: lockBlink 0.2s steps(2) infinite;
+}
+@keyframes lockBlink {
+  50% { opacity: 0.4; }
+}
 
 /* ---------- Car select: machine buttons in a row at the bottom centre, so the whole car stays visible ---------- */
 #screen-car-select .car-select-bottom { pointer-events: auto; }
@@ -1192,31 +1236,247 @@ html, body {
   width: 100%;
   margin-bottom: 6px;
 }
-.car-select-bottom .car-card-list-arcade { flex-direction: row; gap: 14px; justify-content: center; }
-.car-select-bottom .car-card-arcade { flex: 0 0 auto; width: 250px; padding: 7px 12px; }
 .car-select-bottom .car-card-arcade:hover { transform: skewX(-6deg) translateY(-3px); }
 .car-select-bottom .car-card-arcade.active { transform: skewX(-6deg) translateY(-5px); }
-.car-select-bottom .car-name-arcade { font-size: 17px; margin: 0 0 3px 0; }
-.car-select-bottom .car-badge-arcade { font-size: 9px; }
-.car-select-bottom .arcade-gauges { gap: 2px; }
-.car-select-bottom .g-blocks span { width: 10px; height: 5px; }
-.car-select-bottom .g-lbl { font-size: 10px; width: 36px; }
 
-/* Car select: everything below the car scales with the window (em units off one clamped font size) */
-#screen-car-select { font-size: clamp(9px, min(1.15vw, 2.1vh), 18px); padding: 1.8em 2.6em; }
+#screen-car-select {
+  font-size: clamp(9px, min(1.15vw, 2.0vh), 18px);
+  padding: clamp(8px, 1.4vh, 1.5em) clamp(8px, 1.4vw, 1.6em);
+  --choice-w: 24em;
+  --choice-h: clamp(23em, 44vh, 26em);
+}
 #screen-car-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
-.car-select-bottom { width: 100%; max-width: 78em; margin-bottom: 1em; }
-.car-select-bottom .car-card-list-arcade { width: 100%; gap: 1.4em; flex-wrap: wrap; justify-content: center; }
-.car-select-bottom .car-card-arcade { flex: 1 1 14em; width: auto; min-width: 0; max-width: 26em; padding: 1em 1.4em; gap: 0.8em; }
-.car-select-bottom .car-card-focus-bar { width: 0.3em; height: 3em; }
-.car-select-bottom .car-badge-arcade { font-size: 0.85em; }
-.car-select-bottom .car-name-arcade { font-size: 1.9em; margin: 0.1em 0 0.45em 0; }
-.car-select-bottom .arcade-gauges { gap: 0.5em; }
-.car-select-bottom .gauge-row { gap: 0.8em; }
-.car-select-bottom .g-lbl { font-size: 0.9em; width: 3.6em; }
-.car-select-bottom .g-blocks { gap: 0.3em; }
-.car-select-bottom .g-blocks span { width: 1.3em; height: 0.6em; }
-#screen-car-select .arcade-action-bar { max-width: 78em; gap: 1.2em; margin-bottom: 0; }
+.car-select-bottom {
+  width: 100%;
+  max-width: 98vw;
+  margin: auto 0 clamp(6px, 1vh, 1em) 0;
+  display: flex;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.car-select-bottom .car-card-list-arcade {
+  width: 100%;
+  max-width: 90em;
+  gap: clamp(6px, 0.9vw, 12px);
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  overflow: visible;
+  padding: 10px 4px 6px 4px;
+  box-sizing: border-box;
+}
+.car-select-bottom .car-card-list-arcade::-webkit-scrollbar { display: none; }
+.car-select-bottom .car-card-arcade {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  max-width: 22em;
+  min-height: var(--choice-h, 24em);
+  height: auto;
+  padding: 1.1em 1.2em;
+  gap: 0;
+  box-sizing: border-box;
+  align-items: stretch;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.car-num-badge {
+  font-size: 0.85em;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ff0055;
+  text-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
+}
+.car-card-title-arcade {
+  font-size: 1.55em;
+  font-weight: 900;
+  font-style: italic;
+  color: #ffffff;
+  margin: 2px 0 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.car-card-sub-arcade {
+  font-size: 0.85em;
+  font-weight: 800;
+  color: #ffcc00;
+  margin-bottom: 0.5em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Machine select: vector outline art box */
+/* Machine select: vector outline art box */
+.car-outline {
+  display: block;
+  width: 100%;
+  height: 5.6em;
+  margin: 0.25em 0 0.45em 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+.car-card-arcade.active .car-outline {
+  border-color: rgba(0, 240, 255, 0.45);
+}
+
+/* Machine select: Segmented status gauges */
+.car-select-bottom .arcade-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28em;
+  margin: 0.3em 0 0.55em 0;
+}
+.car-select-bottom .gauge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em;
+}
+.car-select-bottom .g-lbl {
+  font-size: 0.76em;
+  font-weight: 900;
+  color: #94a3b8;
+  width: 3.2em;
+  white-space: nowrap;
+}
+.car-select-bottom .g-blocks {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  justify-content: flex-end;
+}
+.car-select-bottom .g-blocks span {
+  display: inline-block;
+  width: clamp(8px, 0.9vw, 13px);
+  height: 0.50em;
+  background: rgba(255, 255, 255, 0.10);
+  transform: skewX(-15deg);
+  border-radius: 1px;
+}
+.car-select-bottom .g-blocks span.on {
+  background: #00f0ff;
+  box-shadow: 0 0 6px #00f0ff;
+}
+.car-select-bottom .g-blocks span.on.cyan {
+  background: #00f0ff;
+  box-shadow: 0 0 6px #00f0ff;
+}
+.car-select-bottom .g-blocks span.on.gold {
+  background: #ffcc00;
+  box-shadow: 0 0 6px #ffcc00;
+}
+.car-select-bottom .g-blocks span.on.red {
+  background: #ff3344;
+  box-shadow: 0 0 7px #ff3344;
+}
+
+/* Machine select: Tactical specs & characteristics box */
+.car-spec-arcade {
+  background: linear-gradient(135deg, rgba(8, 14, 26, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 3px solid #00f0ff;
+  border-radius: 4px;
+  padding: 0.48em 0.8em 0.52em 0.8em;
+  margin-top: auto;
+  box-sizing: border-box;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease-out;
+}
+.car-card-arcade[data-car="trail_j"] .car-spec-arcade {
+  border-left-color: #00f0ff;
+}
+.car-card-arcade[data-car="cross_j"] .car-spec-arcade {
+  border-left-color: #ffcc00;
+}
+.car-card-arcade[data-car="combat_sedan"] .car-spec-arcade {
+  border-left-color: #ff3355;
+}
+.car-card-arcade[data-car="missile_truck_j"] .car-spec-arcade {
+  border-left-color: #ff0055;
+}
+
+.spec-header-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25em;
+}
+
+.spec-badge {
+  font-size: 0.70em;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  padding: 0.12em 0.55em;
+  border-radius: 2px;
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+}
+.car-card-arcade[data-car="cross_j"] .spec-badge {
+  color: #ffcc00;
+  background: rgba(255, 204, 0, 0.12);
+  border-color: rgba(255, 204, 0, 0.35);
+  text-shadow: 0 0 6px rgba(255, 204, 0, 0.5);
+}
+.car-card-arcade[data-car="combat_sedan"] .spec-badge,
+.car-card-arcade[data-car="missile_truck_j"] .spec-badge {
+  color: #ff3355;
+  background: rgba(255, 51, 85, 0.14);
+  border-color: rgba(255, 51, 85, 0.4);
+  text-shadow: 0 0 6px rgba(255, 51, 85, 0.5);
+}
+
+/* 白文字でハイコントラスト・高精細なスタイリッシュ表示 */
+.car-spec-arcade .spec-main-digital {
+  font-size: 1.18em;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  font-style: italic;
+  color: #ffffff !important;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
+  line-height: 1.35;
+  margin: 2px 0 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Neon SVG vector vehicle styling */
+.car-outline .car-wire { fill: none; stroke: #00f0ff; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.car-outline .car-wire-glow { fill: none; stroke: rgba(0, 240, 255, 0.42); stroke-width: 6; stroke-linejoin: round; filter: blur(1.5px); }
+.car-outline .car-wire-sub { fill: none; stroke: #58a6ff; stroke-width: 1.6; stroke-linejoin: round; }
+.car-outline .car-wire-dim { fill: none; stroke: rgba(148, 163, 184, 0.4); stroke-width: 1.2; }
+.car-outline .car-wire-grid { stroke: rgba(255, 255, 255, 0.1); stroke-dasharray: 2 4; stroke-width: 1; }
+.car-outline .car-reticle { fill: none; stroke: rgba(0, 240, 255, 0.6); stroke-width: 1.2; }
+.car-outline .car-wheel-rim { fill: rgba(10, 16, 26, 0.85); stroke: #00f0ff; stroke-width: 1.8; }
+.car-outline .car-wheel-hub { fill: #00f0ff; }
+.car-outline .car-wheel-spoke { stroke: rgba(0, 240, 255, 0.5); stroke-width: 1.2; }
+.car-outline .car-accent-gold { fill: #ffcc00; filter: drop-shadow(0 0 3px #ffcc00); }
+.car-outline .car-accent-headlight { fill: #00f0ff; filter: drop-shadow(0 0 4px #00f0ff); }
+.car-outline .car-accent-taillight { fill: #ff3344; filter: drop-shadow(0 0 4px #ff3344); }
+.car-outline .car-accent-red { fill: #ff3344; filter: drop-shadow(0 0 3px #ff3344); }
+.car-outline .car-accent-red-lamp { fill: #ff3344; filter: drop-shadow(0 0 4px #ff3344); }
+.car-outline .car-laser-line { stroke: #ff3344; stroke-width: 1; stroke-dasharray: 2 2; }
+.car-outline .car-ram-bumper { fill: rgba(255, 50, 70, 0.2); stroke: #ff4466; stroke-width: 1.8; }
+.car-outline .car-weapon-body { fill: rgba(20, 30, 48, 0.9); stroke: #00f0ff; stroke-width: 1.5; }
+.car-outline .car-weapon-barrel { stroke: #00f0ff; stroke-width: 1.8; stroke-linecap: round; }
+.car-outline .car-weapon-muzzle { fill: #00f0ff; }
+.car-outline .car-armor-bolt { fill: #94a3b8; }
+.car-outline .car-pipe-line { stroke: #ff9944; stroke-width: 2.2; stroke-linecap: round; }
+.car-outline .car-pipe-rim { fill: #ff5500; stroke: #ffaa00; stroke-width: 1; }
+.car-outline .car-flame-outer { fill: #ff4400; filter: drop-shadow(0 0 4px rgba(255, 68, 0, 0.8)); opacity: 0.9; }
+.car-outline .car-flame-inner { fill: #ffdd44; filter: drop-shadow(0 0 3px #ffee66); }
+.car-outline .car-pod-box { fill: rgba(20, 28, 44, 0.95); stroke: #ff4466; stroke-width: 1.6; }
+.car-outline .car-pod-inner { fill: rgba(10, 16, 26, 0.9); stroke: rgba(255, 68, 102, 0.4); stroke-width: 1; }
+.car-outline .car-rocket-cell { fill: #111a28; stroke: #ff3344; stroke-width: 1; }
+.car-outline .car-warhead-tip { fill: #ffaa00; filter: drop-shadow(0 0 2px #ffaa00); }
+#screen-car-select .arcade-action-bar { max-width: 96vw; width: 100%; gap: 1.2em; margin-bottom: 0; justify-content: center; }
 #screen-car-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
 #screen-car-select .arcade-btn-go { padding: 0.8em 3em; font-size: 1.4em; }
 #screen-car-select .arcade-action-bar .arcade-color-cycle-btn { width: auto; flex: 0 1 22em; min-width: 0; padding: 0.6em 1.2em; gap: 0.9em; transform: skewX(-10deg); }
@@ -1275,14 +1535,7 @@ html, body {
 #screen-map-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
 #screen-map-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
 
-/* Car select: two chips and a short description, with room to breathe */
-.car-select-bottom .car-card-arcade { align-items: stretch; min-height: 19em; padding: 1.3em 1.7em; }
-.car-select-bottom .car-card-inner { display: flex; flex-direction: column; }
-.car-select-bottom .arcade-gauges { gap: 0.75em; margin-top: 0.3em; }
-.car-chips { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 1.3em 0 1em 0; }
-.car-chips span { padding: 0.3em 0.9em; font-size: 1em; font-weight: 800; color: #e2e8f0; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 2px; }
-.car-desc-arcade { margin: 0; font-size: 1em; line-height: 1.75; color: #aab6c8; }
-.car-select-bottom .car-card-focus-bar { align-self: center; }
+
 
 /* Altitude readout (courses that climb) */
 .hud-altitude { position: absolute; left: 20px; pointer-events: none; z-index: 30; font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
@@ -1321,9 +1574,8 @@ html, body {
 .time-card.active .time-card-art { border-color: rgba(0, 240, 255, 0.45); }
 .time-card-desc { font-size: 1em; line-height: 1.7; color: #aab6c8; margin-top: 0.4em; }
 
-/* ---------- The choice cards of all the select screens (machine / course / time of day) share one size ---------- */
+/* ---------- The choice cards of other select screens (course / time of day) share one size ---------- */
 #screen-car-select, #screen-map-select, #screen-time-select, #screen-mode-select, #screen-ghost-select { --choice-w: 24em; --choice-h: 24em; }
-.car-select-bottom .car-card-arcade,
 #screen-map-select .map-card-arcade,
 .time-card {
   flex: 0 1 var(--choice-w);
@@ -1333,7 +1585,7 @@ html, body {
   min-width: 0;
   box-sizing: border-box;
 }
-.car-select-bottom .car-card-inner { justify-content: space-between; flex: 1; }
+
 .time-card { display: flex; flex-direction: column; }
 .time-card-art { height: 9em; align-items: center; }
 .time-cards-container { max-width: none; gap: 1.4em; }

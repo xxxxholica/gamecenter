@@ -140,9 +140,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     formatScore: (score) => formatTimeMs(score),
     // minScore は shared/netProtocol.ts の MIN_FINISH_MS(コースごとの物理的な最短タイム)と同じ値
     variants: [
-      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ', revision: 1, minScore: 30000 },
-      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ', revision: 1, minScore: 28000 },
-      { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 1, minScore: 58000 },
+      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ', revision: 2, minScore: 30000 },
+      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ', revision: 2, minScore: 28000 },
+      { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 2, minScore: 58000 },
     ],
   },
   'school-corridor-runner': {
@@ -194,8 +194,8 @@ export function parseBoardKey(key: string): [string, string | undefined] {
   return i < 0 ? [key, undefined] : [key.slice(0, i), key.slice(i + 1)];
 }
 
-/** ランキングボード(ハブ)に出るのは上位3位まで。4位以下は記録も名前登録もしない。 */
-export const LEADERBOARD_MAX_ENTRIES = 3;
+/** ランキングボード(ハブ)に出るのは上位5位まで。6位以下は記録も名前登録もしない。 */
+export const LEADERBOARD_MAX_ENTRIES = 5;
 
 /** a が b より良い記録か(ascなら小さい方、descなら大きい方) */
 export function isBetterScore(def: GameLeaderboardDef, a: number, b: number): boolean {

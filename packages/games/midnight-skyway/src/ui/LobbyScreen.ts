@@ -23,7 +23,12 @@ export interface LobbyDeps {
   onErrorToTitle?: (message: string) => void;
 }
 
-const CAR_NAMES: Record<string, string> = { trail_j: 'TRAIL J', cross_j: 'CROSS J', truck_j: 'TRUCK J' };
+const CAR_NAMES: Record<string, string> = {
+  trail_j: 'TRAIL J',
+  cross_j: 'CROSS J',
+  combat_sedan: 'COMBAT SEDAN',
+  missile_truck_j: 'TRUCK J MLRS',
+};
 
 const css = `
 .lobby { position: absolute; inset: 0; display: none; z-index: 60; pointer-events: none; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif; color: #fff; }

@@ -6,7 +6,7 @@ import type { DriveScene } from './DriveScene';
 import type { DriveHUD } from '../ui/DriveHUD';
 import type { TimeAttackManager, TimeAttackResult } from './TimeAttackManager';
 import { AutoPilot } from './AutoPilot';
-import { GhostCar, GhostPlayer, GhostRecorder, buildPaceBot, SECTOR_FRACTIONS, type GhostTrace } from './Ghost';
+import { GhostCar, GhostPlayer, GhostRecorder, buildPaceBot, type GhostTrace } from './Ghost';
 
 /** コース(ルート)の署名。点数・開始点・長さが変わったら別のコースとみなす(端末に保存した自己ベストの無効化に使う) */
 function routeSignature(route: THREE.Vector3[]): string {
@@ -90,15 +90,9 @@ export class RaceDirector {
     }
     this.ta.setReferenceSectors(this.rival?.sectorTimes() ?? null);
 
-    // Time limit derived from the pace bot's lap (not from the player's best, so a fast record never makes it harder)
-    if (bot) {
-      const seg = bot.timeMs / 6;
-      const gates = [1, 2, 3, 4, 5].map((k) => (k / 6) * SECTOR_FRACTIONS[SECTOR_FRACTIONS.length - 1]);
-      this.ta.setRules({ initialMs: seg * 1.6, bonusMs: seg * 1.3, gates });
-    } else {
-      this.ta.setRules(null);
-    }
-    this.hud.updateRemaining(this.ta.remainingMs > 0 ? this.ta.remainingMs : null);
+    // Pure lap time attack with 5-minute background safety timeout (no checkpoint penalty)
+    this.ta.setRules(null);
+    this.hud.updateRemaining(null);
   }
 
   /**
@@ -164,6 +158,12 @@ export class RaceDirector {
     if (!this.active) return;
     if (result.timedOut && this.scene.carController) this.scene.carController.canDrive = false;
     if (!result.timedOut && !this.online) this.lastTrace = this.recorder.finish(result.totalTimeMs, this.carName);
+  }
+
+  /** オンライン: サーバーが対戦を打ち切った(最初のゴールから30秒・最大レース時間)。未完走の車の走行を止める。 */
+  public onForcedEnd(): void {
+    this.ta.abort();
+    if (this.scene.carController) this.scene.carController.canDrive = false;
   }
 
   public dispose(): void {

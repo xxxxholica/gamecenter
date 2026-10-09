@@ -638,6 +638,28 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
   public override getCarLift(): number { return this.carLift; }
   public override getGradeEffect(): number { return this.gradeEffect; }
 
+  public override getSurfaceY(pos: { x: number; z: number }): number {
+    if (!this.road || this.road.length === 0) return 0;
+    let bestD2 = Infinity;
+    let bestY = this.road[0].y;
+    const allPaths = [this.road, ...this.branches];
+    for (let pIdx = 0; pIdx < allPaths.length; pIdx++) {
+      const pts = allPaths[pIdx];
+      if (!pts || pts.length === 0) continue;
+      for (let i = 0; i < pts.length; i += 2) {
+        const pt = pts[i];
+        const dx = pt.x - pos.x;
+        const dz = pt.z - pos.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          bestY = pt.y;
+        }
+      }
+    }
+    return bestY;
+  }
+
   public override update(dt: number, carPosition: THREE.Vector3): void {
     this.traffic?.update(dt, carPosition);
     this.blockade?.update(dt);

@@ -2,7 +2,9 @@ import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { GarageScene } from './core/GarageScene';
 import { TrailJModel } from './models/TrailJModel';
 import { CrossJModel } from './models/CrossJModel';
-import { TruckJModel } from './models/TruckJModel';
+import { CombatSedanModel } from './models/CombatSedanModel';
+import { MissileTruckModel } from './models/MissileTruckModel';
+import { preloadGlbCars } from './models/CarModelLoader';
 import { CarBase } from './models/CarBase';
 
 import { DriveScene } from './core/DriveScene';
@@ -124,14 +126,13 @@ const guideRace = () => mountArcadeGuide({
   keyMoveLabel: 'W/↑ 走る  S/↓ 減速  A/D/←→ ハンドル',
   buttons: [
     { indices: [0], label: 'ハンドブレーキ', keyLabel: 'Space' },
-    { indices: [2], label: 'カメラ切替', keyLabel: 'C' },
     { indices: [3], label: '前方確認', keyLabel: 'V' },
     { indices: [9], label: 'ポーズ', keyLabel: 'P' },
   ],
   showHomeHint: true,
 });
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById('canvas-container');
   const titleContainer = document.getElementById('screen-title');
   const carSelectContainer = document.getElementById('screen-car-select');
@@ -149,15 +150,19 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Preload GLTF binary models before scene initialization
+  await preloadGlbCars();
+
   // ==========================================
   // 1. Initialize Garage Scene
   // ==========================================
   const garage = new GarageScene(container);
 
-  // Car Models (3 Original K-Cars)
+  // Car Models (2 Original K-Cars + 2 Combat Vehicles)
   const trailJ = new TrailJModel();
   const crossJ = new CrossJModel();
-  const truckJ = new TruckJModel();
+  const combatSedan = new CombatSedanModel();
+  const missileTruck = new MissileTruckModel();
 
   let currentCar: CarBase = trailJ;
   garage.turntableGroup.add(currentCar.group);
@@ -245,6 +250,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (driveScene.carController) {
       driveScene.carController.canDrive = false;
     }
+    driveScene.combatSystem.raceStarted = false;
     timeAttack.initCourse(currentMapId, currentCar.specs.name);
     raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
     syncBestTimeDisplay();
@@ -273,10 +279,12 @@ window.addEventListener('DOMContentLoaded', () => {
       if (driveScene.carController) {
         driveScene.carController.canDrive = true;
       }
+      driveScene.combatSystem.raceStarted = true;
     } else {
       if (driveScene.carController) {
         driveScene.carController.canDrive = false;
       }
+      driveScene.combatSystem.raceStarted = false;
     }
   };
 
@@ -303,6 +311,7 @@ window.addEventListener('DOMContentLoaded', () => {
   };
 
   timeAttack.callbacks.onGoal = (result) => {
+    driveScene.combatSystem.raceStarted = false;
     raceDirector.onGoal(result);
     if (online && !online.disconnected && !result.timedOut) {
       online.finished = true;
@@ -327,8 +336,8 @@ window.addEventListener('DOMContentLoaded', () => {
         variantId: currentMapId,
         modal: { title: '走行記録', scoreDisplay: result.formattedTime, themeClass: 'theme-skyway', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
         setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
-        onName: (name) => {
-          void saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
+        onName: async (name) => {
+          await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
           syncBestTimeDisplay();
         },
       });
@@ -361,6 +370,7 @@ window.addEventListener('DOMContentLoaded', () => {
       driveScene.stop();
     }
     driveScene.paused = false;
+    driveScene.combatSystem.raceStarted = false;
     currentCar.setLights(lightsBeforeRace);
     raceDirector.dispose();
     teardownOnlineRace();
@@ -427,6 +437,9 @@ window.addEventListener('DOMContentLoaded', () => {
   driveScene.callbacks.onPositionUpdate = (pos, rotY, fwdTraffic) => {
     driveHUD.updateCarPosition(pos, rotY, fwdTraffic);
   };
+  driveScene.callbacks.onCombatUpdate = (hp, maxHp, lockOn) => {
+    driveHUD.updateCombatStatus(hp, maxHp, lockOn);
+  };
   driveScene.callbacks.onProgressUpdate = (fraction, speedKmH, dt) => {
     timeAttack.update(dt, fraction, speedKmH);
     raceDirector.update(fraction);
@@ -467,8 +480,10 @@ window.addEventListener('DOMContentLoaded', () => {
         currentCar = trailJ;
       } else if (carType === 'cross_j') {
         currentCar = crossJ;
-      } else if (carType === 'truck_j') {
-        currentCar = truckJ;
+      } else if (carType === 'combat_sedan') {
+        currentCar = combatSedan;
+      } else if (carType === 'missile_truck_j') {
+        currentCar = missileTruck;
       }
       garage.turntableGroup.add(currentCar.group);
       carSelectScreen.updateSpecs(currentCar.specs);
@@ -670,6 +685,8 @@ window.addEventListener('DOMContentLoaded', () => {
   net.on('left', () => {                                     // レースが終わってルームが空に戻った
     onlineRoom = null;
     lobby.setRoom(null);
+    // 結果が届かないまま空に戻った(ロード中の打ち切りなど): 走れない画面が取り残されないよう、タイトルへ戻す
+    if (online && !online.finished && !online.race) leaveOnlineToTitle('対戦が終了しました');
   });
 
   net.on('start', (m) => {
@@ -704,7 +721,15 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   net.on('results', (m) => {
-    if (!online?.race || !online.finished) return;
+    if (!online?.race) return;
+    if (!online.finished) {
+      if (!m.done) return;                                    // 走行中は、他の人の途中経過を出さない
+      // サーバーが打ち切った(最初のゴールから30秒など): まだ走っている車を止めて、「タイムアップ」の結果を出す
+      online.finished = true;
+      raceDirector.onForcedEnd();
+      bgm.duck(0.3);
+      sfx.timeUp();
+    }
     const colors = new Map<number, number>(online.players.map((p) => [p.id, p.car.body]));
     onlineHUD.showResults(m.entries, online.you, m.done, colors, m.endsInMs);
   });
@@ -717,6 +742,42 @@ window.addEventListener('DOMContentLoaded', () => {
 
   onlineHUD.onLeave = () => {
     leaveOnlineToTitle();
+  };
+
+  // Title screen 2-second car rotation cycle
+  const titleCarEntries: { type: CarType; model: CarBase }[] = [
+    { type: 'trail_j', model: trailJ },
+    { type: 'cross_j', model: crossJ },
+    { type: 'combat_sedan', model: combatSedan },
+    { type: 'missile_truck_j', model: missileTruck },
+  ];
+  let titleCarIndex = 0;
+  let titleCarTimer: number | null = null;
+
+  const startTitleCarCycle = () => {
+    stopTitleCarCycle();
+    const idx = titleCarEntries.findIndex((e) => e.model === currentCar);
+    if (idx >= 0) titleCarIndex = idx;
+    titleCarTimer = window.setInterval(() => {
+      if (flow.currentScreen !== 'TITLE') {
+        stopTitleCarCycle();
+        return;
+      }
+      titleCarIndex = (titleCarIndex + 1) % titleCarEntries.length;
+      garage.turntableGroup.remove(currentCar.group);
+      currentCar = titleCarEntries[titleCarIndex].model;
+      currentCar.setLights(lightsBeforeRace);
+      currentCar.group.position.set(0, 0, 0);
+      currentCar.group.rotation.set(0, 0, 0);
+      garage.turntableGroup.add(currentCar.group);
+    }, 2000);
+  };
+
+  const stopTitleCarCycle = () => {
+    if (titleCarTimer !== null) {
+      clearInterval(titleCarTimer);
+      titleCarTimer = null;
+    }
   };
 
   // ==========================================
@@ -738,8 +799,10 @@ window.addEventListener('DOMContentLoaded', () => {
       garage.start();
       guideTitle();
       titleScreen.show();
+      startTitleCarCycle();
     },
     onEnterModeSelect: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -755,6 +818,7 @@ window.addEventListener('DOMContentLoaded', () => {
       modeSelectScreen.show(onlineStatus);
     },
     onEnterCarSelect: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -765,12 +829,14 @@ window.addEventListener('DOMContentLoaded', () => {
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
+      carSelectScreen.setCarType(titleCarEntries[titleCarIndex].type);
       carSelectScreen.updateSpecs(currentCar.specs);
       carSelectScreen.setOnlineMode(false);
       guideCarSelect();
       carSelectScreen.show();
     },
     onEnterMapSelect: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -788,6 +854,7 @@ window.addEventListener('DOMContentLoaded', () => {
       mapSelectScreen.show(records);
     },
     onEnterGhostSelect: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -802,6 +869,7 @@ window.addEventListener('DOMContentLoaded', () => {
       ghostSelectScreen.show(ghostChoices, ghostPick?.id ?? null);
     },
     onEnterTimeSelect: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -816,6 +884,7 @@ window.addEventListener('DOMContentLoaded', () => {
       timeSelectScreen.show(currentTimeOfDay);
     },
     onEnterOnlineLobby: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       titleScreen.hide();
       modeSelectScreen.hide();
@@ -825,6 +894,7 @@ window.addEventListener('DOMContentLoaded', () => {
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
+      carSelectScreen.setCarType(titleCarEntries[titleCarIndex].type);
       carSelectScreen.updateSpecs(currentCar.specs);
       carSelectScreen.setOnlineMode(true);                   // マシン選択をそのまま使い、右にマッチングのパネルを出す
       carSelectScreen.setTakenColors(lobby.othersBodies());
@@ -834,6 +904,7 @@ window.addEventListener('DOMContentLoaded', () => {
       lobby.show();                                          // 接続・参加は続く
     },
     onEnterOnlineCourse: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       titleScreen.hide();
       modeSelectScreen.hide();
@@ -851,6 +922,7 @@ window.addEventListener('DOMContentLoaded', () => {
       lobby.show();
     },
     onEnterOnlineWait: () => {
+      stopTitleCarCycle();
       bgm.play('menu');
       titleScreen.hide();
       modeSelectScreen.hide();
@@ -866,6 +938,7 @@ window.addEventListener('DOMContentLoaded', () => {
       lobby.setWaitingVisible(true);                         // 参加者と「あと◯秒 / 待機中」を出す
     },
     onStartRace: async () => {
+      stopTitleCarCycle();
       bgm.play('race', true);
       lobby.hide();
       titleScreen.hide();
@@ -984,8 +1057,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     // Y: 押している間だけ車の前からの視点
     driveScene.setFrontViewPad(!!readPad().buttons[3]);
-    if (p.any(2)) driveScene.cycleCameraMode();
-    else if (p.any(9)) driveHUD.togglePause(true);
+    if (p.any(9)) driveHUD.togglePause(true);
   });
 
   // Dev hooks

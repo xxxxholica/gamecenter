@@ -2165,7 +2165,7 @@ class Game {
       score,
       modal: { title: '脱出記録', scoreDisplay: `${Math.floor(score).toLocaleString()} pts`, themeClass: 'theme-corridor', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
-      onName: (name) => void saveLeaderboardScore('school-corridor-runner', score, name, undefined, undefined, { cleared: state === GameState.CLEARED }),
+      onName: (name) => saveLeaderboardScore('school-corridor-runner', score, name, undefined, undefined, { cleared: state === GameState.CLEARED }),
       onClosed: () => { this.resultArmTime = performance.now() + 800; },
     });
   }

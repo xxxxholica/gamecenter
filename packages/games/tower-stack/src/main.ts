@@ -22,6 +22,15 @@ watchResultAutoReturn(['result-btn-title']);
 const HUB_URL = '../../';
 const SLUG = 'tower-stack'; // 共通ランキングでの名前 (packages/shared/arcadeLeaderboardCore.ts に定義)
 const ACCENT = '#ffd166';
+const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+
+if (isPreview) {
+  const style = document.createElement('style');
+  style.textContent = `
+    #hud, #result-modal, #banner, .agc-root, .ats-overlay { display: none !important; }
+  `;
+  document.head.appendChild(style);
+}
 
 // 画面左下の共通ボタンガイド (場面ごとに差し替える)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
@@ -792,7 +801,8 @@ world.addEventListener('preStep', () => {
 function spawnPiece(): void {
   const def = nextDef;
   nextDef = randomPiece();
-  const block = createPiece(def, 0, camY + VIEW_H / 2 + 1);
+  const spawnY = isPreview ? (currentHeight + 5.5) : (camY + VIEW_H / 2 + 1);
+  const block = createPiece(def, 0, spawnY);
   block.body.allowSleep = false;
   current = block;
   currentReleased = false;
@@ -1207,14 +1217,12 @@ function showRanking(): void {
       rankDisplay: `第${rank}位`,
       themeClass: 'theme-street',
       delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-      onComplete: (name) => {
+      onComplete: async (name) => {
+        menuNav.clear();
+        const res = await saveLeaderboardScore(SLUG, s, name, undefined, `高さ ${height.toFixed(1)}m`);
+        if (seq === resultSeq && res.rank > 0) renderRanking(res.list, res.rank);
         nameEntryOpen = false;
         resultArmUntil = performance.now() + 800; // 名前の決定がメニューの決定として入らないようにする
-        menuNav.clear();
-        void saveLeaderboardScore(SLUG, s, name, undefined, `高さ ${height.toFixed(1)}m`).then((res) => {
-          if (seq !== resultSeq) return;
-          if (res.rank > 0) renderRanking(res.list, res.rank);
-        });
       },
     });
   });
@@ -1264,19 +1272,40 @@ function startGame(): void {
   shield = false;
   pendingVine = null;
   firstBlock = null;
-  eventTimer = 30;
+  eventTimer = isPreview ? 99999 : 30;
   upcoming = null;
   spawnTimer = 0.4;
   camY = 6;
   bestLine.visible = false;
   elBanner.style.display = 'none';
-  nextDef = randomPiece();
+
+  if (isPreview) {
+    const demoBlocks: [number, number, number][] = [
+      [1, 0, 1],        // O (黄)
+      [0, 0, 2.5],      // I (シアン)
+      [4, -1.0, 3.8],   // J (青)
+      [3, 1.0, 3.8],    // L (橙)
+      [2, 0.0, 4.8],    // T (紫)
+      [5, -0.6, 6.0],   // S (緑)
+      [6, 0.8, 6.0],    // Z (赤)
+    ];
+    for (const [i, x, y] of demoBlocks) {
+      freezeBlock(createPiece(PIECES[i], x, y), 0);
+    }
+    placed = demoBlocks.length;
+    currentHeight = 6.8;
+    camY = 6.0;
+  }
+
+  nextDef = PIECES[0]; // I (シアン)
   renderNext();
   renderItems();
   state = 'playing';
   stateTime = 0;
-  guidePlay();
-  beep(520, 0.12, 'square', 0.07);
+  if (!isPreview) {
+    guidePlay();
+    beep(520, 0.12, 'square', 0.07);
+  }
 }
 
 let resultIsNew = false;
@@ -1458,7 +1487,7 @@ function frame(now: number): void {
     baseMarker.visible = false; // 画面下のバーは使わない (両端の縦線だけで示す)
     baseMarker.position.set(px, markerY, 2);
   }
-  guide.visible = state === 'playing' && !!current;
+  guide.visible = !isPreview && state === 'playing' && !!current;
   if (current) {
     const xs = current.cells.map((c) => worldPoint(current!.body, c)[0]);
     const minX = Math.min(...xs) - 0.5;
@@ -1491,7 +1520,11 @@ function frame(now: number): void {
   renderer.render(scene, camera);
 }
 
-showTitle();
+if (isPreview) {
+  startGame();
+} else {
+  showTitle();
+}
 renderItems();
 requestAnimationFrame(frame);
 

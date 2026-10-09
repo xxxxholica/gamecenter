@@ -767,9 +767,12 @@ export class LaserGrid {
   private nodeMat: THREE.MeshStandardMaterial;
   /** 点滅1周期の秒数(2.5秒 = 96BPMの4拍)。周期を揃えた複数のレーザーは位相(phase)で交互に点滅させる */
   private period: number = 3.6;
+  /** 1周期のうち発射している割合。残りは前半が消灯、後半が予告(黄色の点滅) */
+  private duty: number = 2.0 / 3.6;
 
-  constructor(x: number, y: number, width: number = 3.0, beamHeight: number = 1.15, isIntermittent: boolean = false, beat?: { period: number; phase: number }) {
+  constructor(x: number, y: number, width: number = 3.0, beamHeight: number = 1.15, isIntermittent: boolean = false, beat?: { period: number; phase: number; duty?: number }) {
     if (beat) {
+      this.duty = beat.duty ?? this.duty;
       this.period = beat.period;
       this.animTimer = beat.phase * beat.period;
     }
@@ -815,16 +818,17 @@ export class LaserGrid {
     this.animTimer += dt;
 
     if (this.isIntermittent) {
-      // 周期の 0〜55% が発射、55〜78% が消灯、78〜100% が予告(黄色の点滅)
-      const cycle = ((this.animTimer % this.period) / this.period) * 3.6;
-      if (cycle < 2.0) {
+      // 周期の 0〜duty が発射(既定55%)、残りの前半が消灯、後半が予告(黄色の点滅)
+      const frac = (this.animTimer % this.period) / this.period;
+      const rest = (frac - this.duty) / (1 - this.duty);
+      if (frac < this.duty) {
         // Active Danger Laser
         this.isActive = true;
         this.beamMesh.visible = true;
         (this.beamMesh.material as THREE.MeshBasicMaterial).color.setHex(0xff0033);
         this.beamMesh.scale.x = 0.8 + Math.sin(this.animTimer * 16) * 0.3;
         this.beamMesh.scale.z = 0.8 + Math.sin(this.animTimer * 16) * 0.3;
-      } else if (cycle < 2.8) {
+      } else if (rest < 0.5) {
         // Cooldown Off
         this.isActive = false;
         this.beamMesh.visible = false;
@@ -971,10 +975,14 @@ export class CrumblingPlatform {
   private static readonly FALL_TIME = 1.0;
   private static readonly GONE_TIME = 2.6;
 
-  constructor(x: number, y: number, width: number) {
+  /** 踏んでから落ち始めるまでの時間(秒)。短いほど立ち止まれない */
+  private readonly shakeTime: number;
+
+  constructor(x: number, y: number, width: number, shakeTime: number = CrumblingPlatform.SHAKE_TIME) {
     this.x = x;
     this.y = y;
     this.width = width;
+    this.shakeTime = shakeTime;
     this.mesh = new THREE.Group();
 
     const plankGeo = new THREE.BoxGeometry(width, this.height, 2.4);
@@ -1002,7 +1010,7 @@ export class CrumblingPlatform {
   public touch(): void {
     if (this.state === 'idle') {
       this.state = 'shaking';
-      this.timer = CrumblingPlatform.SHAKE_TIME;
+      this.timer = this.shakeTime;
     }
   }
 
@@ -1108,5 +1116,70 @@ export class Checkpoint {
   /** 旗の周りの縦長のトリガー(体は止めない) */
   public getAABB(): BoundingBox2D {
     return { x: this.x - 0.6, y: this.y, w: 1.2, h: 3.0 };
+  }
+}
+
+// 13. VERTICAL LASER TRAP (下から定期的にレーザーが飛んでくる砲台)
+export class VerticalLaserTrap {
+  public mesh: THREE.Group;
+  public x: number;
+  public y: number;
+  public targetHeight: number;
+  public period: number;
+  public timer: number;
+  public speed: number;
+  private emitterMesh: THREE.Mesh;
+  public onFire?: (trap: VerticalLaserTrap) => void;
+
+  constructor(
+    x: number,
+    y: number,
+    targetHeight: number = 42,
+    period: number = 2.0,
+    phase: number = 0,
+    speed: number = 22
+  ) {
+    this.x = x;
+    this.y = y;
+    this.targetHeight = targetHeight;
+    this.period = period;
+    this.timer = phase * period;
+    this.speed = speed;
+
+    this.mesh = new THREE.Group();
+
+    // 砲台・エミッター台座
+    const emitterGeo = new THREE.CylinderGeometry(0.35, 0.55, 0.5, 8);
+    const emitterMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
+      emissive: 0xff0033,
+      emissiveIntensity: 0.4,
+      metalness: 0.85,
+    });
+    this.emitterMesh = new THREE.Mesh(emitterGeo, emitterMat);
+    this.emitterMesh.position.set(0, 0.25, 0);
+    this.mesh.add(this.emitterMesh);
+
+    this.mesh.position.set(x, y, 0);
+  }
+
+  public update(dt: number): void {
+    const prevTimer = this.timer;
+    this.timer += dt;
+
+    // 周期の境目で発射
+    if (Math.floor(prevTimer / this.period) !== Math.floor(this.timer / this.period)) {
+      this.onFire?.(this);
+    }
+  }
+
+  public dispose(): void {
+    this.mesh.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry?.dispose();
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material?.dispose();
+      }
+    });
   }
 }

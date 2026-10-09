@@ -149,7 +149,7 @@ const allGames: GameEntry[] = [
     title: 'グラグラタワー',
     englishTitle: 'TOWER STACK',
     description:
-      '落ちてくるブロックを積み上げて高さを競う物理パズル。3個落としたらゲームオーバー。突風やいん石などの邪魔イベントを、ツタ・セメント・バリア・回復のアイテムで乗り切れ。',
+      '落ちてくるブロックを積み上げて高さを競う物理パズル。3個落としたらゲームオーバー。突風やいん石をアイテムで乗り越えて、限界の高さに挑戦しよう。',
     thumbnail: 'thumbnails/tower-stack.webp',
     logo: 'logos/tower-stack.webp',
     accent: '#ffd166',

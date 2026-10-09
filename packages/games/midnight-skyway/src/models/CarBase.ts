@@ -78,6 +78,8 @@ export abstract class CarBase {
   /** [meshes before, after] the draw-call merge in initSuspension(). */
   public meshStats: { body: [number, number]; wheels: [number, number][] } | null = null;
   public lightsEnabled: boolean = true;
+  /** Skip draw-call mesh merge in initSuspension (for GLB models with existing clean hierarchies/materials) */
+  public skipMeshMerge: boolean = false;
   /** コクピット視点時のカメラ位置オフセット [右+, 上+, 前+] */
   public cockpitEyeOffset: THREE.Vector3 = new THREE.Vector3(-0.32, 1.20, -0.16);
   /** コクピット視点時の注視オフセット [右+, 上+, 前+] */
@@ -269,7 +271,9 @@ export abstract class CarBase {
     this.bodyPivot = pivot;
 
     // hundreds of tiny meshes -> a few dozen (draw calls dominate the frame time)
-    this.meshStats = { body: mergeMeshesByMaterial(pivot), wheels: this.wheels.map((w) => mergeMeshesByMaterial(w)) };
+    if (!this.skipMeshMerge) {
+      this.meshStats = { body: mergeMeshesByMaterial(pivot), wheels: this.wheels.map((w) => mergeMeshesByMaterial(w)) };
+    }
   }
 
   /** 車の下に接地影を置く(幅・長さは車体より少し大きく)。initSuspension() の前に呼ぶこと。 */

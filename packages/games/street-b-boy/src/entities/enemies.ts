@@ -14,16 +14,25 @@ export class EnemyProjectile {
   public isDeflected: boolean = false;
   public isDead: boolean = false;
   public life: number = 3.5;
+  public isVertical: boolean = false;
 
-  constructor(x: number, y: number, vx: number, vy: number = 0) {
+  constructor(x: number, y: number, vx: number, vy: number = 0, isVertical: boolean = false) {
     this.x = x;
     this.y = y;
     this.vx = vx;
     this.vy = vy;
+    this.isVertical = isVertical;
 
-    const geo = new THREE.SphereGeometry(0.2, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff1a1a });
-    this.mesh = new THREE.Mesh(geo, mat);
+    if (isVertical) {
+      this.radius = 0.35;
+      const geo = new THREE.CylinderGeometry(0.12, 0.12, 1.8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
+      this.mesh = new THREE.Mesh(geo, mat);
+    } else {
+      const geo = new THREE.SphereGeometry(0.2, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff1a1a });
+      this.mesh = new THREE.Mesh(geo, mat);
+    }
     this.mesh.position.set(x, y, 0);
   }
 
@@ -47,6 +56,14 @@ export class EnemyProjectile {
   }
 
   public getAABB(): BoundingBox2D {
+    if (this.isVertical) {
+      return {
+        x: this.x - 0.25,
+        y: this.y - 0.9,
+        w: 0.5,
+        h: 1.8
+      };
+    }
     return {
       x: this.x - this.radius,
       y: this.y - this.radius,
@@ -218,6 +235,8 @@ export class SecurityBot extends BaseEnemy {
 export interface DogTerrain {
   /** x の位置で、高さ maxY 以下にある最も高い足場の上面。無ければ null */
   supportTop(x: number, maxY: number): number | null;
+  /** x の位置で、高さ fromY〜toY にある最も低い足場の下面(頭上の天井)。無ければ null。一方通行の薄い板も天井として扱う */
+  ceilingBottom?(x: number, fromY: number, toY: number): number | null;
 }
 
 /** 犬の強さの設定。ステージごと・犬ごとに変えられる */
@@ -247,6 +266,13 @@ export const DOG_NORMAL: DogTuning = {
 export const DOG_HORDE: DogTuning = {
   patrolSpeed: 11, chaseSpeed: 12, chaseRange: Infinity, jumpSpeed: 14, leash: Infinity, smartJump: true, edgeSafe: false,
 };
+
+/** ドローンの射撃: 間隔(秒) / 認識から初弾までの遅延(秒) / 撃つ前の予告の長さ(秒) / 射程(m) / 弾の速さ(m/s) */
+const DRONE_FIRE_INTERVAL = 1.4;
+const DRONE_LOCKON_DELAY = 0.6;
+const DRONE_TELEGRAPH = 0.35;
+const DRONE_FIRE_RANGE = 12;
+const DRONE_SHOT_SPEED = 8.0;
 
 const DOG_GRAVITY = 26;
 /** 足場の上面がこれ以下の段差なら、跳ばずに乗り越える(歩いて上がる扱い) */
@@ -396,6 +422,7 @@ export class SkaterDog extends BaseEnemy {
     if (!this.grounded) {
       this.vy -= DOG_GRAVITY * dt;
       this.y += this.vy * dt;
+      this.bonkOnCeiling();
       this.updateLanding(this.x + (this.holdAtEdge ? 0 : this.dir * speed * dt));
     }
 
@@ -500,7 +527,7 @@ export class SkaterDog extends BaseEnemy {
     const near = Math.abs(playerX - this.x) < 5 + (playerY - this.y) * 2;   // 水平に離れていれば、跳んでも届かない
     if (chasing && toward && near && playerY > this.y + 1.6 && Math.abs(playerY - this.y) < maxRise + 1.5) {
       const vy = Math.min(t.jumpSpeed, Math.sqrt(2 * DOG_GRAVITY * (playerY - this.y + 0.6)));
-      if (this.canLandAfterJump(vy, speed, maxRise)) this.jump(vy);
+      if (!this.hasCeilingAbove(vy) && this.canLandAfterJump(vy, speed, maxRise)) this.jump(vy);
     }
   }
 
@@ -514,6 +541,22 @@ export class SkaterDog extends BaseEnemy {
       if (top === null || top < this.y - 0.5) return false;
     }
     return true;
+  }
+
+  /** 上昇中に頭が足場の下面に届いたら、そこで止まる(薄い足場を下から突き抜けて、上に飛び出さないように) */
+  private bonkOnCeiling(): void {
+    if (this.vy <= 0 || !this.terrain?.ceilingBottom) return;
+    const ceiling = this.terrain.ceilingBottom(this.x, this.prevY + this.height - 0.05, this.y + this.height);
+    if (ceiling !== null) {
+      this.y = ceiling - this.height;
+      this.vy = 0;
+    }
+  }
+
+  /** 初速 vy で跳んだとき、頭上に足場の下面があって頭をぶつけるか */
+  private hasCeilingAbove(vy: number): boolean {
+    const rise = (vy * vy) / (2 * DOG_GRAVITY);
+    return this.terrain?.ceilingBottom?.(this.x, this.y + this.height - 0.05, this.y + this.height + rise) != null;
   }
 
   private jump(vy: number): void {
@@ -550,13 +593,15 @@ export class SurveillanceDrone extends BaseEnemy {
   private maxX: number;
   private patrolDir: number = 1;
   private animTimer: number = 0;
-  private dropTimer: number = Math.random() * 2.0;
+  /** 次の射撃までの経過(秒)。DRONE_FIRE_INTERVAL に達すると、プレイヤーの方へ撃つ */
+  private fireTimer: number = DRONE_FIRE_INTERVAL - DRONE_LOCKON_DELAY;
   private propLeft: THREE.Mesh;
   private propRight: THREE.Mesh;
   private spotLightBeam: THREE.Mesh;
 
-  constructor(x: number, y: number, patrolRange: number = 6) {
+  constructor(x: number, y: number, patrolRange: number = 6, startDirection: number = 1) {
     super(x, y);
+    this.patrolDir = startDirection >= 0 ? 1 : -1;
     this.startY = y;
     this.minX = x - patrolRange;
     this.maxX = x + patrolRange;
@@ -614,7 +659,7 @@ export class SurveillanceDrone extends BaseEnemy {
     this.turnCooldown = 0.8;
   }
 
-  public update(dt: number, playerX: number, onShoot?: (proj: EnemyProjectile) => void): void {
+  public update(dt: number, playerX: number, onShoot?: (proj: EnemyProjectile) => void, playerY: number = this.y - 3): void {
     this.animTimer += dt;
     this.prevX = this.x;
     this.prevY = this.y;
@@ -644,19 +689,28 @@ export class SurveillanceDrone extends BaseEnemy {
     if (distToPlayer < 10) {
       const targetY = this.startY - 1.4;
       this.y = THREE.MathUtils.lerp(this.y, targetY + Math.sin(this.animTimer * 4) * 0.4, 3.2 * dt);
-
-      // Vertical plasma bomb drop if right above player
-      if (distToPlayer < 1.4) {
-        this.dropTimer += dt;
-        if (this.dropTimer >= 2.2) {
-          this.dropTimer = 0;
-          if (onShoot) {
-            onShoot(new EnemyProjectile(this.x, this.y - 0.2, 0, -6.5));
-          }
-        }
-      }
     } else {
       this.y = THREE.MathUtils.lerp(this.y, this.startY + Math.sin(this.animTimer * 3.5) * 0.6, 2.5 * dt);
+    }
+
+    // プレイヤーが射程にいれば、どの角度からでも本人に向けて撃つ(真下だけでなく、横・斜め・下からも)。
+    // 撃つ直前は照射コーンが明るく光って予告する。
+    const aimX = playerX - this.x;
+    const aimY = playerY + 0.9 - this.y;
+    const aimDist = Math.hypot(aimX, aimY);
+    const inRange = aimDist > 1.0 && aimDist < DRONE_FIRE_RANGE;
+    if (inRange) {
+      this.fireTimer += dt;
+    } else {
+      this.fireTimer = Math.min(this.fireTimer, DRONE_FIRE_INTERVAL - DRONE_LOCKON_DELAY);
+    }
+    const warning = inRange && this.fireTimer > DRONE_FIRE_INTERVAL - DRONE_TELEGRAPH;
+    const beamMat = this.spotLightBeam.material as THREE.MeshBasicMaterial;
+    beamMat.opacity = warning ? 0.75 : 0.35;
+    beamMat.color.setHex(warning ? 0xffea00 : 0xff1a1a);
+    if (inRange && this.fireTimer >= DRONE_FIRE_INTERVAL) {
+      this.fireTimer = 0;
+      onShoot?.(new EnemyProjectile(this.x, this.y, (aimX / aimDist) * DRONE_SHOT_SPEED, (aimY / aimDist) * DRONE_SHOT_SPEED));
     }
 
     this.mesh.position.set(this.x, this.y, 0);

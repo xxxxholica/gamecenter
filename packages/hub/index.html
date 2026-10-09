@@ -336,12 +336,12 @@
     /* ===== ランキング表示 (明るいカード内ブロック) ===== */
     .card-ranking-container {
       margin-top: auto;
-      height: 116px;
+      height: 154px;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 9px 14px 10px;
+      padding: 8px 12px 9px;
       background: #f8fafc;
       border: 1.5px solid #e2e8f0;
       border-radius: 10px;
@@ -378,7 +378,7 @@
     .ranking-rows {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 3.5px;
       transition: opacity 0.22s ease;
     }
 
@@ -390,7 +390,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     .rank-pos {
@@ -411,6 +411,11 @@
 
     .rank-pos.bronze {
       color: #b45309;
+    }
+
+    .rank-pos.fourth,
+    .rank-pos.fifth {
+      color: #64748b;
     }
 
     /* クリアした記録の名前のすぐ右の ★ */

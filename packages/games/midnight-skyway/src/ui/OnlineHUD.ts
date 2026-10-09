@@ -107,9 +107,15 @@ export class OnlineHUD {
   }
 
   public toast(text: string): void {
+    this.root.style.display = 'block';
     const t = Object.assign(document.createElement('div'), { className: 'ohud-toast', textContent: text });
     this.toasts.append(t);
-    setTimeout(() => t.remove(), 3500);
+    setTimeout(() => {
+      t.remove();
+      if (!this.toasts.hasChildNodes() && !this.stand.hasChildNodes() && this.wait.style.display === 'none' && this.result.style.display === 'none') {
+        this.root.style.display = 'none';
+      }
+    }, 3500);
   }
 
   public showWaiting(text: string | null): void {
@@ -132,12 +138,12 @@ export class OnlineHUD {
       if (myEntry && myEntry.timeMs === null) titleText = 'タイムアップ';
       else titleText = myPlace === 1 ? '優勝' : `${myPlace}位`;
     }
-    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? fmt(myEntry.timeMs) : 'DNF';
+    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? fmt(myEntry.timeMs) : '記録なし';
 
     const tableRows = entries.map((e, i) => {
       const isMe = e.id === you;
       const rankStr = e.timeMs !== null ? (['1st', '2nd', '3rd', '4th'][i] ?? `${i + 1}th`) : '-';
-      const timeStr = e.timeMs !== null ? fmt(e.timeMs) : (done ? 'DNF' : '走行中');
+      const timeStr = e.timeMs !== null ? fmt(e.timeMs) : (done ? '記録なし' : '走行中');
       return `
         <div class="stat-line ${isMe ? 'me' : ''}">
           <span class="online-res-left">

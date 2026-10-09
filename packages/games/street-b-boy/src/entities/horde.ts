@@ -14,6 +14,8 @@ export interface HordeConfig {
   batchEnd: number;
   /** 画面にいる犬の上限(負荷を抑える) */
   maxAlive: number;
+  /** プレイヤーがこの X を過ぎたら、新しい犬を出さない(ゴール前の区間に入れない)。省略すると出し続ける */
+  endX?: number;
 }
 
 export const FINAL_HORDE: HordeConfig = {
@@ -24,6 +26,7 @@ export const FINAL_HORDE: HordeConfig = {
   batchStart: 1,
   batchEnd: 3,
   maxAlive: 26,
+  endX: 296,
 };
 
 export class HordeSpawner {

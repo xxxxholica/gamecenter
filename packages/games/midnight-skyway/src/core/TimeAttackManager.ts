@@ -22,6 +22,9 @@ export interface TimeAttackResult {
   progress?: number;
 }
 
+/** Maximum race duration (5 minutes / 300,000 ms) safety limit to prevent infinite idling/stuck state */
+export const MAX_RACE_TIME_MS = 5 * 60 * 1000;
+
 /** Time-limit checkpoint rules: start with `initialMs`, every gate adds `bonusMs`; run out and the race is over. */
 export interface TimeLimitRules {
   initialMs: number;
@@ -197,6 +200,12 @@ export class TimeAttackManager {
       this.callbacks.onTimeUpdate?.(this.elapsedTimeMs, this.formatTime(this.elapsedTimeMs));
       this.lastProgress = progressFraction;
 
+      // 5分（300,000ms）の最大安全リミット（放置・スタック対策）
+      if (this.elapsedTimeMs >= MAX_RACE_TIME_MS) {
+        this.timeUp();
+        return;
+      }
+
       if (this.rules) {
         this.remainingMs -= dt * 1000;
         const gate = this.rules.gates[this.nextGate];
@@ -287,6 +296,13 @@ export class TimeAttackManager {
 
     this.callbacks.onStateChange?.(this.state);
     this.callbacks.onGoal?.(result);
+  }
+
+  /** オンライン: サーバーが対戦を打ち切った。結果(記録)を出さずに、走行の判定だけを止める。 */
+  public abort(): void {
+    if (this.state !== 'RACING' && this.state !== 'COUNTDOWN') return;
+    this.state = 'GOAL';
+    this.callbacks.onStateChange?.(this.state);
   }
 
   /** The time limit ran out: the race ends without a record. */

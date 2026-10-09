@@ -399,7 +399,7 @@ class ArcadeCorkShooter {
       score: finalScore,
       modal: { title: '番付 記名', scoreDisplay: `${finalScore.toLocaleString()} g`, themeClass: 'theme-ennichi', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
-      onName: (name) => void saveLeaderboardScore(SLUG, finalScore, name),
+      onName: (name) => saveLeaderboardScore(SLUG, finalScore, name),
       onClosed: () => { this.resultArmTime = performance.now() + 800; },
     });
 

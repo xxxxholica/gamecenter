@@ -3,6 +3,7 @@
 // 各ゲームのエントリで installHomeReturn() を1回呼ぶ。キーボードの Escape は従来どおり各ゲーム側で処理する。
 
 import { mountFullscreenKey } from './fullscreenKey';
+import { initGameMobileBlock } from './mobileBlock';
 
 const SELECT_BUTTON = 8;
 const HOLD_MS = 1000;
@@ -70,6 +71,9 @@ function createOverlay(): { root: HTMLDivElement; fill: HTMLDivElement } {
 }
 
 export function installHomeReturn(): void {
+  // モバイル端末での直接アクセス時にゲーム画面をグレーアウトし警告を表示
+  initGameMobileBlock();
+
   // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
   mountFullscreenKey();
 

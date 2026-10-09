@@ -1,4 +1,4 @@
-// ランキングの保存層。上位3件×(ゲーム/バリアント)を1つのJSONファイルに持つ。件数が少ないので、全体をメモリに置き、
+// ランキングの保存層。上位5件×(ゲーム/バリアント)を1つのJSONファイルに持つ。件数が少ないので、全体をメモリに置き、
 // 変更のたびに一時ファイルへ書いてから rename する(書き込み途中で落ちても壊れない)。
 // 検証はここで行う: クライアントの申告は信用しない(名前の正規化・スコア範囲・ゴーストの形式)。
 import crypto from 'node:crypto';
@@ -107,7 +107,8 @@ export class LeaderboardStore {
     this.file = file;
     if (!file) return;
     try {
-      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const content = fs.readFileSync(file, 'utf8');
+      const data = JSON.parse(content);
       for (const [key, b] of Object.entries<Board>(data?.boards ?? {})) {
         const [slug, variant] = parseBoardKey(key);
         if (!this.def(slug, variant) || !b || !Array.isArray(b.entries)) continue;     // 知らない枠・壊れた枠は捨てる
@@ -115,8 +116,14 @@ export class LeaderboardStore {
         const entries = b.entries.filter(isStoredEntry).slice(0, LEADERBOARD_MAX_ENTRIES);   // 手で編集して壊れた行があっても、読み出しで落ちない
         this.boards.set(key, { rev: b.rev ?? 0, entries });
       }
-    } catch {
-      // ファイルがない・壊れている: 空から始める
+    } catch (e) {
+      if (fs.existsSync(file)) {
+        const backup = `${file}.corrupted.${Date.now()}.bak`;
+        try {
+          fs.copyFileSync(file, backup);
+          console.error(`[leaderboard] 破損ファイルを退避しました: ${backup}`, (e as Error).message);
+        } catch { /* 退避失敗時も続行 */ }
+      }
     }
   }
 
@@ -278,7 +285,7 @@ export class LeaderboardStore {
     try {
       const file = this.file;
       await fsp.mkdir(path.dirname(file), { recursive: true });
-      const tmp = `${file}.${process.pid}.tmp`;
+      const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
       await fsp.writeFile(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
       await fsp.rename(tmp, file);
     } catch (e) {
@@ -297,7 +304,7 @@ export class LeaderboardStore {
     this.dirty = false;
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.${process.pid}.sync.tmp`;
+      const tmp = `${this.file}.${process.pid}.${crypto.randomUUID()}.sync.tmp`;
       fs.writeFileSync(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
       fs.renameSync(tmp, this.file);
     } catch (e) {

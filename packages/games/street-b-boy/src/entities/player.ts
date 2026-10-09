@@ -60,6 +60,8 @@ export class Player {
   public isVictory: boolean = false;
   public deathTimer: number = 0;
   public spawnShieldTimer: number = 0;
+  /** 落下速度の上限(m/s)。縦穴の中では小さくして、ゆっくり舞い降りる */
+  public fallSpeedLimit: number = 24;
 
   // Animation Timer
   private animTimer: number = 0;
@@ -263,7 +265,7 @@ export class Player {
     if (this.isSpinning || this.spinCooldown > 0 || this.isDead || this.isVictory) return false;
     this.isSpinning = true;
     this.spinTimer = 0.38; // Spin attack duration
-    this.spinCooldown = 0.55; // Total cooldown
+    this.spinCooldown = 0.85; // Total cooldown(連打で敵を片づけ続けられないよう、スピンの持続0.38秒より十分長くする)
     return true;
   }
 
@@ -412,7 +414,7 @@ export class Player {
 
     // Gravity
     this.vy -= this.gravity * dt;
-    if (this.vy < -24) this.vy = -24; // Terminal fall velocity
+    if (this.vy < -this.fallSpeedLimit) this.vy = -this.fallSpeedLimit; // Terminal fall velocity
 
     // Update position
     this.prevX = this.x;

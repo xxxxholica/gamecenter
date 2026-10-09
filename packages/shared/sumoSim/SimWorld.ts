@@ -98,7 +98,6 @@ export class SimWorld {
   private readonly opts: SimOptions;
   private nokottaTimer: number | null = null;
   private activeTime = 0;
-  private blastDone = false;
   private lastFallen: SimFighter | null = null;
   private readonly fell = new Set<SimFighter>();
 
@@ -215,7 +214,6 @@ export class SimWorld {
     this.phase = 'standby';
     this.phaseTime = 0;
     this.activeTime = 0;
-    this.blastDone = false;
     this.lastFallen = null;
     this.hitStopRemaining = 0;
     this.fell.clear();
@@ -357,11 +355,8 @@ export class SimWorld {
       if (f.gone || this.fell.has(f) || f.body.position.y >= RING_OUT_Y) continue;
       this.fell.add(f);
       this.lastFallen = f;
-      // 最初の脱落の場所で大爆発(1ラウンドに1回。客席に先に突っ込んだ場合は、画面側がその場で爆破する)
-      if (!this.blastDone) {
-        this.blastDone = true;
-        this.fx.push('main', 'blast', f.body.position.x, 0.8, f.body.position.z, 0);
-      }
+      // 脱落の場所で大爆発(各力士の落下ごとに1回。客席に先に突っ込んだ場合は、画面側がその場で爆破する)
+      this.fx.push('main', 'blast', f.body.position.x, 0.8, f.body.position.z, 0);
     }
 
     const alive = this.fighters.filter((f) => !f.gone && !this.fell.has(f));

@@ -145,14 +145,14 @@ export class ResultScreen {
         rankDisplay: `第${check.rank}位`,
         themeClass: 'theme-skyway',
         delayMs: NAME_ENTRY_AFTER_RESULT_MS,
-        onComplete: (name) => {
+        onComplete: async (name) => {
+          // 保存直後のランキングを再描画し、登録された順位を光らせる(保存に失敗したら強調なしで元の表を出す)
+          const res = await saveLeaderboardScore(SLUG, score, name, undefined, `撃破${player.kills}体`);
+          if (seq === this.showSeq) {
+            this.renderLeaderboard(player, res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined, false, res.rank > 0);
+          }
           this.nameEntryOpen = false;
           this.armTime = performance.now() + 800;
-          // 保存直後のランキングを再描画し、登録された順位を光らせる(保存に失敗したら強調なしで元の表を出す)
-          void saveLeaderboardScore(SLUG, score, name, undefined, `撃破${player.kills}体`).then((res) => {
-            if (seq !== this.showSeq) return;
-            this.renderLeaderboard(player, res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined, false, res.rank > 0);
-          });
         },
       });
     });

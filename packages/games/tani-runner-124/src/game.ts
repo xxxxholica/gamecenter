@@ -843,7 +843,7 @@ export class Game {
       variantId: this.level,
       modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
-      onName: (name) => void RankingStore.add(score, this.level, name),
+      onName: (name) => RankingStore.add(score, this.level, name),
     });
   }
 

@@ -747,7 +747,7 @@ export class GameManager {
       score: deviation,
       modal: { title: '限界記録', scoreDisplay: `${deviation.toFixed(1)} pt`, themeClass: 'theme-extreme', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
-      onName: (name) => void RankingManager.addScore(deviation, rankText, name),
+      onName: (name) => RankingManager.addScore(deviation, rankText, name),
       onClosed: () => { this.resultArmTime = performance.now() + 800; },
     });
   }

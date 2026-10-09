@@ -5,6 +5,8 @@
 // 両方をこのモジュールから提供する。見た目はどのゲームのテーマにも馴染むよう、
 // 暗い半透明パネル+白文字のニュートラルな配色にしている。
 
+import { isMobileDevice } from './mobileBlock';
+
 export interface ArcadeGuideButton {
   // 実機で確認したGamepad APIのボタン番号。表示時はBUTTON_NAMESで名称に変換する。
   // 複数指定すると「いずれか」の意味(例: [1, 2, 7] = B/X/RTのどれでもよい)。
@@ -92,6 +94,20 @@ function injectStyle(): void {
     }
     body:not([data-input-mode="gamepad"]) .agc-pad-only {
       display: none !important;
+    }
+
+    /* スマホ・モバイル表示時はボタンガイドを非表示 */
+    body.is-mobile-blocked .agc-root,
+    body.is-game-mobile-blocked .agc-root,
+    body.is-mobile-blocked .agc-inline,
+    body.is-game-mobile-blocked .agc-inline {
+      display: none !important;
+    }
+    @media (max-width: 840px), (hover: none) and (pointer: coarse) {
+      .agc-root,
+      .agc-inline {
+        display: none !important;
+      }
     }
 
     .agc-root.agc-top-left {
@@ -425,6 +441,9 @@ function buttonBadge(b: ArcadeGuideButton): HTMLDivElement {
  */
 export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
   if (typeof location !== 'undefined' && location.search.includes('noHud')) {
+    return document.createElement('div');
+  }
+  if (isMobileDevice()) {
     return document.createElement('div');
   }
   injectStyle();

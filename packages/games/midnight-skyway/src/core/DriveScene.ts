@@ -7,6 +7,7 @@ import { MapBase } from '../maps/MapBase';
 import { CarBase } from '../models/CarBase';
 import { CarController, CameraMode } from './CarController';
 import { TireSmokeSystem } from './TireSmokeSystem';
+import { CombatSystem } from './CombatSystem';
 import type { TimeOfDay } from './TimeOfDay';
 
 export interface DriveSceneCallbacks {
@@ -14,6 +15,7 @@ export interface DriveSceneCallbacks {
   onPositionUpdate?: (carPos: THREE.Vector3, carRotY: number, forwardTraffic: THREE.Vector2[]) => void;
   onProgressUpdate?: (fraction: number, speedKmH: number, dt: number) => void;
   onCameraModeChange?: (mode: CameraMode) => void;
+  onCombatUpdate?: (playerHp: number, maxHp: number, lockOn: CombatSystem['currentLockOn']) => void;
   /** 自車の物理の直後、マップの拘束(壁・路面)の前。オンライン対戦の車同士の当たり判定に使う。 */
   onBeforeConstrain?: (car: CarController, dt: number) => void;
 }
@@ -37,6 +39,7 @@ export class DriveScene {
   private postFx: PostFX;
   public carController: CarController | null = null;
   public tireSmoke: TireSmokeSystem;
+  public combatSystem: CombatSystem;
 
   public active: boolean = false;
   private animationFrameId: number | null = null;
@@ -52,6 +55,7 @@ export class DriveScene {
   private chaseHeading = 0;
   private chaseDist = 4.4;
   private chaseHeight = 2.9;
+  private cameraTrauma = 0;
 
   /** Frozen (pause menu): nothing moves, the last frame stays on screen. */
   public paused: boolean = false;
@@ -104,13 +108,16 @@ export class DriveScene {
     this.tireSmoke = new TireSmokeSystem();
     this.scene.add(this.tireSmoke.group);
 
+    // 4c. Combat & Weapons System
+    this.combatSystem = new CombatSystem(this.scene, this.camera);
+    this.combatSystem.onCameraShake = (amt: number) => this.addCameraTrauma(amt);
+
     // 5. Window resize
     window.addEventListener('resize', this.onResize.bind(this));
 
-    // 6. Camera mode switch key (C key)
+    // 6. Camera selfie/lookback key (V key)
     window.addEventListener('keydown', (e) => {
       if (!this.active) return;
-      if (e.code === 'KeyC') this.cycleCameraMode();
       if (e.code === 'KeyV') this.frontKeyHeld = true;
     });
     window.addEventListener('keyup', (e) => {
@@ -351,6 +358,7 @@ export class DriveScene {
 
     // If car exists, respawn it at map start point
     if (this.carController) {
+      this.combatSystem.setEntities(this.carController, this.currentMap.traffic ?? null, this.currentMap, this.camera);
       this.respawnCar();
     }
   }
@@ -404,6 +412,7 @@ export class DriveScene {
       this.carController.setCar(car);
     }
 
+    this.combatSystem.setEntities(this.carController, this.currentMap?.traffic ?? null, this.currentMap, this.camera);
     this.applyPaintEnvironment();
     this.respawnCar();
   }
@@ -411,6 +420,9 @@ export class DriveScene {
   public respawnCar(): void {
     if (!this.carController || !this.currentMap) return;
     this.tireSmoke?.reset();
+    this.combatSystem.reset();
+    this.combatSystem.raceStarted = false;
+    this.combatSystem.setEntities(this.carController, this.currentMap.traffic ?? null, this.currentMap, this.camera);
     const startPos = this.currentMap.startPosition.clone();
     // Slightly lift to prevent ground clipping
     startPos.y += 0.05;
@@ -440,16 +452,17 @@ export class DriveScene {
 
   public setCameraMode(mode: CameraMode): void {
     if (!this.carController) return;
-    this.carController.cameraMode = mode;
-    this.controls.enabled = (mode === 'orbit');
-    if (mode === 'chase') this.chaseHeading = this.carController.rotationY;   // no swing when coming back to the chase view
+    // 一人称視点は廃止: 常に三人称後方視点(chase)に固定
+    const effectiveMode: CameraMode = (mode === 'cockpit' || mode === 'hood') ? 'chase' : mode;
+    this.carController.cameraMode = effectiveMode;
+    this.controls.enabled = (effectiveMode === 'orbit');
+    if (effectiveMode === 'chase') this.chaseHeading = this.carController.rotationY;   // no swing when coming back to the chase view
     
-    // Adjust field of view: natural FOV for first-person cockpit (62°), standard for third-person chase (54°)
-    this.camera.fov = mode === 'cockpit' ? 62 : 54;
+    this.camera.fov = 54;
     this.camera.updateProjectionMatrix();
 
-    this.callbacks.onCameraModeChange?.(mode);
-    if (mode === 'orbit' && this.carController) {
+    this.callbacks.onCameraModeChange?.(effectiveMode);
+    if (effectiveMode === 'orbit' && this.carController) {
       this.controls.target.copy(this.carController.position).add(new THREE.Vector3(0, 0.8, 0));
     }
   }
@@ -461,12 +474,8 @@ export class DriveScene {
 
   public cycleCameraMode(): void {
     if (!this.carController) return;
-    // 視点は一人称(cockpit)と三人称後方(chase)の2つに限定
-    const modes: CameraMode[] = ['chase', 'cockpit'];
-    const currentIdx = modes.indexOf(this.carController.cameraMode);
-    const nextMode = modes[(currentIdx + 1) % modes.length];
-    this.setCameraMode(nextMode);
-    audio.sfx.cameraSwitch('cycle');
+    // 一人称視点(cockpit)は廃止、三人称視点(chase)に固定
+    this.setCameraMode('chase');
   }
 
   public start(): void {
@@ -502,26 +511,17 @@ export class DriveScene {
     const carPos = this.carController.position;
     const rotY = this.carController.rotationY;
     let mode = this.carController.cameraMode;
+    if (mode === 'cockpit' || mode === 'hood') mode = 'chase';
 
     // 前方の視点: 押している間だけ。ボタンでの視点切り替えなのでアニメーションはつけず、効果音だけ鳴らす
     const wantFront = mode !== 'orbit' && (this.frontKeyHeld || this.frontPadHeld);
     if (wantFront !== this.frontActive) {
       this.frontActive = wantFront;
       audio.sfx.cameraSwitch(wantFront ? 'front' : 'back');
-      // 運転席視点との行き来でも、視野角はその場で切り替える
-      this.camera.fov = mode === 'cockpit' && !wantFront ? 62 : 54;
+      this.camera.fov = 54;
       this.camera.updateProjectionMatrix();
     }
-    // 運転席視点のときも、前方の視点の間は三人称のカメラを使う
-    if (mode === 'cockpit' && this.frontActive) {
-      mode = 'chase';
-    } else if (mode === 'cockpit') {
-      this.chaseHeading = rotY;
-    }
     const front = this.frontActive ? 1 : 0;
-
-    const forward = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
-    const right = new THREE.Vector3(Math.cos(rotY), 0, -Math.sin(rotY));
 
     if (mode === 'chase') {
       this.controls.enabled = false;
@@ -550,39 +550,28 @@ export class DriveScene {
       this.cameraLookTarget.copy(carPos).add(new THREE.Vector3(0, 0.9, 0)).add(cf.multiplyScalar(lookAhead));
       this.camera.lookAt(this.cameraLookTarget);
 
-    } else if (mode === 'cockpit') {
-      this.controls.enabled = false;
-      // 車種ごとのコクピットアイポイント・注視位置を使用
-      const eyeOffset = this.currentCar.cockpitEyeOffset;
-      const lookOffset = this.currentCar.cockpitLookOffset;
-
-      const eyePos = carPos.clone()
-        .add(right.clone().multiplyScalar(eyeOffset.x))
-        .add(new THREE.Vector3(0, eyeOffset.y, 0))
-        .add(forward.clone().multiplyScalar(eyeOffset.z));
-
-      this.camera.position.copy(eyePos);
-      const lookTarget = eyePos.clone()
-        .add(forward.clone().multiplyScalar(lookOffset.z))
-        .add(new THREE.Vector3(0, lookOffset.y, 0))
-        .add(right.clone().multiplyScalar(lookOffset.x));
-      this.camera.lookAt(lookTarget);
-
-    } else if (mode === 'hood') {
-      this.controls.enabled = false;
-      // Hood / Bumper camera
-      const hoodPos = carPos.clone()
-        .add(new THREE.Vector3(0, 0.85, 0))
-        .add(forward.clone().multiplyScalar(1.2));
-      this.camera.position.copy(hoodPos);
-      const lookTarget = hoodPos.clone().add(forward.clone().multiplyScalar(20.0));
-      this.camera.lookAt(lookTarget);
-
     } else if (mode === 'orbit') {
       this.controls.enabled = true;
       this.controls.target.copy(carPos).add(new THREE.Vector3(0, 0.8, 0));
       this.controls.update();
     }
+
+    // Weapon recoil & explosion camera shake
+    if (this.cameraTrauma > 0) {
+      this.cameraTrauma = Math.max(0, this.cameraTrauma - dt * 2.5);
+      const shake = this.cameraTrauma * this.cameraTrauma;
+      const shakeX = (Math.random() - 0.5) * shake * 0.45;
+      const shakeY = (Math.random() - 0.5) * shake * 0.45;
+      const shakeZ = (Math.random() - 0.5) * shake * 0.3;
+      this.camera.position.x += shakeX;
+      this.camera.position.y += shakeY;
+      this.camera.position.z += shakeZ;
+      this.camera.rotation.z += (Math.random() - 0.5) * shake * 0.04;
+    }
+  }
+
+  public addCameraTrauma(amount: number): void {
+    this.cameraTrauma = Math.min(1.0, this.cameraTrauma + amount);
   }
 
   private animate = (): void => {
@@ -656,6 +645,16 @@ export class DriveScene {
         );
       }
 
+      // Update Combat, Homing Weapons, Death Tumble & Road Destruction
+      this.combatSystem.update(dt);
+      if (this.callbacks.onCombatUpdate) {
+        this.callbacks.onCombatUpdate(
+          this.combatSystem.playerHp,
+          this.combatSystem.playerMaxHp,
+          this.combatSystem.currentLockOn
+        );
+      }
+
       // Tire visual effects: Sparks during drift, Smoke during high-speed redline
       if (this.tireSmoke && this.carController) {
         const tires = this.carController.getTireContactPositions();
@@ -689,13 +688,11 @@ export class DriveScene {
       }
     }
 
-    // 2. Update Camera (mode-dependent FOV, wider view while a drift boost is on)
+    // 2. Update Camera (standard chase FOV, wider view while a drift boost is on)
     if (this.carController) {
-      const isCockpit = this.carController.cameraMode === 'cockpit' && !this.frontActive;
-      // 一人称ではフロントガラスを消してフルクリアにする(三人称では車体として見せる)
       const windshield = this.currentCar?.windshield;
-      if (windshield) windshield.visible = !isCockpit;
-      const baseFov = isCockpit ? 62 : 54;
+      if (windshield) windshield.visible = true;
+      const baseFov = 54;
       const fovTarget = this.carController.boostTimer > 0 ? (baseFov + 6) : baseFov;
       if (Math.abs(this.camera.fov - fovTarget) > 0.05) {
         this.camera.fov += (fovTarget - this.camera.fov) * Math.min(1, 6 * dt);

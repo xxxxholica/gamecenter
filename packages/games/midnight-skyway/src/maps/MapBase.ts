@@ -51,6 +51,9 @@ export abstract class MapBase {
   /** How far the car origin rides above the route samples. */
   public getCarLift(): number { return 0; }
 
+  /** Returns the road surface elevation Y at coordinates (x, z). Returns 0 by default. */
+  public getSurfaceY(_pos: { x: number; z: number }): number { return 0; }
+
   /** Called when the car is (re)placed at the start: reset any road tracking and put it on the road surface. */
   public onRespawn(_car: CarController): void {}
 

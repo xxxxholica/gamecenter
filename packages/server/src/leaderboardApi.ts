@@ -92,6 +92,15 @@ function route(req: http.IncomingMessage, res: http.ServerResponse, url: URL, ip
   const parts = decoded as string[];
   const method = req.method ?? 'GET';
 
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'content-type',
+      'access-control-max-age': '86400',
+    }).end();
+    return;
+  }
+
   if (method === 'GET' && parts[0] === 'leaderboards' && parts.length === 1) {
     return send(res, 200, { boards: store.all() });
   }
@@ -108,7 +117,8 @@ function route(req: http.IncomingMessage, res: http.ServerResponse, url: URL, ip
 
   if (method === 'POST' && parts[0] === 'leaderboard' && (parts.length === 2 || parts.length === 3)) {
     const origin = req.headers.origin;
-    if (origin && !originAllowed(origin)) return send(res, 403, { error: 'forbidden_origin' });
+    // Safari の sandboxed iframe / プライベートブラウズでの Origin: 'null' は許可する
+    if (origin && origin !== 'null' && !originAllowed(origin)) return send(res, 403, { error: 'forbidden_origin' });
     // JSON以外(text/plain 等)は、他のサイトのフォーム・fetch が事前確認(preflight)なしで送れる形式なので受け付けない
     if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return send(res, 415, { error: 'unsupported_media_type' });
     if (!postRate.hit(ip)) return send(res, 429, { error: 'rate' });
