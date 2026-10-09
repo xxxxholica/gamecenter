@@ -21,6 +21,7 @@ import {
 import { fetchAllOnlineStatuses } from '../../shared/online/onlineStatus';
 import type { PublicStatus } from '../../shared/online/core';
 import { initHubMobileBlock, isMobileDevice } from '../../shared/mobileBlock';
+import { initSessionTracking } from '../../shared/arcadeAnalytics';
 
 // モバイル端末（スマホ・タブレット）アクセス制限の適用
 initHubMobileBlock();
@@ -29,6 +30,7 @@ initHubMobileBlock();
 if (isFramedHub) {
   initFramedHub();
 } else {
+  initSessionTracking();
   listenGameFrameMessages();
   mountFullscreenKey();
 
@@ -462,7 +464,7 @@ function launchSelected(slug?: string) {
     openGameFrame(url, () => {
       setPressed(false);
       void renderSections(targetSlug, true);
-    });
+    }, targetSlug);
   } else {
     window.location.href = url;
   }

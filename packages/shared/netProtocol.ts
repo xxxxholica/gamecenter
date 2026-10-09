@@ -49,6 +49,17 @@ export interface RacerInfo {
 /** 20Hzで送る自車の姿勢。[x, y, z, rotY, speed, steer, roll, pitch, drift(0|1), progress] */
 export type CarState = [number, number, number, number, number, number, number, number, number, number];
 
+/**
+ * 武装車両の発砲。k: 'g'=機関砲(2連) / 'm'=ミサイル。o: 発射位置[x,y,z]、f: 向き[x,z](正規化済み)、tg: 狙っている参加者id(NPCや無目標は null)。
+ * 当たり判定とダメージは「撃たれた側」の端末が自分の車についてだけ行う(撃った側は相手のHPを決めない)。
+ */
+export interface FireInfo {
+  k: 'g' | 'm';
+  o: [number, number, number];
+  f: [number, number];
+  tg: number | null;
+}
+
 export interface FinishEntry {
   id: number;
   name: string;
@@ -67,6 +78,9 @@ export type ClientMsg =
   /** ts: 送信時のサーバー時刻(ms)。受け取った側が、通信の揺らぎに左右されず送信間隔どおりに補間するのに使う。 */
   | { t: 'state'; s: CarState; ts?: number }
   | { t: 'loaded' }
+  | ({ t: 'fire' } & FireInfo)
+  /** 自車が撃破された(他の人の画面で爆発させる) */
+  | { t: 'died' }
   | { t: 'finish'; timeMs: number };
 
 export type ServerMsg =
@@ -95,6 +109,8 @@ export type ServerMsg =
   | { t: 'states'; s: Record<number, CarState>; ts?: Record<number, number> }
   /** 走行中の順位(先頭が1位の参加者id)。サーバーが全員の進行率を同じ時刻に揃えて決めるので、全員の画面で同じになる。 */
   | { t: 'standings'; order: number[] }
+  | ({ t: 'fire'; from: number } & FireInfo)
+  | { t: 'died'; from: number }
   | { t: 'results'; entries: FinishEntry[]; done: boolean; endsInMs?: number }
   /** レースが終わってルームが空に戻った(次のレースに出るには、もう一度参加する)。 */
   | { t: 'left' };

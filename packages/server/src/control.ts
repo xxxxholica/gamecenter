@@ -5,6 +5,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GameStatus, OpenOptions } from './host.ts';
+import type { SetRoleOptions } from './leaderboardStore.ts';
+import type { AdminRole } from '../../shared/arcadeLeaderboardCore.ts';
 import { RANDOM } from './vote.ts';
 
 export const DEFAULT_SOCKET = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'control.sock');   // data/ はサービスが書き込める唯一の場所
@@ -40,8 +42,14 @@ export interface ControlHandlers {
   listBoards(): { board: string; slug: string; variant?: string; variantLabel?: string; entries: object[] }[];
   /** ランキングの枠の rank 位(1始まり)に、開発者の印を付ける・外す。変えたら true、すでにその状態なら false、存在しない枠・順位は null */
   setDev(board: string, rank: number, on: boolean): boolean | null;
+  /** ランキングの枠の rank 位(1始まり)に、ロール(「開発者」「テスター」)と任意の名前を設定する・外す。変えたら true、すでにその状態なら false、存在しない枠・順位・無効な値は null */
+  setRole(board: string, rank: number, opts: SetRoleOptions): boolean | null;
   /** ランキングの枠の rank 位(1始まり)を1件消す。消したら true、なければ false、存在しない枠は null */
   removeEntry(board: string, rank: number): boolean | null;
+  /** アナリティクスサマリーの取得 */
+  getAnalyticsSummary(): object;
+  /** アナリティクスデータの項目別JSONエクスポート */
+  exportAnalytics(type: string, gameId?: string): object;
 }
 
 /**
@@ -75,10 +83,31 @@ export function handleAdminRequest(h: ControlHandlers, method: string, url: URL)
     return h.kick(url.searchParams.get('game') ?? '', id) ? { code: 200, body: h.status() } : { code: 404, body: { error: 'not_found' } };
   }
   if (method === 'GET' && url.pathname === '/lb') return { code: 200, body: { boards: h.listBoards() } };
+  if (method === 'POST' && url.pathname === '/lb-role') {
+    const rank = Number(url.searchParams.get('rank'));
+    const on = url.searchParams.get('on');
+    if (!Number.isInteger(rank) || (on !== '1' && on !== '0')) return { code: 400, body: { error: 'bad_request' } };
+    const board = url.searchParams.get('board') ?? '';
+    if (on === '0') {
+      const r = h.setRole(board, rank, { on: false });
+      return r === null ? { code: 404, body: { error: 'not_found' } } : { code: 200, body: { changed: r } };
+    }
+    const name = url.searchParams.get('name') ?? '';
+    const role = url.searchParams.get('role') as AdminRole;
+    if (!name || !role) return { code: 400, body: { error: 'bad_request' } };
+    const r = h.setRole(board, rank, { on: true, name, role });
+    return r === null ? { code: 400, body: { error: 'invalid_role_or_name' } } : { code: 200, body: { changed: r } };
+  }
   if (method === 'POST' && url.pathname === '/lb-dev') {
     const rank = Number(url.searchParams.get('rank'));
     const on = url.searchParams.get('on');
     if (!Number.isInteger(rank) || (on !== '1' && on !== '0')) return { code: 400, body: { error: 'bad_request' } };
+    const name = url.searchParams.get('name');
+    const role = url.searchParams.get('role') as AdminRole;
+    if (on === '1' && name && role) {
+      const r = h.setRole(url.searchParams.get('board') ?? '', rank, { on: true, name, role });
+      return r === null ? { code: 400, body: { error: 'invalid_role_or_name' } } : { code: 200, body: { changed: r } };
+    }
     const r = h.setDev(url.searchParams.get('board') ?? '', rank, on === '1');
     return r === null ? { code: 404, body: { error: 'not_found' } } : { code: 200, body: { changed: r } };
   }
@@ -91,6 +120,12 @@ export function handleAdminRequest(h: ControlHandlers, method: string, url: URL)
     if (!Number.isInteger(rank)) return { code: 400, body: { error: 'bad_request' } };
     const r = h.removeEntry(url.searchParams.get('board') ?? '', rank);
     return r === null ? { code: 404, body: { error: 'unknown_board' } } : { code: r ? 200 : 404, body: { removed: r } };
+  }
+  if (method === 'GET' && url.pathname === '/analytics/summary') return { code: 200, body: h.getAnalyticsSummary() };
+  if (method === 'GET' && url.pathname === '/analytics/export') {
+    const type = url.searchParams.get('type') ?? 'all';
+    const game = url.searchParams.get('game') || undefined;
+    return { code: 200, body: h.exportAnalytics(type, game) };
   }
   return { code: 404, body: { error: 'not_found' } };
 }

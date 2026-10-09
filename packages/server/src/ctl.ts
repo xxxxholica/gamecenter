@@ -9,6 +9,8 @@
 //   clear-board <枠>                        … ランキングの枠の記録(とゴースト)をすべて消す。枠は <ゲームid> か <ゲームid>:<コース/難易度>
 //       例: clear-board street-b-boy / clear-board midnight-skyway:tokyo_skyway
 //   mark-dev <枠> <順位> [off]              … 枠の<順位>位の記録に、開発者の印を付ける(名前が「開発者」になり、ホームで強調される)。off で外す
+//   set-role <枠> <順位> <名前> <ロール>     … 枠の<順位>位に「好きな名前（ロール）」を設定する(ロールは 開発者 または テスター)
+//   clear-role <枠> <順位>                  … 枠の<順位>位のロール設定を解除し、元の名前に戻す
 //   remove-record <枠> <順位>               … 枠の<順位>位(1〜3)の記録を1件消す(荒らし・不正な記録の削除)
 // ゲームは id(例: midnight-skyway)か、一意に決まる部分文字列(例: skyway)。
 import http from 'node:http';
@@ -63,11 +65,17 @@ try {
     const off = rest[2] === 'off';
     const r = await call('POST', `/lb-dev?${new URLSearchParams({ board: rest[0], rank: rest[1], on: off ? '0' : '1' })}`);
     console.log(`${rest[0]}: ${rest[1]}位の開発者の印を${off ? '外し' : '付け'}${r.changed ? 'ました' : '(すでにその状態です)'}`);
+  } else if (cmd === 'set-role' && rest[0] && rest[1] && rest[2] && rest[3]) {
+    const r = await call('POST', `/lb-role?${new URLSearchParams({ board: rest[0], rank: rest[1], on: '1', name: rest[2], role: rest[3] })}`);
+    console.log(`${rest[0]}: ${rest[1]}位に「${rest[2]}（${rest[3]}）」を設定${r.changed ? 'しました' : '(すでにその状態です)'}`);
+  } else if (cmd === 'clear-role' && rest[0] && rest[1]) {
+    const r = await call('POST', `/lb-role?${new URLSearchParams({ board: rest[0], rank: rest[1], on: '0' })}`);
+    console.log(`${rest[0]}: ${rest[1]}位のロール設定を解除${r.changed ? 'しました' : '(すでにその状態です)'}`);
   } else if (cmd === 'remove-record' && rest[0] && rest[1]) {
     await call('POST', `/lb-remove?${new URLSearchParams({ board: rest[0], rank: rest[1] })}`);
     console.log(`${rest[0]}: ${rest[1]}位の記録を消しました`);
   } else {
-    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id> | clear-board <枠> | mark-dev <枠> <順位> [off] | remove-record <枠> <順位>>');
+    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id> | clear-board <枠> | mark-dev <枠> <順位> [off] | set-role <枠> <順位> <名前> <開発者|テスター> | clear-role <枠> <順位> | remove-record <枠> <順位>>');
     process.exit(2);
   }
 } catch (e) {

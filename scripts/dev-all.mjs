@@ -112,7 +112,17 @@ httpServer.listen(PORT, () => {
 // 試す時は http://localhost:5173/games/<ゲーム>/ を複数タブで開き、START後のモード選択から「オンライン対戦」を選ぶ。管理画面は http://localhost:5173/admin/
 const onlineServer = spawn(process.execPath, ['--watch', 'src/index.ts'], {
   cwd: path.join(root, 'packages/server'),
-  env: { ...process.env, ONLINE_START_OPEN: '1', ONLINE_ALLOWED_ORIGINS: '*', ONLINE_PROXY_SECRET: DEV_PROXY_SECRET, ONLINE_ADMIN_PORT: String(ONLINE_ADMIN_PORT), ONLINE_MAX_CONNS_PER_IP: '50', ONLINE_CONNECTS_PER_MIN: '300' },
+  env: {
+    ...process.env,
+    ONLINE_START_OPEN: '1',
+    ONLINE_ALLOWED_ORIGINS: '*',
+    ONLINE_PROXY_SECRET: DEV_PROXY_SECRET,
+    ONLINE_ADMIN_PORT: String(ONLINE_ADMIN_PORT),
+    ONLINE_ADMIN_USER: process.env.ONLINE_ADMIN_USER ?? 'admin',
+    ONLINE_ADMIN_PASS: process.env.ONLINE_ADMIN_PASS ?? 'admin',
+    ONLINE_MAX_CONNS_PER_IP: '50',
+    ONLINE_CONNECTS_PER_MIN: '300',
+  },
   stdio: 'inherit',
 });
 onlineServer.on('error', (err) => console.error('[online] サーバーを起動できませんでした:', err.message));

@@ -13,12 +13,14 @@ import { log } from './log.ts';
 import { GameHost } from './host.ts';
 import { LeaderboardStore } from './leaderboardStore.ts';
 import { handleLeaderboardRequest } from './leaderboardApi.ts';
+import { AnalyticsStore } from './analyticsStore.ts';
 import { GAME_FACTORIES } from './games/index.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
 const HOST = process.env.ONLINE_HOST ?? '127.0.0.1';
 const WS_PATH = process.env.ONLINE_WS_PATH ?? '/online-ws';
 const LEADERBOARD_FILE = process.env.LEADERBOARD_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'leaderboard.json');
+const ANALYTICS_FILE = process.env.ANALYTICS_FILE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'analytics.json');
 const CONTROL_SOCKET = process.env.ONLINE_CONTROL_SOCKET ?? DEFAULT_SOCKET;
 const ADMIN_PORT = Number(process.env.ONLINE_ADMIN_PORT ?? 8788);
 const PROXY_SECRET = process.env.ONLINE_PROXY_SECRET;
@@ -32,6 +34,7 @@ for (const [id, make] of Object.entries(GAME_FACTORIES)) hosts.set(id, new GameH
 if (process.env.ONLINE_START_OPEN === '1') for (const h of hosts.values()) if (!h.open) h.setOpen(true);
 
 const leaderboard = new LeaderboardStore(LEADERBOARD_FILE);
+const analytics = new AnalyticsStore(ANALYTICS_FILE);
 
 /** リバースプロキシ(ループバック)経由の時だけ X-Forwarded-For を信用する。 */
 function clientIp(req: http.IncomingMessage): string {
@@ -53,7 +56,7 @@ const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllo
 
 // 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
 const server = http.createServer((req, res) => {
-  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed)) return;
+  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed, analytics)) return;
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
     for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
@@ -67,7 +70,7 @@ server.on('upgrade', (req, socket, head) => connections.handleUpgrade(req, socke
 // アイドル切断・無応答の回収と、レート表の掃除。
 setInterval(() => connections.sweep(), 5000);
 
-const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count());
+const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics);
 startControl(CONTROL_SOCKET, controlHandlers);
 startAdminWeb(ADMIN_PORT, '127.0.0.1', PROXY_SECRET, ADMIN_USER, ADMIN_PASS, controlHandlers);
 
@@ -82,6 +85,7 @@ process.on('unhandledRejection', (e) => log(`unhandledRejection: ${(e as Error)?
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     leaderboard.flush();
+    analytics.flush();
     connections.closeAll(1001);
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();

@@ -4,6 +4,13 @@
 // ハブ自身が親へ閉じるよう伝える(initFramedHub)。ゲームのコードは変えなくてよい。
 
 import { FULLSCREEN_TOGGLE_MESSAGE, toggleFullscreen } from '../../shared/fullscreenKey';
+import {
+  GAME_ANALYTICS_MESSAGE,
+  applyDeepAnalytics,
+  attachGameInputSource,
+  trackGameClose,
+  trackGameLaunch,
+} from '../../shared/arcadeAnalytics';
 
 const CLOSE_MESSAGE = 'gamecenter:close-game';
 
@@ -18,6 +25,7 @@ export function initFramedHub(): void {
 
 let frame: HTMLIFrameElement | null = null;
 let onClosed: (() => void) | null = null;
+let activeGameId: string | undefined = undefined;
 
 export function isGameFrameOpen(): boolean {
   return frame !== null;
@@ -31,9 +39,13 @@ export function shouldOpenInFrame(): boolean {
   return true;
 }
 
-export function openGameFrame(url: string, closed: () => void): void {
+export function openGameFrame(url: string, closed: () => void, gameId?: string): void {
   if (frame) return;
+  activeGameId = gameId;
   onClosed = closed;
+  if (gameId) {
+    trackGameLaunch(gameId);
+  }
   const el = document.createElement('iframe');
   el.src = url;
   el.setAttribute('allow', 'fullscreen; gamepad; autoplay; keyboard-map');
@@ -42,6 +54,8 @@ export function openGameFrame(url: string, closed: () => void): void {
   el.addEventListener('load', () => {
     el.focus();
     el.contentWindow?.focus();
+    // iframe内のキー・タッチ入力は親windowに届かないので、計測の対象に加える
+    attachGameInputSource(el.contentWindow);
   });
   document.body.appendChild(el);
   frame = el;
@@ -49,6 +63,8 @@ export function openGameFrame(url: string, closed: () => void): void {
 
 export function closeGameFrame(): void {
   if (!frame) return;
+  trackGameClose(activeGameId);
+  activeGameId = undefined;
   frame.remove();
   frame = null;
   window.focus();
@@ -57,6 +73,11 @@ export function closeGameFrame(): void {
   cb?.();
 }
 
+// ゲームを開いたままハブごとページを離れた場合も、終了(プレイ時間・FPSなど)を送る
+window.addEventListener('pagehide', () => {
+  if (frame) trackGameClose(activeGameId, { unload: true });
+});
+
 /** iframeのゲームからのメッセージ(閉じる・全画面切り替え)を受ける。 */
 export function listenGameFrameMessages(): void {
   window.addEventListener('message', (e) => {
@@ -64,5 +85,9 @@ export function listenGameFrameMessages(): void {
     const type = (e.data as { type?: string } | null)?.type;
     if (type === CLOSE_MESSAGE) closeGameFrame();
     else if (type === FULLSCREEN_TOGGLE_MESSAGE) toggleFullscreen();
+    else if (type === GAME_ANALYTICS_MESSAGE) {
+      const msg = e.data as { subType?: string; data?: Record<string, unknown> };
+      if (msg.subType) applyDeepAnalytics(msg.subType, msg.data, activeGameId);
+    }
   });
 }

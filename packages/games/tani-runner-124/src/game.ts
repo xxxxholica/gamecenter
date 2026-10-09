@@ -21,6 +21,7 @@ import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 /** 最後のジャンプのタイミングゲージ: 緑の帯の中心(0〜1)・半幅、カーソルの往復にかかる秒数、受付時間 */
@@ -77,6 +78,7 @@ export class Game {
   private resultMenu = new ResultMenu();
   private flightBoostsLeft: number = 0;
   public ringsHit: number = 0;
+  private pickupsCollected = 0;
   private reqTextElem: HTMLElement | null = null;
   private launchCursorElem: HTMLElement | null = null;
   private bonusHintElem: HTMLElement | null = null;
@@ -337,6 +339,11 @@ export class Game {
     this.graduationRequirement = pickRequirement(this.level);
     this.world.reset(this.graduationRequirement, this.level);
     this.ringsHit = 0;
+    this.pickupsCollected = 0;
+    reportDeepAnalytics('progression_update', {
+      difficulty: LEVELS[this.level].label,
+      extraStats: { requirement: this.graduationRequirement },
+    });
     this.effects.clearAll();
     if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
 
@@ -597,6 +604,7 @@ export class Game {
       this.effects.spawnDispersalDebris(pk.spec.x, 1.0, pk.spec.z, 8, false);
       sound.playCreditUp(false);
       inputManager.rumble(100, 0.2, 0.5);
+      this.pickupsCollected++;
       this.setCredits(this.currentCredits + pk.spec.value, pk.spec.value);
     }
   }
@@ -807,6 +815,13 @@ export class Game {
   // Game Over: 「留年」 (Red bold text)
   private triggerGameOver(): void {
     this.state = 'GAME_OVER';
+    reportDeepAnalytics('progression_update', {
+      result: 'gameover',
+      deathReason: '卒業要件に届かず留年',
+      difficulty: LEVELS[this.level].label,
+      itemsCollected: this.pickupsCollected,
+      extraStats: { requirement: this.graduationRequirement, credits: this.currentCredits, maxMultiplier: this.maxAchievedMultiplier },
+    });
     sound.stopBgm();
     sound.playGameOverJingle();
 
@@ -826,6 +841,12 @@ export class Game {
 
     // 取得単位 = 壁に着いた人数 × 到達倍率。余った人数が多いほど、遠くまで飛ぶほど増える
     const score = Math.round(this.creditsAtWall * this.maxAchievedMultiplier * (1 + 0.1 * this.ringsHit));
+    reportDeepAnalytics('progression_update', {
+      result: 'clear',
+      difficulty: LEVELS[this.level].label,
+      itemsCollected: this.pickupsCollected,
+      extraStats: { requirement: this.graduationRequirement, creditsAtWall: this.creditsAtWall, maxMultiplier: this.maxAchievedMultiplier, ringsHit: this.ringsHit, ringsTotal: this.world.rings.length },
+    });
     if (this.finalRingElem) {
       this.finalRingElem.textContent = `${LEVELS[this.level].label}　リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
     }

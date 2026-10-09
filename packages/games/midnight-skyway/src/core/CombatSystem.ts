@@ -25,6 +25,31 @@ export interface CombatTarget {
   carType: string;
   obj?: THREE.Object3D;
   npcRef?: NpcCar;
+  /** オンライン対戦の他のプレイヤーなら、その参加者id(撃つ標的にはなるが、ダメージは相手の端末が決める) */
+  remoteId?: number;
+}
+
+/** オンライン対戦の他のプレイヤー(OnlineRace が渡す)。RemoteCar がそのまま満たす。 */
+export interface RemoteCombatant {
+  id: number;
+  name: string;
+  carType: string;
+  pos: THREE.Vector3;
+  rotY: number;
+  speed: number;
+  valid: boolean;
+  stale: boolean;
+  dead: boolean;
+  car: { group: THREE.Object3D };
+  markDead(ms: number): void;
+}
+
+/** 発砲の通知(自分の発砲をオンラインで知らせる)。 */
+export interface FireEvent {
+  k: 'g' | 'm';
+  origin: THREE.Vector3;
+  forward: THREE.Vector3;
+  targetRemoteId: number | null;
 }
 
 export interface Bullet {
@@ -93,6 +118,13 @@ export class CombatSystem {
 
   // Camera trauma shake callback
   public onCameraShake?: (amount: number) => void;
+
+  // オンライン対戦: 他のプレイヤー(標的)と、自分の発砲・撃破の通知先
+  public remoteSource: (() => Iterable<RemoteCombatant>) | null = null;
+  public onLocalFire?: (e: FireEvent) => void;
+  public onPlayerKilled?: () => void;
+  /** 自分の参加者id(他のプレイヤーの発砲の標的が自分か判定する) */
+  public onlineYou = -1;
 
   // Threat warning
   public incomingThreatTimer = 0;
@@ -306,7 +338,49 @@ export class CombatSystem {
       }
     }
 
+    // 3. オンライン対戦の他のプレイヤー
+    if (this.remoteSource) {
+      for (const r of this.remoteSource()) {
+        const id = `remote_${r.id}`;
+        if (id === excludeId || !r.valid || r.stale) continue;
+        list.push({
+          id,
+          isPlayer: false,
+          position: r.pos.clone(),
+          velocity: new THREE.Vector3(Math.sin(r.rotY) * r.speed, 0, Math.cos(r.rotY) * r.speed),
+          rotationY: r.rotY,
+          hp: 1,
+          maxHp: 1,
+          isDead: r.dead,
+          carType: r.carType,
+          obj: r.car.group,
+          remoteId: r.id,
+        });
+      }
+    }
+
     return list;
+  }
+
+  private findRemote(id: number): RemoteCombatant | null {
+    if (!this.remoteSource) return null;
+    for (const r of this.remoteSource()) if (r.id === id) return r;
+    return null;
+  }
+
+  /** 飛んでいる弾・ミサイルの標的の位置・生死を最新にする(他のプレイヤーは姿勢を補間しているので毎フレーム写す)。 */
+  private refreshRemoteTarget(t: CombatTarget): void {
+    const r = t.remoteId !== undefined ? this.findRemote(t.remoteId) : null;
+    if (!r) { t.isDead = true; return; }
+    t.position.copy(r.pos);
+    t.velocity.set(Math.sin(r.rotY) * r.speed, 0, Math.cos(r.rotY) * r.speed);
+    t.isDead = r.dead;
+  }
+
+  /** 弾が当たる相手か。他のプレイヤーが撃った弾は自分の車だけ(NPCは各端末で別物なので当てない)。 */
+  private canHit(shooterId: string, t: CombatTarget): boolean {
+    if (t.id === shooterId || t.isDead) return false;
+    return shooterId.startsWith('remote_') ? t.id === 'player' : true;
   }
 
   /** Accurately retrieves the road surface elevation Y at position */
@@ -480,7 +554,7 @@ export class CombatSystem {
     // Update Lock-on HUD status and 3D Pointer Reticle marker
     if (bestTarget) {
       this.currentLockOn = {
-        targetName: bestTarget.isPlayer ? 'RIVAL PLAYER' : `NPC (${bestTarget.carType.toUpperCase()})`,
+        targetName: bestTarget.isPlayer || bestTarget.remoteId !== undefined ? 'RIVAL PLAYER' : `NPC (${bestTarget.carType.toUpperCase()})`,
         dist: Math.round(bestDist),
         state: 'locked',
       };
@@ -561,7 +635,7 @@ export class CombatSystem {
       let bestDist = Infinity;
 
       for (const t of targets) {
-        if (t.isDead) continue;
+        if (t.isDead || t.remoteId !== undefined) continue;   // NPCは他のプレイヤーを撃たない(NPCは端末ごとに別物)
         const toT = t.position.clone().sub(nPos);
         const dist = toT.length();
         const dot = toT.clone().normalize().dot(fwd);
@@ -628,6 +702,7 @@ export class CombatSystem {
 
     // 2. Twin roof gun barrels protruding on top of Combat Sedan:
     // Model coordinates: x = ±0.14, y = 1.86, z = 1.2
+    if (shooterId === 'player') this.onLocalFire?.({ k: 'g', origin: origin.clone(), forward: forward.clone(), targetRemoteId: target.remoteId ?? null });
     const right = new THREE.Vector3(forward.z, 0, -forward.x).normalize();
     [-0.14, 0.14].forEach((offset) => {
       const pos = origin.clone().add(forward.clone().multiplyScalar(1.2)).add(right.clone().multiplyScalar(offset));
@@ -671,6 +746,7 @@ export class CombatSystem {
       }
     }
 
+    if (shooterId === 'player') this.onLocalFire?.({ k: 'm', origin: origin.clone(), forward: forward.clone(), targetRemoteId: target.remoteId ?? null });
     const mGroup = new THREE.Group();
     const body = new THREE.Mesh(this.missileBodyGeo, this.missileBodyMat);
     const nose = new THREE.Mesh(this.missileNoseGeo, this.missileNoseMat);
@@ -718,6 +794,8 @@ export class CombatSystem {
         } else if (b.target.npcRef) {
           b.target.position.copy(b.target.npcRef.obj.position);
           b.target.isDead = !!b.target.npcRef.isDead;
+        } else if (b.target.remoteId !== undefined) {
+          this.refreshRemoteTarget(b.target);
         } else if (b.target.obj) {
           b.target.position.copy(b.target.obj.position);
         }
@@ -740,7 +818,7 @@ export class CombatSystem {
         : allTargets;
 
       for (const t of candidateTargets) {
-        if (t.id === b.shooterId || t.isDead) continue;
+        if (!this.canHit(b.shooterId, t)) continue;
         const d = b.position.distanceTo(t.position.clone().add(new THREE.Vector3(0, 0.6, 0)));
         if (d < 2.0) {
           hitTarget = t;
@@ -792,6 +870,8 @@ export class CombatSystem {
             Math.cos(m.target.npcRef.obj.rotation.y) * m.target.npcRef.speed
           );
           m.target.isDead = !!m.target.npcRef.isDead;
+        } else if (m.target.remoteId !== undefined) {
+          this.refreshRemoteTarget(m.target);
         } else if (m.target.obj) {
           m.target.position.copy(m.target.obj.position);
         }
@@ -847,7 +927,7 @@ export class CombatSystem {
         : allTargets;
 
       for (const t of candidateTargets) {
-        if (t.id === m.shooterId || t.isDead) continue;
+        if (!this.canHit(m.shooterId, t)) continue;
         const targetCenter = t.position.clone().add(new THREE.Vector3(0, 0.65, 0));
         moveSegment.closestPointToPoint(targetCenter, true, segClosest);
         const dist = segClosest.distanceTo(targetCenter);
@@ -858,7 +938,7 @@ export class CombatSystem {
       }
 
       // Safeguard: direct distance check to tracked target
-      if (!hitTarget && m.target && !m.target.isDead && m.target.id !== m.shooterId) {
+      if (!hitTarget && m.target && this.canHit(m.shooterId, m.target)) {
         const targetCenter = m.target.position.clone().add(new THREE.Vector3(0, 0.65, 0));
         if (m.position.distanceTo(targetCenter) < 3.6) {
           hitTarget = m.target;
@@ -881,9 +961,44 @@ export class CombatSystem {
     this.missiles = alive;
   }
 
+  /** 他のプレイヤーの発砲を受けた: 同じ弾・ミサイルを自分の画面でも飛ばす(当たるのは自分の車だけ。ダメージは自分で決める)。 */
+  public spawnRemoteFire(fromId: number, e: FireEvent): void {
+    const shooterId = `remote_${fromId}`;
+    const targets = this.getAllTargets(shooterId);
+    // 狙われているのが自分なら、ホーミングの標的は自車。他のプレイヤーならその車。NPCや無目標なら直進
+    let target: CombatTarget | null = null;
+    if (e.targetRemoteId !== null) {
+      const myId = this.onlineYou;
+      target = e.targetRemoteId === myId ? (targets.find((t) => t.id === 'player') ?? null) : (targets.find((t) => t.remoteId === e.targetRemoteId) ?? null);
+    }
+    const dummy: CombatTarget = target ?? {
+      id: 'none', isPlayer: false, position: e.origin.clone().addScaledVector(e.forward, 60), velocity: new THREE.Vector3(),
+      rotationY: 0, hp: 1, maxHp: 1, isDead: true, carType: 'none',
+    };
+    if (e.k === 'g') this.fireMachineGun(shooterId, e.origin, e.forward, dummy);
+    else this.fireHomingMissile(shooterId, e.origin, e.forward, dummy);
+    if (target?.id === 'player') this.incomingThreatTimer = 2.5;
+  }
+
+  /** 他のプレイヤーが撃破された: その車を隠し、破片と爆発を出す。その人の飛行中の弾は消す。 */
+  public onRemoteDied(id: number): void {
+    const r = this.findRemote(id);
+    if (!r) return;
+    r.markDead(3200);
+    const shooterId = `remote_${id}`;
+    this.bullets = this.bullets.filter((b) => (b.shooterId === shooterId ? (this.scene.remove(b.mesh), false) : true));
+    this.missiles = this.missiles.filter((m) => (m.shooterId === shooterId ? (this.scene.remove(m.group), false) : true));
+    const v = new THREE.Vector3(Math.sin(r.rotY) * r.speed, 0, Math.cos(r.rotY) * r.speed);
+    this.spawnShatteredCarDebris(r.pos.clone(), v);
+    this.triggerExplosion(r.pos.clone(), false);
+  }
+
   /** Applies damage to target, triggers death sequence if HP reaches 0 */
   public applyDamage(target: CombatTarget, dmg: number, hitPos: THREE.Vector3, shooterId?: string): void {
     if (target.isDead) return;
+
+    // 他のプレイヤー: ダメージ・撃破は相手の端末が自分の車について決める(ここは当たった演出だけ)
+    if (target.remoteId !== undefined) return;
 
     if (target.isPlayer) {
       // 自分の攻撃（ミサイル、銃撃、爆風）による自傷は100%完全無効化
@@ -917,6 +1032,7 @@ export class CombatSystem {
     if (this.playerIsDead) return;
 
     this.playerIsDead = true;
+    this.onPlayerKilled?.();
     this.playerRespawnTimer = 3.2;
     this.lockOnReticleGroup.visible = false;
     this.currentLockOn = null;

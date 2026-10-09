@@ -9,6 +9,10 @@ import {
   GAME_LEADERBOARD_DEFS,
   LEADERBOARD_MAX_ENTRIES,
   DEV_NAME,
+  ADMIN_ROLES,
+  isValidAdminCustomName,
+  isValidAdminRole,
+  formatAdminRoleName,
   getLeaderboardDef,
   insertScore,
   leaderboardBoardKey as boardKey,
@@ -16,6 +20,7 @@ import {
   rankForScore,
   sanitizeLeaderboardExtra,
   sanitizeLeaderboardName,
+  type AdminRole,
   type GameLeaderboardDef,
   type LeaderboardEntry,
 } from '../../shared/arcadeLeaderboardCore.ts';
@@ -37,8 +42,10 @@ export interface GhostTrace {
 
 interface StoredEntry extends LeaderboardEntry {
   id: string;
-  /** 開発者の印を付ける前の名前(印を外すと戻す) */
+  /** 管理者の印・ロールを付ける前の名前(印を外すと戻す) */
   origName?: string;
+  /** 管理者が設定した名前(ロール付与前) */
+  customName?: string;
   ghost?: GhostTrace;
 }
 
@@ -64,6 +71,10 @@ export type SubmitInput = {
 export type SubmitResult =
   | { ok: true; rank: number; entries: LeaderboardEntry[] }
   | { ok: false; error: 'unknown_board' | 'bad_score' | 'bad_ghost' };
+
+export type SetRoleOptions =
+  | { on: false }
+  | { on: true; name: string; role: AdminRole };
 
 function today(): string {
   const jst = new Date(Date.now() + 9 * 3600 * 1000);
@@ -210,34 +221,90 @@ export class LeaderboardStore {
   }
 
   /** 管理画面用: すべての枠(記録が空の枠も)を、表示名つきで返す。 */
-  adminBoards(): { board: string; slug: string; variant?: string; variantLabel?: string; entries: LeaderboardEntry[] }[] {
+  adminBoards(): { board: string; slug: string; variant?: string; variantLabel?: string; entries: (LeaderboardEntry & { origName?: string; customName?: string })[] }[] {
     return this.keys().map((key) => {
       const [slug, variant] = parseBoardKey(key);
       const variantLabel = getLeaderboardDef(slug)?.variants?.find((v) => v.id === variant)?.label;
-      return { board: key, slug, variant, variantLabel, entries: this.list(slug, variant) ?? [] };
+      const board = this.boards.get(key);
+      const entries = (board?.entries ?? []).map(({ ghost, ...e }) => ({
+        ...e,
+        hasGhost: !!ghost,
+      }));
+      return { board: key, slug, variant, variantLabel, entries };
     });
   }
 
   /**
-   * 枠の rank 位(1始まり)の記録に、開発者の印を付ける(on=true)・外す(false)。管理用。
+   * 枠の rank 位(1始まり)の記録に、ロール(「開発者」「テスター」)と任意の名前(漢字・カナ・かな・英数)を設定する・外す。
+   * 設定すると名前が「好きな名前（ロール）」になる。外すと元の名前に戻す。
+   */
+  setRole(slug: string, variant: string | undefined, rank: number, opts: SetRoleOptions): boolean | null {
+    if (!this.def(slug, variant)) return null;
+    const board = this.boards.get(boardKey(slug, variant));
+    const e = board?.entries[rank - 1];
+    if (!e || !Number.isInteger(rank)) return null;
+
+    if (!opts.on) {
+      if (!e.role && !e.dev) return false;
+      e.name = e.origName ?? 'ゲスト';
+      delete e.origName;
+      delete e.customName;
+      delete e.role;
+      delete e.dev;
+      this.save();
+      return true;
+    }
+
+    const { name, role } = opts;
+    if (!isValidAdminRole(role) || !isValidAdminCustomName(name)) {
+      return null;
+    }
+    const formatted = formatAdminRoleName(name, role);
+    if (e.role === role && e.customName === name.trim() && e.name === formatted) {
+      return false;
+    }
+
+    if (!e.origName) {
+      e.origName = e.name;
+    }
+    e.customName = name.trim();
+    e.role = role;
+    if (role === '開発者') {
+      e.dev = true;
+    } else {
+      delete e.dev;
+    }
+    e.name = formatted;
+    this.save();
+    return true;
+  }
+
+  /**
+   * 枠の rank 位(1始まり)の記録に、開発者の印を付ける(on=true)・外す(false)。管理用(下位互換)。
    * 付けると名前が DEV_NAME になり、元の名前は残す。外すと元の名前に戻す。変えたら true、すでにその状態なら false、存在しない枠・順位は null。
    */
   setDev(slug: string, variant: string | undefined, rank: number, on: boolean): boolean | null {
     if (!this.def(slug, variant)) return null;
     const e = this.boards.get(boardKey(slug, variant))?.entries[rank - 1];
     if (!e || !Number.isInteger(rank)) return null;
-    if (on === (e.dev === true)) return false;
+    if (on === (e.dev === true && e.name === DEV_NAME)) return false;
     if (on) {
-      e.origName = e.name;
+      if (!e.origName) e.origName = e.name;
       e.name = DEV_NAME;
       e.dev = true;
+      e.role = '開発者';
+      e.customName = DEV_NAME;
+      this.save();
+      return true;
     } else {
       e.name = e.origName ?? 'ゲスト';
       delete e.origName;
+      delete e.customName;
+      delete e.role;
       delete e.dev;
+      this.save();
+      return true;
     }
-    this.save();
-    return true;
   }
 
   /** 枠の記録(ランキングとゴースト)をすべて消す(管理用: 荒らされたとき)。消した件数。存在しない枠は null。 */

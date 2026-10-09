@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
@@ -748,6 +749,9 @@ let pendingTime = 0;
 let pendingMin = Infinity;
 let items: ItemKind[] = [];
 let glueArmed = false;
+// 分析用: 1プレイ内の取得アイテム数と、種類ごとの使用回数
+let itemsGained = 0;
+let itemsUsedByKind: Record<string, number> = {};
 let shield = false;
 let pendingVine: { block: Block; timer: number } | null = null;
 let firstBlock: { block: Block; timer: number } | null = null; // 1個目は着地後に自動で固定する
@@ -840,6 +844,7 @@ function onLanded(block: Block): void {
     const pool = ITEM_KINDS.filter((k) => k !== 'heal' || drops > 0);
     const kind = pool[Math.floor(Math.random() * pool.length)];
     items.push(kind);
+    itemsGained++;
     showBanner(`アイテム GET: ${ITEM_INFO[kind].name}`, ITEM_INFO[kind].desc, true, 1.6);
     beep(660, 0.1, 'square', 0.07);
     setTimeout(() => beep(880, 0.14, 'square', 0.07), 90);
@@ -910,6 +915,7 @@ function useItem(): void {
     return;
   }
   items.shift();
+  itemsUsedByKind[kind] = (itemsUsedByKind[kind] ?? 0) + 1;
   beep(740, 0.18, 'sine', 0.1, 400);
   if (kind === 'glue') {
     glueArmed = true;
@@ -1268,6 +1274,8 @@ function startGame(): void {
   pendingTime = 0;
   pendingMin = Infinity;
   items = [];
+  itemsGained = 0;
+  itemsUsedByKind = {};
   glueArmed = false;
   shield = false;
   pendingVine = null;
@@ -1328,6 +1336,13 @@ function gameOver(): void {
     }
   }
   resultIsNew = isNew;
+  reportDeepAnalytics('progression_update', {
+    result: 'gameover',
+    deathReason: 'ブロックの落下が上限',
+    maxStage: `${Math.floor(bestHeight)}m`,
+    itemsCollected: itemsGained,
+    extraStats: { bestHeightM: Math.round(bestHeight * 10) / 10, blocksPlaced: placed, drops, itemsUsed: itemsUsedByKind },
+  });
 }
 
 function updatePlaying(dt: number, inp: Input): void {

@@ -3,6 +3,7 @@ import { parseBoardKey } from '../../shared/arcadeLeaderboardCore.ts';
 import type { ControlHandlers } from './control.ts';
 import type { GameHost } from './host.ts';
 import type { LeaderboardStore } from './leaderboardStore.ts';
+import type { AnalyticsStore } from './analyticsStore.ts';
 
 /** id、または一意に決まる部分文字列(CLI・管理画面用)でゲームを探す。 */
 export function findHost(hosts: Map<string, GameHost>, name: string): GameHost | null {
@@ -12,7 +13,12 @@ export function findHost(hosts: Map<string, GameHost>, name: string): GameHost |
   return part.length === 1 ? part[0] : null;
 }
 
-export function createControlHandlers(hosts: Map<string, GameHost>, leaderboard: LeaderboardStore, clientCount: () => number): ControlHandlers {
+export function createControlHandlers(
+  hosts: Map<string, GameHost>,
+  leaderboard: LeaderboardStore,
+  clientCount: () => number,
+  analytics?: AnalyticsStore,
+): ControlHandlers {
   return {
     status: () => ({ games: [...hosts.values()].map((h) => h.status()), clients: clientCount() }),
     open(game, opts) {
@@ -41,6 +47,10 @@ export function createControlHandlers(hosts: Map<string, GameHost>, leaderboard:
       const [slug, variant] = parseBoardKey(board);
       return leaderboard.setDev(slug, variant, rank, on);
     },
+    setRole(board, rank, opts) {
+      const [slug, variant] = parseBoardKey(board);
+      return leaderboard.setRole(slug, variant, rank, opts);
+    },
     clearBoard(board) {
       const [slug, variant] = parseBoardKey(board);
       return leaderboard.clearBoard(slug, variant);
@@ -48,6 +58,12 @@ export function createControlHandlers(hosts: Map<string, GameHost>, leaderboard:
     removeEntry(board, rank) {
       const [slug, variant] = parseBoardKey(board);
       return leaderboard.removeEntry(slug, variant, rank);
+    },
+    getAnalyticsSummary() {
+      return analytics ? analytics.getSummary() : { totalSessions: 0, totalPlays: 0, totalPlayTimeSec: 0, activeSessionsNow: 0, gamepadUserRate: 0, games: {} };
+    },
+    exportAnalytics(type: string, gameId?: string) {
+      return analytics ? analytics.export(type as any, gameId) : { exportedAt: new Date().toISOString(), type, gameId, error: 'no_store' };
     },
   };
 }

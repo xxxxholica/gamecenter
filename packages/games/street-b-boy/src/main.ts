@@ -13,6 +13,7 @@ import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
 installHomeReturn();
@@ -67,6 +68,13 @@ class StreetBBoyGame {
   private countingDown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
   private lives: number = 3;
+  // 分析用: 1プレイ内の統計
+  private lastDeathCause = '';
+  private deathsByCause: Record<string, number> = {};
+  private cassettesTaken = 0;
+  private goldTaken = 0;
+  private maxComboSeen = 0;
+  private stompKills = 0;
 
   // Result Menu Navigation (0: 再挑戦, 1: タイトルに戻る, 2: ゲームを終了)
   private resultMenuFocus: number = 0;
@@ -313,6 +321,12 @@ class StreetBBoyGame {
     this.score = 0;
     this.timeLeft = this.getStageInitialTime(this.currentStage);
     this.lives = 3;
+    this.lastDeathCause = '';
+    this.deathsByCause = {};
+    this.cassettesTaken = 0;
+    this.goldTaken = 0;
+    this.maxComboSeen = 0;
+    this.stompKills = 0;
     this.hud.updateScore(this.score);
     this.hud.updateTime(this.timeLeft);
     this.hud.updateLives(this.lives);
@@ -615,7 +629,7 @@ class StreetBBoyGame {
       this.timeLeft = 0;
       this.hud.showCenterBanner('timeup');
       this.sound.playTimeUp();
-      this.handlePlayerDeath(true);
+      this.handlePlayerDeath(true, 'タイムアップ');
       return;
     }
 
@@ -685,7 +699,7 @@ class StreetBBoyGame {
 
     // Pit fall check
     if (this.player.y < -5) {
-      this.handlePlayerDeath();
+      this.handlePlayerDeath(false, '穴に落下');
       return;
     }
 
@@ -799,6 +813,8 @@ class StreetBBoyGame {
       if (cassette.isCollected) continue;
       if (this.checkAABB(pBox, cassette.getAABB())) {
         cassette.isCollected = true;
+        this.cassettesTaken++;
+        if (cassette.isGold) this.goldTaken++;
         this.stage.scene.remove(cassette.mesh);
 
         if (cassette.isGold) {
@@ -920,7 +936,7 @@ class StreetBBoyGame {
         this.sound.playLaserWarning();
         this.stage.particleSystem.spawnSparkles(this.player.x, this.player.y + 1.0, 18, 0xff0033);
         this.triggerCameraShake(0.45, 0.4);
-        this.handlePlayerDeath();
+        this.handlePlayerDeath(false, 'レーザー');
         return;
       }
     }
@@ -966,10 +982,11 @@ class StreetBBoyGame {
           this.stage.particleSystem.spawnSparkles(enemy.x, enemy.y + 0.5, 8, 0xffea00);
           this.addScore(enemy.scoreValue);
           this.registerComboHit();
+          this.stompKills++;
           this.triggerCameraShake(0.18, 0.18);
         } else if (this.player.spawnShieldTimer <= 0) {
           // Hurt / Death by contact
-          this.handlePlayerDeath();
+          this.handlePlayerDeath(false, '敵との接触');
           return;
         }
       }
@@ -1035,7 +1052,7 @@ class StreetBBoyGame {
           this.stage.particleSystem.spawnSparkles(proj.x, proj.y, 8, 0xffea00);
           this.addScore(150);
         } else {
-          this.handlePlayerDeath();
+          this.handlePlayerDeath(false, '敵の飛び道具');
           return;
         }
       }
@@ -1124,6 +1141,14 @@ class StreetBBoyGame {
     this.hud.setHordeWarning(0);
     this.sound.stopBgm();
     this.sound.playClear();
+    reportDeepAnalytics('progression_update', {
+      ...(this.currentStage === FINAL_STAGE ? { result: 'clear' as const } : {}),
+      maxStage: this.currentStage,
+      maxCombo: this.maxComboSeen,
+      enemiesDefeated: this.stompKills,
+      itemsCollected: this.cassettesTaken,
+      extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score },
+    });
 
     this.player.x = this.stage.goalX;
     this.player.y = this.stage.goalY + 0.3;
@@ -1241,8 +1266,10 @@ class StreetBBoyGame {
   // -------------------------------------------------------------
   // PLAYER DEATH & GAME OVER
   // -------------------------------------------------------------
-  private handlePlayerDeath(skipHurtSound: boolean = false): void {
+  private handlePlayerDeath(skipHurtSound: boolean = false, cause: string = '不明'): void {
     if (!this.player || this.player.isDead) return;
+    this.lastDeathCause = cause;
+    this.deathsByCause[cause] = (this.deathsByCause[cause] ?? 0) + 1;
 
     this.player.isDead = true;
     this.hud.setHordeWarning(0);
@@ -1283,6 +1310,15 @@ class StreetBBoyGame {
         this.state = 'game_over';
         this.stateTimer = 0;
         this.sound.stopBgm();
+        reportDeepAnalytics('progression_update', {
+          result: 'gameover',
+          maxStage: this.currentStage,
+          deathReason: this.lastDeathCause || 'ライフ枯渇',
+          maxCombo: this.maxComboSeen,
+          enemiesDefeated: this.stompKills,
+          itemsCollected: this.cassettesTaken,
+          extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score },
+        });
         this.openResultScreen('gameover');
       }
     }, 1800);
@@ -1303,6 +1339,7 @@ class StreetBBoyGame {
 
   private registerComboHit(): void {
     this.comboHits += 1;
+    this.maxComboSeen = Math.max(this.maxComboSeen, this.comboHits);
     this.comboTimer = 2.2;
     if (this.comboHits >= 2) {
       this.hud.showCombo(this.comboHits);

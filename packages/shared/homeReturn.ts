@@ -4,6 +4,7 @@
 
 import { mountFullscreenKey } from './fullscreenKey';
 import { initGameMobileBlock } from './mobileBlock';
+import { startStandaloneTracking } from './arcadeAnalytics';
 
 const SELECT_BUTTON = 8;
 const HOLD_MS = 1000;
@@ -73,6 +74,9 @@ function createOverlay(): { root: HTMLDivElement; fill: HTMLDivElement } {
 export function installHomeReturn(): void {
   // モバイル端末での直接アクセス時にゲーム画面をグレーアウトし警告を表示
   initGameMobileBlock();
+
+  // ハブを経由せず直接開かれた場合の起動・終了を記録する(iframe内ではハブ側が記録するので何もしない)
+  startStandaloneTracking();
 
   // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
   mountFullscreenKey();

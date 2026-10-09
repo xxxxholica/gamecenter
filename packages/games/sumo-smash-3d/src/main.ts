@@ -9,6 +9,7 @@ import { ParticleManager } from './effects/ParticleManager';
 import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
@@ -409,6 +410,7 @@ class SumoGame {
    * CPU対戦(1P=自分 vs 2P=CPU、二本先取)。シミュレーションはこのブラウザの中で動かす。
    */
   public startCpuBattle() {
+    reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
     this.match = null;
     this.showViews(2, ['あなた', null]);
     this.uiManager.setMultiLayout(null);
@@ -639,6 +641,7 @@ class SumoGame {
     });
 
     this.onlineNames = m.players.map((p) => p.name);
+    reportDeepAnalytics('progression_update', { mode: 'オンライン', extraStats: { players: count } });
     this.showViews(count, FIGHTERS.slice(0, count).map((_, i) => (i === slot ? 'あなた' : null)));
     this.uiManager.setMultiLayout(
       FIGHTERS.slice(0, count).map((f, i) => ({ name: this.onlineNames[i] ?? f.name, css: f.css, label: `${i + 1}P`, me: i === slot }))
@@ -678,6 +681,12 @@ class SumoGame {
     this.soundManager.playBgm('menu');
     this.menuNav.clear();
     this.armInput(600);
+    reportDeepAnalytics('progression_update', {
+      result: winner === me ? 'clear' : 'gameover',
+      ...(winner === me ? {} : { deathReason: 'オンライン対戦で敗北' }),
+      mode: 'オンライン',
+      extraStats: { players: wins.length, wins: wins[me] ?? 0, winnerWins: wins[winner] ?? 0 },
+    });
     const rows = wins.map((w, i) => ({ name: this.onlineNames[i] ?? FIGHTERS[i].name, css: FIGHTERS[i].css, wins: w, me: i === me }));
     this.uiManager.showVictory(winner === me, rows);
     guideResult();
@@ -803,6 +812,12 @@ class SumoGame {
     this.menuNav.clear();
     this.armInput(600);
     const wins = this.cpu?.sim.wins ?? [0, 0];
+    reportDeepAnalytics('progression_update', {
+      result: winner === 0 ? 'clear' : 'gameover',
+      ...(winner === 0 ? {} : { deathReason: 'CPUに敗北' }),
+      mode: 'CPU対戦',
+      extraStats: { wins: wins[0], cpuWins: wins[1] },
+    });
     this.uiManager.showVictory(winner === 0, [
       { name: FIGHTERS[0].name, css: FIGHTERS[0].css, wins: wins[0], me: false },
       { name: FIGHTERS[1].name, css: FIGHTERS[1].css, wins: wins[1], me: false },

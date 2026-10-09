@@ -28,6 +28,7 @@ import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
@@ -253,6 +254,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     driveScene.combatSystem.raceStarted = false;
     timeAttack.initCourse(currentMapId, currentCar.specs.name);
     raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
+    reportDeepAnalytics('progression_update', {
+      vehicle: currentCar.specs.name,
+      mode: online ? 'オンライン' : 'ひとり',
+      maxStage: currentMapId,
+      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay },
+    });
     syncBestTimeDisplay();
     if (online) return;                                      // オンライン: 全員のロードが揃って go が来てから始める
     timeAttack.startCountdown();
@@ -312,6 +319,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   timeAttack.callbacks.onGoal = (result) => {
     driveScene.combatSystem.raceStarted = false;
+    reportDeepAnalytics('progression_update', {
+      result: result.timedOut ? 'gameover' : 'clear',
+      ...(result.timedOut ? { deathReason: 'タイムアップ' } : {}),
+      vehicle: currentCar.specs.name,
+      mode: online ? 'オンライン' : 'ひとり',
+      maxStage: currentMapId,
+      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay, totalTimeMs: Math.round(result.totalTimeMs) },
+    });
     raceDirector.onGoal(result);
     if (online && !online.disconnected && !result.timedOut) {
       online.finished = true;
@@ -509,6 +524,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onNext: () => {
       sfx.uiConfirm();
+      reportDeepAnalytics('progression_update', { vehicle: currentCar.specs.name });
       if (flow.currentScreen === 'ONLINE_LOBBY') flow.goToOnlineCourse();    // オンライン: コースの希望まで進める
       else flow.goToMapSelect();
     },

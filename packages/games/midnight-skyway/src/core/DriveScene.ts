@@ -353,6 +353,7 @@ export class DriveScene {
     this.applyPaintEnvironment();                                  // NPC車の塗装にも環境マップを持たせる
     if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.density = map.fogDensity ?? 0.0035;
     this.camera.far = map.viewDistance ?? 2000;
+    map.traffic?.setFogDensity(map.fogDensity ?? 0.0035, this.camera.far);
     this.camera.updateProjectionMatrix();
     map.setNight(this.timeOfDay === 'night');
 

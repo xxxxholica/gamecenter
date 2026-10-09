@@ -137,7 +137,14 @@ export class Traffic {
   private fwdArcs: number[] = [0];
   private fwdTotal = 0;
 
-  private readonly showDistance = 450;
+  /** この距離(m)より遠いNPCは描かない。霧で見えなくなる距離に合わせる(setFogDensity)。短いと、霧の薄いコースで遠くの車が突然現れる。 */
+  private showDistance = 450;
+
+  /** FogExp2 の濃度から、霧で見えなくなる(透過率およそ2%)距離を表示距離にする。 */
+  public setFogDensity(density: number, viewDistance = 2000): void {
+    const hidden = Math.sqrt(Math.log(50)) / Math.max(1e-6, density);
+    this.showDistance = Math.min(viewDistance, Math.max(450, hidden));
+  }
 
   /**
    * 共有時計(オンライン対戦): 設定すると dt を使わず、レース開始からの秒数(負=開始前)に合わせて固定刻みで進める。
@@ -149,7 +156,8 @@ export class Traffic {
 
   constructor(roadWidth: number, options: TrafficOptions) {
     this.group.name = 'traffic';
-    const kinds = ['trail', 'cross', 'combat_sedan', 'missile_truck'];
+    // 武装車両(combat_sedan / missile_truck)はNPCに使わない: 重いモデルを軽量化(マージ等)すると描画に失敗するため
+    const kinds = ['trail', 'cross'];
 
     // 1. Setup Opposite Route Traffic
     if (options.oppositeRoute && options.oppositeRoute.length > 0) {

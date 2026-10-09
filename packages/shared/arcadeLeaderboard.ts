@@ -5,6 +5,8 @@ import {
   DEV_NAME,
   GAME_LEADERBOARD_DEFS,
   LEADERBOARD_MAX_ENTRIES,
+  isValidAdminRole,
+  isValidAdminRoleName,
   leaderboardBoardKey,
   padEmptyEntries,
   rankForScore,
@@ -12,6 +14,7 @@ import {
   sanitizeLeaderboardName,
 } from './arcadeLeaderboardCore.ts';
 import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCore.ts';
+import { trackScoreSubmit } from './arcadeAnalytics.ts';
 
 export * from './arcadeLeaderboardCore.ts';
 
@@ -74,19 +77,31 @@ function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEn
   return list
     .filter((item) => item && typeof item.score === 'number' && item.score > 0 && item.name !== '記録なし')
     .slice(0, LEADERBOARD_MAX_ENTRIES)
-    .map((item, idx) => ({
-      id: typeof item.id === 'string' ? item.id : undefined,
-      hasGhost: item.hasGhost === true ? true : undefined,
-      rank: idx + 1,
-      // 開発者の印が付いた記録だけ、予約された名前をそのまま使う(プレイヤーの名前は DEV_NAME を拒否する)
-      name: item.dev === true && item.name === DEV_NAME ? DEV_NAME : sanitizeLeaderboardName(item.name),
-      score: item.score,
-      formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(item.score),
-      date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
-      extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
-      cleared: item.cleared === true ? true : undefined,
-      dev: item.dev === true ? true : undefined,
-    }));
+    .map((item, idx) => {
+      const rawRole = (item as any)?.role;
+      const role = isValidAdminRole(rawRole) ? rawRole : undefined;
+      const rawName = (item as any)?.name;
+      const dev = (item as any)?.dev === true ? true : undefined;
+
+      // 管理者が印・ロールを付けた記録は、「好きな名前（ロール）」または DEV_NAME をそのまま使う
+      const isAdminNamed =
+        (role && typeof rawName === 'string' && isValidAdminRoleName(rawName, role)) ||
+        (dev === true && rawName === DEV_NAME);
+
+      return {
+        id: typeof item.id === 'string' ? item.id : undefined,
+        hasGhost: item.hasGhost === true ? true : undefined,
+        rank: idx + 1,
+        name: isAdminNamed ? rawName : sanitizeLeaderboardName(rawName),
+        score: item.score,
+        formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(item.score),
+        date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
+        extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
+        cleared: item.cleared === true ? true : undefined,
+        dev: dev ?? (role === '開発者' ? true : undefined),
+        role,
+      };
+    });
 }
 
 /** 保存済みの実スコアリスト(「記録なし」の枠は含まない)。通信に失敗したら例外 */
@@ -192,7 +207,14 @@ export async function saveLeaderboardScore(
       ghost: options.ghost,
     });
     const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
-    return { rank: typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1, list };
+    const rank = typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1;
+    trackScoreSubmit(slug, {
+      score,
+      formattedScore: typeof def.formatScore === 'function' ? def.formatScore(score) : String(score),
+      cleared: options.cleared === true,
+      rank,
+    });
+    return { rank, list };
   } catch (e) {
     console.warn('Failed to save leaderboard', e);
     return { rank: -1, list: [] };

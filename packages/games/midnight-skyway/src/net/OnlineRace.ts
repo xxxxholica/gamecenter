@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { DriveScene } from '../core/DriveScene';
 import type { CarController } from '../core/CarController';
 import type { SkywayNet } from './skywayNet';
@@ -44,6 +45,7 @@ export class OnlineRace {
   /** サーバーが決めた順位(先頭が1位の参加者id)。まだ届いていなければ null で、自分の画面の進行率から仮に並べる。 */
   private serverOrder: number[] | null = null;
   private offs: (() => void)[] = [];
+  private readonly drive: DriveScene;
 
   constructor(client: SkywayNet, drive: DriveScene, players: RacerInfo[], you: number, night: boolean, hooks: OnlineRaceHooks) {
     this.client = client;
@@ -58,7 +60,24 @@ export class OnlineRace {
       this.remotes.set(p.id, rc);
       drive.scene.add(rc.car.group);
     }
+    const combat = drive.combatSystem;
+    combat.remoteSource = () => this.remotes.values();
+    combat.onlineYou = you;
+    combat.onLocalFire = (e) => {
+      if (!this.racing) return;
+      const r2 = (v: number) => Math.round(v * 100) / 100;
+      client.send({ t: 'fire', k: e.k, o: [r2(e.origin.x), r2(e.origin.y), r2(e.origin.z)], f: [r2(e.forward.x), r2(e.forward.z)], tg: e.targetRemoteId });
+    };
+    combat.onPlayerKilled = () => { if (this.racing) client.send({ t: 'died' }); };
+    this.drive = drive;
     this.offs.push(
+      client.on('fire', (m) => {
+        if (!this.racing || !this.remotes.has(m.from)) return;
+        const f = new THREE.Vector3(m.f[0], 0, m.f[1]);
+        if (f.lengthSq() < 1e-6) return;
+        combat.spawnRemoteFire(m.from, { k: m.k, origin: new THREE.Vector3(m.o[0], m.o[1], m.o[2]), forward: f.normalize(), targetRemoteId: m.tg });
+      }),
+      client.on('died', (m) => { if (this.racing) combat.onRemoteDied(m.from); }),
       client.on('states', (m) => {
         const now = performance.now();
         const serverNow = this.client.serverNow();
@@ -173,6 +192,11 @@ export class OnlineRace {
 
   public dispose(): void {
     this.racing = false;
+    const combat = this.drive.combatSystem;
+    combat.remoteSource = null;
+    combat.onLocalFire = undefined;
+    combat.onPlayerKilled = undefined;
+    combat.onlineYou = -1;
     this.offs.forEach((f) => f());
     this.offs = [];
     for (const rc of this.remotes.values()) rc.dispose();

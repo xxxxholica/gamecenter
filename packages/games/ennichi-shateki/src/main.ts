@@ -16,6 +16,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 
 const SLUG = 'ennichi-shateki';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
@@ -74,6 +75,10 @@ class ArcadeCorkShooter {
   private ammo: number = 6;
   private reloadTimer: number = 0;
   private totalDefeatedCount: number = 0;
+  // 分析用: 1プレイ内の最大コンボと発射数
+  private maxComboSeen = 0;
+  private shotsNormal = 0;
+  private shotsExplosive = 0;
   // 金だるまを落とした回数。1回ごとにスコア倍率が +1.0 される(コンボ倍率の最大3倍とは別枠)
   private darumaDropCount: number = 0;
   private isNameEntryOpen = false;
@@ -326,6 +331,9 @@ class ArcadeCorkShooter {
     this.score = 0;
     this.timeLeft = 30.0;
     this.totalDefeatedCount = 0;
+    this.maxComboSeen = 0;
+    this.shotsNormal = 0;
+    this.shotsExplosive = 0;
     this.darumaDropCount = 0;
     this.bombCooldown = 0;
     this.comboCount = 0;
@@ -394,6 +402,13 @@ class ArcadeCorkShooter {
     });
 
     const finalScore = this.score;
+    reportDeepAnalytics('progression_update', {
+      result: 'clear',
+      deathReason: 'タイムアップ',
+      maxCombo: this.maxComboSeen,
+      enemiesDefeated: this.totalDefeatedCount,
+      extraStats: { shotsNormal: this.shotsNormal, shotsExplosive: this.shotsExplosive, score: finalScore, newRecord: isNewRecord },
+    });
     runHighScoreEntryFlow({
       slug: SLUG,
       score: finalScore,
@@ -442,6 +457,7 @@ class ArcadeCorkShooter {
     const fireData = this.gun.fire(this.scene, false);
     const shootDir = this.aimTargetWorld.clone().sub(fireData.origin).normalize();
     this.corkSystem.spawn(fireData.origin, shootDir, 'normal');
+    this.shotsNormal++;
 
     const bombRatio = 1.0 - this.bombCooldown / this.BOMB_RECHARGE_TIME;
     this.hud.updateInGame(this.score, this.timeLeft, bombRatio, this.comboCount, this.scoreMultiplier());
@@ -458,6 +474,7 @@ class ArcadeCorkShooter {
     const fireData = this.gun.fire(this.scene, true);
     const shootDir = this.aimTargetWorld.clone().sub(fireData.origin).normalize();
     this.corkSystem.spawn(fireData.origin, shootDir, 'explosive');
+    this.shotsExplosive++;
 
     this.hud.updateInGame(this.score, this.timeLeft, 0.0, this.comboCount, this.scoreMultiplier());
     return true;
@@ -543,6 +560,7 @@ class ArcadeCorkShooter {
           // Dynamic target hit (Balloon / Duck / UFO)
           this.totalDefeatedCount++;
           this.comboCount++;
+          this.maxComboSeen = Math.max(this.maxComboSeen, this.comboCount);
           this.comboTimer = 2.4;
           sounds.playCombo(this.comboCount);
 
@@ -786,6 +804,7 @@ class ArcadeCorkShooter {
       if (newlyDefeated) {
         this.totalDefeatedCount++;
         this.comboCount++;
+        this.maxComboSeen = Math.max(this.maxComboSeen, this.comboCount);
         this.comboTimer = 2.4;
         sounds.playCombo(this.comboCount);
         this.prizePileManager.recordDefeated(prize.config.type, prize.config.name);

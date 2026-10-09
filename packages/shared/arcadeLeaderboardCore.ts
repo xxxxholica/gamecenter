@@ -16,6 +16,10 @@ export interface LeaderboardEntry {
   cleared?: boolean;
   /** 開発者の記録か。管理画面でだけ付けられ、ホームのランキングで、名前の右に印を付けて表示する */
   dev?: boolean;
+  /** 管理画面で設定したロール (開発者 / テスター) */
+  role?: AdminRole;
+  /** 管理画面用: 元のプレイヤー名 */
+  origName?: string;
 }
 
 export interface LeaderboardVariant {
@@ -59,6 +63,43 @@ export function escapeHtml(str: string): string {
 /** 開発者の記録の名前。管理画面で印を付けたときだけ使われ、プレイヤーは名前にできない(なりすまし防止) */
 export const DEV_NAME = '開発者';
 
+/** 管理者が設定できるロール */
+export const ADMIN_ROLES = ['開発者', 'テスター'] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+/** 管理者が設定できる名前の文字: 漢字・カタカナ・ひらがな・英数 (半角および全角) */
+const ADMIN_NAME_ALLOWED_CHARS = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Z0-9ａ-ｚＡ-Ｚ０-９ー々〆〇ヶ]+$/u;
+
+/** 「好きな名前（ロール）」の形式を判定する正規表現 */
+export const ADMIN_ROLE_NAME_REGEX = /^([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}a-zA-Z0-9ａ-ｚＡ-Ｚ０-９ー々〆〇ヶ]{1,10})（(開発者|テスター)）$/u;
+
+/** 管理者による任意の名前の検証 (1〜10文字、漢字・カタカナ・ひらがな・英数) */
+export function isValidAdminCustomName(rawName: unknown): rawName is string {
+  if (typeof rawName !== 'string') return false;
+  const trimmed = rawName.trim();
+  const chars = Array.from(trimmed);
+  if (chars.length < 1 || chars.length > 10) return false;
+  return ADMIN_NAME_ALLOWED_CHARS.test(trimmed);
+}
+
+/** ロールの検証 (「開発者」「テスター」) */
+export function isValidAdminRole(rawRole: unknown): rawRole is AdminRole {
+  return rawRole === '開発者' || rawRole === 'テスター';
+}
+
+/** 「好きな名前（ロール）」の表示用文字列を生成 */
+export function formatAdminRoleName(customName: string, role: AdminRole): string {
+  return `${customName.trim()}（${role}）`;
+}
+
+/** 文字列が「好きな名前（ロール）」の正しい形式になっているか検証 */
+export function isValidAdminRoleName(name: string, role?: AdminRole): boolean {
+  const match = ADMIN_ROLE_NAME_REGEX.exec(name);
+  if (!match) return false;
+  if (role && match[2] !== role) return false;
+  return true;
+}
+
 const NG_WORD_REGEX = /^(シネ|コロス|キチガイ|バカ|アホ|カス|シネヨ|レイプ|チンコ|マンコ|ペニス|セックス|オメコ)$/i;
 
 /** 制御文字・危険記号（< > " ' & ` \ / など）・表示を乱す文字(ゼロ幅・双方向の制御) */
@@ -81,9 +122,22 @@ export function sanitizeLeaderboardExtra(raw: unknown, maxLen = 30): string | un
 export function sanitizeLeaderboardName(rawName: unknown): string {
   if (typeof rawName !== 'string') return 'ゲスト';
   // 制御文字・危険記号（< > " ' & ` \ / など）および改行を除去
-  const cleaned = Array.from(rawName.replace(UNSAFE_CHARS, '').trim()).slice(0, 5).join('');   // コードポイント単位(絵文字などのサロゲートペアを分断しない)
-  if (!cleaned) return 'ゲスト';
-  if (cleaned === DEV_NAME || NG_WORD_REGEX.test(cleaned)) {
+  const stripped = rawName.replace(UNSAFE_CHARS, '').trim();
+  if (
+    !stripped ||
+    stripped === DEV_NAME ||
+    stripped === 'テスター' ||
+    ADMIN_ROLE_NAME_REGEX.test(stripped) ||
+    stripped.includes('（開発者）') ||
+    stripped.includes('（テスター）') ||
+    stripped.includes('(開発者)') ||
+    stripped.includes('(テスター)') ||
+    NG_WORD_REGEX.test(stripped)
+  ) {
+    return 'ゲスト';
+  }
+  const cleaned = Array.from(stripped).slice(0, 5).join('');   // コードポイント単位(絵文字などのサロゲートペアを分断しない)
+  if (!cleaned || cleaned === DEV_NAME || cleaned === 'テスター' || NG_WORD_REGEX.test(cleaned)) {
     return 'ゲスト';
   }
   return cleaned;

@@ -35,7 +35,13 @@ interface SkywayMember {
   /** 進行率の履歴(順位の計算用) */
   track: ProgressTrack | null;
   finish: number | null;
+  /** 直近の発砲の時刻(連射の上限用) */
+  lastFireAt: number;
 }
+
+/** 発砲の最短間隔(ms)。正規の連射(機関砲0.45秒・ミサイル2秒)よりずっと短い値で、荒らしの連打だけを弾く。 */
+const MIN_FIRE_INTERVAL_MS = 150;
+const finite = (v: unknown, lim: number): v is number => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= lim;
 
 /** [x, y, z, rotY, speed, steer, roll, pitch, drift, progress] の許容範囲。範囲外は不正として捨てる(他の人のブラウザに巨大な値を渡さない)。 */
 const STATE_LIMITS: [number, number][] = [[-1e5, 1e5], [-1e4, 1e4], [-1e5, 1e5], [-100, 100], [-200, 200], [-4, 4], [-4, 4], [-4, 4], [0, 1], [-1, 2]];
@@ -129,7 +135,7 @@ export class SkywayGame implements GameModule<SkywayMember> {
   }
 
   onJoin(m: Member<SkywayMember>): void {
-    m.data = { car: null, course: null, state: null, stateTs: null, track: null, finish: null } satisfies SkywayMember;
+    m.data = { car: null, course: null, state: null, stateTs: null, track: null, finish: null, lastFireAt: 0 } satisfies SkywayMember;
   }
 
   onLeave(): void {}
@@ -231,6 +237,18 @@ export class SkywayGame implements GameModule<SkywayMember> {
       d.stateTs = typeof msg.ts === 'number' && Number.isFinite(msg.ts) && Math.abs(msg.ts - now) < 5000 ? msg.ts : null;
       d.track = updateTrack(d.track, msg.s[9], Date.now());
       this.dirty = true;
+    } else if (msg.t === 'fire') {
+      const { k, o, f, tg } = msg;
+      if (k !== 'g' && k !== 'm') return;
+      if (!Array.isArray(o) || o.length !== 3 || !finite(o[0], 1e5) || !finite(o[1], 1e4) || !finite(o[2], 1e5)) return;
+      if (!Array.isArray(f) || f.length !== 2 || !finite(f[0], 2) || !finite(f[1], 2)) return;
+      if (tg !== null && !(typeof tg === 'number' && Number.isInteger(tg) && this.room.members.has(tg))) return;
+      const now = Date.now();
+      if (now - d.lastFireAt < MIN_FIRE_INTERVAL_MS) return;
+      d.lastFireAt = now;
+      this.relay(m, { t: 'fire', from: m.peer.id, k, o: [o[0], o[1], o[2]], f: [f[0], f[1]], tg });
+    } else if (msg.t === 'died') {
+      this.relay(m, { t: 'died', from: m.peer.id });
     } else if (msg.t === 'finish') {
       const timeMs = msg.timeMs;
       if (typeof timeMs !== 'number' || !Number.isFinite(timeMs) || timeMs <= 0 || d.finish !== null) return;
@@ -253,6 +271,11 @@ export class SkywayGame implements GameModule<SkywayMember> {
       }
       if (!this.isDone()) this.room.broadcast(this.results(false));
     }
+  }
+
+  /** 送り主以外の全員に中継する。 */
+  private relay(from: Member<SkywayMember>, msg: Msg): void {
+    for (const [id, o] of this.room.members) if (id !== from.peer.id) o.peer.send(msg);
   }
 
   isDone(): boolean {

@@ -23,6 +23,7 @@ import { mountArcadeGuide, ArcadeGuideOptions } from '../../../../shared/arcadeG
 import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
 import { returnToHub } from '../../../../shared/homeReturn';
+import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
 import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
 export class GameEngine {
@@ -879,6 +880,20 @@ export class GameEngine {
     if (this.player.rank === 1) {
       this.sound.playTrack('VICTORY');
     }
+    reportDeepAnalytics('progression_update', {
+      maxStage: Math.floor(this.waveDirector.gameTime) + '秒生存',
+      result: this.playerCleared5Min ? 'clear' : 'gameover',
+      deathReason: !this.player.alive ? 'モンスター被弾' : '時間切れ生存',
+      enemiesDefeated: this.player.kills,
+      maxCombo: this.player.comboCount,
+      extraStats: {
+        survivedSec: Math.floor(this.waveDirector.gameTime),
+        playerLevel: this.player.level,
+        rank: this.player.rank,
+        score: this.player.score,
+        cleared5Min: this.playerCleared5Min,
+      },
+    });
     this.resultScreen.show(this.player, this.standings, this.waveDirector.gameTime);
     this.state = 'RESULT';
   }

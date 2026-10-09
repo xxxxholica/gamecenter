@@ -14,6 +14,7 @@ import { Stage4Clock } from './stages/stage4_clock';
 import { Stage5Balloon } from './stages/stage5_balloon';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { RankingManager } from './ranking';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
@@ -54,6 +55,7 @@ export class GameManager {
   private currentStage: Stage | null = null;
   private arcadeTitleScreen!: ArcadeTitleScreen;
   private stageRecords: StageRecord[] = [];
+  private runRetries = 0; // 分析用: 失敗してやり直した回数(1プレイ合計)
 
   // Timers
   private stateTimer = 0.0;
@@ -310,6 +312,7 @@ export class GameManager {
     sound.playStart();
 
     this.stageRecords = [];
+    this.runRetries = 0;
     this.attempt = 1;
     this.attemptResults = [];
     this.currentStageIndex = 0;
@@ -559,6 +562,12 @@ export class GameManager {
           if (last && !last.success && this.attempt < GameManager.MAX_ATTEMPTS) {
             // 失敗: 同じ種目をもう一度(説明カードは出さない)
             this.attempt++;
+            this.runRetries++;
+            reportDeepAnalytics('progression_update', {
+              deathReason: `大惨事: ${this.currentStage?.title ?? ''}`,
+              maxStage: this.currentStageIndex + 1,
+              retries: this.runRetries,
+            });
             this.loadStage(this.currentStageIndex, true);
             break;
           }
@@ -574,10 +583,14 @@ export class GameManager {
               judgmentText: best.judgmentText,
             });
           }
+          if (!best.success) {
+            reportDeepAnalytics('progression_update', { deathReason: `大惨事: ${this.currentStage?.title ?? ''}`, retries: this.runRetries });
+          }
           this.attempt = 1;
           this.attemptResults = [];
 
           this.currentStageIndex++;
+          reportDeepAnalytics('progression_update', { maxStage: this.currentStageIndex, retries: this.runRetries });
           if (this.currentStageIndex < this.stageFactories.length) {
             // Next stage
             this.loadStage(this.currentStageIndex);
@@ -740,6 +753,17 @@ export class GameManager {
     const rankEl = document.getElementById('rank-val')!;
     rankEl.textContent = rankText;
     rankEl.style.color = rankColor;
+
+    reportDeepAnalytics('progression_update', {
+      result: 'clear',
+      maxStage: this.stageRecords.length,
+      retries: this.runRetries,
+      extraStats: {
+        deviation: Math.round(deviation * 10) / 10,
+        rank: rankText,
+        stages: this.stageRecords.map((r) => ({ title: r.stageTitle, success: r.success, scorePercent: Math.round(r.scorePercent * 10) / 10 })),
+      },
+    });
 
     // Register high score into the server ranking Top 3.
     runHighScoreEntryFlow({

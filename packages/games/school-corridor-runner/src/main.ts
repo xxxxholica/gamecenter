@@ -1,7 +1,7 @@
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
-import { GameInputState, GameScore, GameState, LANE_COORDINATES, LaneIndex, ObstacleType } from './types';
+import { GameInputState, GameScore, GameState, LANE_COORDINATES, LaneIndex, OBSTACLE_DEATH_LABELS, ObstacleType } from './types';
 import { InputManager } from './input/InputManager';
 import { SoundSystem } from './audio/SoundSystem';
 import { ParticleSystem } from './graphics/ParticleSystem';
@@ -19,6 +19,7 @@ import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 // アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
@@ -76,6 +77,7 @@ class Game {
 
   // ゲームステート
   private state: GameState = GameState.TITLE;
+  private lastDeathCause = ''; // 分析用: 直近の死因(ぶつかった障害物の種類)
   private arcadeTitleScreen!: ArcadeTitleScreen;
   private scoreData: GameScore = {
     score: 0,
@@ -189,6 +191,9 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // リンク結果の同期取得(getProgramInfoLog等)で数百msメインスレッドが止まるのを避ける。
+    // 無効化するとThree.jsはKHR_parallel_shader_compileで非同期に完了を待つ
+    this.renderer.debug.checkShaderErrors = false;
     this.renderer.localClippingEnabled = true; // クリア演出で廊下を出口で切り落とすため
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
@@ -528,6 +533,9 @@ class Game {
     this.fpArms.reset();
     this.fpArms.group.visible = true;
     this.fpArms.update(0, 0, 0, false, false, this.bombStock);
+
+    // 描画ループ中の初回コンパイル(フリーズ)を避けるため、現在シーンのシェーダーを事前に非同期コンパイルしておく
+    this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
 
     // 最初の位置で初期描画を実行（事前ロードされた障害物・コインが視界に描画される）
     this.renderFrame();
@@ -1748,6 +1756,7 @@ class Game {
     }
 
     if (this.state !== GameState.PLAYING || this.isFallingDeath) return;
+    this.lastDeathCause = obs ? (OBSTACLE_DEATH_LABELS[obs.type] ?? '障害物に激突') : '出席簿(先生の攻撃)';
 
     // 1. スローモーション効果
     this.timeScale = 0.25;
@@ -2145,6 +2154,19 @@ class Game {
       grade = 'B';
     }
     this.scoreData.grade = grade;
+
+    reportDeepAnalytics('progression_update', {
+      result: state === GameState.CLEARED ? 'clear' : 'gameover',
+      ...(state === GameState.CLEARED ? {} : { deathReason: this.lastDeathCause || '障害物に激突' }),
+      maxCombo: this.scoreData.maxCombo,
+      enemiesDefeated: this.scoreData.destroyedCount,
+      extraStats: {
+        grade,
+        distanceM: Math.round(this.scoreData.distance),
+        dodgedSigns: this.scoreData.dodgedSignsCount,
+        timeLeftSec: Math.round(this.scoreData.timeRemaining),
+      },
+    });
 
     this.uiManager.setGameState(state, this.scoreData);
     this.resultFocus = 0; // デフォルトは「再挑戦」

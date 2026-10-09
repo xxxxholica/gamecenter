@@ -31,6 +31,10 @@ export class RemoteCar {
   public speed = 0;
   public progress = 0;
   public valid = false;
+  /** マシンの種類(CarSpec.type)。武装車両の射程の判定に使う。 */
+  public readonly carType: string;
+  /** 撃破されて復帰するまでの時刻(performance.now)。この間は非表示・攻撃対象外。 */
+  private deadUntil = 0;
 
   private readonly track = new RemoteTrack();
 
@@ -38,6 +42,7 @@ export class RemoteCar {
     this.id = id;
     this.name = name;
     this.color = spec.body;
+    this.carType = spec.type;
     this.car = createCarModel(spec.type);
     this.car.setBodyColor(spec.body);
     this.car.setRoofColor(spec.roof);
@@ -50,6 +55,16 @@ export class RemoteCar {
 
   public push(s: CarState, now = performance.now(), sentAt?: number): void {
     this.track.push(s, now, sentAt);
+  }
+
+  public get dead(): boolean {
+    return performance.now() < this.deadUntil;
+  }
+
+  /** 相手の撃破を受けた: 復帰するまで車体を隠す(破片と爆発は CombatSystem が出す)。 */
+  public markDead(ms: number): void {
+    this.deadUntil = performance.now() + ms;
+    this.car.group.visible = false;
   }
 
   public get stale(): boolean {
@@ -66,7 +81,7 @@ export class RemoteCar {
     this.valid = true;
 
     const g = this.car.group;
-    g.visible = true;
+    g.visible = !this.dead;
     g.position.copy(this.pos);
     g.rotation.set(p.pitch, this.rotY, 0, 'YXZ');      // 路面の勾配
     this.car.bodyPivot?.rotation.set(0, 0, p.roll);     // ボディのロール

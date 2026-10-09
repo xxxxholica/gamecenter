@@ -25,6 +25,22 @@ export enum ObstacleType {
   FIRE = 'FIRE',                       // 破壊不可・業火/火災（飛び越え不能・左右移動で迂回必須）
 }
 
+/** 分析用: 障害物にやられたときの死因の表示名(内部名のまま送ると読めないため) */
+export const OBSTACLE_DEATH_LABELS: Record<ObstacleType, string> = {
+  [ObstacleType.DESK_CHAIR]: '机と椅子に激突',
+  [ObstacleType.LOCKER_VAULT]: 'ロッカー・跳び箱に激突',
+  [ObstacleType.TEACHER]: '生活指導の先生に捕まった',
+  [ObstacleType.HANGING_SIGN]: '看板に激突',
+  [ObstacleType.GIMMICK_JUMP]: '低い障害物に激突',
+  [ObstacleType.GIMMICK_SLIDE]: '低いシャッターに激突',
+  [ObstacleType.GIMMICK_BOMB]: '段ボール壁に激突',
+  [ObstacleType.CHARGING_CART]: '暴走配膳台に激突',
+  [ObstacleType.FALLING_LOCKER]: '倒壊ロッカーに潰された',
+  [ObstacleType.BOUNCING_BALL]: 'バウンドボールに激突',
+  [ObstacleType.SWEEPING_POLISHER]: '清掃ポリッシャーに激突',
+  [ObstacleType.FIRE]: '業火に突っ込んだ',
+};
+
 export interface GameScore {
   score: number;
   combo: number;

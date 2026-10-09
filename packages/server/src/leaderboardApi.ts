@@ -3,15 +3,23 @@ import type http from 'node:http';
 import { RateWindow, num } from './limits.ts';
 import { safeUrl } from './control.ts';
 import { LeaderboardStore } from './leaderboardStore.ts';
+import type { AnalyticsStore } from './analyticsStore.ts';
 import { log } from './log.ts';
 
 /** 本文の上限。ゴースト(数千サンプル)を含む登録が通る大きさ */
+const MAX_BATCH_EVENTS = 50;
 export const MAX_BODY_BYTES = 512 * 1024;
 /** 会場の共有NATを考慮して、同一IPのPOSTは多めに許可する */
 const postRate = new RateWindow(num('LEADERBOARD_POSTS_PER_MIN', 120), 60_000);
-setInterval(() => postRate.sweep(), 30_000).unref();
+// アナリティクスはランキングと枠を分ける(会場の共有NATで全員が同じIPでも、ランキング保存を巻き込まず取りこぼさない)
+const analyticsRate = new RateWindow(num('ANALYTICS_POSTS_PER_MIN', 1200), 60_000);
+setInterval(() => { postRate.sweep(); analyticsRate.sweep(); }, 30_000).unref();
 
-const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+const JSON_HEADERS = {
+  'content-type': 'application/json',
+  'cache-control': 'no-store',
+  'access-control-allow-origin': '*',
+};
 
 function send(res: http.ServerResponse, code: number, body: object) {
   res.writeHead(code, JSON_HEADERS).end(JSON.stringify(body));
@@ -73,11 +81,12 @@ export function handleLeaderboardRequest(
   ip: string,
   store: LeaderboardStore,
   originAllowed: (origin: string) => boolean,
+  analytics?: AnalyticsStore,
 ): boolean {
   const url = safeUrl(req.url);
   if (!url || !url.pathname.startsWith('/api/')) return false;
   try {
-    route(req, res, url, ip, store, originAllowed);
+    route(req, res, url, ip, store, originAllowed, analytics);
   } catch (e) {
     log(`leaderboard error: ${(e as Error).message}`);
     if (!res.headersSent) send(res, 500, { error: 'internal' });
@@ -86,14 +95,25 @@ export function handleLeaderboardRequest(
   return true;
 }
 
-function route(req: http.IncomingMessage, res: http.ServerResponse, url: URL, ip: string, store: LeaderboardStore, originAllowed: (origin: string) => boolean): void {
+function route(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  ip: string,
+  store: LeaderboardStore,
+  originAllowed: (origin: string) => boolean,
+  analytics?: AnalyticsStore,
+): void {
   const decoded = url.pathname.split('/').slice(2).map(decodeSegment);
   if (decoded.some((p) => p === null)) return send(res, 400, { error: 'bad_request' });
   const parts = decoded as string[];
   const method = req.method ?? 'GET';
 
   if (method === 'OPTIONS') {
+    const origin = req.headers.origin;
+    const allowOrigin = origin && (origin === 'null' || originAllowed(origin)) ? origin : '*';
     res.writeHead(204, {
+      'access-control-allow-origin': allowOrigin,
       'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
@@ -130,6 +150,45 @@ function route(req: http.IncomingMessage, res: http.ServerResponse, url: URL, ip
       send(res, 200, { rank: r.rank, entries: r.entries });
     }).catch((e: Error) => {
       log(`leaderboard error: ${e.message}`);
+      if (!res.headersSent) send(res, 500, { error: 'internal' });
+    });
+    return;
+  }
+
+  if (method === 'POST' && parts[0] === 'analytics' && parts[1] === 'event' && parts.length === 2) {
+    if (!analytics) return send(res, 503, { error: 'analytics_unavailable' });
+    const origin = req.headers.origin;
+    if (origin && origin !== 'null' && !originAllowed(origin)) return send(res, 403, { error: 'forbidden_origin' });
+    if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) return send(res, 415, { error: 'unsupported_media_type' });
+    if (!analyticsRate.hit(ip)) return send(res, 429, { error: 'rate' });
+    readJson(req, res).then((body) => {
+      if (!body) return;
+      // 再送キューからのまとめ送信 { events: [...] } と、従来の1件送信の両方を受ける
+      const list: unknown[] = Array.isArray(body.events) ? body.events.slice(0, MAX_BATCH_EVENTS) : [body];
+      let accepted = 0;
+      let first: { ok: boolean; eventId: string } | undefined;
+      for (const raw of list) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+        const b = raw as Record<string, unknown>;
+        const type = typeof b.type === 'string' ? b.type.trim().slice(0, 64) : '';
+        if (!type) continue;
+        const r = analytics.recordEvent({
+          sessionId: typeof b.sessionId === 'string' ? b.sessionId.trim().slice(0, 80) : '',
+          type,
+          gameId: typeof b.gameId === 'string' ? b.gameId.trim().slice(0, 64) : undefined,
+          timestamp: typeof b.timestamp === 'string' ? b.timestamp : undefined,
+          data: b.data && typeof b.data === 'object' && !Array.isArray(b.data) ? (b.data as Record<string, unknown>) : undefined,
+          device: b.device && typeof b.device === 'object' && !Array.isArray(b.device) ? (b.device as any) : undefined,
+          referrer: typeof b.referrer === 'string' ? b.referrer.slice(0, 500) : undefined,
+          clientEventId: typeof b.eventId === 'string' ? b.eventId : undefined,
+        });
+        accepted++;
+        first ??= r;
+      }
+      if (accepted === 0) return send(res, 400, { error: 'bad_request' });
+      send(res, 200, { ...first, accepted });
+    }).catch((e: Error) => {
+      log(`analytics error: ${e.message}`);
       if (!res.headersSent) send(res, 500, { error: 'internal' });
     });
     return;
