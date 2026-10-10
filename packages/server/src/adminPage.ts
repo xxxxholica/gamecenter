@@ -896,7 +896,7 @@ export const ADMIN_JS = `
   var summaryEl = document.getElementById('summary');
 
   var HEADERS = { 'X-Requested-With': 'online-admin' };
-  var TITLES = { 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲' };
+  var TITLES = { 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
   var PHASES = { lobby: '参加受付中', loading: 'ロード中', racing: '実行中' };
   var MINUTES = [['60', '1時間'], ['120', '2時間'], ['180', '3時間'], ['360', '6時間']];
   var BOARD_TITLES = {

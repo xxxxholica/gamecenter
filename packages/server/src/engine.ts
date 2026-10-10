@@ -41,6 +41,8 @@ export interface GameModule<D = any> {
   readonly config: ConfigField[];
   /** 参加者に割り当てる名前の候補リスト(使われていない名前からランダムに選ぶ)。未指定なら PLAYER 1〜4 */
   readonly playerNames?: string[];
+  /** 満員になったら、自動開始までの待ちをこの時間(ms)に縮める。未指定なら満員でも通常どおり待つ(1on1 のゲーム向け) */
+  readonly startWhenFullMs?: number;
   attach(room: Room<D>): void;
   getConfig(): Record<string, string>;
   /** 主催者の設定を反映する(不正な値は無視する) */
@@ -121,6 +123,13 @@ export class Room<D = any> {
     if (this.members.size >= 2 && !this.countdownTimer) {
       this.countdownEnd = Date.now() + AUTO_START_MS;
       this.countdownTimer = setTimeout(() => this.begin(), AUTO_START_MS);
+    }
+    // 満員になったら待たずに始めるゲーム(1on1 など): 残りが指定の時間より長ければ縮める
+    const fullMs = this.game.startWhenFullMs;
+    if (fullMs !== undefined && this.members.size >= this.game.maxPlayers && this.countdownEnd !== null && this.countdownEnd - Date.now() > fullMs) {
+      this.stopCountdown();
+      this.countdownEnd = Date.now() + fullMs;
+      this.countdownTimer = setTimeout(() => this.begin(), fullMs);
     }
     this.broadcastRoom();
     return 'ok';

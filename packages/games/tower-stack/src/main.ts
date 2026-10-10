@@ -15,6 +15,14 @@ import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { setText, setDisplay } from '../../../shared/hudDom';
 import { loadLeaderboardAndCheck, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { PIECES, partExtents, randomPieceIndex, resetPieceBag, type Cell, type Part, type PieceDef } from './pieces';
+import { ModeSelect } from '../../../shared/online/ModeSelect';
+import type { PublicStatus } from '../../../shared/online/core';
+import { ATTACK_EVERY, ATTACK_KINDS, MAX_SNAP_BLOCKS, STATE_INTERVAL_MS } from '../../../shared/towerProtocol';
+import type { BlockSnap, PlayerInfo, ResultEntry, ServerMsg, TowerState } from '../../../shared/towerProtocol';
+import { createNet, fetchTowerStatus, PLAYER_COLORS } from './online/net';
+import { WaitScreen } from './online/WaitScreen';
+import { RivalStages, STAGE_SPACING } from './online/RivalStages';
 
 installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
@@ -34,16 +42,34 @@ if (isPreview) {
 }
 
 // 画面左下の共通ボタンガイド (場面ごとに差し替える)
-const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
-const guidePlay = () => mountArcadeGuide({
+/** ボタンガイドを出す(オンライン対戦で左右に分けた右側の分も片付ける) */
+const mountGuide = (opts: Parameters<typeof mountArcadeGuide>[0]) => {
+  document.getElementById('agc-guide-r')?.remove();
+  return mountArcadeGuide(opts);
+};
+const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+const mountGuidePlay = () => mountGuide({
   moveLabel: '移動 / 下で早く落とす',
   buttons: [
-    { indices: [0, 2], label: '回転' },
-    { indices: [1, 3], label: 'アイテムを使う' },
+    { indices: [0, 2], label: '回転', keyLabel: 'Space / Z' },
+    { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Enter / X' },
   ],
   showHomeHint: true,
 });
-const guideResult = () => mountArcadeGuide({
+const guidePlay = () => {
+  mountGuidePlay();
+  // オンライン対戦中は、ボタンガイドを左右の上端に分けて出す
+  if (document.body.classList.contains('online')) splitGuide();
+};
+const guideMenu = () => mountGuide({
+  moveLabel: '選択',
+  buttons: [
+    { indices: [0], label: '決定' },
+    { indices: [1], label: '戻る' },
+  ],
+  showHomeHint: true,
+});
+const guideResult = () => mountGuide({
   moveLabel: '選択',
   buttons: [
     { indices: [0], label: '決定' },
@@ -59,7 +85,7 @@ const MAX_DROPS = 3;
 const KILL_Y = -3.5; // これより下に落ちたブロックは「落下」
 const MOVE_STEP = 0.5;
 const MOVE_LIMIT = 8;
-const ITEM_EVERY = 3; // 何個置くごとにアイテムがもらえるか
+const ITEM_EVERY = 6; // 何個置くごとにアイテムがもらえるか(以前は3個ごと)
 const ITEM_MAX = 3;
 const VINE_RANGE = 2.3; // ツタが届く距離 (セル中心どうし。約2マス)
 const VINE_DELAY = 0.3; // 着地してからツタが伸びるまでの秒数
@@ -67,19 +93,12 @@ const VINE_COLOR = 0x3fae4a;
 const RESULT_DELAY = 1.6; // ゲームオーバーからリザルトが出るまでの秒数
 const FIRST_FIX_DELAY = 0.8; // 1個目のブロックが着地してから固定されるまでの秒数
 const HISCORE_KEY = 'tower-stack-hiscore';
-
-type Cell = [number, number];
-interface PieceDef { color: number; cells: Cell[] }
-// セル座標は重心が原点になるようにしてある
-const PIECES: PieceDef[] = [
-  { color: 0x35c9e8, cells: [[-1.5, 0], [-0.5, 0], [0.5, 0], [1.5, 0]] }, // I
-  { color: 0xf5d547, cells: [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]] }, // O
-  { color: 0xb26be8, cells: [[-1, -0.25], [0, -0.25], [1, -0.25], [0, 0.75]] }, // T
-  { color: 0xf59e42, cells: [[-1.25, -0.25], [-0.25, -0.25], [0.75, -0.25], [0.75, 0.75]] }, // L
-  { color: 0x4f7df0, cells: [[1.25, -0.25], [0.25, -0.25], [-0.75, -0.25], [-0.75, 0.75]] }, // J
-  { color: 0x5fd068, cells: [[-1, -0.5], [0, -0.5], [0, 0.5], [1, 0.5]] }, // S
-  { color: 0xee5a5a, cells: [[1, -0.5], [0, -0.5], [0, 0.5], [-1, 0.5]] }, // Z
-];
+const LEVEL_EVERY = 6; // 何個置くごとにレベル(落下スピード)が上がるか
+const MAX_LEVEL = 10;
+/** レベルごとの落下スピード(m/秒)。1 から MAX_LEVEL まで段階的に速くなる */
+function levelSpeed(lv: number): number {
+  return 3.0 + (lv - 1) * 0.5;
+}
 
 type ItemKind = 'glue' | 'cement' | 'shield' | 'heal';
 const ITEM_INFO: Record<ItemKind, { name: string; desc: string }> = {
@@ -94,7 +113,7 @@ type EventKind = 'wind' | 'quake' | 'meteor' | 'speed';
 const EVENT_INFO: Record<EventKind, { name: string; desc: string; duration: number }> = {
   wind: { name: '突風', desc: '横からの風でブロックが流される!', duration: 6 },
   quake: { name: '地震', desc: '土台がゆれる!', duration: 4.5 },
-  meteor: { name: 'いん石', desc: '横から石が飛んでくる!', duration: 5 },
+  meteor: { name: 'いん石', desc: '空から石が降ってくる!', duration: 5 },
   speed: { name: 'スピードアップ', desc: 'ブロックの落下が速くなる!', duration: 8 },
 };
 // 地震 ('quake') は難しすぎるので出さない。戻すときはこの配列に 'quake' を足す
@@ -117,7 +136,13 @@ scene.fog = new THREE.Fog(SKY_LOW.clone(), 70, 190);
 
 // 透視カメラ。Z=0 の面で縦 VIEW_H メートルが映る距離に、正面を向けて置く
 const CAM_FOV = 30;
-const CAM_DIST = VIEW_H / 2 / Math.tan(THREE.MathUtils.degToRad(CAM_FOV / 2));
+const CAM_TAN = Math.tan(THREE.MathUtils.degToRad(CAM_FOV / 2));
+/** いま画面に映している高さ(m)。オンライン対戦ではステージを並べるぶん広くなる */
+let viewH = VIEW_H;
+/** オンライン対戦で、タワーが高くなっても引きすぎないための上限(m) */
+const ONLINE_MAX_VIEW_H = 48;
+/** カメラの左右の中心(自分のステージが原点) */
+let camX = 0;
 const CAM_OFFSET_X = 0; // 0 なら正面から。増やすと斜めから見る (3D化直後は 2.5)
 const CAM_OFFSET_Y = 0; // 0 なら正面から。増やすと見下ろす (3D化直後は 3.5)
 const camera = new THREE.PerspectiveCamera(CAM_FOV, 1, 1, 500);
@@ -128,7 +153,6 @@ function resize(): void {
   const h = window.innerHeight;
   renderer.setSize(w, h);
   camera.aspect = w / h;
-  viewHalfW = (VIEW_H / 2) * (w / h);
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -237,7 +261,7 @@ function makeLabel(text: string): THREE.Mesh {
 }
 const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 });
 for (let h = 5; h <= 300; h += 5) {
-  const line = new THREE.Mesh(new THREE.PlaneGeometry(60, 0.04), lineMat);
+  const line = new THREE.Mesh(new THREE.PlaneGeometry(300, 0.04), lineMat);
   line.position.set(0, h, -0.75);
   scene.add(line);
   const label = makeLabel(`${h}m`);
@@ -246,7 +270,7 @@ for (let h = 5; h <= 300; h += 5) {
 }
 // 最高到達ライン
 const bestLine = new THREE.Mesh(
-  new THREE.PlaneGeometry(60, 0.08),
+  new THREE.PlaneGeometry(300, 0.08),
   new THREE.MeshBasicMaterial({ color: 0xffd166 }),
 );
 bestLine.position.z = -0.7;
@@ -256,7 +280,7 @@ scene.add(bestLine);
 // 土台の位置の目印: 両端の縦線は常に表示し、土台が画面の下に隠れたら画面下にバーを出す
 const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.45 });
 const edgeLines = [-1, 1].map((side) => {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.06, VIEW_H * 2), edgeMat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 160), edgeMat);
   m.position.set(side * PLATFORM_HALF_W, 0, -1.5);
   scene.add(m);
   return m;
@@ -300,13 +324,15 @@ platformBody.addShape(new CANNON.Box(new CANNON.Vec3(PLATFORM_HALF_W, 0.5, 1)));
 platformBody.position.set(0, -0.5, 0);
 world.addBody(platformBody);
 
-const cellShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
 
 interface Block {
   body: CANNON.Body;
   group: THREE.Group;
   mat: THREE.MeshStandardMaterial;
-  cells: Cell[];
+  /** 当たり判定の部品(テトリス型はマスごとの箱) */
+  parts: Part[];
+  /** PIECES の添字(いん石は -1)。オンライン対戦で相手にタワーの形を送るのに使う */
+  piece: number;
   cemented: boolean;
   isMeteor: boolean;
   life: number;
@@ -362,18 +388,15 @@ function lock2D(body: CANNON.Body): void {
   body.angularFactor.set(0, 0, 1);
 }
 
-function createPiece(def: PieceDef, x: number, y: number): Block {
-  const body = new CANNON.Body({ mass: 1 });
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.35, metalness: 0.05 });
-  for (const [cx, cy] of def.cells) {
-    body.addShape(cellShape, new CANNON.Vec3(cx, cy, 0));
-    const mesh = new THREE.Mesh(cellGeo, mat);
-    mesh.position.set(cx, cy, 0);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+function createPiece(index: number, x: number, y: number): Block {
+  const def: PieceDef = PIECES[index];
+  const body = new CANNON.Body({ mass: def.mass });
+  for (const pt of def.parts) {
+    const shape = pt.round ? new CANNON.Sphere(pt.hw) : new CANNON.Box(new CANNON.Vec3(pt.hw, pt.hh, 0.5));
+    body.addShape(shape, new CANNON.Vec3(pt.x, pt.y, 0));
   }
+  const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.35, metalness: 0.05 });
+  const group = def.build(mat);
   lock2D(body);
   body.position.set(x, y, 0);
   body.linearDamping = 0.05;
@@ -382,7 +405,7 @@ function createPiece(def: PieceDef, x: number, y: number): Block {
   body.sleepTimeLimit = 0.6;
   world.addBody(body);
   scene.add(group);
-  const block: Block = { body, group, mat, cells: def.cells, cemented: false, isMeteor: false, life: 0 };
+  const block: Block = { body, group, mat, parts: def.parts, piece: index, cemented: false, isMeteor: false, life: 0 };
   blocks.push(block);
   return block;
 }
@@ -398,7 +421,11 @@ function removeBlock(block: Block): void {
   removeVinesOf(block.body);
   world.removeBody(block.body);
   scene.remove(block.group);
-  block.mat.dispose();
+  // 見た目の材質はピースごとに作っているので捨てる(形状は使い回しのものもあるので捨てない)
+  block.group.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
+  });
   blocks = blocks.filter((b) => b !== block);
 }
 
@@ -415,12 +442,28 @@ function topOf(block: Block): number {
   const a = angleOf(block.body);
   const s = Math.sin(a);
   const c = Math.cos(a);
-  const ext = 0.5 * (Math.abs(s) + Math.abs(c));
   let top = -Infinity;
-  for (const [cx, cy] of block.cells) {
-    top = Math.max(top, block.body.position.y + cx * s + cy * c + ext);
+  for (const pt of block.parts) {
+    const { ey } = partExtents(pt, s, c);
+    top = Math.max(top, block.body.position.y + pt.x * s + pt.y * c + ey);
   }
   return top;
+}
+
+/** ブロックの左右の端のX座標 (落下位置ガイド用) */
+function xRangeOf(block: Block): [number, number] {
+  const a = angleOf(block.body);
+  const s = Math.sin(a);
+  const c = Math.cos(a);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const pt of block.parts) {
+    const { ex } = partExtents(pt, s, c);
+    const cx = block.body.position.x + pt.x * c - pt.y * s;
+    lo = Math.min(lo, cx - ex);
+    hi = Math.max(hi, cx + ex);
+  }
+  return [lo, hi];
 }
 
 // ───────────────────────── 爆発エフェクト ─────────────────────────
@@ -679,7 +722,7 @@ const menuNav = new MenuNav();
 let resultOpen = false;
 let nameEntryOpen = false; // 順位の確認中・名前入力中は、リザルトの操作を止める
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape') {
+  if (e.code === 'Escape' && state !== 'menu') {
     window.location.href = HUB_URL;
     return;
   }
@@ -726,7 +769,7 @@ function readInput(): Input {
 }
 
 // ───────────────────────── ゲーム状態 ─────────────────────────
-type State = 'title' | 'playing' | 'gameover';
+type State = 'title' | 'menu' | 'playing' | 'gameover';
 let state: State = 'title';
 let stateTime = 0;
 
@@ -737,12 +780,13 @@ let targetX = 0;
 let targetAngle = 0;
 let fastDrop = false;
 let spawnTimer = 0;
-let nextDef: PieceDef = PIECES[0];
+let nextIndex = 0; // 次のピース (PIECES の添字)
 let moveRepeat = 0;
 let moveDir = 0;
 
 let drops = 0;
 let placed = 0;
+let level = 1;
 let bestHeight = 0;
 let currentHeight = 0;
 let pendingTime = 0;
@@ -774,7 +818,7 @@ try {
 }
 
 function fallSpeed(): number {
-  let v = 2.2 + Math.min(2.5, bestHeight * 0.04);
+  let v = levelSpeed(level);
   if (activeEvent === 'speed') v *= 1.6;
   if (fastDrop) v *= 3;
   return v;
@@ -782,10 +826,6 @@ function fallSpeed(): number {
 function score(): number {
   return Math.floor(bestHeight * 100);
 }
-function randomPiece(): PieceDef {
-  return PIECES[Math.floor(Math.random() * PIECES.length)];
-}
-
 // 物理ステップごとの処理: 操作中ブロックの制御と風
 world.addEventListener('preStep', () => {
   if (current && !currentReleased) {
@@ -803,10 +843,12 @@ world.addEventListener('preStep', () => {
 });
 
 function spawnPiece(): void {
-  const def = nextDef;
-  nextDef = randomPiece();
-  const spawnY = isPreview ? (currentHeight + 5.5) : (camY + VIEW_H / 2 + 1);
-  const block = createPiece(def, 0, spawnY);
+  const index = nextIndex;
+  nextIndex = randomPieceIndex();
+  // オンライン対戦は画面が広いので、画面の上端ではなくタワーの少し上から落とす
+  const top = camY + viewH / 2 + 1;
+  const spawnY = isPreview ? currentHeight + 5.5 : mode === 'online' ? Math.min(top, Math.max(currentHeight, 2) + 9) : top;
+  const block = createPiece(index, 0, spawnY);
   block.body.allowSleep = false;
   current = block;
   currentReleased = false;
@@ -832,6 +874,17 @@ function onLanded(block: Block): void {
   block.body.velocity.scale(0.3, block.body.velocity);
   block.body.angularVelocity.scale(0.3, block.body.angularVelocity);
   placed++;
+  const nextLevel = Math.min(MAX_LEVEL, 1 + Math.floor(placed / LEVEL_EVERY));
+  if (nextLevel > level) {
+    level = nextLevel;
+    showSpeedUp(level >= MAX_LEVEL);
+    beep(500, 0.1, 'square', 0.07);
+    setTimeout(() => beep(750, 0.16, 'square', 0.07), 110);
+  }
+  if (mode === 'online' && placed % ATTACK_EVERY === 0) {
+    // オンライン対戦: 置いた数に応じて、一番高い相手へおじゃまを送る(宛先はサーバーが決める)
+    net.send({ t: 'attack', k: ATTACK_KINDS[Math.floor(Math.random() * ATTACK_KINDS.length)] });
+  }
   if (placed === 1) firstBlock = { block, timer: FIRST_FIX_DELAY };
   beep(180, 0.08, 'triangle', 0.12, -60);
   if (glueArmed) {
@@ -862,11 +915,12 @@ function growVines(src: Block): void {
     pairs.sort((p, q) => p.d - q.d);
     for (const p of pairs.slice(0, 3)) addVine(src.body, p.la, other, p.lb);
   };
-  const srcCells = src.cells.map((c) => ({ local: c, world: worldPoint(src.body, c) }));
+  const srcCells = src.parts.map((pt): { local: Cell; world: Cell } => ({ local: [pt.x, pt.y], world: worldPoint(src.body, [pt.x, pt.y]) }));
   for (const blk of blocks) {
     if (blk === src || blk === current || blk.isMeteor) continue;
     const pairs: { la: Cell; lb: Cell; d: number }[] = [];
-    for (const oc of blk.cells) {
+    for (const op of blk.parts) {
+      const oc: Cell = [op.x, op.y];
       const [ox, oy] = worldPoint(blk.body, oc);
       for (const sc of srcCells) {
         const d = Math.hypot(ox - sc.world[0], oy - sc.world[1]);
@@ -944,14 +998,15 @@ function wakeAll(): void {
   for (const blk of blocks) blk.body.wakeUp();
 }
 
-function startEvent(kind: EventKind): void {
+function startEvent(kind: EventKind, from?: string): void {
   if (shield) {
     shield = false;
-    showBanner('バリアで防いだ!', `${EVENT_INFO[kind].name}を無効化`, true, 2);
+    showBanner('バリアで防いだ!', `${from ? `${from}からの` : ''}${EVENT_INFO[kind].name}を無効化`, true, 2);
     beep(900, 0.25, 'sine', 0.1, 500);
     renderItems();
     return;
   }
+  if (activeEvent) endEvent();
   activeEvent = kind;
   activeTime = 0;
   wakeAll();
@@ -959,7 +1014,7 @@ function startEvent(kind: EventKind): void {
   if (kind === 'quake') world.allowSleep = false;
   if (kind === 'meteor') meteorTimer = 0;
   const arrow = kind === 'wind' ? (windDir > 0 ? ' →→→' : ' ←←←') : '';
-  showBanner(`${EVENT_INFO[kind].name}${arrow}`, EVENT_INFO[kind].desc, false, 2);
+  showBanner(`${EVENT_INFO[kind].name}${arrow}`, from ? `${from}からのおじゃま! ${EVENT_INFO[kind].desc}` : EVENT_INFO[kind].desc, false, 2);
 }
 
 function endEvent(): void {
@@ -972,13 +1027,13 @@ function endEvent(): void {
 }
 
 function spawnMeteor(): void {
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const body = new CANNON.Body({ mass: 0.35 });
+  const body = new CANNON.Body({ mass: 0.6 });
   body.addShape(new CANNON.Sphere(0.45));
   lock2D(body);
-  const y = Math.max(2, currentHeight) + 1 + Math.random() * 2;
-  body.position.set(side * 11, y, 0);
-  body.velocity.set(-side * (7 + Math.random() * 2), 3, 0);
+  // 画面の上の外から、土台の上あたりをめがけて降ってくる
+  const x = (Math.random() - 0.5) * 2 * (PLATFORM_HALF_W - 1);
+  body.position.set(x + (Math.random() - 0.5) * 4, camY + viewH / 2 + 2, 0);
+  body.velocity.set((x - body.position.x) * 0.6, -9 - Math.random() * 3, 0);
   world.addBody(body);
   const mat = new THREE.MeshStandardMaterial({ color: 0x3a2d2d, emissive: 0xff5a1f, emissiveIntensity: 0.9, roughness: 1, flatShading: true });
   const group = new THREE.Group();
@@ -988,7 +1043,7 @@ function spawnMeteor(): void {
   glow.scale.set(2.6, 2.6, 1);
   group.add(rock, glow);
   scene.add(group);
-  blocks.push({ body, group, mat, cells: [[0, 0]], cemented: false, isMeteor: true, life: 0 });
+  blocks.push({ body, group, mat, parts: [{ x: 0, y: 0, hw: 0.45, hh: 0.45, round: true }], piece: -1, cemented: false, isMeteor: true, life: 0 });
   beep(300, 0.4, 'sawtooth', 0.06, -220);
 }
 
@@ -1041,6 +1096,7 @@ const elScore = $('score');
 const elHeight = $('height');
 const elDrops = $('drops');
 const elNext = $('next');
+const elMatch = $('match');
 const elItems = $('items');
 const elStatus = $('status');
 const elBanner = $('banner');
@@ -1063,16 +1119,31 @@ function showBanner(title: string, sub: string, good: boolean, time: number): vo
 
 function renderNext(): void {
   elNext.innerHTML = '';
-  const xs = nextDef.cells.map((c) => c[0]);
-  const ys = nextDef.cells.map((c) => c[1]);
+  const def = PIECES[nextIndex];
+  if (!def.tetromino) {
+    // テトリス型でないピースは名前で出す
+    const label = document.createElement('span');
+    label.className = 'next-special';
+    label.textContent = def.name;
+    elNext.append(label);
+    return;
+  }
+  const xs = def.parts.map((c) => c.x);
+  const ys = def.parts.map((c) => c.y);
   const minX = Math.min(...xs);
   const maxY = Math.max(...ys);
-  const color = `#${nextDef.color.toString(16).padStart(6, '0')}`;
-  for (const [cx, cy] of nextDef.cells) {
+  // 大きい形(3段・4列を超える)は、マスを小さくして同じ枠に収める
+  const cols = Math.round(Math.max(...xs) - minX) + 1;
+  const rows = Math.round(maxY - Math.min(...ys)) + 1;
+  const size = Math.min(20, Math.floor(42 / rows) - 2, Math.floor(86 / cols) - 2);
+  elNext.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+  elNext.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+  const color = `#${def.color.toString(16).padStart(6, '0')}`;
+  for (const { x, y } of def.parts) {
     const i = document.createElement('i');
     i.style.background = color;
-    i.style.gridColumn = String(Math.round(cx - minX) + 1);
-    i.style.gridRow = String(Math.round(maxY - cy) + 1);
+    i.style.gridColumn = String(Math.round(x - minX) + 1);
+    i.style.gridRow = String(Math.round(maxY - y) + 1);
     elNext.append(i);
   }
 }
@@ -1098,9 +1169,11 @@ function renderItems(): void {
 }
 
 function renderHud(): void {
-  setDisplay(elHud, state === 'title' ? 'none' : 'block');
+  setDisplay(elHud, state === 'title' || state === 'menu' ? 'none' : 'block');
+  renderMatchHud();
   setText(elScore, String(score()));
   setText(elHeight, currentHeight.toFixed(1));
+
   // 残機: 左から MAX_DROPS 個。落とした数だけ右から消える
   const marks = elDrops.children;
   for (let i = 0; i < marks.length; i++) marks[i].classList.toggle('lost', i >= MAX_DROPS - drops);
@@ -1111,13 +1184,13 @@ const titleScreen = new ArcadeTitleScreen({
   slug: 'tower-stack',
   accentColor: ACCENT,
   tagline: 'ブロックを積んで高さを競え! 3個落としたらゲームオーバー',
-  onStart: () => startGame(),
+  onStart: () => void onStartPressed(),
 });
 
 /** タイトルの背景に置く飾りのタワー */
 function buildTitleTower(): void {
   const deco: [number, number, number][] = [[1, 0, 1], [0, 0, 2.5], [1, 1, 4], [2, -1.5, 3.75]];
-  for (const [i, x, y] of deco) freezeBlock(createPiece(PIECES[i], x, y), 0);
+  for (const [i, x, y] of deco) freezeBlock(createPiece(i, x, y), 0);
 }
 
 function clearBlocks(): void {
@@ -1127,6 +1200,8 @@ function clearBlocks(): void {
 
 function showTitle(): void {
   closeResult();
+  modeSelect.hide();
+  leaveOnline();
   clearBlocks();
   endEvent();
   upcoming = null;
@@ -1148,12 +1223,28 @@ const resultItems: ResultMenuItem[] = [
   { button: $('result-btn-exit'), color: '#ff8fa3' },
 ];
 setupResultMenu($('result-menu'), resultItems);
-const resultActions = [() => startGame(), () => showTitle(), () => { window.location.href = HUB_URL; }];
+const resultActions = [
+  () => (mode === 'online' ? retryOnline() : startGame()),
+  () => showTitle(),
+  () => { window.location.href = HUB_URL; },
+];
+const elResultBadge = document.querySelector('.result-badge') as HTMLElement;
+const elResultTitle = document.querySelector('.result-title') as HTMLElement;
+const elResultLabel = document.querySelector('.result-label') as HTMLElement;
+/** リザルトの見出し(ひとりで遊んだとき / オンライン対戦)を切り替える */
+function setResultTexts(badge: string, title: string, label: string, retry: string): void {
+  elResultBadge.textContent = badge;
+  elResultTitle.textContent = title;
+  elResultLabel.textContent = label;
+  const btn = resultItems[0].button;
+  if (btn) btn.textContent = retry;
+}
 resultItems.forEach((it, i) => it.button?.addEventListener('click', () => { if (resultOpen && !nameEntryOpen) resultActions[i](); }));
 let resultFocus = 0;
 let stopCountUp: (() => void) | null = null;
 
 function openResult(isNew: boolean): void {
+  setResultTexts('◆ ブロックを3個落とした ◆', 'GAME OVER', 'SCORE', '再挑戦');
   resultOpen = true;
   resultFocus = 0;
   menuNav.clear();
@@ -1259,6 +1350,376 @@ function updateResult(inp: Input): void {
   else if (inp.cancel) resultActions[2]();
 }
 
+// ───────────────────────── オンライン対戦 ─────────────────────────
+// START → (開催中なら)あそびかた選択 → 待機 → 対戦(各自のタワーを積み、様子を送り合う) → 結果
+type Mode = 'solo' | 'online';
+let mode: Mode = 'solo';
+const net = createNet();
+let onlineStatus: PublicStatus | null = null;
+let startingFlow = false;
+let onlineYou = -1;
+let onlineWired = false;
+let waitScreen: WaitScreen | null = null;
+const rivalStages = new RivalStages(scene, {
+  makePlatform: () => {
+    const g = new THREE.Group();
+    const p = platformMesh.clone();
+    p.position.set(0, -0.5, 0);
+    g.add(p, pillar.clone());
+    return g;
+  },
+  explode: (x, y, color, power) => {
+    explode(x, y, color, power);
+    boom(0.25);
+  },
+});
+
+interface OnlineMatch {
+  players: PlayerInfo[];
+  /** スタートの時刻(サーバー時刻ms)。go が届くまでは無限大 */
+  startAt: number;
+  started: boolean;
+  /** 決着がついて(自分が勝ち残って)積むのを止めた */
+  stopped: boolean;
+  out: boolean;
+  results: ResultEntry[] | null;
+  sendAcc: number;
+  states: Record<number, TowerState & { out: boolean }>;
+  gone: number[];
+}
+let match: OnlineMatch | null = null;
+
+const towerArt = (n: number) => {
+  const tower = (x: number, h: number, c: string) =>
+    Array.from({ length: h }, (_, i) => `<rect x="${x + (i % 2) * 4}" y="${80 - (i + 1) * 13}" width="26" height="12" rx="2" fill="${c}" stroke="#0006"/>`).join('');
+  const cols = n === 1 ? [[87, 5, '#ffd166']] : [[48, 4, PLAYER_COLORS[0]], [126, 5, PLAYER_COLORS[1]]];
+  const vs = n === 1 ? '' : '<text x="100" y="50" text-anchor="middle" font-size="22" font-weight="900" fill="#fff">VS</text>';
+  return `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="80" width="184" height="8" rx="2" fill="#7a5236"/>${cols.map(([x, h, c]) => tower(x as number, h as number, c as string)).join('')}${vs}</svg>`;
+};
+
+const modeSelect = new ModeSelect(
+  { title: 'あそびかた', accent: ACCENT, accentEnd: '#ff9f43' },
+  (id) => onModeSelected(id),
+  () => {
+    modeSelect.hide();
+    showTitle();
+  },
+);
+
+/** START: オンライン対戦が開かれていれば遊び方の選択を挟み、そうでなければそのまま始める */
+async function onStartPressed(): Promise<void> {
+  if (startingFlow) return;
+  startingFlow = true;
+  try {
+    onlineStatus = isPreview ? null : await fetchTowerStatus(1500); // 開催状況の確認は START の時の1回だけ
+  } finally {
+    startingFlow = false;
+  }
+  if (state !== 'title') return;
+  if (onlineStatus) openModeSelect();
+  else startGame();
+}
+
+function openModeSelect(): void {
+  state = 'menu';
+  const st = onlineStatus;
+  const full = !!st && st.players >= st.max;
+  modeSelect.show([
+    { id: 'solo', badge: 'OFFLINE', art: towerArt(1), title: 'ひとりで', sub: 'スコアを競う', desc: 'ひとりでどこまで高く積めるかに挑戦。高さがスコアになり、上位はランキングに載ります。' },
+    {
+      id: 'online',
+      badge: 'ONLINE',
+      art: towerArt(2),
+      title: '1on1 対戦',
+      sub: !st ? '' : full ? '対戦中' : st.phase !== 'lobby' ? '対戦中' : st.players === 1 ? '相手が待っています!' : '相手を待つ',
+      desc: 'オンラインで1対1。同時に積んで、先にブロックを3個落とした方の負け。積むほど相手におじゃまが飛びます。',
+    },
+  ]);
+  guideMenu();
+}
+
+function onModeSelected(id: string): void {
+  modeSelect.hide();
+  if (id === 'online') {
+    enterOnlineWait();
+    return;
+  }
+  mode = 'solo';
+  startGame();
+}
+
+function enterOnlineWait(): void {
+  state = 'menu';
+  wireOnline();
+  if (!waitScreen) {
+    waitScreen = new WaitScreen(net, {
+      onBack: () => {
+        leaveOnline();
+        openModeSelect();
+      },
+      onErrorToTitle: (msg: string) => {
+        showTitle();
+        showNotice(msg);
+      },
+    });
+  }
+  guideMenu();
+  waitScreen.show();
+}
+
+/** サーバーからの通知の受け口(1回だけ登録する) */
+function wireOnline(): void {
+  if (onlineWired) return;
+  onlineWired = true;
+  net.on('room', (m) => {
+    onlineYou = m.you;
+    waitScreen?.setRoom(m);
+  });
+  net.on('left', () => waitScreen?.setRoom(null));
+  net.on('start', (m) => beginOnlineMatch(m));
+  net.on('go', (m) => {
+    if (!match) return;
+    match.startAt = m.startAt;
+  });
+  net.on('states', (m) => {
+    if (!match) return;
+    match.states = m.p;
+    match.gone = m.gone;
+    rivalStages.update(m.p, m.gone, camY - viewH / 2);
+  });
+  net.on('atk', (m) => onAttack(m));
+  net.on('results', (m) => onOnlineResults(m.entries));
+  net.onClose(() => {
+    if (mode !== 'online' || !match || match.results) return;
+    showTitle();
+    showNotice('接続が切れました');
+  });
+}
+
+/** 開始の合図: 自分のタワーを用意して、ロード完了を伝える(全員そろうと go が来る) */
+function beginOnlineMatch(m: Extract<ServerMsg, { t: 'start' }>): void {
+  if (state !== 'menu') return;
+  waitScreen?.hide(); // 接続は保ったまま、待機画面だけ閉じる
+  modeSelect.hide();
+  mode = 'online';
+  match = {
+    players: m.players, startAt: Infinity, started: false, stopped: false, out: false, results: null, sendAcc: 0, states: {}, gone: [],
+  };
+  startGame();
+  rivalStages.setup(m.players, onlineYou);
+  const me = m.players.findIndex((p) => p.id === onlineYou);
+  showBanner('オンライン対戦', `あなたは ${m.players[me]?.name ?? ''}(${me + 1}P)`, true, 2.5);
+  net.send({ t: 'loaded' });
+}
+
+function playerName(id: number): string {
+  return match?.players.find((p) => p.id === id)?.name ?? '???';
+}
+
+/** おじゃま: 自分宛てならイベントを起こす。自分が送ったものは宛先を知らせる */
+function onAttack(m: Extract<ServerMsg, { t: 'atk' }>): void {
+  if (!match) return;
+  const kind = m.k as EventKind;
+  if (!EVENT_INFO[kind]) return;
+  if (m.to === onlineYou) {
+    if (state === 'playing' && match.started && !match.stopped) startEvent(kind, playerName(m.from));
+    return;
+  }
+  rivalStages.flash(m.to);
+  if (m.from === onlineYou) {
+    showBanner(`おじゃま送信! → ${playerName(m.to)}`, EVENT_INFO[kind].name, true, 1.4);
+    beep(700, 0.12, 'square', 0.06, 300);
+  }
+}
+
+/** 自分のタワーの様子を送る(相手の画面に小さく出る) */
+function sendState(): void {
+  const k: BlockSnap[] = [];
+  for (const blk of blocks) {
+    if (blk.isMeteor || blk.piece < 0) continue; // 落下中のブロックも送る(相手の画面で落ちていく様子が見える)
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    k.push([blk.piece, r2(blk.body.position.x), r2(blk.body.position.y), r2(wrapAngle(angleOf(blk.body)))]);
+  }
+  net.send({
+    t: 'state',
+    h: Math.max(0, Math.round(currentHeight * 100) / 100),
+    b: Math.max(0, Math.round(bestHeight * 100) / 100),
+    d: Math.min(3, drops),
+    lv: level,
+    k: k.slice(-MAX_SNAP_BLOCKS),
+  });
+}
+
+/** 決着がついた(自分が最後まで残った): 積むのを止める */
+function stopPlaying(title: string, sub: string): void {
+  if (!match) return;
+  match.stopped = true;
+  sendState();
+  endEvent();
+  upcoming = null;
+  if (current) {
+    removeBlock(current);
+    current = null;
+  }
+  state = 'gameover';
+  stateTime = 0;
+  showBanner(title, sub, true, 3);
+  beep(660, 0.3, 'square', 0.08, 300);
+}
+
+function onOnlineResults(entries: ResultEntry[]): void {
+  if (!match) return;
+  match.results = entries;
+  if (state === 'playing') {
+    if (entries[0]?.id === onlineYou) stopPlaying('WIN!', '最後まで残った!');
+    else stopPlaying('試合終了', '');
+  }
+  // 結果を受け取ったら接続は閉じる(開いたままにして負荷をかけない)。もう一度遊ぶときに接続し直す
+  net.close();
+}
+
+/** オンラインの結果: 順位表(最高到達の高い順) */
+function openOnlineResult(entries: ResultEntry[]): void {
+  const rank = entries.findIndex((e) => e.id === onlineYou) + 1;
+  const mine = entries.find((e) => e.id === onlineYou);
+  setResultTexts('◆ 1on1 対戦 ◆', rank === 1 ? 'YOU WIN!' : rank > 0 ? 'YOU LOSE…' : 'RESULT', 'あなたの最高到達', 'もう一度対戦');
+  resultOpen = true;
+  resultFocus = 0;
+  menuNav.clear();
+  applyResultMenuFocus(resultItems, resultFocus);
+  elResultScore.textContent = `${(mine?.best ?? bestHeight).toFixed(1)}m`;
+  elResultDetail.textContent = rank === 1 ? '最後まで崩れなかった!' : rank > 0 ? '先に3個落としてしまった' : '';
+  elResultRecord.textContent = '';
+  elResultRecord.classList.remove('new');
+  elResultRanking.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'rank-head';
+  head.textContent = '順位';
+  elResultRanking.append(head);
+  entries.forEach((e, i) => {
+    const row = document.createElement('div');
+    row.className = `rank-row r${i + 1}`;
+    if (e.id === onlineYou) row.classList.add('me');
+    const index = match?.players.findIndex((p) => p.id === e.id) ?? -1;
+    const no = Object.assign(document.createElement('span'), { className: 'rank-no', textContent: `${i + 1}位` });
+    const name = Object.assign(document.createElement('span'), { className: 'rank-name', textContent: e.id === onlineYou ? `${e.name}（あなた）` : e.name });
+    if (index >= 0) name.style.color = PLAYER_COLORS[index % PLAYER_COLORS.length];
+    const sc = Object.assign(document.createElement('span'), { className: 'rank-score', textContent: e.out ? `脱落 ${e.best.toFixed(1)}m` : `生き残り ${e.best.toFixed(1)}m` });
+    row.append(no, name, sc);
+    elResultRanking.append(row);
+  });
+  elResult.classList.add('show');
+  if (rank === 1) beep(880, 0.3, 'square', 0.08, 400);
+  guideResult();
+}
+
+/** もう一度オンライン対戦: 待機画面へ戻る */
+function retryOnline(): void {
+  closeResult();
+  clearBlocks();
+  rivalStages.clear();
+  match = null;
+  currentHeight = 0;
+  camY = 6;
+  bestLine.visible = false;
+  elBanner.style.display = 'none';
+  buildTitleTower();
+  enterOnlineWait();
+}
+
+/** オンラインの途中だった場合の片付け。ひとりで遊んでいるときは何も起きない */
+function leaveOnline(): void {
+  waitScreen?.hide();
+  rivalStages.clear();
+  match = null;
+  mode = 'solo';
+  if (net.connected) {
+    net.send({ t: 'leave' });
+    net.close();
+  }
+}
+
+/** オンライン対戦の表示: UI(状況・高さ・残機・NEXT・アイテム・ボタンガイド)を上部の1本のバーにまとめる / 元に戻す */
+let onlineLayout = false;
+function setOnlineLayout(on: boolean): void {
+  if (on === onlineLayout) return;
+  onlineLayout = on;
+  document.body.classList.toggle('online', on);
+  // 上部のバーには NEXT とアイテムだけを置く(高さ・残機・名前はステージの下の名札に出ている)
+  const right = $('right');
+  if (on) {
+    $('topbar').append(right);
+    splitGuide();
+  } else {
+    elHud.append(right); // 元の位置(右上)は CSS の絶対配置で決まるので、#hud に戻すだけでよい
+    document.getElementById('agc-guide-r')?.remove();
+    const guide = document.getElementById('agc-guide');
+    if (guide?.dataset.split) guide.remove(); // 分けたガイドは片付ける(次の画面で出し直す)
+  }
+}
+/** オンライン対戦: ボタンガイドを左上(移動・回転)と右上(アイテム・ホーム)に分ける */
+function splitGuide(): void {
+  const guide = document.getElementById('agc-guide');
+  if (!guide || !onlineLayout || guide.dataset.split) return;
+  guide.dataset.split = '1';
+  guide.classList.add('agc-top-left');
+  const right = guide.cloneNode(false) as HTMLElement;
+  right.id = 'agc-guide-r';
+  right.classList.remove('agc-top-left');
+  right.classList.add('agc-top-right');
+  const rows = [...guide.children];
+  rows.slice(Math.ceil(rows.length / 2)).forEach((r) => right.append(r));
+  document.body.append(right);
+}
+
+/** レベルが上がった: 画面中央に「SPEED UP!」を大きく出す */
+let speedTimer: number | null = null;
+function showSpeedUp(max: boolean): void {
+  const el = $('speedup');
+  el.textContent = max ? 'MAX SPEED!' : 'SPEED UP!';
+  el.classList.remove('show');
+  void el.offsetWidth; // アニメーションをやり直す
+  el.classList.add('show');
+  shake = Math.max(shake, 0.25);
+  if (speedTimer !== null) clearTimeout(speedTimer);
+  speedTimer = window.setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+/** 対戦中の上部の表示(残り人数と状況) */
+function renderMatchHud(): void {
+  const show = mode === 'online' && !!match && (state === 'playing' || state === 'gameover');
+  setDisplay(elMatch, 'none'); // 上部の状況表示は使わない(相手の名前は名札に、カウントダウンは画面中央に出す)
+  setOnlineLayout(show);
+  // スタート前のカウントダウンを画面中央に大きく出す
+  const elCount = $('countdown');
+  let count = '';
+  if (show && match && !match.started) {
+    const sec = Math.ceil((match.startAt - net.serverNow()) / 1000);
+    count = Number.isFinite(sec) ? String(Math.max(1, sec)) : '';
+  }
+  setText(elCount, count);
+  setDisplay(elCount, count ? 'block' : 'none');
+}
+
+let noticeEl: HTMLDivElement | null = null;
+let noticeTimer: number | null = null;
+/** 画面の上部に出す短い案内(接続が切れた・満員 など) */
+function showNotice(text: string): void {
+  if (!noticeEl) {
+    noticeEl = document.createElement('div');
+    noticeEl.style.cssText =
+      'position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:9999;pointer-events:none;padding:.7em 1.4em;border-radius:6px;' +
+      'background:rgba(8,8,14,.94);border:1px solid #ffd166;color:#fff;font:700 1rem system-ui,"Hiragino Kaku Gothic ProN",sans-serif;letter-spacing:.08em;display:none;';
+    document.body.appendChild(noticeEl);
+  }
+  noticeEl.textContent = text;
+  noticeEl.style.display = 'block';
+  if (noticeTimer !== null) clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(() => {
+    if (noticeEl) noticeEl.style.display = 'none';
+  }, 3500);
+}
+
 // ───────────────────────── 進行 ─────────────────────────
 function startGame(): void {
   closeResult();
@@ -1269,6 +1730,7 @@ function startGame(): void {
   currentReleased = false;
   drops = 0;
   placed = 0;
+  level = 1;
   bestHeight = 0;
   currentHeight = 0;
   pendingTime = 0;
@@ -1280,7 +1742,7 @@ function startGame(): void {
   shield = false;
   pendingVine = null;
   firstBlock = null;
-  eventTimer = isPreview ? 99999 : 30;
+  eventTimer = isPreview || mode === 'online' ? Infinity : 30; // オンライン対戦では、おじゃまは相手から飛んでくる
   upcoming = null;
   spawnTimer = 0.4;
   camY = 6;
@@ -1298,14 +1760,15 @@ function startGame(): void {
       [6, 0.8, 6.0],    // Z (赤)
     ];
     for (const [i, x, y] of demoBlocks) {
-      freezeBlock(createPiece(PIECES[i], x, y), 0);
+      freezeBlock(createPiece(i, x, y), 0);
     }
     placed = demoBlocks.length;
     currentHeight = 6.8;
     camY = 6.0;
   }
 
-  nextDef = PIECES[0]; // I (シアン)
+  resetPieceBag();
+  nextIndex = isPreview ? 0 : randomPieceIndex();
   renderNext();
   renderItems();
   state = 'playing';
@@ -1325,6 +1788,14 @@ function gameOver(): void {
   upcoming = null;
   current = null;
   blowUpAll();
+  if (mode === 'online' && match) {
+    // オンライン対戦: 脱落を伝えて、結果が届くまで相手のタワーを見ながら待つ
+    match.out = true;
+    sendState();
+    net.send({ t: 'out', b: bestHeight });
+    showBanner('脱落…', '結果を待っています', false, 3);
+    return;
+  }
   const s = score();
   const isNew = s > hiscore;
   if (isNew) {
@@ -1346,6 +1817,22 @@ function gameOver(): void {
 }
 
 function updatePlaying(dt: number, inp: Input): void {
+  if (mode === 'online' && match) {
+    const now = net.serverNow();
+    if (!match.started) {
+      // スタートの合図(go)を待つ。その間は動かさない
+      world.step(1 / 120, dt, 10);
+      if (now < match.startAt) return;
+      match.started = true;
+      showBanner('START!', '先に3個落とした方の負け', true, 1.4);
+      beep(880, 0.2, 'square', 0.08);
+    }
+    match.sendAcc += dt * 1000;
+    if (match.sendAcc >= STATE_INTERVAL_MS) {
+      match.sendAcc = 0;
+      sendState();
+    }
+  }
   // 操作
   if (current && !currentReleased) {
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
@@ -1423,8 +1910,8 @@ function updatePlaying(dt: number, inp: Input): void {
       const counts = !blk.isMeteor;
       if (counts) {
         // 落ちたブロックは画面の下端あたりで爆発する
-        const ex = Math.max(-viewHalfW + 1.5, Math.min(viewHalfW - 1.5, p.x));
-        const ey = Math.max(p.y, camY - VIEW_H / 2 + 2);
+        const ex = Math.max(camX - viewHalfW + 1.5, Math.min(camX + viewHalfW - 1.5, p.x));
+        const ey = Math.max(p.y, camY - viewH / 2 + 2);
         explode(ex, ey, blk.mat.color.getHex(), 1.3);
       }
       removeBlock(blk);
@@ -1482,7 +1969,10 @@ function frame(now: number): void {
     // タイトル・ゲームオーバー中も、残ったブロックは動かしておく
     if (state === 'gameover') {
       world.step(1 / 120, dt, 10);
-      if (!resultOpen && stateTime >= RESULT_DELAY) openResult(resultIsNew);
+      if (!resultOpen && stateTime >= RESULT_DELAY) {
+        if (mode === 'solo') openResult(resultIsNew);
+        else if (match?.results) openOnlineResult(match.results);
+      }
       if (resultOpen) updateResult(inp);
     }
     // タイトルのスタート操作は共通タイトル画面が受け付ける
@@ -1504,25 +1994,50 @@ function frame(now: number): void {
   }
   guide.visible = !isPreview && state === 'playing' && !!current;
   if (current) {
-    const xs = current.cells.map((c) => worldPoint(current!.body, c)[0]);
-    const minX = Math.min(...xs) - 0.5;
-    const maxX = Math.max(...xs) + 0.5;
+    const [minX, maxX] = xRangeOf(current);
     guide.scale.x = maxX - minX;
     guide.position.set((minX + maxX) / 2, current.body.position.y - 40, -0.6);
   }
   platformMesh.position.set(platformBody.position.x, platformBody.position.y, 0);
 
-  const camTarget = Math.max(6, currentHeight + 3);
+  // カメラ: オンライン対戦では、並んだ全員のステージが入るように引いて、一番高いタワーに合わせる
+  const lay = mode === 'online' ? rivalStages.layout() : null;
+  let targetViewH = VIEW_H;
+  let targetCamX = 0;
+  let camTarget = Math.max(VIEW_H * 0.3, currentHeight + VIEW_H * 0.15);
+  if (lay) {
+    // 横は全員の土台が入る幅、縦は土台(名札)から一番高いタワーの少し上まで。高くなりすぎたら上だけ追いかける
+    const topH = Math.max(currentHeight, rivalStages.maxHeight());
+    // 操作ガイドは上部に移すので(index.html の body.online)、ステージは画面の横幅いっぱいに並べる
+    const fitW = (lay.count * STAGE_SPACING + 2) / camera.aspect;
+    targetViewH = Math.min(ONLINE_MAX_VIEW_H, Math.max(VIEW_H, fitW, topH + 14));
+    targetCamX = lay.center;
+    // 上はタワーの10m上まで映す(ブロックはタワーの9m上から落ちてくるので、相手の落下中のブロックも見える)
+    camTarget = Math.max(targetViewH / 2 - 4, topH + 10 - targetViewH / 2);
+    rivalStages.tick(dt, { h: currentHeight, drops, out: !!match?.out });
+  }
+  viewH += (targetViewH - viewH) * Math.min(1, dt * 3);
+  camX += (targetCamX - camX) * Math.min(1, dt * 3);
+  viewHalfW = (viewH / 2) * camera.aspect;
   camY += (camTarget - camY) * Math.min(1, dt * 2.5);
   updateParticles(dt);
   shake = Math.max(0, shake - dt * 0.8);
   const sx = (Math.random() - 0.5) * shake;
   const sy = (Math.random() - 0.5) * shake;
-  camera.position.set(CAM_OFFSET_X + sx, camY + CAM_OFFSET_Y + sy, CAM_DIST);
-  camera.lookAt(sx, camY + sy, 0);
+  camera.position.set(camX + CAM_OFFSET_X + sx, camY + CAM_OFFSET_Y + sy, viewH / 2 / CAM_TAN);
+  camera.lookAt(camX + sx, camY + sy, 0);
   // 太陽(影)はカメラの高さについてくる
-  sun.position.set(-9, camY + 16, 14);
-  sun.target.position.set(0, camY, 0);
+  sun.position.set(camX - 9, camY + 16, 14);
+  sun.target.position.set(camX, camY, 0);
+  const shadowHalf = Math.max(18, Math.ceil(viewHalfW + 2));
+  if (sun.shadow.camera.right !== shadowHalf) {
+    sun.shadow.camera.left = -shadowHalf;
+    sun.shadow.camera.right = shadowHalf;
+    sun.shadow.camera.top = Math.max(18, Math.ceil(viewH / 2 + 4));
+    sun.shadow.camera.bottom = -sun.shadow.camera.top;
+    sun.shadow.camera.far = 80 + shadowHalf;
+    sun.shadow.camera.updateProjectionMatrix();
+  }
   const sky = (scene.background as THREE.Color).copy(SKY_LOW).lerp(SKY_HIGH, Math.min(1, Math.max(0, (camY - 6) / 70)));
   scene.fog!.color.copy(sky);
   starMat.opacity = Math.min(1, Math.max(0, (camY - 35) / 40));
@@ -1546,10 +2061,11 @@ requestAnimationFrame(frame);
 // 動作確認用 (開発時のみ)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__tower = {
-    get state() { return { state, drops, placed, bestHeight, currentHeight, items, activeEvent, blocks: blocks.length }; },
+    get state() { return { state, drops, placed, level, bestHeight, currentHeight, items, activeEvent, blocks: blocks.length }; },
     give: (k: ItemKind) => { items.push(k); renderItems(); },
     event: (k: EventKind) => startEvent(k),
-    next: (i: number) => { nextDef = PIECES[i]; renderNext(); },
+    next: (i: number) => { nextIndex = i; renderNext(); },
     get vines() { return vines.length; },
+    speedup: () => showSpeedUp(false),
   };
 }
