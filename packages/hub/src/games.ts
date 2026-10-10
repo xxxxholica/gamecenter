@@ -46,6 +46,15 @@ const KURENAI_BEAT: Developer = {
 // この配列の順番がそのままピックアップの巡回順・一覧の表示順になる。
 const allGames: GameEntry[] = [
   {
+    slug: 'cyber-2d-fighter-3d',
+    title: 'サイバー２Dファイター３D',
+    englishTitle: 'CYBER 2D FIGHTER 3D',
+    description: '3Dキャラクターで戦う横視点の対戦格闘。4人のファイターから選び、6ボタンの攻撃と必殺技で勝負！CPU戦・練習・開催中のオンライン対戦に対応。',
+    thumbnail: 'thumbnails/cyber-2d-fighter-3d.webp',
+    accent: '#b544ff',
+    developer: KURENAI_BEAT,
+  },
+  {
     slug: 'phaser-fighter',
     title: 'ストリートストライカー',
     englishTitle: 'STREET STRIKER',

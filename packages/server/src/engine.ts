@@ -36,6 +36,8 @@ export type RoomPhase = 'lobby' | 'loading' | 'racing';
 export interface GameModule<D = any> {
   readonly id: string;
   readonly maxPlayers: number;
+  /** Snapshot-heavy games may opt into a larger bounded packet; others keep the default. */
+  readonly maxPayloadBytes?: number;
   /** 実行(racing)の最大時間。誰も終わらせなくても、この時間で強制終了して空に戻す */
   readonly maxPlayMs: number;
   readonly config: ConfigField[];

@@ -9,6 +9,7 @@ gamecenter/
   packages/
     hub/                      # ゲーム選択画面 (トップページ, Vite + TypeScript)
     games/
+      cyber-2d-fighter-3d/      # サイバー２Dファイター３D (Three.js, 3D格闘 / CPU・練習・オンライン)
       school-corridor-runner/  # テンパレラン (Three.js)
       extreme-edge-arcade/     # 極限ギリギリ選手権 (Three.js)
       tani-runner-124/         # 単位増殖ラン (Three.js)

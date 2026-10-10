@@ -40,7 +40,8 @@ export interface ConnectionManager {
 
 export function createConnectionManager(opts: ConnectionOptions): ConnectionManager {
   const { hosts, wsPath, originAllowed, clientIp } = opts;
-  const wss = new WebSocketServer({ noServer: true, maxPayload: LIMITS.maxPayloadBytes });
+  const maxPayload = Math.max(LIMITS.maxPayloadBytes, ...[...hosts.values()].map(h=>h.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes));
+  const wss = new WebSocketServer({ noServer: true, maxPayload });
   const connectRate = new RateWindow(LIMITS.connectsPerMinPerIp, 60_000);
   const connsByIp = new Map<string, number>();
   const clients = new Set<Client>();
@@ -98,6 +99,7 @@ export function createConnectionManager(opts: ConnectionOptions): ConnectionMana
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) return ws.close(1003);
+      if (Buffer.byteLength(data.toString()) > (host.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes)) return ws.close(1009);
       const t = Date.now();
       if (t - client.windowStart >= 1000) {
         client.windowStart = t;

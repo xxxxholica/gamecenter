@@ -46,6 +46,7 @@ export const ADMIN_HTML = `<!doctype html>
           <option value="all">すべてのゲーム (全体集計)</option>
           <option value="midnight-skyway">ミッドナイト・スカイウェイ</option>
           <option value="street-b-boy">ストリートビーボーイ</option>
+          <option value="cyber-2d-fighter-3d">サイバー２Dファイター３D</option>
           <option value="sumo-smash-3d">剛体大相撲</option>
           <option value="school-corridor-runner">テンパレラン</option>
           <option value="survivor-score-battle">サバイバー・スコアバトル</option>
@@ -896,7 +897,7 @@ export const ADMIN_JS = `
   var summaryEl = document.getElementById('summary');
 
   var HEADERS = { 'X-Requested-With': 'online-admin' };
-  var TITLES = { 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
+  var TITLES = { 'cyber-2d-fighter-3d': 'サイバー２Dファイター３D', 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
   var PHASES = { lobby: '参加受付中', loading: 'ロード中', racing: '実行中' };
   var MINUTES = [['60', '1時間'], ['120', '2時間'], ['180', '3時間'], ['360', '6時間']];
   var BOARD_TITLES = {
@@ -1087,6 +1088,7 @@ export const ADMIN_JS = `
   var GAME_META = {
     'midnight-skyway': { name: 'ミッドナイト・スカイウェイ' },
     'street-b-boy': { name: 'ストリートビーボーイ' },
+    'cyber-2d-fighter-3d': { name: 'サイバー２Dファイター３D' },
     'sumo-smash-3d': { name: '剛体大相撲' },
     'school-corridor-runner': { name: 'テンパレラン' },
     'survivor-score-battle': { name: 'サバイバー・スコアバトル' },
