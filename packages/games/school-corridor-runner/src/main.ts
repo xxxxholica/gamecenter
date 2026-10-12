@@ -16,22 +16,25 @@ import { PowerUp } from './entities/PowerUp';
 import { UIManager } from './ui/UIManager';
 import { createSchoolGateNameplateTexture } from './graphics/Textures';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['btn-result-title']);
 
-mountArcadeGuide({
+const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
   keyMoveLabel: 'WASD / 矢印',
   buttons: [{ indices: [0, 1, 2, 3], label: '攻撃(手裏剣/辞書ボム)', keyLabel: 'Space / Enter' }],
   showHomeHint: true,
+  backLabel: 'ポーズ',
 });
+mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
 
 class Game {
   // Three.js
@@ -77,6 +80,12 @@ class Game {
 
   // ゲームステート
   private state: GameState = GameState.TITLE;
+  /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
+  private readonly pause = new ArcadePause({
+    accent: '#ffd23f',
+    isPlaying: () => this.state === GameState.PLAYING && !this.isCountingDown && !this.isPreChase,
+    onRestart: () => this.startWithCountdown(),
+  });
   private lastDeathCause = ''; // 分析用: 直近の死因(ぶつかった障害物の種類)
   private arcadeTitleScreen!: ArcadeTitleScreen;
   private scoreData: GameScore = {
@@ -247,7 +256,7 @@ class Game {
     const btnRetry = document.getElementById('btn-retry');
     if (btnRetry) {
       btnRetry.addEventListener('click', (e) => {
-        if (performance.now() < this.resultArmTime) {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
           e.preventDefault();
           return;
         }
@@ -263,7 +272,7 @@ class Game {
     const btnTitle = document.getElementById('btn-result-title');
     if (btnTitle) {
       btnTitle.addEventListener('click', (e) => {
-        if (performance.now() < this.resultArmTime) {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
           e.preventDefault();
           return;
         }
@@ -279,7 +288,7 @@ class Game {
     const btnExit = document.getElementById('btn-result-exit');
     if (btnExit) {
       btnExit.addEventListener('click', (e) => {
-        if (performance.now() < this.resultArmTime) {
+        if (this.isNameEntryOpen || performance.now() < this.resultArmTime) {
           e.preventDefault();
           return;
         }
@@ -311,7 +320,7 @@ class Game {
     this.camera.updateProjectionMatrix();
     this.titleScrollZ = this.TITLE_START_Z;
     this.corridor.update(this.titleScrollZ, 0);
-    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
   }
 
   private updateResultFocus(): void {
@@ -360,6 +369,7 @@ class Game {
 
     // 1. ゲームステートを即時PLAYINGに設定
     this.state = GameState.PLAYING;
+    mountPlayGuide();
     this.isFallingDeath = false;
     this.deathFallTimer = 0;
     this.timeScale = 1.0;
@@ -584,6 +594,7 @@ class Game {
    */
   private startGame(isDemo: boolean): void {
     this.state = isDemo ? GameState.DEMO : GameState.PLAYING;
+    if (!isDemo) mountPlayGuide();
     this.scoreData = {
       score: 0,
       combo: 0,
@@ -772,6 +783,12 @@ class Game {
 
     const input = this.inputManager.update(rawDelta);
 
+    // ポーズ中は進めない(描画だけ続ける)
+    if (this.pause.isOpen) {
+      this.renderFrame();
+      return;
+    }
+
     this.checkAttractMode(input);
 
     // カウントダウン前「追われる」導入演出の実行中
@@ -859,7 +876,7 @@ class Game {
         returnToHub();
       }
     } else if (input.cancel) {
-      returnToHub();
+      this.showTitle(); // 結果画面の Backspace は、タイトルへ
     }
   }
 
@@ -2180,6 +2197,7 @@ class Game {
         { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
 
     runHighScoreEntryFlow({

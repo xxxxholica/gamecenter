@@ -3,7 +3,7 @@
 import type http from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { LIMITS, RateWindow } from './limits.ts';
+import { LIMITS, RateWindow, ipKey } from './limits.ts';
 import { safeUrl } from './control.ts';
 import { log } from './log.ts';
 import type { GameHost } from './host.ts';
@@ -12,6 +12,8 @@ import type { Msg, Peer } from './engine.ts';
 interface Client extends Peer {
   ws: WebSocket;
   ip: string;
+  /** 回数制限・接続数の数え方に使う丸めた IP(IPv6 は /64) */
+  key: string;
   host: GameHost;
   lastMsg: number;
   /** 直近の ping に pong が返ったか(返らないまま次の ping 時刻が来たら、死んだ接続として切る) */
@@ -40,7 +42,7 @@ export interface ConnectionManager {
 
 export function createConnectionManager(opts: ConnectionOptions): ConnectionManager {
   const { hosts, wsPath, originAllowed, clientIp } = opts;
-  const maxPayload = Math.max(LIMITS.maxPayloadBytes, ...[...hosts.values()].map(h=>h.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes));
+  const maxPayload = Math.max(LIMITS.maxPayloadBytes, ...[...hosts.values()].map((h) => h.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes));
   const wss = new WebSocketServer({ noServer: true, maxPayload });
   const connectRate = new RateWindow(LIMITS.connectsPerMinPerIp, 60_000);
   const connsByIp = new Map<string, number>();
@@ -63,12 +65,17 @@ export function createConnectionManager(opts: ConnectionOptions): ConnectionMana
       return reject(403);
     }
     const ip = clientIp(req);
-    if (!connectRate.hit(ip)) return reject(429);
-    if (clients.size >= LIMITS.maxConnsTotal || (connsByIp.get(ip) ?? 0) >= LIMITS.effectiveConnsPerIp) return reject(503);
-    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, ip, host));
+    const key = ipKey(ip);
+    if (!connectRate.hit(key)) return reject(429);
+    if (clients.size >= LIMITS.maxConnsTotal || (connsByIp.get(key) ?? 0) >= LIMITS.effectiveConnsPerIp) return reject(503);
+    // 繋ぐだけで join しない接続を溜めて、他の参加者の枠を塞ぐのを防ぐ(参加済みの接続は、上の IP ごとの上限で数える)
+    let idle = 0;
+    for (const c of clients) if (c.key === key && !c.host.room.members.has(c.id)) idle++;
+    if (idle >= LIMITS.maxUnjoinedPerIp) return reject(503);
+    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, ip, key, host));
   }
 
-  function onConnection(ws: WebSocket, ip: string, host: GameHost): void {
+  function onConnection(ws: WebSocket, ip: string, key: string, host: GameHost): void {
     ws.on('error', () => ws.terminate());                    // 閉鎖中の早期 return より前に登録(不正フレームで未処理の error になってプロセスが落ちるのを防ぐ)
     // 閉鎖中は状態を伝えてすぐ切る。クライアント登録・ルーム・タイマーは一切作らない。
     if (!host.open) {
@@ -80,6 +87,7 @@ export function createConnectionManager(opts: ConnectionOptions): ConnectionMana
       id: nextId++,
       ws,
       ip,
+      key,
       host,
       lastMsg: now,
       alive: true,
@@ -92,14 +100,16 @@ export function createConnectionManager(opts: ConnectionOptions): ConnectionMana
     };
     clients.add(client);
     host.clients.add(client);
-    connsByIp.set(ip, (connsByIp.get(ip) ?? 0) + 1);
+    connsByIp.set(key, (connsByIp.get(key) ?? 0) + 1);
     log(`${host.id} connect id=${client.id} ip=${ip} clients=${clients.size}`);
 
     client.send({ t: 'status', open: true });
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) return ws.close(1003);
-      if (Buffer.byteLength(data.toString()) > (host.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes)) return ws.close(1009);
+      // 文字列に起こす前に、バイト数だけで弾く(他ゲームの上限は小さいまま。ws 自体の上限は最大のゲームに合わせてある)
+      const size = Array.isArray(data) ? data.reduce((n, b) => n + b.length, 0) : data.byteLength;
+      if (size > (host.game.maxPayloadBytes ?? LIMITS.maxPayloadBytes)) return ws.close(1009);
       const t = Date.now();
       if (t - client.windowStart >= 1000) {
         client.windowStart = t;
@@ -121,9 +131,9 @@ export function createConnectionManager(opts: ConnectionOptions): ConnectionMana
       host.room.leave(client.id);
       host.clients.delete(client);
       clients.delete(client);
-      const n = (connsByIp.get(ip) ?? 1) - 1;
-      if (n <= 0) connsByIp.delete(ip);
-      else connsByIp.set(ip, n);
+      const n = (connsByIp.get(key) ?? 1) - 1;
+      if (n <= 0) connsByIp.delete(key);
+      else connsByIp.set(key, n);
     });
   }
 

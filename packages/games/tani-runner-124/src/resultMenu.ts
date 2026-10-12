@@ -69,7 +69,7 @@ export class ResultMenu {
       else if (p.any(1)) this.handleCancel();
     });
 
-    // キーボード操作: 移動はWASD/矢印、確定はEnter/Space、戻るはEscape/Backspace
+    // キーボード操作: 移動はWASD/矢印、確定はEnter/Space、戻るはBackspace
     // 移動は受付待ちの間も効かせる。確定・戻るだけ誤爆防止で待たせ、押し直しが必要。
     this.navUsed.clear();
     this.keyHandler = (e: KeyboardEvent) => {
@@ -87,7 +87,7 @@ export class ResultMenu {
       if (e.code === 'Enter' || e.code === 'Space') {
         e.preventDefault();
         this.buttons[this.focus]?.click();
-      } else if (e.code === 'Backspace' || e.code === 'Escape') {
+      } else if (e.code === 'Backspace') {
         e.preventDefault();
         this.handleCancel();
       }

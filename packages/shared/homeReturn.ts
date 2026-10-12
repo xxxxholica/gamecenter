@@ -1,15 +1,12 @@
-// 全ゲーム共通: アケコン/ゲームパッドの SELECT(Back / Share。標準マッピングの button 8)、またはキーボードの Backspace を長押しするとホーム(ハブ)へ戻る。
-// 短押しはゲームによって別用途(メニューの「戻る」・phaser-fighter の CPU 切替など)に使われているため、長押しで判定する。
-// 各ゲームのエントリで installHomeReturn() を1回呼ぶ。キーボードの Escape は従来どおり各ゲーム側で処理する。
+// 全ゲーム共通: ホーム(ハブ)へ戻る処理と、戻る操作(Backspace / アケコンの SELECT)の統一。
+// 各ゲームのエントリで installHomeReturn() を1回呼ぶ。
 
 import { mountFullscreenKey } from './fullscreenKey';
 import { initGameMobileBlock } from './mobileBlock';
 import { startStandaloneTracking } from './arcadeAnalytics';
+import { readGamepads } from './gamepadFrame';
 
 const SELECT_BUTTON = 8;
-const HOLD_MS = 1000;
-// 短押しでゲージが一瞬ちらつかないよう、この時間を超えて押し続けたときだけ表示する
-const SHOW_AFTER_MS = 150;
 // games/<slug>/ 配下からルートへは2階層上
 export const HUB_URL = '../../';
 export const CLOSE_GAME_MESSAGE = 'gamecenter:close-game';
@@ -27,48 +24,28 @@ export function returnToHub(): void {
   }
 }
 
-let backspaceHeld = false;
+// 戻る操作は全ゲームで Backspace に統一する(アケコン/ゲームパッドの SELECT = button 8 は、Backspace を押したのと同じ扱い)。
+//   タイトル: ホームへ / メニュー: 一つ前へ / プレイ中: ポーズ(arcadePause.ts)
+// Escape は使わない(キーボードの Escape は、どのゲームにも届かないようにここで止める)。
 
-function isHomeHeld(): boolean {
-  if (backspaceHeld) return true;
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const pad of pads) {
-    if (pad && pad.connected && pad.buttons[SELECT_BUTTON]?.pressed) return true;
-  }
-  return false;
-}
-
-function createOverlay(): { root: HTMLDivElement; fill: HTMLDivElement } {
-  const root = document.createElement('div');
-  root.style.cssText = [
-    'position:fixed',
-    'top:24px',
-    'left:50%',
-    'transform:translateX(-50%)',
-    'z-index:2147483647',
-    'pointer-events:none',
-    'display:none',
-    'padding:10px 18px 12px',
-    'border-radius:10px',
-    'background:rgba(7,6,12,0.88)',
-    'border:1px solid rgba(255,255,255,0.25)',
-    'box-shadow:0 8px 24px rgba(0,0,0,0.5)',
-    'color:#fff',
-    "font:700 15px/1.4 system-ui,'Hiragino Kaku Gothic ProN',sans-serif",
-    'letter-spacing:0.04em',
-    'text-align:center',
-  ].join(';');
-  root.textContent = 'ホームへ戻る';
-
-  const track = document.createElement('div');
-  track.style.cssText = 'margin-top:8px;width:180px;height:6px;border-radius:3px;background:rgba(255,255,255,0.18);overflow:hidden';
-  const fill = document.createElement('div');
-  fill.style.cssText = 'width:0;height:100%;background:#fff';
-  track.appendChild(fill);
-  root.appendChild(track);
-
-  document.body.appendChild(root);
-  return { root, fill };
+/** SELECT を押した瞬間に、Backspace のキー操作を作ってゲームへ届ける(各ゲームは Backspace だけ見ればよい) */
+function mapSelectToBackspace(): void {
+  let prev = false;
+  const tick = () => {
+    const pads = readGamepads();
+    let down = false;
+    for (const pad of pads) {
+      if (pad && pad.connected && pad.buttons[SELECT_BUTTON]?.pressed) down = true;
+    }
+    if (down && !prev) {
+      const init = { code: 'Backspace', key: 'Backspace', bubbles: true, cancelable: true } as const;
+      window.dispatchEvent(new KeyboardEvent('keydown', init));
+      window.setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', init)), 60);
+    }
+    prev = down;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 export function installHomeReturn(): void {
@@ -81,43 +58,14 @@ export function installHomeReturn(): void {
   // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
   mountFullscreenKey();
 
-  // Backspace の押下状態。キーを離す・ウィンドウが外れる(keyup を取り逃す)と解除する
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Backspace') backspaceHeld = true;
-  });
-  window.addEventListener('keyup', (e) => {
-    if (e.code === 'Backspace') backspaceHeld = false;
-  });
-  window.addEventListener('blur', () => {
-    backspaceHeld = false;
-  });
-
-  let overlay: { root: HTMLDivElement; fill: HTMLDivElement } | null = null;
-  let holdStart: number | null = null;
-  let leaving = false;
-
-  const tick = (now: number) => {
-    if (leaving) return;
-
-    if (isHomeHeld()) {
-      holdStart ??= now;
-      const elapsed = now - holdStart;
-      if (elapsed >= SHOW_AFTER_MS) {
-        overlay ??= createOverlay();
-        overlay.root.style.display = 'block';
-        overlay.fill.style.width = `${Math.min(1, elapsed / HOLD_MS) * 100}%`;
-      }
-      if (elapsed >= HOLD_MS) {
-        leaving = true;
-        returnToHub();
-        return;
-      }
-    } else {
-      holdStart = null;
-      if (overlay) overlay.root.style.display = 'none';
-    }
-
-    requestAnimationFrame(tick);
+  // Escape は無効(Backspace に統合)。各ゲームのキー処理より先に受けて、止める
+  const blockEscape = (e: KeyboardEvent) => {
+    if (e.code !== 'Escape') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
   };
-  requestAnimationFrame(tick);
+  window.addEventListener('keydown', blockEscape, true);
+  window.addEventListener('keyup', blockEscape, true);
+
+  mapSelectToBackspace();
 }

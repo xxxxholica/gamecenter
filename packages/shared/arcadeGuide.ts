@@ -6,6 +6,7 @@
 // 暗い半透明パネル+白文字のニュートラルな配色にしている。
 
 import { isMobileDevice } from './mobileBlock';
+import { readGamepads } from './gamepadFrame';
 
 export interface ArcadeGuideButton {
   // 実機で確認したGamepad APIのボタン番号。表示時はBUTTON_NAMESで名称に変換する。
@@ -60,7 +61,7 @@ function keyboardKeyName(indices: number[], customLabel?: string): string {
   // スタート・決定など複数ボタンが割り当てられている場合の代表キー推測
   if (indices.length >= 4 && (indices.includes(0) || indices.includes(9))) return 'Enter / Space';
   if (indices.includes(0) && indices.includes(2)) return 'Enter / Space';
-  if (indices.includes(1) && indices.includes(3)) return 'Backspace / Esc';
+  if (indices.includes(1) && indices.includes(3)) return 'Backspace';
   if (indices.includes(9) || indices.includes(0)) return 'Enter';
   if (indices.includes(1) && indices.includes(2)) return 'X / C';
   return indices.map(buttonName).join('/');
@@ -72,8 +73,10 @@ export interface ArcadeGuideOptions {
   // キーボード時の移動案内 (省略時はmoveLabel)
   keyMoveLabel?: string;
   buttons?: ArcadeGuideButton[];
-  // SELECT(キーボードは Backspace)長押しでホームへ戻る案内を出すか(ホーム画面自身では不要)。
+  // SELECT(キーボードは Backspace)の案内を出すか(ホーム画面自身では不要)。
   showHomeHint?: boolean;
+  // その案内の文字。画面ごとの Backspace の役割に合わせる(タイトル=「ホームへ」、プレイ中=「ポーズ」、メニュー=「戻る」)。省略時は「戻る」。
+  backLabel?: string;
   // 表示位置。省略すると左下。画面下に別のHUDを置くゲームだけ 'top-left' を指定する。
   position?: 'bottom-left' | 'top-left';
 }
@@ -93,6 +96,11 @@ function injectStyle(): void {
       display: none !important;
     }
     body:not([data-input-mode="gamepad"]) .agc-pad-only {
+      display: none !important;
+    }
+    /* アケコンのBボタンだけの行(キーボードでは、下の Backspace の行と同じキーになるので出さない) */
+    body[data-input-mode="keyboard"] .agc-row-padonly,
+    body:not([data-input-mode="gamepad"]) .agc-row-padonly {
       display: none !important;
     }
 
@@ -345,7 +353,7 @@ export function initInputModeTracker(): void {
   trackerInitialized = true;
 
   // 初期値の判定 (接続済みゲームパッドがあるか)
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pads = readGamepads();
   const hasConnectedPad = Array.from(pads).some((p) => p && p.connected);
   setMode(hasConnectedPad ? 'gamepad' : 'keyboard');
 
@@ -374,7 +382,7 @@ export function initInputModeTracker(): void {
   const checkGamepad = (now: number) => {
     if (now - lastCheck > 60) {
       lastCheck = now;
-      const currentPads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const currentPads = readGamepads();
       for (const pad of currentPads) {
         if (!pad || !pad.connected) continue;
         const btn = pad.buttons.some((b) => b && b.pressed);
@@ -469,7 +477,10 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
   }
 
   for (const b of options.buttons ?? []) {
-    root.appendChild(buttonBadge(b));
+    const row = buttonBadge(b);
+    // 下に Backspace の行(showHomeHint)がある時、同じ Backspace になるボタンの行は、キーボードでは出さない(2つ並んで見えるのを避ける)
+    if (options.showHomeHint && keyboardKeyName(b.indices, b.keyLabel).includes('Backspace')) row.classList.add('agc-row-padonly');
+    root.appendChild(row);
   }
 
   if (options.showHomeHint) {
@@ -477,9 +488,9 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
     row.className = 'agc-row agc-home';
     row.innerHTML = `
       <span class="agc-icon agc-pad-only"><span class="agc-btn">BACK</span></span>
-      <span class="agc-label agc-pad-only">長押しでホームへ</span>
+      <span class="agc-label agc-pad-only">${options.backLabel ?? '戻る'}</span>
       <span class="agc-icon agc-kbd-only">${renderKeyboardKeysHtml('Backspace', false)}</span>
-      <span class="agc-label agc-kbd-only">長押しでホームへ</span>
+      <span class="agc-label agc-kbd-only">${options.backLabel ?? '戻る'}</span>
     `;
     root.appendChild(row);
   }

@@ -9,10 +9,12 @@ import { ParticleManager } from './effects/ParticleManager';
 import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { ArcadePause } from '../../../shared/arcadePause';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
+import { CPU_ART, ONLINE_ART } from './modeArt';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { PadEdge, readPad } from '../../../shared/arcadePad';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
@@ -27,7 +29,7 @@ import { WaitScreen } from './online/WaitScreen';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { replayFx, type FxSink } from './online/fx';
 
-// SELECT長押しでハブ(ゲーム選択画面)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
 watchResultAutoReturn(['result-btn-title']);
@@ -35,9 +37,10 @@ watchResultAutoReturn(['result-btn-title']);
 // games/<slug>/ 配下からハブ(ルート)へは2階層上
 const HUB_URL = '../../';
 const ACCENT = '#e63946';
+const isPreviewMode = () => typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
 
 // 画面左下の共通ボタンガイド(場面ごとに差し替える)
-const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
 const guideModeSelect = () => mountArcadeGuide({
   moveLabel: 'モード選択',
   buttons: [
@@ -53,6 +56,7 @@ const guideBattle = () => mountArcadeGuide({
     { indices: [1, 3], label: 'つかみ', keyLabel: 'K / E' },
   ],
   showHomeHint: true,
+  backLabel: 'ポーズ',
   position: 'top-left',
 });
 const guideResult = () => mountArcadeGuide({
@@ -62,19 +66,10 @@ const guideResult = () => mountArcadeGuide({
     { indices: [1], label: '終了' },
   ],
   showHomeHint: true,
+  backLabel: 'タイトルへ',
 });
 
 // モード選択カードの絵(固定のSVG)
-const rikishi = (x: number, color: string) =>
-  `<circle cx="${x}" cy="30" r="13" fill="#efc49b"/><rect x="${x - 20}" y="44" width="40" height="34" rx="14" fill="#efc49b"/><rect x="${x - 20}" y="66" width="40" height="12" rx="3" fill="${color}"/>`;
-const versusArt = (rightLabel: string) => `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="100" cy="84" rx="92" ry="12" fill="#c9a36a"/>
-  ${rikishi(52, '#1b4965')}${rikishi(148, '#8b1e0f')}
-  <text x="100" y="58" text-anchor="middle" font-size="20" font-weight="900" fill="#fff">VS</text>
-  <text x="52" y="14" text-anchor="middle" font-size="12" font-weight="900" fill="#7fd4ff">1P</text>
-  <text x="148" y="14" text-anchor="middle" font-size="12" font-weight="900" fill="#ff9d8a">${rightLabel}</text>
-</svg>`;
-
 export type GameState = 'title' | 'menu' | 'battle';
 
 type RoundState = 'waiting' | 'standby' | 'active' | 'finished' | 'match_over';
@@ -154,6 +149,18 @@ class SumoGame {
   /** オンライン対戦の力士名(参加者の番号順。サーバーがランダムに付けた名前) */
   private onlineNames: string[] = [];
   private match: OnlineMatch | null = null;
+  /** ポーズ(Backspace / SELECT): CPU対戦は止めてやり直せる。オンライン対戦は相手がいるので止めず、退出だけできる */
+  private readonly pauseCpu = new ArcadePause({
+    accent: ACCENT,
+    isPlaying: () => this.gameState === 'battle' && !!this.cpu && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
+    onRestart: () => this.startCpuBattle(),
+  });
+  private readonly pauseOnline = new ArcadePause({
+    accent: ACCENT,
+    isPlaying: () => this.gameState === 'battle' && !!this.match && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
+    exitLabel: '退出',
+    onExit: () => { this.leaveOnline(); returnToHub(); },
+  });
   private onlineWired = false;
   private onlineYou = 0;
   private startingFlow = false;
@@ -276,7 +283,7 @@ class SumoGame {
       },
     });
     this.modeSelect = new ModeSelect(
-      { title: 'モード選択', accent: ACCENT },
+      { title: 'モード選択', accent: ACCENT, arcade: true },
       (id) => this.onModeSelected(id),
       () => {
         this.modeSelect.hide();
@@ -451,14 +458,14 @@ class SumoGame {
     const st = this.onlineStatus;
     const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
     this.modeSelect.show([
-      { id: 'pve', badge: 'OFFLINE', art: versusArt('CPU'), title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・ぶちかまし・つかみで、先に二番取った方が勝ちです。' },
+      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・ぶちかまし・つかみで、先に二番取った方が勝ちです。' },
       {
         id: 'online',
-        badge: 'ONLINE',
-        art: versusArt('4P'),
+        art: ONLINE_ART,
         title: 'オンライン対戦',
-        sub: !st ? '' : full ? '満員' : st.phase !== 'lobby' ? '対戦中' : `参加中 ${st.players}/${st.max}`,
+        sub: !st ? '現在は開催されていません' : full ? '満員' : st.phase !== 'lobby' ? '対戦中' : `参加中 ${st.players}/${st.max}`,
         desc: '最大4人の乱戦。土俵に最後まで残った人が1点、先に2点取った人の勝ち。待っている間に集まった人で始まります。',
+        disabled: !st,                                           // 開催されていなくても項目は出す(選べない)
       },
     ]);
     guideModeSelect();
@@ -500,7 +507,7 @@ class SumoGame {
     } else if (this.roundState === 'match_over' && this.uiManager.isVictoryModalOpen()) {
       this.updateResultMenu(padPress.any(0, 9), padPress.any(1));
       this.updateBattle(dt);
-    } else {
+    } else if (!this.pauseCpu.isOpen) {
       this.updateBattle(dt);
     }
 
@@ -557,7 +564,7 @@ class SumoGame {
   // オンライン対戦: モード選択 → 待機 → 対戦(サーバーのシミュレーションを表示し、自分の操作を送る) → 結果
   // ---------------------------------------------------------------
 
-  /** START: オンライン対戦が開かれていればモード選択を挟み、そうでなければ従来どおりそのままCPU対戦を始める。 */
+  /** START: モード選択を出す(オンライン対戦が開かれていなければ、その項目は選べない)。 */
   private async onStartPressed() {
     if (this.startingFlow) return;
     this.startingFlow = true;
@@ -567,8 +574,7 @@ class SumoGame {
       this.startingFlow = false;
     }
     if (this.gameState !== 'title') return;
-    if (this.onlineStatus) this.openModeSelect();
-    else this.startCpuBattle();
+    this.openModeSelect();                                    // 開催されていなくても、オンライン対戦の項目は出す(選べない)
   }
 
   /** 画面の上部に出す短い案内(接続が切れた・相手が抜けた など) */

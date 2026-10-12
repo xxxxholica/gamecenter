@@ -37,7 +37,7 @@ export function uiLayerHtml(): string {
               <tr>
                 <td><strong>張り手</strong></td>
                 <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">J</span> を<strong>ちょん押し</strong></td>
-                <td>連打できる小さな突き。タメている相手を止める。当て続けると、次の1発が強い。</td>
+                <td>連打できる小さな突き。タメている相手を止める。当てるほど吹き飛ばしが強くなり(外してもたまった分は消えない)、満タンで次の1発が強い。</td>
               </tr>
               <tr>
                 <td><strong>ぶちかまし</strong></td>

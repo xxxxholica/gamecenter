@@ -1620,3 +1620,72 @@ html, body {
 .ghost-card[data-rank="2"] .ghost-rank-num { color: #d0e0f0; text-shadow: 0 0 16px rgba(208, 224, 240, 0.45); }
 .ghost-card[data-rank="3"] .ghost-rank-num { color: #cd7f32; text-shadow: 0 0 16px rgba(205, 127, 50, 0.5); }
 .ghost-card.disabled .time-card-art { border-color: rgba(255, 255, 255, 0.05); }
+
+/* =========================================================
+   新UI: 選択画面(マシン・コース・時間帯・ゴースト)を、モード選択(共通部品 ModeSelect の arcade 版)と同じ見た目にそろえる
+   左上の見出し(小さなラベル + 大きな題字 + 斜めの下線)、少しだけ傾いた角ばったカード、角のないボタン(影つき)。寸法の単位 --u もモード選択と同じ
+   ========================================================= */
+#screen-car-select, #screen-map-select, #screen-time-select, #screen-ghost-select { --u: min(0.074vh, 0.0625vw); }
+#screen-car-select .arcade-title-bar, #screen-map-select .arcade-title-bar, #screen-time-select .arcade-title-bar, #screen-ghost-select .arcade-title-bar { align-self: flex-start; margin: 0; transform: none; }
+#screen-car-select .arcade-title-bar::before, #screen-map-select .arcade-title-bar::before, #screen-time-select .arcade-title-bar::before, #screen-ghost-select .arcade-title-bar::before { display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); font-weight: 400; letter-spacing: 0.36em; }
+#screen-car-select .arcade-title-bar::before { content: 'MACHINE'; }
+#screen-map-select .arcade-title-bar::before { content: 'COURSE'; }
+#screen-time-select .arcade-title-bar::before { content: 'TIME OF DAY'; }
+#screen-ghost-select .arcade-title-bar::before { content: 'GHOST'; }
+#screen-car-select .arcade-title-main, #screen-map-select .arcade-title-main, #screen-time-select .arcade-title-main, #screen-ghost-select .arcade-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em; padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
+#screen-car-select .arcade-title-main::after, #screen-map-select .arcade-title-main::after, #screen-time-select .arcade-title-main::after, #screen-ghost-select .arcade-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: #00f0ff; transform: skewX(-20deg); }
+#screen-car-select .arcade-action-bar, #screen-map-select .arcade-action-bar, #screen-time-select .arcade-action-bar, #screen-ghost-select .arcade-action-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); max-width: none; gap: calc(18 * var(--u)); margin-bottom: 0; }
+#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start, #screen-time-select .arcade-action-bar .arcade-btn-back, #screen-time-select .arcade-action-bar .arcade-btn-go, #screen-time-select .arcade-action-bar .arcade-btn-start, #screen-ghost-select .arcade-action-bar .arcade-btn-back, #screen-ghost-select .arcade-action-bar .arcade-btn-go, #screen-ghost-select .arcade-action-bar .arcade-btn-start { box-sizing: border-box; width: auto; height: auto; min-width: calc(340 * var(--u)); padding: calc(20 * var(--u)) calc(52 * var(--u)); font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; animation: none; }
+#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-time-select .arcade-action-bar .arcade-btn-back, #screen-ghost-select .arcade-action-bar .arcade-btn-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
+#screen-car-select .arcade-action-bar .arcade-btn-back:hover, #screen-map-select .arcade-action-bar .arcade-btn-back:hover, #screen-time-select .arcade-action-bar .arcade-btn-back:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-back:hover { color: #fff; background: #34324a; border-color: #8a85a3; transform: none; }
+#screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start, #screen-time-select .arcade-action-bar .arcade-btn-go, #screen-time-select .arcade-action-bar .arcade-btn-start, #screen-ghost-select .arcade-action-bar .arcade-btn-go, #screen-ghost-select .arcade-action-bar .arcade-btn-start { color: #111; background: #00f0ff; border: 0; box-shadow: 6px 6px #006b73; }
+#screen-car-select .arcade-action-bar .arcade-btn-go:hover, #screen-car-select .arcade-action-bar .arcade-btn-start:hover, #screen-map-select .arcade-action-bar .arcade-btn-go:hover, #screen-map-select .arcade-action-bar .arcade-btn-start:hover, #screen-time-select .arcade-action-bar .arcade-btn-go:hover, #screen-time-select .arcade-action-bar .arcade-btn-start:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-go:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-start:hover { background: #33f5ff; transform: scale(1.04); }
+.map-card-arcade, .car-card-arcade { border: 3px solid #334466; border-radius: 0; background: linear-gradient(150deg, #222335, #10101a); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); transform: skewX(-3deg); transition: transform 0.15s, border-color 0.15s; }
+.map-card-arcade:hover, .car-card-arcade:hover { background: linear-gradient(150deg, #222335, #10101a); border-color: #ffcc00; transform: skewX(-3deg) translateY(-6px); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 204, 0, 0.5); }
+.map-card-arcade.active, .car-card-arcade.active { background: linear-gradient(150deg, #123036, #0a1418); border-color: #00f0ff; transform: skewX(-3deg) translateY(-6px); box-shadow: 0 0 28px rgba(0, 240, 255, 0.55); }
+.car-select-bottom .car-card-arcade:hover, .car-select-bottom .car-card-arcade.active { transform: skewX(-3deg) translateY(-6px); }
+.map-card-arcade.disabled:hover { transform: skewX(-3deg); border-color: #334466; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+.map-num-badge, .car-num-badge { color: #67687f; text-shadow: none; }
+.map-card-arcade.active .map-num-badge, .car-card-arcade.active .car-num-badge { color: #00f0ff; }
+.map-card-sub-arcade { color: #00f0ff; letter-spacing: 0.2em; }
+.map-card-title-arcade, .car-card-title-arcade { font-style: normal; letter-spacing: -0.02em; }
+.time-card-art { border: 0; border-radius: 0; }
+
+/* 見出しごとに文字サイズをそろえる(他のゲームのモード選択・キャラ選択と同じ): カードのタイトル 40 / サブ 14 / 説明 17 */
+#screen-car-select .map-card-title-arcade,
+#screen-map-select .map-card-title-arcade,
+#screen-time-select .map-card-title-arcade,
+#screen-ghost-select .map-card-title-arcade,
+#screen-car-select .car-card-title-arcade,
+#screen-map-select .car-card-title-arcade,
+#screen-time-select .car-card-title-arcade,
+#screen-ghost-select .car-card-title-arcade { font-size: max(15px, calc(40 * var(--u))); line-height: 1.1; }
+#screen-car-select .map-card-sub-arcade,
+#screen-map-select .map-card-sub-arcade,
+#screen-time-select .map-card-sub-arcade,
+#screen-ghost-select .map-card-sub-arcade,
+#screen-car-select .car-card-sub-arcade,
+#screen-map-select .car-card-sub-arcade,
+#screen-time-select .car-card-sub-arcade,
+#screen-ghost-select .car-card-sub-arcade { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; margin-bottom: calc(10 * var(--u)); }
+#screen-car-select .time-card-desc,
+#screen-map-select .time-card-desc,
+#screen-time-select .time-card-desc,
+#screen-ghost-select .time-card-desc { font-size: max(10px, calc(17 * var(--u))); line-height: 1.6; color: #a6a8b9; }
+
+/* 4つの選択画面は、外側の余白と間隔も同じにする(マシン選択だけ、独自の小さな余白になっていた) */
+#screen-car-select,
+#screen-map-select,
+#screen-time-select,
+#screen-ghost-select { padding: calc(40 * var(--u)) calc(48 * var(--u)); gap: calc(30 * var(--u)); box-sizing: border-box; }
+/* マシン選択のカード列も、他の選択画面と同じ幅・同じ下の位置(中央、下のボタンの帯の真上)にそろえる */
+#screen-car-select .car-select-bottom { width: min(calc(1500 * var(--u)), 100%); max-width: none; align-self: center; margin: auto 0 0; }
+#screen-car-select .car-select-bottom .car-card-list-arcade { max-width: none; padding: 0; gap: calc(22 * var(--u)); }
+#screen-car-select .car-select-bottom .car-card-arcade { max-width: none; }
+
+/* ポーズ画面: 他のゲームの共通ポーズ(shared/arcadePause.ts)と同じ見た目(枠なし・大きな見出し・下線)にそろえる */
+#hud-pause-modal { flex-direction: column; background: rgba(5, 7, 18, 0.78); backdrop-filter: none; }
+#hud-pause-modal .hud-arcade-modal-box { display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 26px);
+  min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; transform: none; overflow: visible; }
+#hud-pause-modal .arcade-modal-title { margin: 0; font: 900 clamp(28px, 7vh, 60px)/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.08em; color: #fff; text-shadow: none; }
+#hud-pause-modal .arcade-modal-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: #00f0ff; transform: skewX(-20deg); }

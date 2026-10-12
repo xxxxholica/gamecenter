@@ -19,9 +19,34 @@ export interface GameEntry {
   // 筐体の縁・ホバー時に光るネオンカラー(そのゲーム自身のキーカラーに合わせる)
   accent: string;
   developer: Developer;
+  // ハブでどのグループに入れるか(遊び方のスタイル。1つのゲームは1つのグループにだけ入る)
+  group: GroupId;
+  // オンライン対戦に対応しているか(開催中かどうかは、サーバーに問い合わせて別に調べる)
+  online?: boolean;
   // true にするとハブ(ピックアップ・一覧)に表示しない。ゲーム本体のビルド・配信はそのまま。
   hidden?: boolean;
 }
+
+/** ハブのグループ(遊び方のスタイル) */
+export type GroupId = 'easy' | 'party' | 'score' | 'hard';
+
+export interface GroupDef {
+  id: GroupId;
+  title: string;
+  /** 見出しの横に出す、ひとこと */
+  note: string;
+}
+
+/**
+ * グループの固定の並び順(初めての人が、上からやさしい順に遊べる流れ)。
+ * 画面には、ロードのたびにランダムで選んだ1グループを一番上に上げて、残りをこの順番で並べる(main.ts)。
+ */
+export const GROUPS: readonly GroupDef[] = [
+  { id: 'easy', title: 'かんたん操作', note: 'ボタンひとつで、すぐ遊べる' },
+  { id: 'party', title: 'みんなでワイワイ', note: 'オンラインで、友だちと' },
+  { id: 'score', title: 'ハイスコアで勝負', note: 'ランキングの1位を狙え' },
+  { id: 'hard', title: '高難易度に挑戦', note: '腕に自信のある人向け' },
+];
 
 // GitHubのアイコンは `github.com/<user>.png` で本人のアバターにリダイレクトされる。
 const XXXXHOLICA: Developer = {
@@ -51,18 +76,10 @@ const allGames: GameEntry[] = [
     englishTitle: 'CYBER 2D FIGHTER 3D',
     description: '3Dキャラクターで戦う横視点の対戦格闘。4人のファイターから選び、6ボタンの攻撃と必殺技で勝負！CPU戦・練習・開催中のオンライン対戦に対応。',
     thumbnail: 'thumbnails/cyber-2d-fighter-3d.webp',
+    logo: 'logos/cyber-2d-fighter-3d.webp',
     accent: '#b544ff',
-    developer: KURENAI_BEAT,
-  },
-  {
-    slug: 'phaser-fighter',
-    title: 'ストリートストライカー',
-    englishTitle: 'STREET STRIKER',
-    description:
-      'パンチやキックで戦う2D対戦格闘ゲーム。個性いっぱいの6人から好きなファイターを選んで、CPUや友だちと1対1で勝負しよう。必殺技が決まると気持ちいい！',
-    thumbnail: 'thumbnails/phaser-fighter.webp',
-    logo: 'logos/phaser-fighter.webp',
-    accent: '#00f0ff',
+    group: 'party',
+    online: true,
     developer: KURENAI_BEAT,
   },
   {
@@ -74,6 +91,8 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/sumo-smash-3d.webp',
     logo: 'logos/sumo-smash-3d.webp',
     accent: '#e63946',
+    group: 'party',
+    online: true,
     developer: THOUSANDL000,
   },
   {
@@ -85,6 +104,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/school-corridor-runner.webp',
     logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
+    group: 'hard',
     developer: XXXXHOLICA,
   },
   {
@@ -96,6 +116,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/street-b-boy.webp',
     logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
+    group: 'hard',
     developer: XXXXHOLICA,
   },
   {
@@ -107,6 +128,8 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/midnight-skyway.webp',
     logo: 'logos/midnight-skyway.webp',
     accent: '#00e5ff',
+    group: 'party',
+    online: true,
     developer: XXXXHOLICA,
   },
   {
@@ -118,6 +141,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/tani-runner-124.webp',
     logo: 'logos/tani-runner-124.webp',
     accent: '#ffe600',
+    group: 'easy',
     developer: XXXXHOLICA,
   },
   {
@@ -129,6 +153,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/ennichi-shateki.webp',
     logo: 'logos/ennichi-shateki.webp',
     accent: '#ff8c00',
+    group: 'score',
     developer: XXXXHOLICA,
   },
   {
@@ -140,6 +165,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/extreme-edge-arcade.webp',
     logo: 'logos/extreme-edge-arcade.webp',
     accent: '#ff2b4d',
+    group: 'easy',
     developer: XXXXHOLICA,
   },
   {
@@ -151,6 +177,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/survivor-score-battle.webp',
     logo: 'logos/survivor-score-battle.webp',
     accent: '#00e5ff',
+    group: 'score',
     developer: KURENAI_BEAT,
   },
   {
@@ -162,6 +189,8 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/tower-stack.webp',
     logo: 'logos/tower-stack.webp',
     accent: '#ffd166',
+    group: 'party',
+    online: true,
     developer: THOUSANDL000,
   },
 ];

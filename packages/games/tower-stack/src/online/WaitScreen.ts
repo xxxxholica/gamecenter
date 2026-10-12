@@ -1,10 +1,13 @@
 import type { ClientMsg, ServerMsg } from '../../../../shared/towerProtocol';
-import { ATTACK_EVERY, MAX_PLAYERS } from '../../../../shared/towerProtocol';
+import { MAX_PLAYERS } from '../../../../shared/towerProtocol';
 import { LobbyConnection } from '../../../../shared/online/LobbyConnection';
 import { ButtonCardNav, el } from '../../../../shared/online/buttonCardNav';
 import { PLAYER_COLORS, type TowerNet } from './net';
 
 type RoomMsg = Extract<ServerMsg, { t: 'room' }>;
+
+/** 待機画面に出す枠の数(他のゲームの待機画面とそろえた4人分。このゲームの定員を超える枠はダミー) */
+const SLOTS = 4;
 
 export interface WaitDeps {
   /** 退出して戻る(モード選択へ)。 */
@@ -27,6 +30,8 @@ const css = `
 .lobby-card .lb-player { display: flex; align-items: center; gap: 8px; padding: .4em .6em; border-radius: 8px; background: #0c1626; border: 1px solid #22304a; font-size: .85rem; }
 .lobby-card .lb-player.me { border-color: #ffd166; }
 .lobby-card .lb-player.empty { color: #7f90ad; }
+.lobby-card .lb-player.dummy { opacity: .35; }
+.lobby-card .lb-player.dummy .lb-dot { visibility: hidden; }
 .lobby-card .lb-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; flex: none; background: #555; }
 .lobby-card .lb-dot.none { border-style: dashed; background: transparent; }
 .lobby-card .lb-name { flex: 1; font-weight: 700; white-space: nowrap; }
@@ -68,8 +73,10 @@ export class WaitScreen {
     });
   }
 
-  /** サーバーからの room 通知(非表示中も受け取る)。null=ルームを出た。 */
+  /** サーバーからの room 通知(待機画面を開いている間だけ取り込む)。null=ルームを出た。 */
   public setRoom(m: RoomMsg | null): void {
+    // 対戦中や終了後に届く room は取り込まない(残すと、次に待機画面を開いた時に「参加済み」と見なして join を送らず、接続中のまま止まる)
+    if (!this.visible) return;
     this.conn.setRoom(m);
   }
 
@@ -119,26 +126,29 @@ export class WaitScreen {
       return;
     }
 
-    const card = el('div', { cls: 'lobby-card wait' }, el('h2', { textContent: '1on1 対戦' }));
+    const card = el('div', { cls: 'lobby-card wait' }, el('h2', { textContent: 'オンライン対戦' }));
     this.countEl = el('div', { cls: 'lb-count', textContent: c.label() });
     card.append(this.countEl);
     const room = c.room;
-    if (c.view === 'room' && room) {
-      const list = el('div', { cls: 'lb-players' });
-      room.players.forEach((pl, i) => {
+    const list = el('div', { cls: 'lb-players' });
+    const joined = c.view === 'room' && room ? room.players : [];
+    for (let i = 0; i < SLOTS; i++) {
+      if (i < joined.length) {
+        const pl = joined[i];
         const dot = el('span', { cls: 'lb-dot' });
         dot.style.background = PLAYER_COLORS[i % PLAYER_COLORS.length];
-        list.append(el('div', { cls: pl.id === room.you ? 'lb-player me' : 'lb-player' },
+        list.append(el('div', { cls: pl.id === room!.you ? 'lb-player me' : 'lb-player' },
           dot,
-          el('span', { cls: 'lb-name', textContent: pl.id === room.you ? `${pl.name}（あなた）` : pl.name }),
+          el('span', { cls: 'lb-name', textContent: pl.id === room!.you ? `${pl.name}（あなた）` : pl.name }),
           el('span', { cls: 'lb-meta', textContent: `${i + 1}P` })));
-      });
-      for (let i = room.players.length; i < MAX_PLAYERS; i++) {
+      } else if (i < MAX_PLAYERS) {
         list.append(el('div', { cls: 'lb-player empty' }, el('span', { cls: 'lb-dot none' }), el('span', { cls: 'lb-name', textContent: '対戦相手を待っています…' }), el('span', { cls: 'lb-meta', textContent: '\u00a0' })));
+      } else {
+        // 4人枠のうち、このゲームでは使わない枠(見た目をそろえるためのダミー)
+        list.append(el('div', { cls: 'lb-player empty dummy' }, el('span', { cls: 'lb-dot none' }), el('span', { cls: 'lb-name', textContent: '\u00a0' }), el('span', { cls: 'lb-meta', textContent: '\u00a0' })));
       }
-      card.append(el('div', { cls: 'lb-sub', textContent: `参加者 ${room.players.length} / ${MAX_PLAYERS}` }), list);
-      card.append(el('p', { textContent: `1対1で同時に積み、先にブロックを3個落とした方の負け。ブロックを${ATTACK_EVERY}個置くごとに、相手へおじゃまが飛びます。` }));
     }
+    card.append(el('div', { cls: 'lb-sub', textContent: `参加者 ${joined.length} / ${MAX_PLAYERS}` }), list);
     const leave = el('button', { textContent: '退出' });
     leave.onclick = () => this.deps.onBack();
     card.append(el('div', { cls: 'lb-row' }, leave));

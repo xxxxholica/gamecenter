@@ -130,7 +130,6 @@ export class CarSelectScreen {
           <div class="car-card-list-arcade">
             ${CAR_CARDS.map((c) => `
             <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}" data-car="${c.id}" tabindex="0">
-              <div class="car-num-badge">${c.num}</div>
               ${carOutlineSvg(c.id)}
               <div class="car-card-title-arcade">${c.name}</div>
               <div class="car-card-sub-arcade">${c.sub}</div>
@@ -343,7 +342,7 @@ export class CarSelectScreen {
         } else if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
           this.events.onNext();
-        } else if (e.code === 'Escape' || e.code === 'Backspace') {
+        } else if (e.code === 'Backspace') {
           e.preventDefault();
           this.events.onBack();
         } else if (e.code === 'Digit1') {

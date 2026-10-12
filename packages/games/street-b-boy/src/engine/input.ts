@@ -1,5 +1,6 @@
 import { MenuNav } from '../../../../shared/arcadeMenuNav';
 import { KeyboardTracker, SCROLL_KEYS } from '../../../../shared/keyboardTracker';
+import { readGamepads } from '../../../../shared/gamepadFrame';
 
 export interface InputState {
   left: boolean;
@@ -83,7 +84,7 @@ export class InputManager {
     let padNavX = 0;
     let padNavY = 0;
 
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     const gp = gamepads.find((g) => g !== null && g.connected);
 
     if (gp) {

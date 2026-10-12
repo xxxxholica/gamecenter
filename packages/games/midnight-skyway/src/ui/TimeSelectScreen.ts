@@ -30,14 +30,12 @@ export class TimeSelectScreen {
 
       <div class="time-cards-container">
         <div class="map-card-arcade time-card day" data-time="day">
-          <div class="map-num-badge">DAY</div>
           <div class="time-card-art">${SUN}</div>
           <div class="map-card-title-arcade">日中</div>
           <div class="map-card-sub-arcade">明るい空と雲</div>
           <div class="time-card-desc">街灯は消灯。街の細部まで見渡せます。</div>
         </div>
         <div class="map-card-arcade time-card night" data-time="night">
-          <div class="map-num-badge">NIGHT</div>
           <div class="time-card-art">${MOON}</div>
           <div class="map-card-title-arcade">夜間</div>
           <div class="map-card-sub-arcade">星空と月明かり</div>
@@ -90,7 +88,7 @@ export class TimeSelectScreen {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.events.onStartRace(); }
-        else if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
+        else if (e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
         else if (e.code === 'ArrowLeft' || e.code === 'KeyA' || e.code === 'Digit1') this.setSelected('day');
         else if (e.code === 'ArrowRight' || e.code === 'KeyD' || e.code === 'Digit2') this.setSelected('night');
       };

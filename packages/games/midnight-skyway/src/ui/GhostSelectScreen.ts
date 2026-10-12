@@ -131,7 +131,7 @@ export class GhostSelectScreen {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.events.onStart(); }
-        else if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
+        else if (e.code === 'Backspace') { e.preventDefault(); this.events.onBack(); }
         else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.move(-1);
         else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.move(1);
         else if (e.code === 'Digit1') this.setSelected(0);

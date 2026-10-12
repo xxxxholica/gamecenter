@@ -13,5 +13,7 @@ export const createNet = (): TowerNet => new NetClient<ServerMsg, ClientMsg>(GAM
 /** オンライン対戦が開かれているか(START を押した時に1回だけ呼ぶ)。 */
 export const fetchTowerStatus = (timeoutMs?: number) => fetchOnlineStatus(GAME_ID, timeoutMs);
 
-/** 参加者の番号ごとの色(待機画面・相手のタワー・結果で共通) */
-export const PLAYER_COLORS = ['#35c9e8', '#ff6b6b', '#7ddc6a', '#c792ea'];
+/** 参加者の番号ごとのプライマリカラー。白い文字を載せても読める濃さ(名前のボックス・最高到達のブロックなど) */
+export const PLAYER_COLORS = ['#0a7d9e', '#c92c3c', '#238a3c', '#7b3fc4'];
+/** 同じ4色の明るい版。暗い背景の上に、色付きの文字として出すとき用(結果画面など) */
+export const PLAYER_COLORS_LIGHT = ['#35c9e8', '#ff6b6b', '#7ddc6a', '#c792ea'];

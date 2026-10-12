@@ -1,3 +1,4 @@
+import { readGamepads } from '../../../../shared/gamepadFrame';
 // Web Audio の土台: AudioContext、BGM/SEのバス、ミュート(Mキー)、自動再生制限の解除、タブ非表示時の停止。
 // 音はすべて合成で、外部の音声ファイルは使わない。
 
@@ -126,7 +127,7 @@ export class AudioEngine {
 
     const pollPad = () => {
       if (this.running) return;
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const pads = readGamepads();
       for (const pad of pads) {
         if (pad?.connected && pad.buttons.some((b) => b.pressed)) {
           void this.ctx.resume();

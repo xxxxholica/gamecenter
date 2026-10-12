@@ -1,7 +1,8 @@
+import { readGamepads } from '../../shared/gamepadFrame';
 // ハブ用のアケコン(Gamepad API 標準マッピング) + キーボード入力。
 // アーケード筐体のキーボードエンコーダ(レバー→矢印キー、ボタン→Enter等)でもそのまま操作できるよう両対応にしている。
 
-// 決定に使うボタン: 攻撃ボタン(0〜7)と START(9)。SELECT(8) はゲーム中の「長押しでホームへ戻る」専用なので含めない。
+// 決定に使うボタン: 攻撃ボタン(0〜7)と START(9)。SELECT(8) は各ゲームの「戻る」(Backspace 相当)専用なので含めない。
 const CONFIRM_BUTTONS = [0, 1, 2, 3, 4, 5, 6, 7, 9];
 const AXIS_THRESHOLD = 0.5;
 
@@ -39,7 +40,7 @@ function isConfirmHeld(pad: Gamepad): boolean {
   return CONFIRM_BUTTONS.some((i) => pad.buttons[i]?.pressed);
 }
 
-export function createArcadeInput(handlers: ArcadeInputHandlers): void {
+export function createArcadeInput(handlers: ArcadeInputHandlers, isSuspended: () => boolean = () => false): void {
   // 前のページ(ゲーム)から押しっぱなしのボタン・レバーを新しい操作と誤認しないよう、
   // パッドを初めて認識したフレームの状態は「押されたまま」として扱い、一度離すまで無視する。
   const seenPads = new Set<number>();
@@ -57,8 +58,25 @@ export function createArcadeInput(handlers: ArcadeInputHandlers): void {
     prevDir = { dx: 0, dy: 0 };
   });
 
+  // ゲームを開いている間(ハブは iframe の下に隠れている)は、毎フレームのポーリングをやめて、ゆっくり見張るだけにする。
+  // ゲームと同じスレッドで動くので、見えない画面のために毎フレーム使うのは無駄。戻ってきた時は、残っていた押下を新しい操作と誤認しない。
+  const SUSPENDED_CHECK_MS = 250;
+  let wasSuspended = false;
+
   const poll = () => {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    if (isSuspended()) {
+      wasSuspended = true;
+      window.setTimeout(() => requestAnimationFrame(poll), SUSPENDED_CHECK_MS);
+      return;
+    }
+    if (wasSuspended) {
+      wasSuspended = false;
+      seenPads.clear();
+      confirmArmed = false;
+      confirmHeld = false;
+      prevDir = { dx: 0, dy: 0 };
+    }
+    const pads = readGamepads();
     let dir: Direction = { dx: 0, dy: 0 };
     let held = false;
     let newlySeen = false;

@@ -84,7 +84,8 @@ export class ResultScreen {
     this.buttons.forEach((btn, i) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (performance.now() < this.armTime) return;
+        // 順位の確認中・名前登録中は受け付けない。ここで pending に積むと、登録が終わった瞬間に実行されてしまう
+        if (this.nameEntryOpen || performance.now() < this.armTime) return;
         this.pending = ACTIONS[i];
       });
       btn.addEventListener('mouseenter', () => {

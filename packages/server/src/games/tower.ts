@@ -19,6 +19,12 @@ export const TOWER_NAMES = ['大工のゲン', 'つみき名人', 'クレーン�
 const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/** 整数の短い一覧の検証。範囲外や多すぎるものは捨てる(不正なら空) */
+function cleanIntList(v: unknown, maxLen: number, lo: number, hi: number): number[] {
+  if (!Array.isArray(v) || v.length > maxLen) return [];
+  return v.every((x) => Number.isInteger(x) && x >= lo && x <= hi) ? (v as number[]) : [];
+}
+
 /** タワーの様子の検証。不正なら null(数値は小数2桁に丸める)。 */
 export function cleanState(msg: Record<string, unknown>): TowerState | null {
   const { h, b, d, lv, k } = msg;
@@ -32,13 +38,18 @@ export function cleanState(msg: Record<string, unknown>): TowerState | null {
     if (!isNum(x, -50, 50) || !isNum(y, -50, MAX_HEIGHT + 10) || !isNum(a, -100, 100)) return null;
     blocks.push([p, round2(x), round2(y), round2(a)]);
   }
-  return { h: round2(h), b: round2(b), d: Math.round(d), lv: Math.round(lv), k: blocks };
+  // 持ち物・次のピース・構え中の状態(古いクライアントからは来ないので、無ければ空として扱う)
+  const it = cleanIntList(msg.it, 3, 0, 3);
+  const n = cleanIntList(msg.n, 2, 0, PIECE_COUNT - 1);
+  const f = isNum(msg.f, 0, 3) ? Math.round(msg.f) : 0;
+  return { h: round2(h), b: round2(b), d: Math.round(d), lv: Math.round(lv), k: blocks, it, n, f };
 }
 
 interface TowerData {
   state: TowerState;
   out: boolean;
   lastAttackAt: number;
+  lastStateAt: number;
 }
 
 interface Slot {
@@ -51,14 +62,14 @@ interface Slot {
   outOrder: number;
 }
 
-const emptyState = (): TowerState => ({ h: 0, b: 0, d: 0, lv: 1, k: [] });
+const emptyState = (): TowerState => ({ h: 0, b: 0, d: 0, lv: 1, k: [], it: [], n: [], f: 0 });
 
 export class TowerGame implements GameModule<TowerData> {
   readonly id = 'tower-stack';
   readonly playerNames = TOWER_NAMES;
   readonly maxPlayers = MAX_PLAYERS;
-  /** 1on1 なので、2人そろったら5秒で始める */
-  readonly startWhenFullMs = 5000;
+  /** 1on1 なので、2人そろったら10秒待って始める(マッチ後の待機) */
+  readonly startWhenFullMs = 10000;
   readonly maxPlayMs = MAX_MATCH_MS;
   /** 管理画面の設定項目: なし */
   readonly config: ConfigField[] = [];
@@ -87,7 +98,7 @@ export class TowerGame implements GameModule<TowerData> {
   }
 
   onJoin(m: Member<TowerData>): void {
-    m.data = { state: emptyState(), out: false, lastAttackAt: 0 };
+    m.data = { state: emptyState(), out: false, lastAttackAt: 0, lastStateAt: 0 };
   }
 
   /** 抜けた人は脱落扱い(それまでの最高到達は残る)。 */
@@ -124,7 +135,7 @@ export class TowerGame implements GameModule<TowerData> {
     const members = [...this.room.members];
     this.slots = members.map(([id, m]) => ({ id, name: m.name, best: 0, out: false, gone: false, outOrder: 0 }));
     this.outCount = 0;
-    for (const [, m] of members) m.data = { state: emptyState(), out: false, lastAttackAt: 0 };
+    for (const [, m] of members) m.data = { state: emptyState(), out: false, lastAttackAt: 0, lastStateAt: 0 };
     this.finished = false;
     log(`tower start players=${members.length}`);
     return { t: 'start', players: members.map(([id, m]) => ({ id, name: m.name })) };
@@ -145,6 +156,9 @@ export class TowerGame implements GameModule<TowerData> {
     const now = Date.now();
     if (msg.t === 'state') {
       if (m.data.out) return;
+      // 様子は約10Hzで届く。それより速く送って最高到達を一気に伸ばしたり、全員への配信を増やしたりできないよう、半分の間隔より短いものは捨てる
+      if (now - m.data.lastStateAt < STATE_INTERVAL_MS / 2) return;
+      m.data.lastStateAt = now;
       const st = cleanState(msg);
       if (!st) return;
       // 最高到達は下がらず、一度に伸びすぎない

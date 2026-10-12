@@ -26,7 +26,7 @@ const MAP_SIZE = 270;
  * - Streamlined to 2 essential non-intrusive zones:
  *   1. Top Left: Enlarged Transparent Minimap (Course, Blockades, Traffic)
  *   2. Bottom Right: High-tech Supercar Instrument Cluster (Lap Time, Best Time, Speed, Gear, Tachometer)
- * - Zero on-screen buttons during driving (Pause is ESC, Cam is C, Retry is R)
+ * - Zero on-screen buttons during driving (Pause is Backspace, Cam is C, Retry is R)
  * - Transparent minimap with crisp vector drop shadows
  * - Fully localized to authentic Japanese Arcade presentation
  */
@@ -212,13 +212,13 @@ export class DriveHUD {
       <!-- In-game Pause Modal -->
       <div id="hud-pause-modal" class="hud-result-modal" style="display: none;">
         <div class="hud-arcade-modal-box">
-          <div class="arcade-modal-title">一時停止</div>
+          <div class="arcade-modal-title">ポーズ</div>
           <div class="arcade-modal-buttons">
             <button id="pause-btn-resume">再開</button>
-            <button id="pause-btn-retry">リトライ</button>
+            <button id="pause-btn-retry">やり直す</button>
             <button id="pause-btn-map">コース変更</button>
             <button id="pause-btn-car">マシン変更</button>
-            <button id="pause-btn-title">タイトルへ戻る</button>
+            <button id="pause-btn-title">ゲームを終了</button>
           </div>
         </div>
       </div>
@@ -309,18 +309,23 @@ export class DriveHUD {
     });
     document.getElementById('pause-btn-title')?.addEventListener('click', () => {
       this.hidePauseModal();
-      this.events.onReturnToTitle();
+      returnToHub(); // 他のゲームのポーズと同じく、「ゲームを終了」はホームへ戻る
     });
 
     // Result modal buttons
+    // 順位の確認中・名前登録中、結果表示の直後は受け付けない(キー・パッドと同じ。登録が出る前に次のレースが始まってしまう)
+    const resultClickBlocked = (): boolean => this.isNameEntryOpen || performance.now() < this.modalArmTime;
     document.getElementById('res-btn-exit')?.addEventListener('click', () => {
+      if (resultClickBlocked()) return;
       returnToHub();
     });
     document.getElementById('res-btn-retry')?.addEventListener('click', () => {
+      if (resultClickBlocked()) return;
       this.hideResultModal();
       this.events.onRetry();
     });
     document.getElementById('res-btn-title')?.addEventListener('click', () => {
+      if (resultClickBlocked()) return;
       this.hideResultModal();
       this.events.onReturnToTitle();
     });
@@ -583,6 +588,11 @@ export class DriveHUD {
     this.syncPadMenu(0); // 再挑戦がデフォルト
   }
 
+  /** 名前登録が閉じた直後は、決定ボタンの押下がメニューの決定として入らないよう、しばらく受け付けない */
+  public armResultModal(ms = 800): void {
+    this.modalArmTime = performance.now() + ms;
+  }
+
   public hideResultModal(): void {
     this.resultModalEl.style.display = 'none';
     this.container.classList.remove('result-open');
@@ -679,7 +689,7 @@ export class DriveHUD {
     }
   }
 
-  // Keyboard: move focus (WASD / Arrows) / confirm (Enter / Space) / cancel (Escape / Backspace)
+  // Keyboard: move focus (WASD / Arrows) / confirm (Enter / Space) / cancel (Backspace)
   private handleMenuKey(e: KeyboardEvent): void {
     if (!this.isMenuOpen() || this.isNameEntryOpen) return;
     const modal = this.openModal();
@@ -697,13 +707,13 @@ export class DriveHUD {
       e.preventDefault();
       const buttons = this.menuButtons(modal);
       buttons[this.padFocus]?.click();
-    } else if (e.code === 'Escape' || e.code === 'Backspace') {
+    } else if (e.code === 'Backspace') {
       if (modal === this.pauseModalEl) {
         e.preventDefault();
         this.hidePauseModal();
-      } else if (modal === this.resultModalEl && e.code === 'Escape') {  // Backspace は長押しでホームへ(共通)
+      } else if (modal === this.resultModalEl) {  // 結果画面の Backspace は、タイトルへ戻る
         e.preventDefault();
-        returnToHub();
+        document.getElementById('res-btn-title')?.click();
       }
     }
   }

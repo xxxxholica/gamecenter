@@ -11,6 +11,7 @@ import { ArcadeHUD } from './hud';
 import { sounds } from './audio';
 import { ResultsPrizePileManager } from './results_pile';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
@@ -20,18 +21,21 @@ import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['res-btn-title']);
 
-mountArcadeGuide({
+const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: 'ねらう',
   buttons: [
     { indices: [0], label: '通常弾' },
     { indices: [1, 2, 7], label: 'バクダン弾' },
   ],
   showHomeHint: true,
+  backLabel: 'ポーズ',
 });
+const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+mountTitleGuide();
 
 type GameState = 'title' | 'playing' | 'results';
 
@@ -57,6 +61,16 @@ class ArcadeCorkShooter {
 
   // Game state
   private state: GameState = 'title';
+  /** ポーズ(Backspace / SELECT): 的当ての最中に止めて、やり直せる */
+  private readonly pause = new ArcadePause({
+    accent: '#ff4d4f',
+    isPlaying: () => this.state === 'playing' && !this.offlineCountdown,
+    onRestart: () => {
+      this.state = 'results'; // startGame は、プレイ中だと何もしないので、先に外す
+      this.prizePileManager.cleanup(this.scene);
+      this.startGame();
+    },
+  });
   /** 開始前の 3・2・1・GO! の間は true(時間が進まず、撃てない) */
   private offlineCountdown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
@@ -143,6 +157,7 @@ class ArcadeCorkShooter {
     // 4. Lights
     const ambientLight = new THREE.AmbientLight(0xffe2b8, 1.0);
     this.scene.add(ambientLight);
+    this.prizePileManager.prepareLights(this.scene); // 結果画面の照明は、光の数が変わらないよう、ここで先に置いておく
 
     const mainDirLight = new THREE.DirectionalLight(0xffeedd, 1.8);
     mainDirLight.position.set(2.0, 4.0, 2.5);
@@ -294,6 +309,7 @@ class ArcadeCorkShooter {
 
     this.hud.setMode('title');
     this.hud.updateCrosshair(0, 0, false);
+    mountTitleGuide();
 
     if (!this.arcadeTitleScreen) {
       this.arcadeTitleScreen = new ArcadeTitleScreen({
@@ -325,6 +341,7 @@ class ArcadeCorkShooter {
     sounds.startBgm();
 
     this.state = 'playing';
+    mountPlayGuide();
     this.prizePileManager.cleanup(this.scene);
     this.prizePileManager.reset();
     this.stateTimer = 0;
@@ -399,6 +416,7 @@ class ArcadeCorkShooter {
         { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
 
     const finalScore = this.score;
@@ -494,6 +512,11 @@ class ArcadeCorkShooter {
     const elapsed = timestamp / 1000;
 
     const inputState = this.input.update(dt);
+    // ポーズ中は進めない(描画だけ続ける)
+    if (this.pause.isOpen) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     this.stall.update(dt, elapsed);
     this.dynamicTargets.update(dt, elapsed);
 

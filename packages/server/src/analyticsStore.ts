@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { RateWindow } from './limits.ts';
 
 export interface ClientDevice {
   os?: string;
@@ -199,6 +200,63 @@ const MAX_ROUNDS_PER_PLAY = 100;
 const MAX_SEEN_EVENT_IDS = 20000;
 const SAVE_DEBOUNCE_MS = 600;
 
+/** 公開エンドポイントから届く値の上限。メモリ(MemoryMax=256M)と保存ファイルが、細工した巨大な本文で膨らまないようにする。 */
+const MAX_STR_LEN = 1000;
+const MAX_KEYS = 60;
+const MAX_ARRAY = 100;
+const MAX_DEPTH = 5;
+const MAX_NODES = 300;
+/** 1イベントの data を JSON にしたときの上限(バイト)。実際に送られる内容(FPS・入力・進行)は数KBに収まる。超えたら data は捨てる */
+const MAX_EVENT_DATA_BYTES = 6_000;
+/** イベントログ全体の上限(バイト)。件数(MAX_EVENTS)だけだと、1件を大きくして溜められてしまう。超えたら古い順に捨てる */
+const MAX_EVENT_BYTES = 12 * 1024 * 1024;
+/** 1プレイの記録(JSON)の上限(バイト)。更新のたびにキーが増えて膨らむのを抑える */
+const MAX_PLAY_BYTES = 16_000;
+/** 1つの IP が1分に作れる新しいセッションの数(会場の共有NATでも、来場者が1分にこれだけ増えることはない) */
+const NEW_SESSIONS_PER_MIN = 60;
+/** スコア・プレイ時間として受け付ける上限(ランキング側の汎用上限と同じ) */
+const MAX_SCORE = 1_000_000_000;
+const MAX_DURATION_SEC = 24 * 60 * 60;
+/** 端末情報として受け付けるキー(これ以外は捨てる。セッションに無限にキーが増えないように) */
+const DEVICE_STRING_KEYS = ['os', 'browser', 'gpuRenderer', 'gpuVendor', 'networkType', 'gamepadName', 'timezone', 'language'] as const;
+const DEVICE_NUMBER_KEYS = ['screenWidth', 'screenHeight', 'devicePixelRatio', 'cpuCores', 'deviceMemoryGb', 'downlinkMbps', 'rttMs', 'audioSampleRate', 'audioMaxChannels', 'colorDepth', 'touchPoints'] as const;
+const DEVICE_BOOL_KEYS = ['isMobile', 'hasGamepad', 'gamepadHasHaptics'] as const;
+
+/** 届いた端末情報から、決まったキー・型の値だけを取り出す。 */
+export function sanitizeDevice(raw: unknown): ClientDevice | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of DEVICE_STRING_KEYS) if (typeof r[k] === 'string') out[k] = (r[k] as string).slice(0, 120);
+  for (const k of DEVICE_NUMBER_KEYS) if (typeof r[k] === 'number' && Number.isFinite(r[k])) out[k] = r[k];
+  for (const k of DEVICE_BOOL_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k];
+  return out as ClientDevice;
+}
+
+/** ゲームidとして受け付ける形(ハブの slug と同じ)。 */
+const GAME_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+
+/** 届いた JSON 値を、深さ・個数・文字数を抑えて複製する(`__proto__` などの危険なキーも落とす)。 */
+export function sanitizeJson(v: unknown, budget = { n: MAX_NODES }, depth = 0): unknown {
+  if (budget.n-- <= 0) return undefined;
+  if (typeof v === 'string') return v.length > MAX_STR_LEN ? v.slice(0, MAX_STR_LEN) : v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'boolean' || v === null) return v;
+  if (depth >= MAX_DEPTH) return undefined;
+  if (Array.isArray(v)) return v.slice(0, MAX_ARRAY).map((x) => sanitizeJson(x, budget, depth + 1));
+  if (typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    let n = 0;
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      if (n++ >= MAX_KEYS) break;
+      out[k.length > 64 ? k.slice(0, 64) : k] = sanitizeJson(x, budget, depth + 1);
+    }
+    return out;
+  }
+  return undefined;
+}
+
 /** 既存のプレイ記録を更新するイベント種別 */
 const PLAY_UPDATE_TYPES = new Set(['game_close', 'game_over', 'game_clear', 'game_heartbeat', 'score_submit', 'progression_update']);
 
@@ -208,6 +266,11 @@ export class AnalyticsStore {
   private events: AnalyticsEvent[] = [];
   private errors: ErrorRecord[] = [];
   private seenEventIds = new Set<string>();
+  /** events と同じ並びの、各イベントのおおよその大きさ(バイト)と、その合計 */
+  private eventSizes: number[] = [];
+  private eventBytes = 0;
+  private readonly newSessionRate = new RateWindow(NEW_SESSIONS_PER_MIN, 60_000);
+  private sinceSweep = 0;
   private readonly filePath: string | null;
   private saveTimer: NodeJS.Timeout | null = null;
   private dirty = false;
@@ -235,7 +298,13 @@ export class AnalyticsStore {
       }
       if (Array.isArray(data.events)) {
         this.events = data.events.filter((e) => e && typeof e.id === 'string').slice(-MAX_EVENTS);
-        for (const e of this.events) if (e.clientEventId) this.seenEventIds.add(e.clientEventId);
+        for (const e of this.events) {
+          if (e.clientEventId) this.seenEventIds.add(e.clientEventId);
+          const size = (e.data ? JSON.stringify(e.data).length : 0) + 200;
+          this.eventSizes.push(size);
+          this.eventBytes += size;
+        }
+        this.trimEvents();
       }
       if (Array.isArray(data.errors)) {
         this.errors = data.errors.filter((e) => e && typeof e.id === 'string').slice(-MAX_ERRORS);
@@ -243,6 +312,18 @@ export class AnalyticsStore {
     } catch (e) {
       console.warn(`[analytics] load failed (${(e as Error).message}), starting fresh`);
     }
+  }
+
+  /** 件数とバイト数の両方の上限に収まるまで、古いイベントから捨てる */
+  private trimEvents(): void {
+    let drop = Math.max(0, this.events.length - MAX_EVENTS);
+    let bytes = this.eventBytes;
+    for (let i = 0; i < drop; i++) bytes -= this.eventSizes[i];
+    while (bytes > MAX_EVENT_BYTES && drop < this.events.length - 1) bytes -= this.eventSizes[drop++];
+    if (drop === 0) return;
+    this.events.splice(0, drop);
+    this.eventSizes.splice(0, drop);
+    this.eventBytes = bytes;
   }
 
   private requestSave(): void {
@@ -268,7 +349,7 @@ export class AnalyticsStore {
     const tmp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
     try {
       await fsp.mkdir(path.dirname(this.filePath), { recursive: true });
-      await fsp.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf8');
+      await fsp.writeFile(tmp, JSON.stringify(payload), 'utf8');
       await fsp.rename(tmp, this.filePath);
     } catch (e) {
       this.dirty = true;
@@ -287,7 +368,22 @@ export class AnalyticsStore {
     device?: ClientDevice;
     referrer?: string;
     clientEventId?: string;
+    /** 送ってきた端末の IP(ipKey で丸めたもの)。新しいセッションの作りすぎを抑えるのに使う。省略すると制限しない */
+    ip?: string;
   }): { ok: boolean; eventId: string; duplicate?: boolean } {
+    let cleanData = input.data ? (sanitizeJson(input.data) as Record<string, unknown>) : undefined;
+    let dataBytes = 0;
+    if (cleanData) {
+      dataBytes = JSON.stringify(cleanData).length;
+      if (dataBytes > MAX_EVENT_DATA_BYTES) { cleanData = undefined; dataBytes = 0; }     // 大きすぎる data は捨てる(イベント自体は記録する)
+    }
+    input = {
+      ...input,
+      gameId: typeof input.gameId === 'string' && GAME_ID_RE.test(input.gameId) ? input.gameId : undefined,
+      data: cleanData,
+      device: sanitizeDevice(input.device),
+      referrer: typeof input.referrer === 'string' ? input.referrer.slice(0, 500) : undefined,
+    };
     const clientEventId = typeof input.clientEventId === 'string' && input.clientEventId.length <= 80 ? input.clientEventId : undefined;
     if (clientEventId && this.seenEventIds.has(clientEventId)) return { ok: true, eventId: clientEventId, duplicate: true };
     if (clientEventId) {
@@ -306,6 +402,9 @@ export class AnalyticsStore {
     // 1. セッションの取得・更新
     let session = this.sessions.get(sessionId);
     if (!session) {
+      // 新しいセッションの作りすぎ(正規のセッションを押し出す荒らし)は受けない
+      if (input.ip !== undefined && !this.newSessionRate.hit(input.ip)) return { ok: false, eventId: '' };
+      if (++this.sinceSweep >= 1000) { this.sinceSweep = 0; this.newSessionRate.sweep(); }
       session = {
         id: sessionId,
         startedAt: nowIso,
@@ -322,7 +421,7 @@ export class AnalyticsStore {
     } else {
       session.lastActiveAt = nowIso;
       if (input.device) {
-        session.device = { ...session.device, ...input.device };
+        session.device = { ...session.device, ...input.device };      // sanitizeDevice 済みのキーだけなので、増え続けない
       }
     }
 
@@ -337,9 +436,9 @@ export class AnalyticsStore {
       data: input.data && typeof input.data === 'object' ? input.data : undefined,
     };
     this.events.push(ev);
-    if (this.events.length > MAX_EVENTS) {
-      this.events.splice(0, this.events.length - MAX_EVENTS);
-    }
+    this.eventSizes.push(dataBytes + 200);
+    this.eventBytes += dataBytes + 200;
+    this.trimEvents();
 
     // 3. クライアントエラーの記録
     if (input.type === 'client_error' && input.data) {
@@ -417,7 +516,7 @@ export class AnalyticsStore {
     const elapsed = Math.max(0, Math.round((new Date(nowIso).getTime() - new Date(play.startedAt).getTime()) / 1000));
     if (typeof data.durationSec === 'number' && Number.isFinite(data.durationSec)) {
       // 古い(再送で遅れて届いた)スナップショットで、より長い記録を縮めない
-      play.durationSec = Math.max(play.durationSec ?? 0, Math.max(0, data.durationSec));
+      play.durationSec = Math.min(MAX_DURATION_SEC, Math.max(play.durationSec ?? 0, Math.max(0, data.durationSec)));
     } else if (type !== 'progression_update') {
       play.durationSec = Math.max(play.durationSec ?? 0, elapsed);
     }
@@ -425,7 +524,7 @@ export class AnalyticsStore {
       if (type !== 'game_over') play.endedAt = nowIso;
     }
     if (type === 'game_clear' || data.completed === true) play.completed = true;
-    if (typeof data.score === 'number' && !(typeof play.score === 'number' && play.score >= data.score)) {
+    if (typeof data.score === 'number' && Number.isFinite(data.score) && data.score >= 0 && data.score <= MAX_SCORE && !(typeof play.score === 'number' && play.score >= data.score)) {
       play.score = data.score;
       if (typeof data.formattedScore === 'string') play.formattedScore = data.formattedScore;
     }
@@ -445,9 +544,23 @@ export class AnalyticsStore {
     if ((type === 'game_over' || type === 'game_clear') && data.round && typeof data.round === 'object') {
       const r = { ...(data.round as Record<string, unknown>), at: nowIso } as RoundRecord;
       if (!r.result) r.result = type === 'game_clear' ? 'clear' : 'gameover';
-      if (typeof data.score === 'number') r.score = data.score;
+      if (typeof data.score === 'number' && Number.isFinite(data.score) && data.score >= 0 && data.score <= MAX_SCORE) r.score = data.score;
       play.rounds = [...(play.rounds ?? []), r].slice(-MAX_ROUNDS_PER_PLAY);
     }
+    this.capPlay(play);
+  }
+
+  /** 1プレイの記録が大きくなりすぎたら、自由形式の部分(extraStats・古いラウンド)から削る */
+  private capPlay(play: PlayRecord): void {
+    if (JSON.stringify(play).length <= MAX_PLAY_BYTES) return;
+    if (play.progression) delete play.progression.extraStats;
+    if (play.rounds) play.rounds = play.rounds.slice(-10).map(({ extraStats: _x, ...r }) => r);
+    if (JSON.stringify(play).length <= MAX_PLAY_BYTES) return;
+    delete play.rounds;
+    if (JSON.stringify(play).length <= MAX_PLAY_BYTES) return;
+    delete play.progression;
+    delete play.performance;
+    delete play.input;
   }
 
   /** 集計サマリーを計算して返す */
@@ -471,8 +584,8 @@ export class AnalyticsStore {
     };
 
     const countKey = (map: Record<string, number>, key?: string) => {
-      if (!key) return;
-      map[key] = (map[key] || 0) + 1;
+      if (!key || typeof key !== 'string') return;
+      map[key] = (Object.hasOwn(map, key) ? map[key] : 0) + 1;
     };
 
     for (const s of this.sessions.values()) {
@@ -493,9 +606,10 @@ export class AnalyticsStore {
       }
     }
 
-    const games: Record<string, GameMetrics> = {};
-    const acc: Record<string, { fpsSum: number; fpsN: number; apmSum: number; apmN: number }> = {};
-    const scoreSums: Record<string, number> = {};
+    // gameId は外から来る値なので、`constructor` などで Object.prototype を書き換えられないようプロトタイプ無しの表にする
+    const games: Record<string, GameMetrics> = Object.create(null);
+    const acc: Record<string, { fpsSum: number; fpsN: number; apmSum: number; apmN: number }> = Object.create(null);
+    const scoreSums: Record<string, number> = Object.create(null);
     let totalFpsSum = 0;
     let totalFpsCount = 0;
     let totalApmSum = 0;

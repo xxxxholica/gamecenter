@@ -224,23 +224,53 @@ export interface DebrisParticle {
 export class ParticleSystem {
   public group: THREE.Group;
   private particles: DebrisParticle[] = [];
+  /**
+   * 形と材質は、種類ごとに共有する(粒ごとに作って捨てると、GPUへの転送と破棄が演出のたびに起きる)。
+   * 粒の消え方は scale で表すので、材質は粒の間で共有しても変わらない。
+   */
+  private readonly geos = new Map<string, THREE.BufferGeometry>();
+  private readonly mats = new Map<string, THREE.Material>();
+  /** 同時に出せる粒の上限。連続して演出が重なっても、描画する数が増え続けない(超えたら古い粒から消す) */
+  private static readonly MAX_PARTICLES = 320;
 
   constructor() {
     this.group = new THREE.Group();
   }
 
+  private geo(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
+    let g = this.geos.get(key);
+    if (!g) { g = make(); this.geos.set(key, g); }
+    return g;
+  }
+
+  private mat(key: string, make: () => THREE.Material): THREE.Material {
+    let m = this.mats.get(key);
+    if (!m) { m = make(); this.mats.set(key, m); }
+    return m;
+  }
+
+  /** 粒を登録する。上限を超えたら、いちばん古い粒を外す(形・材質は共有なので破棄しない) */
+  private addParticle(p: DebrisParticle): void {
+    this.particles.push(p);
+    while (this.particles.length > ParticleSystem.MAX_PARTICLES) {
+      const old = this.particles.shift()!;
+      this.group.remove(old.mesh);
+    }
+  }
+
   public spawnSmoke(x: number, y: number): void {
-    const geo = new THREE.SphereGeometry(0.12 + Math.random() * 0.08, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({
+    const k = Math.floor(Math.random() * 3);
+    const geo = this.geo(`smoke${k}`, () => new THREE.SphereGeometry(0.12 + k * 0.03, 6, 6));
+    const mat = this.mat('smoke', () => new THREE.MeshBasicMaterial({
       color: 0xcccccc,
       transparent: true,
       opacity: 0.7
-    });
+    }));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x + (Math.random() - 0.5) * 0.2, y + 0.1, (Math.random() - 0.5) * 0.2);
     this.group.add(mesh);
 
-    this.particles.push({
+    this.addParticle({
       mesh,
       vx: (Math.random() - 0.5) * 1.5,
       vy: 1.2 + Math.random() * 1.0,
@@ -256,13 +286,13 @@ export class ParticleSystem {
   public spawnBrickDebris(x: number, y: number): void {
     const brickTex = TextureGenerator.getBrickBlockTexture();
     for (let i = 0; i < 6; i++) {
-      const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-      const mat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.8 });
+      const geo = this.geo('brick', () => new THREE.BoxGeometry(0.3, 0.3, 0.3));
+      const mat = this.mat('brick', () => new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.8 }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.4, y + (Math.random() - 0.5) * 0.4, 0);
       this.group.add(mesh);
 
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: (Math.random() - 0.5) * 10,
         vy: 4 + Math.random() * 8,
@@ -279,13 +309,13 @@ export class ParticleSystem {
   public spawnObstacleDebris(x: number, y: number, type: 'trash_can' | 'cardboard'): void {
     const color = (type === 'trash_can') ? 0x4a7c59 : 0xb58351;
     for (let i = 0; i < 8; i++) {
-      const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+      const geo = this.geo('obstacle', () => new THREE.BoxGeometry(0.25, 0.25, 0.25));
+      const mat = this.mat(`obstacle${color}`, () => new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.5, y + 0.4, 0);
       this.group.add(mesh);
 
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: (Math.random() - 0.5) * 12,
         vy: 5 + Math.random() * 7,
@@ -301,13 +331,13 @@ export class ParticleSystem {
 
   public spawnSparkles(x: number, y: number, count: number = 8, color: number = 0xffe600): void {
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      const mat = new THREE.MeshBasicMaterial({ color });
+      const geo = this.geo('sparkle', () => new THREE.BoxGeometry(0.1, 0.1, 0.1));
+      const mat = this.mat(`sparkle${color}`, () => new THREE.MeshBasicMaterial({ color }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, 0);
       this.group.add(mesh);
 
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: (Math.random() - 0.5) * 8,
         vy: 2 + Math.random() * 7,
@@ -325,15 +355,15 @@ export class ParticleSystem {
     const colors = [0xff1a1a, 0x00f0ff, 0xffe600, 0xffffff, 0x39ff14];
     const chosenColor = colors[Math.floor(Math.random() * colors.length)];
     for (let i = 0; i < 28; i++) {
-      const geo = new THREE.SphereGeometry(0.12, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ color: chosenColor });
+      const geo = this.geo('firework', () => new THREE.SphereGeometry(0.12, 6, 6));
+      const mat = this.mat(`firework${chosenColor}`, () => new THREE.MeshBasicMaterial({ color: chosenColor }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, 0);
       this.group.add(mesh);
 
       const angle = Math.random() * Math.PI * 2;
       const speed = 4 + Math.random() * 10;
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed + 2,
@@ -349,13 +379,14 @@ export class ParticleSystem {
 
   public spawnSparks(x: number, y: number, count: number = 5): void {
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-      const mat = new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xffea00 : 0xff5500 });
+      const geo = this.geo('spark', () => new THREE.BoxGeometry(0.08, 0.08, 0.08));
+      const sparkColor = Math.random() > 0.5 ? 0xffea00 : 0xff5500;
+      const mat = this.mat(`spark${sparkColor}`, () => new THREE.MeshBasicMaterial({ color: sparkColor }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.2, y + 0.05, (Math.random() - 0.5) * 0.2);
       this.group.add(mesh);
 
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: (Math.random() - 0.7) * 7,
         vy: 2 + Math.random() * 5,
@@ -371,17 +402,19 @@ export class ParticleSystem {
 
   public spawnWater(x: number, y: number, count: number = 6): void {
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.1 + Math.random() * 0.08, 5, 5);
-      const mat = new THREE.MeshBasicMaterial({
-        color: Math.random() > 0.3 ? 0x00f0ff : 0xffffff,
+      const k = Math.floor(Math.random() * 3);
+      const geo = this.geo(`water${k}`, () => new THREE.SphereGeometry(0.1 + k * 0.03, 5, 5));
+      const waterColor = Math.random() > 0.3 ? 0x00f0ff : 0xffffff;
+      const mat = this.mat(`water${waterColor}`, () => new THREE.MeshBasicMaterial({
+        color: waterColor,
         transparent: true,
         opacity: 0.8
-      });
+      }));
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x + (Math.random() - 0.5) * 0.4, y + 0.5, (Math.random() - 0.5) * 0.3);
       this.group.add(mesh);
 
-      this.particles.push({
+      this.addParticle({
         mesh,
         vx: (Math.random() - 0.5) * 3,
         vy: 10 + Math.random() * 8,
@@ -396,17 +429,18 @@ export class ParticleSystem {
   }
 
   public spawnSteam(x: number, y: number): void {
-    const geo = new THREE.SphereGeometry(0.2 + Math.random() * 0.15, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({
+    const k = Math.floor(Math.random() * 3);
+    const geo = this.geo(`steam${k}`, () => new THREE.SphereGeometry(0.2 + k * 0.07, 6, 6));
+    const mat = this.mat('steam', () => new THREE.MeshBasicMaterial({
       color: 0xddffff,
       transparent: true,
       opacity: 0.5
-    });
+    }));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x + (Math.random() - 0.5) * 0.4, y + 0.2, (Math.random() - 0.5) * 0.3);
     this.group.add(mesh);
 
-    this.particles.push({
+    this.addParticle({
       mesh,
       vx: (Math.random() - 0.5) * 1.2,
       vy: 4.5 + Math.random() * 2.5,
@@ -420,13 +454,13 @@ export class ParticleSystem {
   }
 
   public spawnShockwave(x: number, y: number): void {
-    const geo = new THREE.RingGeometry(0.2, 0.4, 24);
-    const mat = new THREE.MeshBasicMaterial({
+    const geo = this.geo('shockwave', () => new THREE.RingGeometry(0.2, 0.4, 24));
+    const mat = this.mat('shockwave', () => new THREE.MeshBasicMaterial({
       color: 0x00f0ff,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.85
-    });
+    }));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y + 0.8, 0.1);
     this.group.add(mesh);
@@ -434,7 +468,7 @@ export class ParticleSystem {
     let life = 0.28;
     const maxLife = 0.28;
 
-    this.particles.push({
+    this.addParticle({
       mesh,
       vx: 0,
       vy: 0,
@@ -452,13 +486,7 @@ export class ParticleSystem {
       const p = this.particles[i];
       p.life -= dt;
       if (p.life <= 0) {
-        this.group.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        if (Array.isArray(p.mesh.material)) {
-          p.mesh.material.forEach((m) => m.dispose());
-        } else {
-          p.mesh.material.dispose();
-        }
+        this.group.remove(p.mesh);                         // 形・材質は共有なので破棄しない
         this.particles.splice(i, 1);
         continue;
       }
@@ -479,17 +507,17 @@ export class ParticleSystem {
   }
 
   public clear(): void {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      this.group.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      if (Array.isArray(p.mesh.material)) {
-        p.mesh.material.forEach((m) => m.dispose());
-      } else {
-        p.mesh.material.dispose();
-      }
-    }
+    for (const p of this.particles) this.group.remove(p.mesh);
     this.particles = [];
+  }
+
+  /** 共有している形・材質を破棄する(ステージを作り直す時) */
+  public dispose(): void {
+    this.clear();
+    for (const g of this.geos.values()) g.dispose();
+    for (const m of this.mats.values()) m.dispose();
+    this.geos.clear();
+    this.mats.clear();
   }
 }
 

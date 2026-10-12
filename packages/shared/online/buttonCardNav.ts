@@ -81,7 +81,7 @@ export class ButtonCardNav {
         // フォーカス中のボタンが標準動作でも反応して二重に押されないように
         (document.activeElement as HTMLElement | null)?.blur();
         b[this.focus]?.click();
-      } else if (e.code === 'Escape' || e.code === 'Backspace') {
+      } else if (e.code === 'Backspace') {
         e.preventDefault();
         this.opts.onBack();
       }

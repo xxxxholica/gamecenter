@@ -18,6 +18,7 @@ import { RankingStore } from './ranking.ts';
 import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
+import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
@@ -254,6 +255,7 @@ export class Game {
         { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
   }
 
@@ -271,7 +273,7 @@ export class Game {
   }
 
   private showTitleGuide(): void {
-    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
   }
 
   private showRunGuide(): void {
@@ -280,6 +282,7 @@ export class Game {
       keyMoveLabel: 'A/D/←→ 隊列操作 / S/↓ 絞る',
       buttons: [{ indices: [0, 1, 7], label: 'ジャンプのタイミング・加速', keyLabel: 'Space / Enter' }],
       showHomeHint: true,
+      backLabel: 'ポーズ',
     });
   }
 
@@ -291,6 +294,7 @@ export class Game {
         { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
   }
 
@@ -382,6 +386,13 @@ export class Game {
     }
   }
 
+  /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
+  private readonly pause = new ArcadePause({
+    accent: '#00e676',
+    isPlaying: () => this.state === 'RUNNING' || this.state === 'WALL_CRASH' || this.state === 'BONUS_LAUNCH' || this.state === 'BONUS_FLIGHT',
+    onRestart: () => this.startGame(),
+  });
+
   // Main game loop
   private lastTime: number = 0;
   private animate = (time: number): void => {
@@ -392,8 +403,8 @@ export class Game {
 
     const input = inputManager.poll();
 
-    // State machine
-    switch (this.state) {
+    // State machine(ポーズ中は進めない)
+    switch (this.pause.isOpen ? 'PAUSED' : this.state) {
       case 'COUNTDOWN':
         // 走り出す前の待機。群衆を足踏みさせるだけで、前進・ゲート判定はしない
         this.crowd.updateRunning(dt, 0);

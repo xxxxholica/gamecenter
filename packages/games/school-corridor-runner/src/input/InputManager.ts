@@ -1,6 +1,7 @@
 import { GameInputState } from '../types';
 import { MenuNav } from '../../../../shared/arcadeMenuNav';
 import { KeyboardTracker } from '../../../../shared/keyboardTracker';
+import { readGamepads } from '../../../../shared/gamepadFrame';
 
 export class InputManager {
   private lastInputTime: number = Date.now();
@@ -114,10 +115,7 @@ export class InputManager {
       input.startOrRetry = true;
     }
 
-    if (
-      this.keysPressedThisFrame.has('Escape') ||
-      this.keysPressedThisFrame.has('Backspace')
-    ) {
+    if (this.keysPressedThisFrame.has('Backspace')) {
       input.cancel = true;
     }
 
@@ -127,7 +125,7 @@ export class InputManager {
     }
 
     // 2. HTML5 Gamepad API 優先判定（接続されていればオーバーライド/合成）
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     let activePad: Gamepad | null = null;
     for (let i = 0; i < gamepads.length; i++) {
       if (gamepads[i]) {

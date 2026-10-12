@@ -589,8 +589,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(14, 15, 18, 0.94);
-  backdrop-filter: blur(8px);
+  background: rgba(14, 15, 18, 0.94); /* ぼかし(backdrop-filter)は、動く3D画面の上だと毎フレーム再計算されて重いので使わない */
   border: 3px solid #ffcc00;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75), 4px 4px 0 #000000;
   padding: 16px 20px;

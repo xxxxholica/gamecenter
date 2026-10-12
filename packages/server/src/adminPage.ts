@@ -54,7 +54,6 @@ export const ADMIN_HTML = `<!doctype html>
           <option value="extreme-edge-arcade">極限ギリギリ選手権</option>
           <option value="tani-runner-124">単位増殖ラン</option>
           <option value="tower-stack">タワースタック</option>
-          <option value="phaser-fighter">ストリートストライカー</option>
         </select>
       </div>
       <div id="game-filter-status" class="game-filter-badge" style="display:none;"></div>
@@ -1095,8 +1094,7 @@ export const ADMIN_JS = `
     'ennichi-shateki': { name: 'えんにち射的' },
     'extreme-edge-arcade': { name: '極限ギリギリ選手権' },
     'tani-runner-124': { name: '単位増殖ラン' },
-    'tower-stack': { name: 'タワースタック' },
-    'phaser-fighter': { name: 'ストリートストライカー' }
+    'tower-stack': { name: 'タワースタック' }
   };
 
   function updateFilterUI() {

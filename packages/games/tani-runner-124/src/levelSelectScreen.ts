@@ -1,23 +1,44 @@
 // ============================================================
-// 難易度選択画面: 深夜首都高のコース選択と同じ構成(タイトルバー・カード・下部アクションバー)。
-// レバー左右で選び、A/STARTで決定、Bで戻る。キーボードは ←→ / Enter / Esc / 数字。
+// 難易度選択画面: オンライン対応ゲームのモード選択と同じ共通部品(ModeSelect の arcade 版)を使う。
+// ←→/レバーで選び、Enter/A で決定、Esc/B でタイトルへ戻る。
 // ============================================================
 
 import { LEVELS, LEVEL_ORDER, LevelId } from './levels.ts';
-import { PadEdge, startPadLoop } from '../../../shared/arcadePad.ts';
-import { buttonIconHtml } from '../../../shared/arcadeGuide.ts';
+import { ModeSelect, type ModeItem } from '../../../shared/online/ModeSelect.ts';
+
+const ACCENT = '#00e676';
 
 interface LevelCardInfo {
   glyphs: string[];
-  stars: string;
+  stars: number;
   tag: string;
 }
 
 const CARD_INFO: Record<LevelId, LevelCardInfo> = {
-  elementary: { glyphs: ['＋', '－', '×', '÷'], stars: '★☆☆', tag: '初心者向け' },
-  middle: { glyphs: ['x²', '√', '%'], stars: '★★☆', tag: '標準' },
-  kosen: { glyphs: ['∫', '∂', 'λ'], stars: '★★★', tag: '選択を迫られる' },
+  elementary: { glyphs: ['＋', '－', '×', '÷'], stars: 1, tag: '初心者向け' },
+  middle: { glyphs: ['x²', '√', '%'], stars: 2, tag: '標準' },
+  kosen: { glyphs: ['∫', '∂', 'λ'], stars: 3, tag: '選択を迫られる' },
 };
+
+/** カードの絵: 黒板のように、そのレベルで出る記号を光らせて並べる。星の数が難しさ */
+function levelArt(info: LevelCardInfo): string {
+  const n = info.glyphs.length;
+  const gap = 200 / n;
+  const w = Math.min(50, gap - 8);
+  const glyphs = info.glyphs.map((g, i) => {
+    const cx = 20 + gap * (i + 0.5);
+    return `<g><rect x="${cx - w / 2}" y="24" width="${w}" height="${w}" rx="6" fill="#0b1812" stroke="${ACCENT}" stroke-opacity=".55" stroke-width="1.6"/>`
+      + `<text x="${cx}" y="${24 + w * 0.72}" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="${g.length > 1 ? w * 0.52 : w * 0.68}" font-weight="700" fill="${ACCENT}" style="filter:drop-shadow(0 0 5px ${ACCENT})">${g}</text></g>`;
+  }).join('');
+  const star = (x: number, on: boolean): string =>
+    `<path d="M${x} 84l3 7 7.5.6-5.7 5 1.8 7.4-6.6-4-6.6 4 1.8-7.4-5.7-5 7.5-.6z" fill="${on ? '#ffcc00' : 'none'}" stroke="${on ? '#ffcc00' : '#4b6a5c'}" stroke-width="1.4" stroke-linejoin="round"${on ? ' style="filter:drop-shadow(0 0 3px #ffcc00)"' : ''}/>`;
+  return `<svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg">`
+    + `<g stroke="${ACCENT}" stroke-width="1.5" fill="none" opacity=".55"><path d="M6 14V6H14M234 14V6H226M6 106V114H14M234 106V114H226"/></g>`
+    + `<path d="M14 106H226" stroke="${ACCENT}" stroke-opacity=".45" stroke-width="1.5"/>`
+    + glyphs
+    + [0, 1, 2].map((i) => star(100 + i * 20, i < info.stars)).join('')
+    + `</svg>`;
+}
 
 export interface LevelSelectEvents {
   onSelect: (level: LevelId) => void;
@@ -26,125 +47,39 @@ export interface LevelSelectEvents {
 }
 
 export class LevelSelectScreen {
-  private selected: LevelId = 'middle';
-  private visible = false;
-  private padEdge = new PadEdge();
-  private stopPad: (() => void) | null = null;
-  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private readonly select: ModeSelect;
 
-  constructor(private readonly container: HTMLElement, private readonly events: LevelSelectEvents) {
-    this.render();
-  }
-
-  private render(): void {
-    const cards = LEVEL_ORDER.map((id, i) => {
-      const lv = LEVELS[id];
-      const info = CARD_INFO[id];
-      const reqs = lv.requirements.map((r) => r.value);
-      return `
-        <div class="lv-card" data-level="${id}">
-          <div class="lv-badge">LEVEL ${String(i + 1).padStart(2, '0')}</div>
-          <div class="lv-art">${info.glyphs.map((g) => `<span>${g}</span>`).join('')}</div>
-          <div class="lv-name">${lv.label}</div>
-          <div class="lv-sub">${lv.description}</div>
-          <div class="lv-meta">
-            <span class="lv-tag">要件 ${Math.min(...reqs)}〜${Math.max(...reqs)}</span>
-            <span class="lv-tag stars">${info.stars}</span>
-            <span class="lv-tag highlight">${info.tag}</span>
-          </div>
-        </div>`;
-    }).join('');
-
-    this.container.innerHTML = `
-      <div class="lv-title-bar"><div class="lv-title-main">難易度選択</div></div>
-      <div class="lv-cards">${cards}</div>
-      <div class="lv-action-bar">
-        <button type="button" class="lv-btn-back">${buttonIconHtml([1], 'Backspace')} タイトルへ</button>
-        <button type="button" class="lv-btn-start">${buttonIconHtml([0], 'Enter')} 決定</button>
-      </div>
-    `;
-
-    this.container.querySelectorAll<HTMLElement>('.lv-card').forEach((card) => {
-      card.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.setSelected(card.dataset.level as LevelId);
-      });
-    });
-    this.container.querySelector('.lv-btn-back')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.events.onBack();
-    });
-    this.container.querySelector('.lv-btn-start')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.events.onConfirm();
-    });
-  }
-
-  private paint(): void {
-    this.container.querySelectorAll<HTMLElement>('.lv-card').forEach((c) => {
-      c.classList.toggle('active', c.dataset.level === this.selected);
-    });
+  /** container は使わない(表示は ModeSelect が持つ)。旧画面の枠は、常に隠したままにする */
+  constructor(container: HTMLElement, private readonly events: LevelSelectEvents) {
+    container.classList.add('hidden');
+    this.select = new ModeSelect(
+      { title: '難易度選択', accent: ACCENT, accentEnd: '#00b0ff', backLabel: 'タイトルへ', arcade: true, onFocus: (id) => this.setSelected(id as LevelId) },
+      () => this.events.onConfirm(),
+      () => this.events.onBack(),
+    );
   }
 
   public setSelected(level: LevelId): void {
-    this.selected = level;
-    this.paint();
     this.events.onSelect(level);
   }
 
-  private step(dir: number): void {
-    const i = LEVEL_ORDER.indexOf(this.selected);
-    const next = Math.min(LEVEL_ORDER.length - 1, Math.max(0, i + dir));
-    if (next !== i) this.setSelected(LEVEL_ORDER[next]);
-  }
-
   public show(current: LevelId): void {
-    this.selected = current;
-    this.paint();
-    this.visible = true;
-    this.container.classList.remove('hidden');
-
-    this.stopPad?.();
-    // レバー左右: 選択 / A: 決定 / B: タイトルへ戻る
-    this.stopPad = startPadLoop(this.padEdge, (p) => {
-      if (!this.visible) return;
-      if (p.left) this.step(-1);
-      else if (p.right) this.step(1);
-      else if (p.any(0)) this.events.onConfirm();
-      else if (p.any(1)) this.events.onBack();
-    });
-
-    if (!this.keyHandler) {
-      this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.visible) return;
-        if (e.code === 'Enter' || e.code === 'Space') {
-          e.preventDefault();
-          this.events.onConfirm();
-        } else if (e.code === 'Escape' || e.code === 'Backspace') {
-          // Escapeはゲーム共通の「ホームへ戻る」より先に取り、ここではタイトルへ戻る
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          this.events.onBack();
-        } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
-          this.step(-1);
-        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
-          this.step(1);
-        } else if (e.code.startsWith('Digit') && LEVEL_ORDER[Number(e.code.slice(5)) - 1]) {
-          this.setSelected(LEVEL_ORDER[Number(e.code.slice(5)) - 1]);
-        }
+    const items: ModeItem[] = LEVEL_ORDER.map((id) => {
+      const lv = LEVELS[id];
+      const info = CARD_INFO[id];
+      const reqs = lv.requirements.map((r) => r.value);
+      return {
+        id,
+        art: levelArt(info),
+        title: lv.label,
+        sub: info.tag,
+        desc: `${lv.description}のゲートが出ます。卒業要件は ${Math.min(...reqs) === Math.max(...reqs) ? `${reqs[0]}` : `${Math.min(...reqs)}〜${Math.max(...reqs)}`} 単位です。`,
       };
-      window.addEventListener('keydown', this.keyHandler, true);
-    }
+    });
+    this.select.show(items, current);
   }
 
   public hide(): void {
-    this.visible = false;
-    this.container.classList.add('hidden');
-    this.stopPad?.();
-    this.stopPad = null;
-    if (this.keyHandler) {
-      window.removeEventListener('keydown', this.keyHandler, true);
-      this.keyHandler = null;
-    }
+    this.select.hide();
   }
 }

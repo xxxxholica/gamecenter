@@ -20,6 +20,12 @@ export interface ModeSelectOptions {
   /** 決定ボタンのグラデーション終点色 */
   accentEnd?: string;
   backLabel?: string;
+  /** 表示先。省略すると画面全体(body)。ゲーム領域の中に出したい時に指定する(position は呼び出し側のCSSで調整する) */
+  parent?: HTMLElement;
+  /** arcade 版の見た目(左上に大きな見出し、斜めの角ばったカードとボタン)にする */
+  arcade?: boolean;
+  /** 選択中の項目が変わった時(表示した時・矢印・クリック・項目の差し替えで位置が変わった時)に、その項目の id で呼ぶ */
+  onFocus?: (id: string) => void;
 }
 
 // midnight-skyway のモード選択/コース選択と同じ見た目: 斜めの見出し帯、斜めのカード(選択中はアクセント色の枠と光)、斜めの 戻る/決定 ボタン。
@@ -56,6 +62,43 @@ const css = `
 .msel-go { color: #05070c; border: none; background: linear-gradient(135deg, var(--msel-accent) 0%, var(--msel-accent-end) 100%); box-shadow: 0 0 30px color-mix(in srgb, var(--msel-accent) 60%, transparent); animation: mselPulse 1.4s infinite alternate; }
 .msel-go:hover { transform: skewX(-10deg) scale(1.04); }
 @keyframes mselPulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
+/* arcade 版(arcade: true): 左上の見出し・斜めの角ばったカードとボタン。寸法は --u(画面の高さ/幅に比例。cyber-2d-fighter-3d の 0.8 倍)で決まり、親が --u を決めていればそれに従う */
+.msel.msel-arcade { --u: min(0.074vh, 0.0625vw); padding: calc(40 * var(--u)) calc(48 * var(--u)); justify-content: space-between; align-items: stretch; gap: calc(30 * var(--u));
+  font-size: calc(16 * var(--u)); font-family: inherit; background: none; animation: none; }
+.msel.msel-arcade::before { content: ''; position: absolute; inset: 0; z-index: -1; animation: mselBgIn 0.7s ease-out both;
+  background: linear-gradient(to bottom, #080b16d0 0%, #080b1600 24%, #080b1600 46%, #080b16dd 64%, #080b16f5 100%), radial-gradient(ellipse at 50% 42%, color-mix(in srgb, var(--msel-accent) 13%, transparent), transparent 64%); }
+@keyframes mselBgIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mselLabelIn { from { opacity: 0; transform: translateX(calc(-60 * var(--u))) skewX(-12deg); } to { opacity: 1; transform: none; } }
+@keyframes mselCardsIn { from { opacity: 0; transform: translateX(calc(140 * var(--u))); } to { opacity: 1; transform: none; } }
+@keyframes mselBarIn { from { opacity: 0; transform: translateY(calc(30 * var(--u))); } to { opacity: 1; transform: none; } }
+.msel.msel-arcade .msel-title { align-self: flex-start; margin: 0; transform: none; animation: mselLabelIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s both; }
+.msel.msel-arcade .msel-title::before { content: 'GAME MODE'; display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); letter-spacing: 0.36em; }
+.msel.msel-arcade .msel-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em;
+  padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
+.msel.msel-arcade .msel-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: var(--msel-accent); transform: skewX(-20deg); }
+.msel.msel-arcade .msel-cards { flex-wrap: nowrap; gap: calc(22 * var(--u)); width: min(calc(1500 * var(--u)), 100%); align-self: center; margin: auto 0 0; justify-content: center;
+  animation: mselCardsIn 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.16s both; }
+.msel.msel-arcade .msel-card { flex: 0 1 calc((1500 * var(--u) - 44 * var(--u)) / 3); width: auto; max-width: none; min-height: calc(480 * var(--u)); padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(24 * var(--u));
+  border: 3px solid #334466; border-radius: 0; background: linear-gradient(150deg, #222335, #10101a); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  transform: skewX(-3deg); transition: transform 0.15s, border-color 0.15s; }
+.msel.msel-arcade .msel-card:hover { background: linear-gradient(150deg, #222335, #10101a); border-color: #ffcc00; transform: skewX(-3deg) translateY(-6px); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 204, 0, 0.5); }
+.msel.msel-arcade .msel-card.active { background: linear-gradient(150deg, color-mix(in srgb, var(--msel-accent) 16%, #12131c), color-mix(in srgb, var(--msel-accent) 7%, #0a0a10)); border-color: var(--msel-accent); transform: skewX(-3deg) translateY(-6px);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--msel-accent) 55%, transparent); }
+.msel.msel-arcade .msel-card.disabled:hover { transform: skewX(-3deg); border-color: #334466; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+.msel.msel-arcade .msel-card .badge { font: 900 max(11px, calc(22 * var(--u))) Arial, sans-serif; letter-spacing: 0.08em; color: #67687f; text-shadow: none; }
+.msel.msel-arcade .msel-card.active .badge { color: var(--msel-accent); }
+.msel.msel-arcade .msel-card .art { height: calc(170 * var(--u)); margin: calc(8 * var(--u)) 0 calc(14 * var(--u)); background: radial-gradient(circle, #ffffff12, transparent); border: 0; border-radius: 0; }
+.msel.msel-arcade .msel-card .t { font: 900 max(15px, calc(40 * var(--u)))/1.1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.02em; margin: calc(4 * var(--u)) 0; color: #fff; }
+.msel.msel-arcade .msel-card .s { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; color: var(--msel-accent); min-height: 1.3em; margin-bottom: calc(10 * var(--u)); }
+.msel.msel-arcade .msel-card .d { font-size: max(10px, calc(17 * var(--u))); line-height: 1.6; color: #a6a8b9; margin-top: 0; }
+.msel.msel-arcade .msel-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); gap: calc(18 * var(--u)); max-width: none;
+  animation: mselBarIn 0.5s ease-out 0.35s both; }
+.msel.msel-arcade .msel-bar button { width: auto; min-width: calc(340 * var(--u)); height: auto; padding: calc(20 * var(--u)) calc(52 * var(--u));
+  font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; }
+.msel.msel-arcade .msel-go { color: #111; background: var(--msel-accent); box-shadow: 6px 6px color-mix(in srgb, var(--msel-accent) 42%, #000); animation: none; border: 0; }
+.msel.msel-arcade .msel-go:hover { transform: scale(1.04); }
+.msel.msel-arcade .msel-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
+.msel.msel-arcade .msel-back:hover { background: #34324a; color: #fff; border-color: #8a85a3; }
 `;
 
 /** モード選択・希望選択で共通のアクセント色(CSS 変数)を root に設定する。 */
@@ -87,6 +130,8 @@ export class ModeSelect {
   private readonly cardsEl: HTMLElement;
   private readonly onSelect: (id: string) => void;
   private readonly onBack: () => void;
+  private readonly onFocus?: (id: string) => void;
+  private focusedId: string | null = null;
   private items: ModeItem[] = [];
   private index = 0;
   private visible = false;
@@ -97,10 +142,12 @@ export class ModeSelect {
   constructor(opts: ModeSelectOptions, onSelect: (id: string) => void, onBack: () => void) {
     this.onSelect = onSelect;
     this.onBack = onBack;
+    this.onFocus = opts.onFocus;
     ensureModeSelectStyle();
     this.root = document.createElement('div');
     this.root.className = 'msel';
     applyModeSelectAccent(this.root, opts);
+    if (opts.arcade) this.root.classList.add('msel-arcade');
     const titleBar = document.createElement('div');
     titleBar.className = 'msel-title';
     const titleMain = document.createElement('div');
@@ -121,7 +168,7 @@ export class ModeSelect {
     go.onclick = () => this.confirm();
     bar.append(back, go);
     this.root.append(titleBar, this.cardsEl, bar);
-    document.body.append(this.root);
+    (opts.parent ?? document.body).append(this.root);
   }
 
   private confirm(): void {
@@ -151,6 +198,13 @@ export class ModeSelect {
         return c;
       }),
     );
+    const id = this.items[this.index]?.id ?? null;
+    if (id && id !== this.focusedId) this.onFocus?.(id);
+    this.focusedId = id;
+  }
+
+  public isVisible(): boolean {
+    return this.visible;
   }
 
   private step(dir: number): void {
@@ -165,9 +219,13 @@ export class ModeSelect {
     this.render();
   }
 
-  public show(items: ModeItem[]): void {
+  /** initialId: 最初に選んでおく項目(省略すると、選べる先頭の項目) */
+  public show(items: ModeItem[], initialId?: string): void {
     this.items = items;
-    this.index = Math.max(0, items.findIndex((i) => !i.disabled));
+    const first = Math.max(0, items.findIndex((i) => !i.disabled));
+    const wanted = initialId === undefined ? -1 : items.findIndex((i) => i.id === initialId && !i.disabled);
+    this.index = wanted >= 0 ? wanted : first;
+    this.focusedId = null;
     this.render();
     this.visible = true;
     this.root.style.display = 'flex';
@@ -185,10 +243,20 @@ export class ModeSelect {
         if (e.code === 'ArrowLeft' || e.code === 'ArrowUp' || e.code === 'KeyA' || e.code === 'KeyW') { e.preventDefault(); this.step(-1); }
         else if (e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'KeyD' || e.code === 'KeyS') { e.preventDefault(); this.step(1); }
         else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') { e.preventDefault(); this.confirm(); }
-        else if (e.code === 'Escape' || e.code === 'Backspace') { e.preventDefault(); this.onBack(); }
+        else if (e.code === 'Backspace') { e.preventDefault(); this.onBack(); }
       };
       window.addEventListener('keydown', this.keyHandler);
     }
+  }
+
+  /** 表示中に項目だけ差し替える(選んでいる位置は、同じ項目が選べる限り保つ)。開催状況の確認が終わってから反映する時などに使う。 */
+  public update(items: ModeItem[]): void {
+    if (!this.visible) return;
+    const keep = this.items[this.index]?.id;
+    this.items = items;
+    const same = items.findIndex((i) => i.id === keep && !i.disabled);
+    this.index = same >= 0 ? same : Math.max(0, items.findIndex((i) => !i.disabled));
+    this.render();
   }
 
   public hide(): void {

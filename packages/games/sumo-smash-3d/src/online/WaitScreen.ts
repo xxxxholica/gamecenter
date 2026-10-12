@@ -17,16 +17,16 @@ export interface WaitDeps {
 // midnight-skyway の待機画面(LobbyScreen)と同じ見た目。
 const css = `
 .lobby { position: fixed; inset: 0; display: none; z-index: 9985; pointer-events: none; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif; color: #fff; }
-.lobby-card { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: auto; width: min(520px, 94vw); box-sizing: border-box; padding: 16px 20px; border: 1px solid #00e5ff; border-radius: 14px;
-  background: rgba(6, 12, 24, .9); box-shadow: 0 0 30px rgba(0, 229, 255, .25); display: flex; flex-direction: column; gap: 10px; }
+.lobby-card { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: auto; width: min(520px, 94vw); box-sizing: border-box; padding: 16px 20px; border: 1px solid #e63946; border-radius: 14px;
+  background: rgba(6, 12, 24, .9); box-shadow: 0 0 30px rgba(230, 57, 70, .3); display: flex; flex-direction: column; gap: 10px; }
 .lobby-card.wait { bottom: 5%; }
-.lobby-card h2 { margin: 0; font-size: .95rem; letter-spacing: .16em; color: #00e5ff; text-align: center; }
+.lobby-card h2 { margin: 0; font-size: .95rem; letter-spacing: .16em; color: #e63946; text-align: center; }
 .lobby-card p { margin: 0; color: #cfd8e6; font-size: .88rem; line-height: 1.6; text-align: center; white-space: pre-line; }
-.lobby-card .lb-count { text-align: center; font-size: 2.2rem; font-weight: 900; letter-spacing: .06em; color: #ffd54a; text-shadow: 0 0 18px rgba(255, 213, 74, .4); }
+.lobby-card .lb-count { text-align: center; font-size: 2.2rem; font-weight: 900; letter-spacing: .06em; color: #ff6b75; text-shadow: 0 0 18px rgba(230, 57, 70, .45); }
 .lobby-card .lb-sub { font-size: .72rem; color: #8fa3c2; letter-spacing: .08em; }
 .lobby-card .lb-players { display: flex; flex-direction: column; gap: 5px; }
 .lobby-card .lb-player { display: flex; align-items: center; gap: 8px; padding: .4em .6em; border-radius: 8px; background: #0c1626; border: 1px solid #22304a; font-size: .85rem; }
-.lobby-card .lb-player.me { border-color: #00e5ff; }
+.lobby-card .lb-player.me { border-color: #e63946; }
 .lobby-card .lb-player.empty { color: #7f90ad; }
 .lobby-card .lb-dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; flex: none; background: #555; }
 .lobby-card .lb-dot.none { border-style: dashed; background: transparent; }
@@ -35,7 +35,7 @@ const css = `
 .lobby-card .lb-row { display: flex; gap: 10px; }
 .lobby-card .lb-row > * { flex: 1; }
 .lobby-card button { font: inherit; font-weight: 700; font-size: .92rem; padding: .6em 1em; border-radius: 9px; border: 1px solid #3a4a66; background: #14213a; color: #fff; cursor: pointer; }
-.lobby-card button.pad-focus, .lobby-card button:focus-visible { outline: 3px solid #ffd54a; outline-offset: 2px; }
+.lobby-card button.pad-focus, .lobby-card button:focus-visible { outline: 3px solid #ff6b75; outline-offset: 2px; }
 `;
 
 /**

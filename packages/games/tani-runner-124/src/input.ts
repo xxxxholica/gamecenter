@@ -4,6 +4,7 @@
 // ============================================================
 
 import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
+import { readGamepads } from '../../../shared/gamepadFrame';
 
 export interface InputState {
   moveX: number;           // -1 (left) to +1 (right)
@@ -106,8 +107,8 @@ export class InputManager {
 
     // 2. Gamepad API Polling
     let hasPad = false;
-    if (navigator.getGamepads) {
-      const pads = navigator.getGamepads();
+    {
+      const pads = readGamepads();
       let pad: Gamepad | null = null;
 
       if (this.gamepadIndex !== null && pads[this.gamepadIndex]) {
@@ -185,8 +186,8 @@ export class InputManager {
 
   // Haptic Rumble for gamepads
   public rumble(durationMs: number = 100, strong: number = 0.5, weak: number = 0.5): void {
-    if (this.gamepadIndex === null || !navigator.getGamepads) return;
-    const pads = navigator.getGamepads();
+    if (this.gamepadIndex === null) return;
+    const pads = readGamepads();
     const pad = pads[this.gamepadIndex];
     if (pad && pad.vibrationActuator && typeof (pad.vibrationActuator as any).playEffect === 'function') {
       (pad.vibrationActuator as any).playEffect('dual-rumble', {

@@ -50,12 +50,12 @@ const { bgm, sfx } = audio;
 // 開放/閉鎖はゲーム画面からは行わない(管理画面か、サーバー機上の `npm run ctl`)。
 // WebSocket に繋ぐのは、その項目を選んで待機画面に入った時だけ。
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['res-btn-title']);
 
 // 画面ごとのアケコンガイド(左下。呼ぶたびに前の画面のカードと入れ替わる)
-const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
 const guideModeSelect = () => mountArcadeGuide({
   moveLabel: 'モード選択',
   buttons: [
@@ -128,9 +128,9 @@ const guideRace = () => mountArcadeGuide({
   buttons: [
     { indices: [0], label: 'ハンドブレーキ', keyLabel: 'Space' },
     { indices: [3], label: '前方確認', keyLabel: 'V' },
-    { indices: [9], label: 'ポーズ', keyLabel: 'P' },
   ],
   showHomeHint: true,
+  backLabel: 'ポーズ',
 });
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -351,6 +351,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         variantId: currentMapId,
         modal: { title: '走行記録', scoreDisplay: result.formattedTime, themeClass: 'theme-skyway', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
         setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
+        onClosed: () => driveHUD.armResultModal(),
         onName: async (name) => {
           await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
           syncBestTimeDisplay();
@@ -480,10 +481,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   const titleScreen = new TitleScreen(titleContainer, {
     onStart: async () => {
       sfx.uiConfirm();
-      // オンライン対戦が開かれていれば、マシン選択の前にモード選択を挟む(開かれていなければ従来どおり)
+      // マシン選択の前に、必ずモード選択を挟む(オンライン対戦が開かれていなければ、その項目は選べない)
       onlineStatus = await fetchSkywayStatus(1500);
-      if (onlineStatus) flow.goToModeSelect();
-      else flow.goToCarSelect();
+      flow.goToModeSelect();                                  // 開催されていなくても、オンライン対戦の項目は出す(選べない)
     },
   });
 
@@ -539,8 +539,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       sfx.uiBack();
-      if (onlineStatus) flow.goToModeSelect();               // モード選択を経由してきた時は、そこへ戻る
-      else flow.goToTitle();
+      flow.goToModeSelect();                                 // モード選択を経由してきたので、そこへ戻る
     },
   });
 

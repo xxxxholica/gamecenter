@@ -42,6 +42,17 @@ export interface GameLeaderboardDef {
   unit: string;
   formatScore: (score: number) => string;
   variants?: LeaderboardVariant[];
+  /**
+   * サーバーが受け付けるスコアの範囲(省略時は汎用の範囲。バリアントの minScore/maxScore があればそちらが優先)。
+   * スコアはクライアントの申告なので、実プレイでありえない値を弾く「天井」。実測の最高値より十分に大きく置く
+   * (小さすぎると正規の記録が捨てられる。管理画面のアナリティクスの bestScore で見直せる)。
+   */
+  minScore?: number;
+  maxScore?: number;
+  /** 起動(チケット発行)から申告までの最短時間(ms)。これより短い間に出せるスコアではない、という下限 */
+  minRunMs?: number;
+  /** 1秒あたりに稼げるスコアの上限(desc のみ)。申告スコアが 経過秒 × この値 を超えたら不正とみなす */
+  maxScorePerSec?: number;
 }
 
 function padZero(n: number, len: number): string {
@@ -156,6 +167,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'street-b-boy': {
     slug: 'street-b-boy',
     hasScore: true,
+    maxScore: 3_000_000,
+    minRunMs: 15_000,
+    maxScorePerSec: 3_000,
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
@@ -163,6 +177,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'ennichi-shateki': {
     slug: 'ennichi-shateki',
     hasScore: true,
+    maxScore: 200_000,                // サーバーの対戦側 MAX_SCORE と同じ
+    minRunMs: 40_000,                 // 制限時間は45秒
+    maxScorePerSec: 6_000,
     scoreOrder: 'desc',
     unit: 'g',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} g` : '0 g'),
@@ -170,6 +187,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'extreme-edge-arcade': {
     slug: 'extreme-edge-arcade',
     hasScore: true,
+    minScore: 15,                     // 偏差値は 15〜88 に丸められる(game.ts)
+    maxScore: 88,
+    minRunMs: 15_000,
     scoreOrder: 'desc',
     unit: 'pt',
     formatScore: (score) => (score > 0 ? `${score.toFixed(1)} pt` : '0.0 pt'),
@@ -177,6 +197,8 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'tani-runner-124': {
     slug: 'tani-runner-124',
     hasScore: true,
+    maxScore: 10_000_000,
+    minRunMs: 10_000,
     scoreOrder: 'desc',
     unit: '単位',
     formatScore: (score) => (score > 0 ? `${Math.floor(score)} 単位` : '0 単位'),
@@ -202,6 +224,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'school-corridor-runner': {
     slug: 'school-corridor-runner',
     hasScore: true,
+    maxScore: 50_000_000,
+    minRunMs: 10_000,
+    maxScorePerSec: 40_000,
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
@@ -209,6 +234,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'survivor-score-battle': {
     slug: 'survivor-score-battle',
     hasScore: true,
+    maxScore: 20_000_000,
+    minRunMs: 20_000,
+    maxScorePerSec: 30_000,
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
@@ -216,16 +244,13 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'tower-stack': {
     slug: 'tower-stack',
     hasScore: true,
+    maxScore: 100_000,                // 1000m(オンラインの MAX_HEIGHT は400m)
+    minRunMs: 10_000,
+    maxScorePerSec: 4_000,
     scoreOrder: 'desc',
-    unit: 'pts',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
-  },
-  'phaser-fighter': {
-    slug: 'phaser-fighter',
-    hasScore: false,
-    scoreOrder: 'desc',
-    unit: 'pt',
-    formatScore: () => '0 pt',
+    unit: 'm',
+    // スコアは高さ(m)×100 の整数で持つ
+    formatScore: (score) => `${(Math.floor(score) / 100).toFixed(1)} m`,
   },
 };
 

@@ -180,6 +180,35 @@ export async function checkHighScore(
   return { isRankIn, rank };
 }
 
+// ===== プレイチケット =====
+// スコアの申告には、サーバーが発行した使い切りの札(チケット)が要る。サーバーは発行からの経過時間を自分の時計で測り、
+// 「起動してすぐ高得点」のような申告を断る。札は、ゲームのページを開いた時点と、スコアを送るたびに取り直す。
+let ticketSlug: string | null = null;
+let ticketPromise: Promise<string | null> | null = null;
+
+async function fetchTicket(slug: string): Promise<string | null> {
+  try {
+    const data = await request('POST', `${API}/ticket/${encodeURIComponent(slug)}`, {});
+    return typeof data?.ticket === 'string' ? data.ticket : null;
+  } catch {
+    return null;
+  }
+}
+
+/** このゲームのプレイ開始として、チケットを取っておく(ゲームのページが開いた時に自動で呼ばれる) */
+export function beginLeaderboardRun(slug: string): void {
+  const def = GAME_LEADERBOARD_DEFS[slug];
+  if (!def || !def.hasScore) return;
+  ticketSlug = slug;
+  ticketPromise = fetchTicket(slug);
+}
+
+// ゲームのページ(/games/<slug>/)として開かれた時だけ、自動でチケットを取る(ハブ・テストでは何もしない)。
+if (typeof window !== 'undefined' && typeof window.location?.pathname === 'string') {
+  const m = /\/games\/([\w-]+)\/?/.exec(window.location.pathname);
+  if (m) beginLeaderboardRun(m[1]);
+}
+
 export interface SaveLeaderboardOptions {
   /** ステージを最後までクリアした記録なら true。ホームのランキングで、名前の右に ★ が付く */
   cleared?: boolean;
@@ -198,13 +227,18 @@ export async function saveLeaderboardScore(
 ): Promise<{ rank: number; list: LeaderboardEntry[] }> {
   const def = GAME_LEADERBOARD_DEFS[slug];
   if (!def || !def.hasScore || score <= 0) return { rank: -1, list: [] };
+  // 札は1回きり: 使うために取り出し、次のプレイ用の札をすぐ取りに行く(取れなかった場合はここで取る)
+  const pending = ticketSlug === slug ? ticketPromise : null;
+  ticketPromise = null;
   try {
+    const ticket = (pending ? await pending : null) ?? (await fetchTicket(slug));
     const data = await request('POST', boardPath(slug, variantId), {
       name: sanitizeLeaderboardName(name),
       score,
       extra: sanitizeLeaderboardExtra(extra),
       cleared: options.cleared === true ? true : undefined,
       ghost: options.ghost,
+      ticket: ticket ?? undefined,
     });
     const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
     const rank = typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1;
@@ -218,6 +252,8 @@ export async function saveLeaderboardScore(
   } catch (e) {
     console.warn('Failed to save leaderboard', e);
     return { rank: -1, list: [] };
+  } finally {
+    if (ticketSlug === slug) ticketPromise = fetchTicket(slug);
   }
 }
 

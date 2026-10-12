@@ -1,4 +1,5 @@
 import { KeyboardTracker } from '../../../../shared/keyboardTracker';
+import { readGamepads } from '../../../../shared/gamepadFrame';
 
 export interface PlayerInputState {
   moveX: number; // -1 to 1 (画面基準の左右)
@@ -119,7 +120,7 @@ export class InputManager {
   }
 
   private activePads(): Gamepad[] {
-    return (navigator.getGamepads ? Array.from(navigator.getGamepads()) : []).filter(
+    return Array.from(readGamepads()).filter(
       (p): p is Gamepad => !!p && p.connected
     );
   }
@@ -143,7 +144,7 @@ export class InputManager {
    * ゲームパッドが接続されているか確認
    */
   public isGamepadConnected(): boolean {
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     return !!gamepads[0];
   }
 
@@ -160,7 +161,7 @@ export class InputManager {
       return true;
     }
 
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     const pad = gamepads[0];
     if (pad) {
       // START(9), A(0), または XBOX START
@@ -177,12 +178,12 @@ export class InputManager {
   }
 
   /**
-   * バックボタン（タイトルに戻る / ESC）
+   * バックボタン（Backspace / SELECT）
    */
   public isBackTriggered(): boolean {
-    if (this.keysPressed.has('Backspace') || this.keysPressed.has('Escape')) return true;
+    if (this.keysPressed.has('Backspace')) return true;
 
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     const pad = gamepads[0];
     if (pad) {
       // SELECT(8)

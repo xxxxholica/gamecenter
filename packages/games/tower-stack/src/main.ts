@@ -4,31 +4,35 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { installHomeReturn } from '../../../shared/homeReturn';
+import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { ArcadePause } from '../../../shared/arcadePause';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
-import { mountArcadeGuide } from '../../../shared/arcadeGuide';
+import { BestMarker } from './bestMarker';
+import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { setText, setDisplay } from '../../../shared/hudDom';
-import { loadLeaderboardAndCheck, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
+import { loadLeaderboardAndCheck, loadRawScores, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { PIECES, partExtents, randomPieceIndex, resetPieceBag, type Cell, type Part, type PieceDef } from './pieces';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
+import { SOLO_ART, ONLINE_ART } from './modeArt';
+import { Bgm } from './bgm';
 import type { PublicStatus } from '../../../shared/online/core';
 import { ATTACK_EVERY, ATTACK_KINDS, MAX_SNAP_BLOCKS, STATE_INTERVAL_MS } from '../../../shared/towerProtocol';
 import type { BlockSnap, PlayerInfo, ResultEntry, ServerMsg, TowerState } from '../../../shared/towerProtocol';
-import { createNet, fetchTowerStatus, PLAYER_COLORS } from './online/net';
+import { createNet, fetchTowerStatus, PLAYER_COLORS, PLAYER_COLORS_LIGHT } from './online/net';
 import { WaitScreen } from './online/WaitScreen';
-import { RivalStages, STAGE_SPACING } from './online/RivalStages';
+import { RivalStages, STAGE_SPACING, BETWEEN_TAG_X } from './online/RivalStages';
+import { readGamepads } from '../../../shared/gamepadFrame';
 
 installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
 watchResultAutoReturn(['result-btn-title']);
 
-const HUB_URL = '../../';
 const SLUG = 'tower-stack'; // 共通ランキングでの名前 (packages/shared/arcadeLeaderboardCore.ts に定義)
 const ACCENT = '#ffd166';
 const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
@@ -36,30 +40,25 @@ const isPreview = typeof location !== 'undefined' && (location.search.includes('
 if (isPreview) {
   const style = document.createElement('style');
   style.textContent = `
-    #hud, #result-modal, #banner, .agc-root, .ats-overlay { display: none !important; }
+    #hud, #result-modal, #banner, #edge-alert, #event-label, #event-fx, .agc-root, .ats-overlay { display: none !important; }
   `;
   document.head.appendChild(style);
 }
 
 // 画面左下の共通ボタンガイド (場面ごとに差し替える)
 /** ボタンガイドを出す(オンライン対戦で左右に分けた右側の分も片付ける) */
-const mountGuide = (opts: Parameters<typeof mountArcadeGuide>[0]) => {
-  document.getElementById('agc-guide-r')?.remove();
-  return mountArcadeGuide(opts);
-};
-const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true });
+const mountGuide = (opts: Parameters<typeof mountArcadeGuide>[0]) => mountArcadeGuide(opts);
+const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
 const mountGuidePlay = () => mountGuide({
   moveLabel: '移動 / 下で早く落とす',
   buttons: [
     { indices: [0, 2], label: '回転', keyLabel: 'Space / Z' },
     { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Enter / X' },
   ],
-  showHomeHint: true,
+  showHomeHint: true, backLabel: 'ポーズ',
 });
 const guidePlay = () => {
   mountGuidePlay();
-  // オンライン対戦中は、ボタンガイドを左右の上端に分けて出す
-  if (document.body.classList.contains('online')) splitGuide();
 };
 const guideMenu = () => mountGuide({
   moveLabel: '選択',
@@ -75,7 +74,7 @@ const guideResult = () => mountGuide({
     { indices: [0], label: '決定' },
     { indices: [1], label: '終了' },
   ],
-  showHomeHint: true,
+  showHomeHint: true, backLabel: 'タイトルへ',
 });
 
 // ───────────────────────── 定数 ─────────────────────────
@@ -100,21 +99,20 @@ function levelSpeed(lv: number): number {
   return 3.0 + (lv - 1) * 0.5;
 }
 
-type ItemKind = 'glue' | 'cement' | 'shield' | 'heal';
+type ItemKind = 'glue' | 'cement' | 'heal';
 const ITEM_INFO: Record<ItemKind, { name: string; desc: string }> = {
-  glue: { name: 'ツタ', desc: '次のブロックが周り2マスのブロックにツタをからめて固定' },
-  cement: { name: 'セメント', desc: '積んだブロックを全部かためる' },
-  shield: { name: 'バリア', desc: '次の邪魔イベントを防ぐ' },
+  glue: { name: 'ツタ', desc: '周りのブロックを固定する' },
+  cement: { name: 'セメント', desc: '積んだブロックを全部固める' },
   heal: { name: '回復', desc: '残機を1つ回復する' },
 };
-const ITEM_KINDS: ItemKind[] = ['glue', 'cement', 'shield', 'heal'];
+const ITEM_KINDS: ItemKind[] = ['glue', 'cement', 'heal'];
 
 type EventKind = 'wind' | 'quake' | 'meteor' | 'speed';
 const EVENT_INFO: Record<EventKind, { name: string; desc: string; duration: number }> = {
-  wind: { name: '突風', desc: '横からの風でブロックが流される!', duration: 6 },
-  quake: { name: '地震', desc: '土台がゆれる!', duration: 4.5 },
-  meteor: { name: 'いん石', desc: '空から石が降ってくる!', duration: 5 },
-  speed: { name: 'スピードアップ', desc: 'ブロックの落下が速くなる!', duration: 8 },
+  wind: { name: '突風', desc: '横からの風でブロックが流される', duration: 6 },
+  quake: { name: '地震', desc: '土台がゆれる', duration: 4.5 },
+  meteor: { name: 'いん石', desc: '空から石が降ってくる', duration: 5 },
+  speed: { name: '加速', desc: 'ブロックの落下が速くなる', duration: 8 },
 };
 // 地震 ('quake') は難しすぎるので出さない。戻すときはこの配列に 'quake' を足す
 const EVENT_KINDS: EventKind[] = ['wind', 'meteor', 'speed'];
@@ -139,8 +137,6 @@ const CAM_FOV = 30;
 const CAM_TAN = Math.tan(THREE.MathUtils.degToRad(CAM_FOV / 2));
 /** いま画面に映している高さ(m)。オンライン対戦ではステージを並べるぶん広くなる */
 let viewH = VIEW_H;
-/** オンライン対戦で、タワーが高くなっても引きすぎないための上限(m) */
-const ONLINE_MAX_VIEW_H = 48;
 /** カメラの左右の中心(自分のステージが原点) */
 let camX = 0;
 const CAM_OFFSET_X = 0; // 0 なら正面から。増やすと斜めから見る (3D化直後は 2.5)
@@ -176,6 +172,12 @@ rim.position.set(10, 4, -12);
 scene.add(rim);
 
 const cellGeo = new RoundedBoxGeometry(0.97, 0.97, 0.97, 3, 0.1);
+
+// ブロックの影を受ける奥の壁(透明。影だけ映る)。カメラについてくる
+const shadowWall = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.38 }));
+shadowWall.position.z = -1.2;
+shadowWall.receiveShadow = true;
+scene.add(shadowWall);
 
 // ぼんやりした丸のテクスチャ (炎・火花・雲・光に使う)
 function makeSoftTexture(blobs: number): THREE.CanvasTexture {
@@ -243,42 +245,133 @@ const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transpare
   scene.add(new THREE.Points(geo, starMat));
 }
 
-// 高さの目盛り (5mごと)
+// 高さの目盛り (5mごと)。文字の材質は使い回す(対戦では相手のステージにも同じ目盛りを出す)
+const scaleLabelGeo = new THREE.PlaneGeometry(2.4, 0.9);
+const scaleLabelMats = new Map<string, THREE.MeshBasicMaterial>();
 function makeLabel(text: string): THREE.Mesh {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 48;
-  const g = c.getContext('2d')!;
-  g.font = 'bold 30px system-ui, sans-serif';
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.textBaseline = 'middle';
-  g.fillText(text, 4, 24);
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.4, 0.9),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true }),
-  );
-  return m;
+  let mat = scaleLabelMats.get(text);
+  if (!mat) {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 48;
+    const g = c.getContext('2d')!;
+    g.font = 'bold 30px system-ui, sans-serif';
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.textBaseline = 'middle';
+    g.fillText(text, 4, 24);
+    mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true });
+    scaleLabelMats.set(text, mat);
+  }
+  return new THREE.Mesh(scaleLabelGeo, mat);
+}
+/** 目盛りの文字(5m〜300m)を、土台の左に並べる。ステージごとに1組 */
+function addScaleLabels(parent: THREE.Object3D): void {
+  for (let h = 5; h <= 300; h += 5) {
+    const label = makeLabel(`${h}m`);
+    label.position.set(-6.3, h + 0.5, -0.75);
+    parent.add(label);
+  }
 }
 const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 });
 for (let h = 5; h <= 300; h += 5) {
   const line = new THREE.Mesh(new THREE.PlaneGeometry(300, 0.04), lineMat);
   line.position.set(0, h, -0.75);
   scene.add(line);
-  const label = makeLabel(`${h}m`);
-  label.position.set(-6.3, h + 0.5, -0.75);
-  scene.add(label);
 }
-// 最高到達ライン
-const bestLine = new THREE.Mesh(
-  new THREE.PlaneGeometry(300, 0.08),
-  new THREE.MeshBasicMaterial({ color: 0xffd166 }),
-);
-bestLine.position.z = -0.7;
-bestLine.visible = false;
-scene.add(bestLine);
+addScaleLabels(scene);
+
+// 最高到達: 黒い点線と、目盛りと同じ左側に出す黒いブロック(線の中心に重ねて手前に出す)
+const ownMarker = new BestMarker({ color: '#000000', width: 300, tagX: -6.6 });
+scene.add(ownMarker.group);
+
+// 過去のランキングの高さの基準線(ひとりで遊ぶときだけ。上位3位)
+const rankMarkers: THREE.Object3D[] = [];
+let rankMarkerSeq = 0;
+function makeRankLabel(text: string, color: string, rank: number): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 176;
+  c.height = 56;
+  const g = c.getContext('2d')!;
+  g.fillStyle = color; // 順位の色のブロック
+  g.fillRect(0, 0, 176, 56);
+  g.font = 'bold 34px system-ui, sans-serif';
+  g.fillStyle = '#fff';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 112, 30);
+  // ブロックの中の左に、順位の数字を入れたメダル
+  g.beginPath();
+  g.arc(30, 28, 21, 0, Math.PI * 2);
+  g.fillStyle = RANK_MEDALS[rank - 1] ?? '#ffffff';
+  g.fill();
+  g.lineWidth = 4;
+  g.strokeStyle = '#fff';
+  g.stroke();
+  g.fillStyle = '#2a2118';
+  g.font = 'bold 30px system-ui, sans-serif';
+  g.fillText(String(rank), 30, 30);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.98, 0.63),
+    new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false, fog: false }),
+  );
+  m.renderOrder = 10;
+  return m;
+}
+const RANK_MEDALS = ['#ffd24a', '#d3dae3', '#e08a4a']; // メダルの色(金・銀・銅)
+const RANK_COLORS = ['#a87400', '#66727f', '#a4531f']; // 金・銀・銅(白文字が読める濃さ)
+// 順位の線に使う点線(白の点線を、線ごとに順位の色で塗る)
+const rankDashTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 4;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, 18, 4);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.set(300 / 0.9, 1);
+  t.magFilter = THREE.NearestFilter;
+  return t;
+})();
+function clearRankMarkers(): void {
+  rankMarkerSeq++;
+  for (const o of rankMarkers) {
+    scene.remove(o);
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh) return;
+      if (m.material !== undefined && (m.material as THREE.MeshBasicMaterial).map !== rankDashTex) (m.material as THREE.MeshBasicMaterial).map?.dispose();
+      (m.material as THREE.Material).dispose();
+      if (m.geometry !== undefined) m.geometry.dispose();
+    });
+  }
+  rankMarkers.length = 0;
+}
+function loadRankMarkers(): void {
+  clearRankMarkers();
+  if (mode !== 'solo' || isPreview) return;
+  const seq = rankMarkerSeq;
+  void loadRawScores(SLUG).then((list) => {
+    if (seq !== rankMarkerSeq || mode !== 'solo') return; // 取得中にやり直された・対戦に入った(対戦にはランキングの線を出さない)
+    for (const e of list.slice(0, 3)) {
+      const h = e.score / 100; // スコアは高さ(m)×100
+      const color = RANK_COLORS[e.rank - 1] ?? '#ffffff';
+      const g = new THREE.Group();
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(300, 0.1), new THREE.MeshBasicMaterial({ color, map: rankDashTex, transparent: true }));
+      const label = makeRankLabel(`${h.toFixed(1)}m`, color, e.rank);
+      label.position.set(6.51, 0, 0); // 自分の高さ(左側)と向かい合う右側に、線の中心に合わせて置く
+      g.add(line, label);
+      g.position.set(0, h, -0.8);
+      scene.add(g);
+      rankMarkers.push(g);
+    }
+  });
+}
 
 // 土台の位置の目印: 両端の縦線は常に表示し、土台が画面の下に隠れたら画面下にバーを出す
-const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.45 });
+const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
 const edgeLines = [-1, 1].map((side) => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 160), edgeMat);
   m.position.set(side * PLATFORM_HALF_W, 0, -1.5);
@@ -288,10 +381,10 @@ const edgeLines = [-1, 1].map((side) => {
 const baseMarker = new THREE.Group();
 baseMarker.add(new THREE.Mesh(
   new THREE.PlaneGeometry(PLATFORM_HALF_W * 2, 0.3),
-  new THREE.MeshBasicMaterial({ color: 0xffe08a }),
+  new THREE.MeshBasicMaterial({ color: 0xffffff }),
 ));
 for (const side of [-1, 1]) {
-  const cap = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.9), new THREE.MeshBasicMaterial({ color: 0xffe08a }));
+  const cap = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.9), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   cap.position.set(side * (PLATFORM_HALF_W - 0.15), 0.3, 0);
   baseMarker.add(cap);
 }
@@ -668,7 +761,17 @@ function blowUpAll(): void {
 
 // ───────────────────────── 効果音 (Web Audio API) ─────────────────────────
 let audio: AudioContext | null = null;
+/** BGM。ブラウザは最初の操作のあとでないと音を出せないので、unlock は操作のたびに呼ぶ */
+const bgm = new Bgm(() => {
+  try {
+    audio ??= new AudioContext();
+    return audio;
+  } catch {
+    return null;
+  }
+});
 function beep(freq: number, dur: number, type: OscillatorType = 'square', vol = 0.08, slide = 0): void {
+  if (demoActive) return; // タイトルの背景のデモでは音を出さない
   try {
     audio ??= new AudioContext();
     if (audio.state === 'suspended') void audio.resume();
@@ -690,6 +793,7 @@ function beep(freq: number, dur: number, type: OscillatorType = 'square', vol = 
 
 /** 爆発音 (ノイズ + 低音) */
 function boom(dur = 0.35): void {
+  if (demoActive) return;
   try {
     audio ??= new AudioContext();
     if (audio.state === 'suspended') void audio.resume();
@@ -715,28 +819,31 @@ function boom(dur = 0.35): void {
 }
 
 // ───────────────────────── 入力 ─────────────────────────
-interface Input { left: boolean; right: boolean; up: boolean; down: boolean; rotate: boolean; item: boolean; confirm: boolean; cancel: boolean }
+interface Input {
+  left: boolean; right: boolean; up: boolean; down: boolean; rotate: boolean; item: boolean; confirm: boolean; cancel: boolean;
+  /** メニューの選択移動用: アケコン(十字キー・スティック)だけの傾き。キーボードは keydown から MenuNav に直接積むので、ここに混ぜると二重に動く */
+  padNavX: number; padNavY: number;
+}
 const keys = new Set<string>();
 const keyPressed = new Set<string>();
 const menuNav = new MenuNav();
 let resultOpen = false;
 let nameEntryOpen = false; // 順位の確認中・名前入力中は、リザルトの操作を止める
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && state !== 'menu') {
-    window.location.href = HUB_URL;
-    return;
-  }
+  if (!isPreview) bgm.unlock();
+  if (e.code === 'KeyM' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) bgm.toggleMute();
   if (resultOpen && !nameEntryOpen && menuNav.pushKey(e)) e.preventDefault();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) keyPressed.add(e.code);
   keys.add(e.code);
 });
+window.addEventListener('pointerdown', () => { if (!isPreview) bgm.unlock(); });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 
 let prevPadButtons: boolean[] = [];
 function readInput(): Input {
-  const inp: Input = { left: false, right: false, up: false, down: false, rotate: false, item: false, confirm: false, cancel: false };
+  const inp: Input = { left: false, right: false, up: false, down: false, rotate: false, item: false, confirm: false, cancel: false, padNavX: 0, padNavY: 0 };
   inp.left = keys.has('ArrowLeft') || keys.has('KeyA');
   inp.right = keys.has('ArrowRight') || keys.has('KeyD');
   inp.down = keys.has('ArrowDown') || keys.has('KeyS');
@@ -746,16 +853,22 @@ function readInput(): Input {
   inp.confirm = kp('Space', 'Enter');
   keyPressed.clear();
 
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pads = readGamepads();
   for (const pad of pads) {
     if (!pad || !pad.connected) continue;
     const b = pad.buttons.map((x) => x.pressed);
     const ax = pad.axes[0] ?? 0;
     const ay = pad.axes[1] ?? 0;
-    inp.left ||= !!b[14] || ax < -0.5;
-    inp.right ||= !!b[15] || ax > 0.5;
-    inp.down ||= !!b[13] || ay > 0.5;
-    inp.up ||= !!b[12] || ay < -0.5;
+    const padLeft = !!b[14] || ax < -0.5;
+    const padRight = !!b[15] || ax > 0.5;
+    const padDown = !!b[13] || ay > 0.5;
+    const padUp = !!b[12] || ay < -0.5;
+    inp.left ||= padLeft;
+    inp.right ||= padRight;
+    inp.down ||= padDown;
+    inp.up ||= padUp;
+    inp.padNavX = padLeft ? -1 : padRight ? 1 : 0;
+    inp.padNavY = padUp ? -1 : padDown ? 1 : 0;
     const pressed = (i: number) => !!b[i] && !prevPadButtons[i];
     // ボタン0/2/4/6 = 回転、1/3/5/7 = アイテム
     inp.rotate ||= pressed(0) || pressed(2) || pressed(4) || pressed(6) || pressed(12);
@@ -781,6 +894,7 @@ let targetAngle = 0;
 let fastDrop = false;
 let spawnTimer = 0;
 let nextIndex = 0; // 次のピース (PIECES の添字)
+let nextIndex2 = 0; // 次の次のピース
 let moveRepeat = 0;
 let moveDir = 0;
 
@@ -796,18 +910,22 @@ let glueArmed = false;
 // 分析用: 1プレイ内の取得アイテム数と、種類ごとの使用回数
 let itemsGained = 0;
 let itemsUsedByKind: Record<string, number> = {};
-let shield = false;
 let pendingVine: { block: Block; timer: number } | null = null;
 let firstBlock: { block: Block; timer: number } | null = null; // 1個目は着地後に自動で固定する
 
 let eventTimer = 30;
-let warnTimer = 0;
-let upcoming: EventKind | null = null;
+/** ランキング挑戦のスタート前のカウントダウン(秒)と、そのあとに GO! を出す残り時間 */
+const SOLO_COUNTDOWN = 3;
+let soloCountdown = 0;
+let soloGo = 0;
+let soloCountSec = 0;
 let activeEvent: EventKind | null = null;
+const EVENT_WARN_TIME = 10; // 予兆(縁が赤く点滅して、ラベルが残り秒数を数える時間)
+const WARN_BEEP_AT = [0, 7, 8, 9]; // 予兆の警告音を鳴らす、予兆開始からの経過秒(最初と、残り3・2・1秒)
+let pendingEvent: { kind: EventKind; t: number; beeps: number } | null = null;
 let activeTime = 0;
 let windDir = 1;
 let meteorTimer = 0;
-let bannerTimer = 0;
 let shake = 0;
 let camY = 6;
 let hiscore = 0;
@@ -844,7 +962,8 @@ world.addEventListener('preStep', () => {
 
 function spawnPiece(): void {
   const index = nextIndex;
-  nextIndex = randomPieceIndex();
+  nextIndex = nextIndex2;
+  nextIndex2 = randomPieceIndex();
   // オンライン対戦は画面が広いので、画面の上端ではなくタワーの少し上から落とす
   const top = camY + viewH / 2 + 1;
   const spawnY = isPreview ? currentHeight + 5.5 : mode === 'online' ? Math.min(top, Math.max(currentHeight, 2) + 9) : top;
@@ -877,7 +996,7 @@ function onLanded(block: Block): void {
   const nextLevel = Math.min(MAX_LEVEL, 1 + Math.floor(placed / LEVEL_EVERY));
   if (nextLevel > level) {
     level = nextLevel;
-    showSpeedUp(level >= MAX_LEVEL);
+    showLevelUp(level);
     beep(500, 0.1, 'square', 0.07);
     setTimeout(() => beep(750, 0.16, 'square', 0.07), 110);
   }
@@ -893,16 +1012,13 @@ function onLanded(block: Block): void {
     glueArmed = false;
   }
   if (placed % ITEM_EVERY === 0 && items.length < ITEM_MAX) {
-    // 回復は、残機が減っているときだけ出る
-    const pool = ITEM_KINDS.filter((k) => k !== 'heal' || drops > 0);
-    const kind = pool[Math.floor(Math.random() * pool.length)];
+    const kind = ITEM_KINDS[Math.floor(Math.random() * ITEM_KINDS.length)];
     items.push(kind);
     itemsGained++;
-    showBanner(`アイテム GET: ${ITEM_INFO[kind].name}`, ITEM_INFO[kind].desc, true, 1.6);
     beep(660, 0.1, 'square', 0.07);
     setTimeout(() => beep(880, 0.14, 'square', 0.07), 90);
-    renderItems();
   }
+  renderItems(); // 次のアイテムまでの残りも更新する
 }
 
 /** ツタ: 周り約2マス以内のブロック(と土台)にツタをからめて固定する */
@@ -938,7 +1054,6 @@ function growVines(src: Block): void {
   bind(platformBody, pPairs);
   src.mat.emissive.setHex(VINE_COLOR);
   src.mat.emissiveIntensity = 0.25;
-  showBanner('ツタ!', '周りのブロックにからみついた', true, 1.4);
   beep(520, 0.15, 'sine', 0.1, 300);
 }
 
@@ -960,14 +1075,6 @@ function useItem(): void {
   const kind = items[0];
   if (!kind) return;
   if (kind === 'glue' && glueArmed) return; // すでに準備中
-  if (kind === 'shield' && shield) return;
-  if (kind === 'heal' && drops === 0) {
-    // 残機が満タンなら使わずに後ろへ回す
-    items.push(items.shift()!);
-    showBanner('残機は満タン', '回復はあとに回した', true, 1.2);
-    renderItems();
-    return;
-  }
   items.shift();
   itemsUsedByKind[kind] = (itemsUsedByKind[kind] ?? 0) + 1;
   beep(740, 0.18, 'sine', 0.1, 400);
@@ -983,12 +1090,8 @@ function useItem(): void {
       if (blk.body.velocity.length() > 1) continue; // 落下中のものは固めない
       freezeBlock(blk, 0.7);
     }
-    showBanner('セメント!', 'いま積んであるブロックが固まった', true, 1.6);
   } else if (kind === 'heal') {
     drops = Math.max(0, drops - 1);
-    showBanner('回復!', '残機が1つ戻った', true, 1.6);
-  } else {
-    shield = true;
   }
   renderItems();
 }
@@ -998,14 +1101,46 @@ function wakeAll(): void {
   for (const blk of blocks) blk.body.wakeUp();
 }
 
-function startEvent(kind: EventKind, from?: string): void {
-  if (shield) {
-    shield = false;
-    showBanner('バリアで防いだ!', `${from ? `${from}からの` : ''}${EVENT_INFO[kind].name}を無効化`, true, 2);
-    beep(900, 0.25, 'sine', 0.1, 500);
-    renderItems();
-    return;
+/** 画面の縁の赤い光・ラベル・流れる線(イベントが来ていることを、文章ではなく見た目で知らせる) */
+const elEdge = document.getElementById('edge-alert')!;
+const elEventLabel = document.getElementById('event-label')!;
+const elEventFx = document.getElementById('event-fx')!;
+for (let i = 0; i < 18; i++) {
+  const s = document.createElement('i');
+  s.style.setProperty('--p', `${Math.round(Math.random() * 100)}%`);
+  s.style.setProperty('--d', `${(0.5 + Math.random() * 0.9).toFixed(2)}s`);
+  s.style.setProperty('--dl', `${(-Math.random() * 1.4).toFixed(2)}s`);
+  elEventFx.append(s);
+}
+
+/** HUD の真下にラベルを置き、通知バナーはその下へずらす(HUD の高さは画面の大きさで変わるので、実際の位置から決める) */
+function placeEventUi(): void {
+  const r = document.getElementById('left')?.getBoundingClientRect();
+  if (r && r.height > 0) document.documentElement.style.setProperty('--hud-bottom', `${Math.round(r.bottom)}px`);
+}
+window.addEventListener('resize', placeEventUi);
+
+function setEventLook(mode: '' | 'warn' | 'active', kind?: EventKind): void {
+  const k = mode && kind ? ` k-${kind}${kind === 'wind' ? (windDir < 0 ? ' left' : ' right') : ''}` : '';
+  elEdge.className = mode + k;
+  elEventLabel.className = mode + k;
+  elEventFx.className = mode === 'active' && kind ? `fx-${kind}${kind === 'wind' && windDir < 0 ? ' left' : ''}` : '';
+  if (mode && kind) {
+    elEventLabel.innerHTML = mode === 'warn'
+      ? `<svg viewBox="0 0 32 32">${EVENT_ICON[kind]}</svg>${EVENT_INFO[kind].name}<b id="ev-time">${EVENT_WARN_TIME.toFixed(1)}秒</b>`
+      : `<svg viewBox="0 0 32 32">${EVENT_ICON[kind]}</svg>${EVENT_INFO[kind].name}`;
+    placeEventUi();
   }
+}
+
+/** イベントを予告する。EVENT_WARN_TIME 秒後に本番が始まる */
+function startEvent(kind: EventKind): void {
+  if (pendingEvent) return;
+  pendingEvent = { kind, t: EVENT_WARN_TIME, beeps: 0 };
+  setEventLook('warn', kind);
+}
+
+function beginEvent(kind: EventKind): void {
   if (activeEvent) endEvent();
   activeEvent = kind;
   activeTime = 0;
@@ -1013,11 +1148,19 @@ function startEvent(kind: EventKind, from?: string): void {
   if (kind === 'wind') windDir = Math.random() < 0.5 ? -1 : 1;
   if (kind === 'quake') world.allowSleep = false;
   if (kind === 'meteor') meteorTimer = 0;
-  const arrow = kind === 'wind' ? (windDir > 0 ? ' →→→' : ' ←←←') : '';
-  showBanner(`${EVENT_INFO[kind].name}${arrow}`, from ? `${from}からのおじゃま! ${EVENT_INFO[kind].desc}` : EVENT_INFO[kind].desc, false, 2);
+  setEventLook('active', kind);
+  const se: Record<EventKind, [number, OscillatorType, number]> = {
+    wind: [300, 'sine', 260],
+    quake: [90, 'sawtooth', -30],
+    meteor: [140, 'sawtooth', -60],
+    speed: [420, 'square', 700],
+  };
+  beep(se[kind][0], 0.6, se[kind][1], 0.09, se[kind][2]);
 }
 
 function endEvent(): void {
+  pendingEvent = null;
+  setEventLook('');
   if (activeEvent === 'quake') {
     world.allowSleep = true;
     platformBody.position.x = 0;
@@ -1048,6 +1191,24 @@ function spawnMeteor(): void {
 }
 
 function updateEvents(dt: number): void {
+  if (pendingEvent) {
+    pendingEvent.t -= dt;
+    // 警告音を0.5秒ごとに3回
+    const elapsed = EVENT_WARN_TIME - pendingEvent.t;
+    while (pendingEvent.beeps < WARN_BEEP_AT.length && WARN_BEEP_AT[pendingEvent.beeps] <= elapsed) {
+      beep(880, pendingEvent.beeps === 0 ? 0.5 : 0.25, 'sawtooth', 0.07, -320);
+      pendingEvent.beeps++;
+    }
+    const timeEl = document.getElementById('ev-time');
+    if (timeEl) timeEl.textContent = `${Math.max(0, pendingEvent.t).toFixed(1)}秒`;
+    elEdge.classList.toggle('urgent', pendingEvent.t <= 3); // 残り3秒からは点滅を速くする
+    if (pendingEvent.t <= 0) {
+      const { kind } = pendingEvent;
+      pendingEvent = null;
+      beginEvent(kind);
+    }
+    return;
+  }
   if (activeEvent) {
     activeTime += dt;
     const dur = EVENT_INFO[activeEvent].duration;
@@ -1070,30 +1231,16 @@ function updateEvents(dt: number): void {
     if (activeTime >= dur) endEvent();
     return;
   }
-  if (upcoming) {
-    warnTimer -= dt;
-    if (warnTimer <= 0) {
-      const k = upcoming;
-      upcoming = null;
-      startEvent(k);
-      eventTimer = Math.max(16, 26 - bestHeight * 0.15);
-    }
-    return;
-  }
   eventTimer -= dt;
   if (eventTimer <= 0) {
-    upcoming = EVENT_KINDS[Math.floor(Math.random() * EVENT_KINDS.length)];
-    warnTimer = 2.5;
-    showBanner('! まもなく邪魔イベント !', EVENT_INFO[upcoming].name, false, 2.4);
-    beep(440, 0.12, 'square', 0.08);
-    setTimeout(() => beep(440, 0.12, 'square', 0.08), 220);
+    // 予告なしで始まる
+    startEvent(EVENT_KINDS[Math.floor(Math.random() * EVENT_KINDS.length)]);
+    eventTimer = Math.max(16, 26 - bestHeight * 0.15);
   }
 }
 
 // ───────────────────────── HUD ─────────────────────────
 const $ = (id: string) => document.getElementById(id)!;
-const elScore = $('score');
-const elHeight = $('height');
 const elDrops = $('drops');
 const elNext = $('next');
 const elMatch = $('match');
@@ -1103,29 +1250,98 @@ const elBanner = $('banner');
 const elHud = $('hud');
 const elResult = $('result-modal');
 const elResultScore = $('result-score');
-const elResultDetail = $('result-detail');
 const elResultRecord = $('result-record');
 
-function showBanner(title: string, sub: string, good: boolean, time: number): void {
-  elBanner.className = good ? 'good' : '';
-  elBanner.innerHTML = '';
-  elBanner.append(title);
-  const s = document.createElement('small');
-  s.textContent = sub;
-  elBanner.append(s);
-  elBanner.style.display = 'block';
-  bannerTimer = time;
+/** 通知の種類(色とアイコンで見分ける) */
+type BannerKind = 'info' | 'get' | 'use' | 'event';
+/** 通知は1か所に、1つずつ順番に出す。出ている間に次が来たら、そのぶん待つ */
+interface BannerItem { title: string; sub: string; kind: BannerKind; time: number; icon: string }
+const bannerQueue: BannerItem[] = [];
+const BANNER_QUEUE_MAX = 4; // 待たせる数の上限。超えたら古い順に捨てる(遅れて古い知らせが出ないように)
+const BANNER_TIME_SCALE = 2; // 各通知の表示時間にかける倍率
+const BANNER_GAP = 0.12; // 次の通知までの間(秒)。切り替わりが分かるようにする
+let bannerNow: { el: HTMLElement; t: number } | null = null;
+let bannerGap = 0;
+
+const ICON_WARN = '<path d="M16 3 L30 28 H2 Z" fill="#ffcc33" stroke="#7a1020" stroke-width="2" stroke-linejoin="round"/><rect x="14.5" y="11" width="3" height="9" rx="1.5" fill="#7a1020"/><circle cx="16" cy="24" r="1.8" fill="#7a1020"/>';
+const ICON_FLAG = '<path d="M7 3 V29" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M9 5 H26 L21 11 L26 17 H9 Z" fill="#8fa3c0" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>';
+const ICON_PLAYERS = '<circle cx="11" cy="11" r="4.5" fill="#8fa3c0" stroke="#fff" stroke-width="2"/><path d="M2 27 C2 19 20 19 20 27 Z" fill="#8fa3c0" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><circle cx="23" cy="12" r="3.6" fill="#8fa3c0" stroke="#fff" stroke-width="2"/><path d="M22 20 C27 19 31 22 31 27 H23" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>';
+const ICON_TROPHY = '<path d="M9 4 H23 V12 C23 17 20 20 16 20 C12 20 9 17 9 12 Z" fill="#ffd166" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M9 7 H4 C4 12 6 14 9 14 M23 7 H28 C28 12 26 14 23 14" fill="none" stroke="#fff" stroke-width="2"/><path d="M16 20 V25 M10 28 H22" stroke="#fff" stroke-width="3" stroke-linecap="round"/>';
+const EVENT_ICON: Record<EventKind, string> = {
+  wind: '<path d="M3 11 H20 A4 4 0 1 0 16 7 M3 17 H25 A4 4 0 1 1 21 21 M3 23 H14" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>',
+  quake: '<path d="M2 16 L8 8 L13 24 L19 6 L24 22 L30 14" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  meteor: '<path d="M4 4 L18 16 M2 12 L13 21 M10 2 L20 11" stroke="#ffb870" stroke-width="3" stroke-linecap="round"/><circle cx="21" cy="21" r="8" fill="#8a6a4e" stroke="#fff" stroke-width="2"/><circle cx="19" cy="19" r="2" fill="#5e4632"/><circle cx="24" cy="23" r="1.6" fill="#5e4632"/>',
+  speed: '<path d="M4 5 L15 16 L4 27 M15 5 L26 16 L15 27" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+
+function renderBanner(b: BannerItem): void {
+  placeEventUi();
+  const el = document.createElement('div');
+  el.className = `bn k-${b.kind}`;
+  const head = document.createElement('div');
+  head.className = 'b-head';
+  head.insertAdjacentHTML('beforeend', `<svg viewBox="0 0 32 32">${b.icon}</svg>`);
+  head.append(b.title);
+  const small = document.createElement('small');
+  small.textContent = b.sub;
+  el.append(head, small);
+  elBanner.append(el);
+  bannerNow = { el, t: b.time };
 }
 
-function renderNext(): void {
-  elNext.innerHTML = '';
-  const def = PIECES[nextIndex];
+/** 通知を出す。何か出ている最中なら、順番待ちに入れる */
+function showBanner(title: string, sub: string, kind: BannerKind, time: number, icon: string): void {
+  bannerQueue.push({ title, sub, kind, time: time * BANNER_TIME_SCALE, icon });
+  while (bannerQueue.length > BANNER_QUEUE_MAX) bannerQueue.shift();
+}
+
+function clearBanner(): void {
+  bannerQueue.length = 0;
+  bannerNow?.el.remove();
+  bannerNow = null;
+  bannerGap = 0;
+}
+
+/** 通知の進行(毎フレーム) */
+function updateBanner(dt: number): void {
+  if (bannerNow) {
+    bannerNow.t -= dt;
+    if (bannerNow.t > 0) return;
+    bannerNow.el.remove();
+    bannerNow = null;
+    bannerGap = BANNER_GAP;
+  }
+  if (bannerGap > 0) {
+    bannerGap -= dt;
+    return;
+  }
+  const next = bannerQueue.shift();
+  if (next) renderBanner(next);
+}
+
+/** 特殊ブロックの 次 用イラスト(96×46 の SVG) */
+function nextIllustration(id: string, c: string): string {
+  const dark = 'rgba(0,0,0,0.28)';
+  const body: Record<string, string> = {
+    car: `<rect x="14" y="20" width="68" height="16" rx="5" fill="${c}"/><rect x="30" y="9" width="36" height="14" rx="5" fill="${c}"/><rect x="34" y="12" width="28" height="9" rx="2" fill="#1b2a3a"/><rect x="14" y="31" width="68" height="5" rx="2" fill="${dark}"/><circle cx="30" cy="37" r="7" fill="#16181c"/><circle cx="30" cy="37" r="3" fill="#b8bec8"/><circle cx="66" cy="37" r="7" fill="#16181c"/><circle cx="66" cy="37" r="3" fill="#b8bec8"/><rect x="78" y="24" width="4" height="5" rx="1" fill="#fff6d0"/>`,
+    desk: `<rect x="12" y="10" width="72" height="8" rx="2" fill="${c}"/><rect x="12" y="16" width="72" height="2" fill="${dark}"/><rect x="18" y="18" width="60" height="7" fill="#8a8f96"/><rect x="16" y="18" width="4" height="26" rx="1" fill="#9aa3ad"/><rect x="76" y="18" width="4" height="26" rx="1" fill="#9aa3ad"/><rect x="16" y="38" width="64" height="3" fill="#9aa3ad"/>`,
+    daruma: `<circle cx="48" cy="23" r="20" fill="${c}"/><ellipse cx="48" cy="20" rx="12" ry="10" fill="#fff3e0"/><circle cx="43" cy="19" r="2.4" fill="#111"/><circle cx="53" cy="19" r="2.4" fill="#111"/><path d="M39 33 Q48 40 57 33" stroke="#ffc94a" stroke-width="2.5" fill="none"/>`,
+    hydrant: `<rect x="40" y="10" width="16" height="28" rx="3" fill="${c}"/><path d="M38 12 A10 9 0 0 1 58 12 Z" fill="${c}"/><rect x="45" y="3" width="6" height="6" rx="1" fill="#c9ced6"/><rect x="30" y="18" width="36" height="8" rx="3" fill="${c}"/><rect x="33" y="38" width="30" height="6" rx="2" fill="${c}"/><rect x="40" y="12" width="4" height="26" fill="rgba(255,255,255,0.25)"/>`,
+    phone: `<rect x="35" y="2" width="26" height="42" rx="5" fill="${c}" stroke="#7a8190" stroke-width="1.5"/><rect x="38" y="6" width="20" height="33" rx="2" fill="#2a6bd8"/><rect x="43" y="41" width="10" height="1.8" rx="1" fill="#fff"/>`,
+    tawara: `<rect x="10" y="9" width="76" height="30" rx="10" fill="${c}"/><rect x="10" y="30" width="76" height="9" rx="6" fill="${dark}"/><rect x="26" y="9" width="4" height="30" fill="#6b4a24"/><rect x="46" y="9" width="4" height="30" fill="#6b4a24"/><rect x="66" y="9" width="4" height="30" fill="#6b4a24"/><ellipse cx="14" cy="24" rx="4" ry="12" fill="#c9a46a"/><ellipse cx="82" cy="24" rx="4" ry="12" fill="#c9a46a"/>`,
+  };
+  return `<svg viewBox="0 0 96 46" xmlns="http://www.w3.org/2000/svg">${body[id] ?? ''}</svg>`;
+}
+
+/** 次のピースを枠に描く。innerW/innerH は枠の中身の大きさ(px) */
+function fillNextBox(box: HTMLElement, index: number, innerW: number, innerH: number): void {
+  box.innerHTML = '';
+  const def = PIECES[index];
   if (!def.tetromino) {
-    // テトリス型でないピースは名前で出す
-    const label = document.createElement('span');
-    label.className = 'next-special';
-    label.textContent = def.name;
-    elNext.append(label);
+    // テトリス型でないピースはイラストで出す
+    box.style.gridTemplateColumns = '100%';
+    box.style.gridTemplateRows = '100%';
+    box.innerHTML = nextIllustration(def.id, `#${def.color.toString(16).padStart(6, '0')}`);
     return;
   }
   const xs = def.parts.map((c) => c.x);
@@ -1135,44 +1351,90 @@ function renderNext(): void {
   // 大きい形(3段・4列を超える)は、マスを小さくして同じ枠に収める
   const cols = Math.round(Math.max(...xs) - minX) + 1;
   const rows = Math.round(maxY - Math.min(...ys)) + 1;
-  const size = Math.min(20, Math.floor(42 / rows) - 2, Math.floor(86 / cols) - 2);
-  elNext.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
-  elNext.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+  const size = Math.min(20, Math.floor(innerH / rows) - 2, Math.floor(innerW / cols) - 2);
+  box.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+  box.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
   const color = `#${def.color.toString(16).padStart(6, '0')}`;
   for (const { x, y } of def.parts) {
     const i = document.createElement('i');
     i.style.background = color;
     i.style.gridColumn = String(Math.round(x - minX) + 1);
     i.style.gridRow = String(Math.round(maxY - y) + 1);
-    elNext.append(i);
+    box.append(i);
   }
+}
+
+/** 次と、その次(矢印の先)を container に出す */
+function renderNextInto(container: HTMLElement, first: number, second: number): void {
+  container.innerHTML = '';
+  const big = document.createElement('div');
+  big.className = 'nbox big';
+  const arrow = document.createElement('span');
+  arrow.className = 'narrow';
+  arrow.textContent = '▶';
+  const small = document.createElement('div');
+  small.className = 'nbox small';
+  container.append(big, arrow, small);
+  fillNextBox(big, first, 50, 32);
+  fillNextBox(small, second, 50, 32);
+}
+function renderNext(): void {
+  renderNextInto(elNext, nextIndex, nextIndex2);
+}
+
+/** アイテムのアイコン(32×32 の SVG) */
+const ITEM_ICON: Record<ItemKind, string> = {
+  glue: '<path d="M6 26 C10 14 14 22 18 12 S24 10 27 5" stroke="#1f6b2a" stroke-width="3.5" fill="none" stroke-linecap="round"/><ellipse cx="11" cy="17" rx="4" ry="2.4" transform="rotate(-35 11 17)" fill="#2e9b3e"/><ellipse cx="22" cy="12" rx="4" ry="2.4" transform="rotate(35 22 12)" fill="#2e9b3e"/>',
+  cement: '<path d="M7 11 H25 L23 27 H9 Z" fill="#6c7580"/><rect x="5" y="7" width="22" height="6" rx="2" fill="#8a949f"/><path d="M11 17 H21 M11 22 H21" stroke="#c9d0d8" stroke-width="2"/>',
+  heal: '<path d="M16 28 C4 19 4 8 11 7 C14 7 16 10 16 10 C16 10 18 7 21 7 C28 8 28 19 16 28 Z" fill="#d6304f"/><path d="M9 11 C10 9 12 9 13 10" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>',
+};
+
+/** アイテム1枠。kind が無ければ未獲得(バリアの形の点線)。remain があれば、その中に残り個数を重ねる */
+function makeItemSlot(kind: ItemKind | undefined, ready: boolean, remain?: string): HTMLElement {
+  const d = document.createElement('div');
+  if (kind) {
+    d.className = `item ${kind}${ready ? ' ready' : ''}`;
+    d.title = ITEM_INFO[kind].name;
+    d.innerHTML = `<svg viewBox="0 0 32 32">${ITEM_ICON[kind]}</svg>`;
+  } else {
+    d.className = 'item slot';
+    // 未獲得のスロットは、バリアの形の点線で出す
+    d.innerHTML = `<svg viewBox="0 0 32 32"><path d="M16 3 L27 7 V16 C27 22 22 27 16 30 C10 27 5 22 5 16 V7 Z" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 3" stroke-linejoin="round"/></svg>${remain ? `<span>${remain}</span>` : ''}`;
+  }
+  return d;
 }
 
 function renderItems(): void {
   elItems.innerHTML = '';
-  if (items.length === 0) {
-    const e = document.createElement('div');
-    e.className = 'empty';
-    e.textContent = `ブロックを${ITEM_EVERY}個置くともらえる`;
-    elItems.append(e);
+  for (let i = 0; i < ITEM_MAX; i++) {
+    const kind = items[i];
+    // 最初の空きスロットに、次のアイテムまでの残り個数を重ねる
+    const remain = !kind && i === items.length ? `あと<br>${ITEM_EVERY - (placed % ITEM_EVERY)}個` : undefined;
+    // スロットの下に、アイテム名を添える
+    const cell = document.createElement('div');
+    cell.className = 'icell';
+    const name = document.createElement('div');
+    name.className = 'iname';
+    name.textContent = kind ? ITEM_INFO[kind].name : '空き';
+    name.classList.toggle('empty', !kind);
+    cell.append(makeItemSlot(kind, i === 0, remain), name);
+    elItems.append(cell);
   }
-  for (const kind of items) {
-    const d = document.createElement('div');
-    d.className = `item ${kind}`;
-    d.textContent = ITEM_INFO[kind].name;
-    elItems.append(d);
+  // 使えるアイテムがあれば、右下寄りに「(ボタン) ○○を使用」を出す
+  const hint = $('item-hint');
+  if (items[0]) {
+    // (ボタン) ○○を使用
+    hint.innerHTML = `${buttonIconHtml([1], 'Enter')}<span class="ih-icon ${items[0]}"><svg viewBox="0 0 32 32">${ITEM_ICON[items[0]]}</svg></span><small>${ITEM_INFO[items[0]].desc}</small>`;
   }
+  hint.classList.toggle('show', !!items[0]);
   const st: string[] = [];
   if (glueArmed) st.push('ツタ 準備OK');
-  if (shield) st.push('バリア展開中');
   setText(elStatus, st.join(' / '));
 }
 
 function renderHud(): void {
   setDisplay(elHud, state === 'title' || state === 'menu' ? 'none' : 'block');
   renderMatchHud();
-  setText(elScore, String(score()));
-  setText(elHeight, currentHeight.toFixed(1));
 
   // 残機: 左から MAX_DROPS 個。落とした数だけ右から消える
   const marks = elDrops.children;
@@ -1183,14 +1445,55 @@ function renderHud(): void {
 const titleScreen = new ArcadeTitleScreen({
   slug: 'tower-stack',
   accentColor: ACCENT,
-  tagline: 'ブロックを積んで高さを競え! 3個落としたらゲームオーバー',
+  logoStretchY: 1.4, // 横長で上下に余白のあるロゴなので、幅は変えずに縦へ引き伸ばして、他のゲームと同じくらいの高さに見せる
+  tagline: 'ブロックを積み上げる物理パズル',
   onStart: () => void onStartPressed(),
 });
 
 /** タイトルの背景に置く飾りのタワー */
-function buildTitleTower(): void {
-  const deco: [number, number, number][] = [[1, 0, 1], [0, 0, 2.5], [1, 1, 4], [2, -1.5, 3.75]];
-  for (const [i, x, y] of deco) freezeBlock(createPiece(i, x, y), 0);
+/** タイトル・モード選択の背景: 自動でブロックを積んでいくデモ。3個落ちたら、結果は出さずにやり直す */
+let demoActive = false;
+/** デモのブロック数・高さの上限。積み続けて重くなりすぎないように、超えたらまっさらにやり直す */
+const DEMO_MAX_BLOCKS = 40;
+const DEMO_MAX_HEIGHT = 26;
+let demoPiece: Block | null = null;
+let demoTarget = 0;
+let demoRot = 0;
+let demoRotTimer = 0;
+function startDemo(): void {
+  clearBlocks();
+  resetRunState();
+  resetPieceBag();
+  nextIndex = randomPieceIndex();
+  nextIndex2 = randomPieceIndex();
+  eventTimer = Infinity; // 邪魔イベントは起こさない
+  spawnTimer = 0.8;
+  demoPiece = null;
+  demoActive = true;
+}
+/** デモの操作役: 落ちてくるブロックごとに、左右の位置と回転の数をランダムに決めて動かす(うまく積めないこともある) */
+function demoInput(dt: number): Input {
+  const inp: Input = { left: false, right: false, up: false, down: false, rotate: false, item: false, confirm: false, cancel: false, padNavX: 0, padNavY: 0 };
+  if (!current || currentReleased) return inp;
+  if (demoPiece !== current) {
+    demoPiece = current;
+    demoTarget = (Math.random() - 0.5) * 7;
+    demoRot = Math.floor(Math.random() * 4);
+    demoRotTimer = 0.15;
+  }
+  const diff = demoTarget - targetX;
+  if (Math.abs(diff) >= MOVE_STEP) {
+    inp.right = diff > 0;
+    inp.left = diff < 0;
+  }
+  demoRotTimer -= dt;
+  if (demoRot > 0 && demoRotTimer <= 0) {
+    inp.rotate = true;
+    demoRot--;
+    demoRotTimer = 0.25;
+  }
+  inp.down = demoRot === 0 && Math.abs(diff) < MOVE_STEP; // 位置が決まったら早く落とす
+  return inp;
 }
 
 function clearBlocks(): void {
@@ -1203,13 +1506,9 @@ function showTitle(): void {
   modeSelect.hide();
   leaveOnline();
   clearBlocks();
-  endEvent();
-  upcoming = null;
-  current = null;
-  currentHeight = 0;
-  bestLine.visible = false;
-  elBanner.style.display = 'none';
-  buildTitleTower();
+  resetRunState(); // 対戦のあとでも、前のプレイの状況(残機・アイテム・記録・通知)を持ち越さない
+  clearRankMarkers();
+  startDemo();
   state = 'title';
   stateTime = 0;
   titleScreen.show();
@@ -1220,22 +1519,16 @@ function showTitle(): void {
 const resultItems: ResultMenuItem[] = [
   { button: $('result-btn-retry'), color: ACCENT },
   { button: $('result-btn-title'), color: '#7bdff2' },
-  { button: $('result-btn-exit'), color: '#ff8fa3' },
 ];
 setupResultMenu($('result-menu'), resultItems);
 const resultActions = [
   () => (mode === 'online' ? retryOnline() : startGame()),
   () => showTitle(),
-  () => { window.location.href = HUB_URL; },
 ];
-const elResultBadge = document.querySelector('.result-badge') as HTMLElement;
 const elResultTitle = document.querySelector('.result-title') as HTMLElement;
-const elResultLabel = document.querySelector('.result-label') as HTMLElement;
 /** リザルトの見出し(ひとりで遊んだとき / オンライン対戦)を切り替える */
-function setResultTexts(badge: string, title: string, label: string, retry: string): void {
-  elResultBadge.textContent = badge;
+function setResultTexts(title: string, retry: string): void {
   elResultTitle.textContent = title;
-  elResultLabel.textContent = label;
   const btn = resultItems[0].button;
   if (btn) btn.textContent = retry;
 }
@@ -1244,16 +1537,16 @@ let resultFocus = 0;
 let stopCountUp: (() => void) | null = null;
 
 function openResult(isNew: boolean): void {
-  setResultTexts('◆ ブロックを3個落とした ◆', 'GAME OVER', 'SCORE', '再挑戦');
+  setResultTexts('GAME OVER', '再挑戦');
+  elResultScore.style.display = '';
   resultOpen = true;
   resultFocus = 0;
   menuNav.clear();
   applyResultMenuFocus(resultItems, resultFocus);
-  elResultDetail.textContent = `最高到達 ${bestHeight.toFixed(1)} m / 置いたブロック ${placed} 個`;
-  elResultRecord.textContent = isNew ? '自己ベスト更新!' : `自己ベスト ${hiscore}`;
+  elResultRecord.textContent = isNew ? '★ 自己ベスト更新!' : `ベスト ${(hiscore / 100).toFixed(1)} m`;
   elResultRecord.classList.toggle('new', isNew);
   elResult.classList.add('show');
-  stopCountUp = countUpText(elResultScore, String(score()));
+  stopCountUp = countUpText(elResultScore, `${bestHeight.toFixed(1)} m`);
   guideResult();
   showRanking();
 }
@@ -1310,13 +1603,13 @@ function showRanking(): void {
     }
     mountNameEntryModal({
       title: 'タワー記録',
-      scoreDisplay: `${s.toLocaleString()} pts`,
+      scoreDisplay: `${height.toFixed(1)} m`,
       rankDisplay: `第${rank}位`,
       themeClass: 'theme-street',
       delayMs: NAME_ENTRY_AFTER_RESULT_MS,
       onComplete: async (name) => {
         menuNav.clear();
-        const res = await saveLeaderboardScore(SLUG, s, name, undefined, `高さ ${height.toFixed(1)}m`);
+        const res = await saveLeaderboardScore(SLUG, s, name);
         if (seq === resultSeq && res.rank > 0) renderRanking(res.list, res.rank);
         nameEntryOpen = false;
         resultArmUntil = performance.now() + 800; // 名前の決定がメニューの決定として入らないようにする
@@ -1339,7 +1632,7 @@ function updateResult(inp: Input): void {
     menuNav.clear();
     return;
   }
-  menuNav.updatePad(inp.left ? -1 : inp.right ? 1 : 0, inp.up ? -1 : inp.down ? 1 : 0);
+  menuNav.updatePad(inp.padNavX, inp.padNavY);
   for (const dir of menuNav.take()) {
     resultFocus = (resultFocus + dir + resultItems.length) % resultItems.length;
     applyResultMenuFocus(resultItems, resultFocus);
@@ -1347,7 +1640,7 @@ function updateResult(inp: Input): void {
   }
   if (stateTime < RESULT_DELAY + 0.6) return; // 直前の操作が決定として入らないよう少し待つ
   if (inp.confirm) resultActions[resultFocus]();
-  else if (inp.cancel) resultActions[2]();
+  else if (inp.cancel) resultActions[1]();
 }
 
 // ───────────────────────── オンライン対戦 ─────────────────────────
@@ -1366,6 +1659,13 @@ const rivalStages = new RivalStages(scene, {
     const p = platformMesh.clone();
     p.position.set(0, -0.5, 0);
     g.add(p, pillar.clone());
+    addScaleLabels(g); // 高さの目盛りも、相手のステージに出す
+    // 土台の左右の白いライン(自分のステージと同じものを、相手のステージにも出す)
+    for (const m of edgeLines) {
+      const e = new THREE.Mesh(m.geometry, edgeMat);
+      e.position.copy(m.position);
+      g.add(e);
+    }
     return g;
   },
   explode: (x, y, color, power) => {
@@ -1389,16 +1689,8 @@ interface OnlineMatch {
 }
 let match: OnlineMatch | null = null;
 
-const towerArt = (n: number) => {
-  const tower = (x: number, h: number, c: string) =>
-    Array.from({ length: h }, (_, i) => `<rect x="${x + (i % 2) * 4}" y="${80 - (i + 1) * 13}" width="26" height="12" rx="2" fill="${c}" stroke="#0006"/>`).join('');
-  const cols = n === 1 ? [[87, 5, '#ffd166']] : [[48, 4, PLAYER_COLORS[0]], [126, 5, PLAYER_COLORS[1]]];
-  const vs = n === 1 ? '' : '<text x="100" y="50" text-anchor="middle" font-size="22" font-weight="900" fill="#fff">VS</text>';
-  return `<svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="80" width="184" height="8" rx="2" fill="#7a5236"/>${cols.map(([x, h, c]) => tower(x as number, h as number, c as string)).join('')}${vs}</svg>`;
-};
-
 const modeSelect = new ModeSelect(
-  { title: 'あそびかた', accent: ACCENT, accentEnd: '#ff9f43' },
+  { title: 'モード選択', accent: ACCENT, accentEnd: '#ff9f43', arcade: true },
   (id) => onModeSelected(id),
   () => {
     modeSelect.hide();
@@ -1406,7 +1698,7 @@ const modeSelect = new ModeSelect(
   },
 );
 
-/** START: オンライン対戦が開かれていれば遊び方の選択を挟み、そうでなければそのまま始める */
+/** START: 遊び方の選択を出す(オンライン対戦が開かれていなければ、その項目は選べない) */
 async function onStartPressed(): Promise<void> {
   if (startingFlow) return;
   startingFlow = true;
@@ -1416,8 +1708,8 @@ async function onStartPressed(): Promise<void> {
     startingFlow = false;
   }
   if (state !== 'title') return;
-  if (onlineStatus) openModeSelect();
-  else startGame();
+  if (isPreview) startGame();
+  else openModeSelect(); // 開催されていなくても、オンライン対戦の項目は出す(選べない)
 }
 
 function openModeSelect(): void {
@@ -1425,14 +1717,14 @@ function openModeSelect(): void {
   const st = onlineStatus;
   const full = !!st && st.players >= st.max;
   modeSelect.show([
-    { id: 'solo', badge: 'OFFLINE', art: towerArt(1), title: 'ひとりで', sub: 'スコアを競う', desc: 'ひとりでどこまで高く積めるかに挑戦。高さがスコアになり、上位はランキングに載ります。' },
+    { id: 'solo', art: SOLO_ART, title: 'ランキング挑戦', sub: '記録を塗り替える', desc: '過去の上位の記録を超える高さを目指します。' },
     {
       id: 'online',
-      badge: 'ONLINE',
-      art: towerArt(2),
-      title: '1on1 対戦',
-      sub: !st ? '' : full ? '対戦中' : st.phase !== 'lobby' ? '対戦中' : st.players === 1 ? '相手が待っています!' : '相手を待つ',
-      desc: 'オンラインで1対1。同時に積んで、先にブロックを3個落とした方の負け。積むほど相手におじゃまが飛びます。',
+      art: ONLINE_ART,
+      title: 'オンライン対戦',
+      sub: !st ? '現在は開催されていません' : full ? '対戦中' : st.phase !== 'lobby' ? '対戦中' : `参加者 ${st.players}/${st.max}`,
+      desc: '1対1で同時に積みます。先に3個落とした方の負けです。',
+      disabled: !st, // 開催されていなくても項目は出す(選べない)
     },
   ]);
   guideMenu();
@@ -1508,7 +1800,7 @@ function beginOnlineMatch(m: Extract<ServerMsg, { t: 'start' }>): void {
   startGame();
   rivalStages.setup(m.players, onlineYou);
   const me = m.players.findIndex((p) => p.id === onlineYou);
-  showBanner('オンライン対戦', `あなたは ${m.players[me]?.name ?? ''}(${me + 1}P)`, true, 2.5);
+  showBanner('オンライン対戦', `あなたは ${m.players[me]?.name ?? ''}`, 'info', 2.5, ICON_PLAYERS);
   net.send({ t: 'loaded' });
 }
 
@@ -1516,18 +1808,17 @@ function playerName(id: number): string {
   return match?.players.find((p) => p.id === id)?.name ?? '???';
 }
 
-/** おじゃま: 自分宛てならイベントを起こす。自分が送ったものは宛先を知らせる */
+/** おじゃま: 自分宛てならイベントを起こす。自分が送ったものは効果音だけ鳴らす */
 function onAttack(m: Extract<ServerMsg, { t: 'atk' }>): void {
   if (!match) return;
   const kind = m.k as EventKind;
   if (!EVENT_INFO[kind]) return;
   if (m.to === onlineYou) {
-    if (state === 'playing' && match.started && !match.stopped) startEvent(kind, playerName(m.from));
+    if (state === 'playing' && match.started && !match.stopped) startEvent(kind);
     return;
   }
   rivalStages.flash(m.to);
   if (m.from === onlineYou) {
-    showBanner(`おじゃま送信! → ${playerName(m.to)}`, EVENT_INFO[kind].name, true, 1.4);
     beep(700, 0.12, 'square', 0.06, 300);
   }
 }
@@ -1547,6 +1838,9 @@ function sendState(): void {
     d: Math.min(3, drops),
     lv: level,
     k: k.slice(-MAX_SNAP_BLOCKS),
+    it: items.slice(0, ITEM_MAX).map((kind) => ITEM_KINDS.indexOf(kind)),
+    n: [nextIndex, nextIndex2],
+    f: glueArmed ? 1 : 0,
   });
 }
 
@@ -1556,14 +1850,13 @@ function stopPlaying(title: string, sub: string): void {
   match.stopped = true;
   sendState();
   endEvent();
-  upcoming = null;
   if (current) {
     removeBlock(current);
     current = null;
   }
   state = 'gameover';
   stateTime = 0;
-  showBanner(title, sub, true, 3);
+  showBanner(title, sub, 'get', 3, ICON_TROPHY);
   beep(660, 0.3, 'square', 0.08, 300);
 }
 
@@ -1571,7 +1864,7 @@ function onOnlineResults(entries: ResultEntry[]): void {
   if (!match) return;
   match.results = entries;
   if (state === 'playing') {
-    if (entries[0]?.id === onlineYou) stopPlaying('WIN!', '最後まで残った!');
+    if (entries[0]?.id === onlineYou) stopPlaying('WIN', '最後まで残った');
     else stopPlaying('試合終了', '');
   }
   // 結果を受け取ったら接続は閉じる(開いたままにして負荷をかけない)。もう一度遊ぶときに接続し直す
@@ -1581,14 +1874,12 @@ function onOnlineResults(entries: ResultEntry[]): void {
 /** オンラインの結果: 順位表(最高到達の高い順) */
 function openOnlineResult(entries: ResultEntry[]): void {
   const rank = entries.findIndex((e) => e.id === onlineYou) + 1;
-  const mine = entries.find((e) => e.id === onlineYou);
-  setResultTexts('◆ 1on1 対戦 ◆', rank === 1 ? 'YOU WIN!' : rank > 0 ? 'YOU LOSE…' : 'RESULT', 'あなたの最高到達', 'もう一度対戦');
+  setResultTexts(rank === 1 ? 'YOU WIN!' : rank > 0 ? 'YOU LOSE…' : 'RESULT', 'もう一度対戦');
+  elResultScore.style.display = 'none'; // 順位表に高さが出るので、大きなスコアは出さない
   resultOpen = true;
   resultFocus = 0;
   menuNav.clear();
   applyResultMenuFocus(resultItems, resultFocus);
-  elResultScore.textContent = `${(mine?.best ?? bestHeight).toFixed(1)}m`;
-  elResultDetail.textContent = rank === 1 ? '最後まで崩れなかった!' : rank > 0 ? '先に3個落としてしまった' : '';
   elResultRecord.textContent = '';
   elResultRecord.classList.remove('new');
   elResultRanking.innerHTML = '';
@@ -1603,7 +1894,7 @@ function openOnlineResult(entries: ResultEntry[]): void {
     const index = match?.players.findIndex((p) => p.id === e.id) ?? -1;
     const no = Object.assign(document.createElement('span'), { className: 'rank-no', textContent: `${i + 1}位` });
     const name = Object.assign(document.createElement('span'), { className: 'rank-name', textContent: e.id === onlineYou ? `${e.name}（あなた）` : e.name });
-    if (index >= 0) name.style.color = PLAYER_COLORS[index % PLAYER_COLORS.length];
+    if (index >= 0) name.style.color = PLAYER_COLORS_LIGHT[index % PLAYER_COLORS_LIGHT.length];
     const sc = Object.assign(document.createElement('span'), { className: 'rank-score', textContent: e.out ? `脱落 ${e.best.toFixed(1)}m` : `生き残り ${e.best.toFixed(1)}m` });
     row.append(no, name, sc);
     elResultRanking.append(row);
@@ -1619,11 +1910,8 @@ function retryOnline(): void {
   clearBlocks();
   rivalStages.clear();
   match = null;
-  currentHeight = 0;
-  camY = 6;
-  bestLine.visible = false;
-  elBanner.style.display = 'none';
-  buildTitleTower();
+  resetRunState();
+  startDemo();
   enterOnlineWait();
 }
 
@@ -1639,50 +1927,90 @@ function leaveOnline(): void {
   }
 }
 
-/** オンライン対戦の表示: UI(状況・高さ・残機・NEXT・アイテム・ボタンガイド)を上部の1本のバーにまとめる / 元に戻す */
+/** オンライン対戦の表示: UI(状況・高さ・残機・次・アイテム・ボタンガイド)を上部の1本のバーにまとめる / 元に戻す */
 let onlineLayout = false;
 function setOnlineLayout(on: boolean): void {
   if (on === onlineLayout) return;
   onlineLayout = on;
   document.body.classList.toggle('online', on);
-  // 上部のバーには NEXT とアイテムだけを置く(高さ・残機・名前はステージの下の名札に出ている)
-  const right = $('right');
-  if (on) {
-    $('topbar').append(right);
-    splitGuide();
-  } else {
-    elHud.append(right); // 元の位置(右上)は CSS の絶対配置で決まるので、#hud に戻すだけでよい
-    document.getElementById('agc-guide-r')?.remove();
-    const guide = document.getElementById('agc-guide');
-    if (guide?.dataset.split) guide.remove(); // 分けたガイドは片付ける(次の画面で出し直す)
+  
+  if (on) clearRankMarkers(); // 対戦にはランキングがないので、線を消す
+  if (!on) {
+    clearOnlineHud();
+    ownMarker.setColor('#000000'); // ひとりのときは黒い線
+    ownMarker.setTagX(-6.6);
   }
 }
-/** オンライン対戦: ボタンガイドを左上(移動・回転)と右上(アイテム・ホーム)に分ける */
-function splitGuide(): void {
-  const guide = document.getElementById('agc-guide');
-  if (!guide || !onlineLayout || guide.dataset.split) return;
-  guide.dataset.split = '1';
-  guide.classList.add('agc-top-left');
-  const right = guide.cloneNode(false) as HTMLElement;
-  right.id = 'agc-guide-r';
-  right.classList.remove('agc-top-left');
-  right.classList.add('agc-top-right');
-  const rows = [...guide.children];
-  rows.slice(Math.ceil(rows.length / 2)).forEach((r) => right.append(r));
-  document.body.append(right);
+
+/** 対戦のHUD: 残機・アイテム・次は自分の分だけで、ソロと同じ画面中央の大きな表示を使う。相手のステージには名前と状況だけをステージの下に出す */
+interface RivalHud { name: HTMLElement }
+const rivalHuds = new Map<number, RivalHud>();
+/** 世界のX座標(m)が画面の横で何pxの位置か */
+function screenX(worldX: number): number {
+  return ((worldX - camX) / (2 * viewHalfW) + 0.5) * window.innerWidth;
+}
+function clearOnlineHud(): void {
+  for (const r of rivalHuds.values()) {
+    r.name.remove();
+  }
+  rivalHuds.clear();
+  $('my-name').style.left = '';
+  $('my-name').textContent = '';
+}
+function buildRivalHud(): RivalHud {
+  const name = document.createElement('div');
+  name.className = 'stage-name';
+  elHud.append(name);
+  return { name };
+}
+function renderOnlineHud(): void {
+  if (!onlineLayout) return;
+  const mineX = `${screenX(0)}px`;
+  $('my-name').style.left = mineX; // HUD・ヒント・通知はソロと同じ画面中央。名前だけ自分のステージの下
+  const me = rivalStages.myInfo();
+  const nameEl = $('my-name');
+  if (me) {
+    // 最高到達の点線とブロックは、対戦では自分の色。ステージをまたいで相手の線と見比べられる
+    ownMarker.setColor(me.color, me.color);
+    // ブロックは、2人のステージの間(それぞれ相手側の端)に、重ならないよう並べて出す
+    ownMarker.setTagX(rivalStages.rivals().some((r) => r.offset > 0) ? BETWEEN_TAG_X : -BETWEEN_TAG_X);
+    const st = match?.out ? '脱落' : glueArmed ? 'ツタ準備OK' : '';
+    nameEl.innerHTML = '';
+    nameEl.append('あなた');
+    if (st) nameEl.insertAdjacentHTML('beforeend', `<small>${st}</small>`);
+    nameEl.style.background = me.color;
+  }
+  const seen = new Set<number>();
+  for (const r of rivalStages.rivals()) {
+    seen.add(r.id);
+    let h = rivalHuds.get(r.id);
+    if (!h) {
+      h = buildRivalHud();
+      rivalHuds.set(r.id, h);
+    }
+    const x = `${screenX(r.offset)}px`;
+    h.name.style.left = x;
+    h.name.style.background = r.flash ? '#ff4d5a' : r.color; // おじゃまを受けた瞬間は赤く
+    const st = r.gone ? '退出' : r.out ? '脱落' : r.flags & 1 ? 'ツタ準備OK' : '';
+    const nameKey = `${r.name}|${st}`;
+    if (h.name.dataset.k !== nameKey) {
+      h.name.dataset.k = nameKey;
+      h.name.innerHTML = '';
+      h.name.append(r.name);
+      if (st) h.name.insertAdjacentHTML('beforeend', `<small>${st}</small>`);
+    }
+  }
+  for (const [id, h] of rivalHuds) {
+    if (!seen.has(id)) {
+      h.name.remove();
+      rivalHuds.delete(id);
+    }
+  }
 }
 
-/** レベルが上がった: 画面中央に「SPEED UP!」を大きく出す */
-let speedTimer: number | null = null;
-function showSpeedUp(max: boolean): void {
-  const el = $('speedup');
-  el.textContent = max ? 'MAX SPEED!' : 'SPEED UP!';
-  el.classList.remove('show');
-  void el.offsetWidth; // アニメーションをやり直す
-  el.classList.add('show');
+/** レベルが上がった: バナーで知らせる(落下が速くなる) */
+function showLevelUp(lv: number): void {
   shake = Math.max(shake, 0.25);
-  if (speedTimer !== null) clearTimeout(speedTimer);
-  speedTimer = window.setTimeout(() => el.classList.remove('show'), 1500);
 }
 
 /** 対戦中の上部の表示(残り人数と状況) */
@@ -1690,12 +2018,17 @@ function renderMatchHud(): void {
   const show = mode === 'online' && !!match && (state === 'playing' || state === 'gameover');
   setDisplay(elMatch, 'none'); // 上部の状況表示は使わない(相手の名前は名札に、カウントダウンは画面中央に出す)
   setOnlineLayout(show);
+  renderOnlineHud();
   // スタート前のカウントダウンを画面中央に大きく出す
   const elCount = $('countdown');
   let count = '';
   if (show && match && !match.started) {
     const sec = Math.ceil((match.startAt - net.serverNow()) / 1000);
     count = Number.isFinite(sec) ? String(Math.max(1, sec)) : '';
+  } else if (mode === 'solo' && state === 'playing' && !isPreview) {
+    // ランキング挑戦のスタート前: 3・2・1 のあと、少しだけ GO! を出す
+    if (soloCountdown > 0) count = String(Math.ceil(soloCountdown));
+    else if (soloGo > 0) count = 'GO!';
   }
   setText(elCount, count);
   setDisplay(elCount, count ? 'block' : 'none');
@@ -1721,10 +2054,8 @@ function showNotice(text: string): void {
 }
 
 // ───────────────────────── 進行 ─────────────────────────
-function startGame(): void {
-  closeResult();
-  titleScreen.hide();
-  clearBlocks();
+/** 1回のプレイの状況をまっさらに戻す(開始前・タイトルに戻ったとき・もう一度対戦するときに使う) */
+function resetRunState(): void {
   endEvent();
   current = null;
   currentReleased = false;
@@ -1739,15 +2070,24 @@ function startGame(): void {
   itemsGained = 0;
   itemsUsedByKind = {};
   glueArmed = false;
-  shield = false;
   pendingVine = null;
   firstBlock = null;
-  eventTimer = isPreview || mode === 'online' ? Infinity : 30; // オンライン対戦では、おじゃまは相手から飛んでくる
-  upcoming = null;
-  spawnTimer = 0.4;
+  shake = 0;
   camY = 6;
-  bestLine.visible = false;
-  elBanner.style.display = 'none';
+  ownMarker.hide();
+  clearBanner();
+  renderItems();
+}
+
+function startGame(): void {
+  closeResult();
+  titleScreen.hide();
+  demoActive = false; // 背景のデモを止めて、ここから本番
+  clearBlocks();
+  resetRunState();
+  loadRankMarkers(); // ひとりのときだけ、ランキングの線を最新にして出す
+  eventTimer = isPreview || mode === 'online' ? Infinity : 30; // オンライン対戦では、おじゃまは相手から飛んでくる
+  spawnTimer = 0.4;
 
   if (isPreview) {
     const demoBlocks: [number, number, number][] = [
@@ -1769,10 +2109,14 @@ function startGame(): void {
 
   resetPieceBag();
   nextIndex = isPreview ? 0 : randomPieceIndex();
+  nextIndex2 = isPreview ? 1 : randomPieceIndex();
   renderNext();
   renderItems();
   state = 'playing';
   stateTime = 0;
+  soloCountdown = mode === 'solo' && !isPreview ? SOLO_COUNTDOWN : 0;
+  soloGo = 0;
+  soloCountSec = 0;
   if (!isPreview) {
     guidePlay();
     beep(520, 0.12, 'square', 0.07);
@@ -1785,7 +2129,6 @@ function gameOver(): void {
   state = 'gameover';
   stateTime = 0;
   endEvent();
-  upcoming = null;
   current = null;
   blowUpAll();
   if (mode === 'online' && match) {
@@ -1793,7 +2136,7 @@ function gameOver(): void {
     match.out = true;
     sendState();
     net.send({ t: 'out', b: bestHeight });
-    showBanner('脱落…', '結果を待っています', false, 3);
+    showBanner('脱落', '結果を待っています', 'event', 3, ICON_WARN);
     return;
   }
   const s = score();
@@ -1817,6 +2160,19 @@ function gameOver(): void {
 }
 
 function updatePlaying(dt: number, inp: Input): void {
+  if (mode === 'solo' && !demoActive && soloCountdown > 0) {
+    // スタートの合図を待つ。その間は動かさない
+    world.step(1 / 120, dt, 10);
+    soloCountdown -= dt;
+    const sec = Math.ceil(soloCountdown);
+    if (sec > 0 && sec !== soloCountSec) beep(520, 0.12, 'square', 0.07);
+    soloCountSec = sec;
+    if (soloCountdown > 0) return;
+    soloCountdown = 0;
+    soloGo = 0.7;
+    beep(880, 0.25, 'square', 0.08);
+  }
+  if (soloGo > 0) soloGo -= dt;
   if (mode === 'online' && match) {
     const now = net.serverNow();
     if (!match.started) {
@@ -1824,7 +2180,7 @@ function updatePlaying(dt: number, inp: Input): void {
       world.step(1 / 120, dt, 10);
       if (now < match.startAt) return;
       match.started = true;
-      showBanner('START!', '先に3個落とした方の負け', true, 1.4);
+      showBanner('START', '先に3個落とした方の負け', 'info', 1.4, ICON_FLAG);
       beep(880, 0.2, 'square', 0.08);
     }
     match.sendAcc += dt * 1000;
@@ -1883,7 +2239,6 @@ function updatePlaying(dt: number, inp: Input): void {
     else if (firstBlock.timer <= 0 && fb.body.velocity.length() < 0.5) {
       freezeBlock(fb, 0.35);
       firstBlock = null;
-      showBanner('1個目を固定!', 'このブロックはもう動かない', true, 1.4);
       beep(600, 0.12, 'sine', 0.08, 200);
     }
   }
@@ -1924,6 +2279,10 @@ function updatePlaying(dt: number, inp: Input): void {
         shake = 0.35;
         boom();
         if (drops >= MAX_DROPS) {
+          if (demoActive) {
+            drops = 0; // タイトルの背景: 3個落ちても結果は出さず、数え直してそのまま続ける
+            continue;
+          }
           renderHud();
           gameOver();
           return;
@@ -1949,22 +2308,38 @@ function updatePlaying(dt: number, inp: Input): void {
     pendingTime = 0;
     pendingMin = Infinity;
   }
-  if (bestHeight > 0) {
-    bestLine.visible = true;
-    bestLine.position.y = bestHeight;
+  if (demoActive && (blocks.length > DEMO_MAX_BLOCKS || currentHeight > DEMO_MAX_HEIGHT)) {
+    startDemo(); // 積みすぎ(物理の重さ・描画の増えすぎ)を防ぐため、ここでだけやり直す
+    return;
   }
+  ownMarker.update(demoActive ? 0 : bestHeight, dt); // 背景のデモでは出さない。記録が伸びたら、線とブロックをなめらかに動かす
 }
 
 let last = performance.now();
+/** ポーズ(Backspace / SELECT): ひとりの時は進行を止めて、やり直せる。オンライン対戦は相手がいるので止めず、退出だけできる */
+const pauseSolo = new ArcadePause({
+  accent: ACCENT,
+  isPlaying: () => state === 'playing' && mode === 'solo' && !demoActive && !isPreview,
+  onRestart: () => startGame(),
+});
+const pauseOnline = new ArcadePause({
+  accent: ACCENT,
+  isPlaying: () => state === 'playing' && mode === 'online' && !!match && !match.stopped && !isPreview,
+  exitLabel: '退出',
+  onExit: () => { leaveOnline(); returnToHub(); },
+});
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   stateTime += dt;
   const inp = readInput();
+  if (inp.left || inp.right || inp.up || inp.down || inp.rotate || inp.item || inp.confirm || inp.cancel) bgm.unlock(); // アケコンの操作も、最初の操作として扱う
+  bgm.setScene(state === 'playing' && !demoActive ? 'play' : 'menu');
 
   if (state === 'playing') {
-    updatePlaying(dt, inp);
+    if (!pauseSolo.isOpen) updatePlaying(dt, inp);
   } else {
     // タイトル・ゲームオーバー中も、残ったブロックは動かしておく
     if (state === 'gameover') {
@@ -1976,6 +2351,7 @@ function frame(now: number): void {
       if (resultOpen) updateResult(inp);
     }
     // タイトルのスタート操作は共通タイトル画面が受け付ける
+    if (demoActive && (state === 'title' || state === 'menu')) updatePlaying(dt, demoInput(dt));
   }
 
   // 描画同期
@@ -2006,15 +2382,13 @@ function frame(now: number): void {
   let targetCamX = 0;
   let camTarget = Math.max(VIEW_H * 0.3, currentHeight + VIEW_H * 0.15);
   if (lay) {
-    // 横は全員の土台が入る幅、縦は土台(名札)から一番高いタワーの少し上まで。高くなりすぎたら上だけ追いかける
-    const topH = Math.max(currentHeight, rivalStages.maxHeight());
-    // 操作ガイドは上部に移すので(index.html の body.online)、ステージは画面の横幅いっぱいに並べる
+    // 対戦のカメラ: 拡大率と横の位置は、全員の土台が入る固定の値にして動かさない。縦は自分のタワーだけを追う
+    // (相手のタワーの高さで拡大や上下が変わると、画面が揺れて酔いやすいため)
     const fitW = (lay.count * STAGE_SPACING + 2) / camera.aspect;
-    targetViewH = Math.min(ONLINE_MAX_VIEW_H, Math.max(VIEW_H, fitW, topH + 14));
+    targetViewH = Math.max(VIEW_H, fitW);
     targetCamX = lay.center;
-    // 上はタワーの10m上まで映す(ブロックはタワーの9m上から落ちてくるので、相手の落下中のブロックも見える)
-    camTarget = Math.max(targetViewH / 2 - 4, topH + 10 - targetViewH / 2);
-    rivalStages.tick(dt, { h: currentHeight, drops, out: !!match?.out });
+    camTarget = Math.max(targetViewH * 0.3, currentHeight + targetViewH * 0.15);
+    rivalStages.tick(dt);
   }
   viewH += (targetViewH - viewH) * Math.min(1, dt * 3);
   camX += (targetCamX - camX) * Math.min(1, dt * 3);
@@ -2029,6 +2403,7 @@ function frame(now: number): void {
   // 太陽(影)はカメラの高さについてくる
   sun.position.set(camX - 9, camY + 16, 14);
   sun.target.position.set(camX, camY, 0);
+  shadowWall.position.set(camX, camY, -1.2);
   const shadowHalf = Math.max(18, Math.ceil(viewHalfW + 2));
   if (sun.shadow.camera.right !== shadowHalf) {
     sun.shadow.camera.left = -shadowHalf;
@@ -2042,10 +2417,7 @@ function frame(now: number): void {
   scene.fog!.color.copy(sky);
   starMat.opacity = Math.min(1, Math.max(0, (camY - 35) / 40));
 
-  if (bannerTimer > 0) {
-    bannerTimer -= dt;
-    if (bannerTimer <= 0) elBanner.style.display = 'none';
-  }
+  updateBanner(dt);
   renderHud();
   renderer.render(scene, camera);
 }
@@ -2066,6 +2438,6 @@ if (import.meta.env.DEV) {
     event: (k: EventKind) => startEvent(k),
     next: (i: number) => { nextIndex = i; renderNext(); },
     get vines() { return vines.length; },
-    speedup: () => showSpeedUp(false),
+    speedup: () => showLevelUp(2),
   };
 }

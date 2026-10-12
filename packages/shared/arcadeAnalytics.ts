@@ -89,9 +89,14 @@ function getGpuInfo(): { vendor?: string; renderer?: string } {
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl || !(gl instanceof WebGLRenderingContext)) return {};
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    if (!ext) return {};
+    if (!ext) {
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      return {};
+    }
     const vendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL);
     const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+    // 読み取り専用に作った使い捨てのコンテキストは、すぐ手放す(ブラウザの WebGL コンテキストの上限は小さく、ゲーム本体のものを奪いかねない)
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
     return {
       vendor: typeof vendor === 'string' ? vendor : undefined,
       renderer: typeof renderer === 'string' ? renderer : undefined,
@@ -511,7 +516,7 @@ export class InputTracker {
       if (e.repeat) return;
       this.keyCount++;
       this.recordAction();
-      if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') this.pauseCount++;
+      if (e.key === 'p' || e.key === 'P' || e.key === 'Backspace') this.pauseCount++;
     };
     this.onTouch = () => {
       this.touchCount++;
@@ -526,20 +531,23 @@ export class InputTracker {
     window.addEventListener('blur', this.onBlur);
 
     // ゲームパッドポーリング (変化があったときのみ加算)
-    let lastPadButtons: boolean[] = [];
+    // (毎回配列を作らないよう、前回の押下状態は使い回す。ゲーム中もハブの側で動き続けるため)
+    const lastPadButtons: boolean[] = [];
     this.padTimer = setInterval(() => {
-      if (!this.active || typeof navigator.getGamepads !== 'function') return;
+      if (!this.active) return;
       try {
-        const pads = navigator.getGamepads();
-        if (pads && pads[0]) {
-          const btns = pads[0].buttons.map((b) => b.pressed);
-          for (let i = 0; i < btns.length; i++) {
-            if (btns[i] && !lastPadButtons[i]) {
+        // (50msごと。フレームごとの呼び出しとは重ならないので、共有の読み取りは使わない: Node のテストが拡張子なしの import を解決できない)
+        const pad = typeof navigator.getGamepads === 'function' ? navigator.getGamepads()[0] : null;
+        if (pad) {
+          const buttons = pad.buttons;
+          for (let i = 0; i < buttons.length; i++) {
+            const pressed = buttons[i].pressed;
+            if (pressed && !lastPadButtons[i]) {
               this.padCount++;
               this.recordAction();
             }
+            lastPadButtons[i] = pressed;
           }
-          lastPadButtons = btns;
         }
       } catch { /* ignore */ }
     }, 50);
@@ -628,7 +636,7 @@ function relayFramedTelemetry(): void {
   (window as any).__analytics_relay_hooked = true;
   const post = (subType: string, data: Record<string, unknown>) => {
     try {
-      window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType, data }, '*');
+      window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType, data }, window.location.origin);
     } catch { /* ignore */ }
   };
   hookWindowErrors((data) => post('client_error', data));
@@ -651,7 +659,9 @@ function relayFramedTelemetry(): void {
 export function reportDeepAnalytics(type: string, data?: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType: type, data }, '*');
+    try {
+      window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType: type, data }, window.location.origin);
+    } catch { /* 親に届けられなくても、ゲームは止めない */ }
     return;
   }
   applyDeepAnalytics(type, data, standaloneGameId);
@@ -778,6 +788,11 @@ export function trackGameLaunch(
   gameId: string,
   variant?: string,
   inputDevice?: 'keyboard' | 'gamepad' | 'touch',
+  /**
+   * このページ自身で FPS を測るか。ハブがゲームを iframe で開く時は false: 親の rAF はゲームの描画を測れず、
+   * 値は iframe 内のゲームが送ってくる(reportedPerformance)ので、親にも毎フレームのループを回すのは無駄(同じスレッドを使うため)。
+   */
+  measureFps = true,
 ): string {
   const playId = newId('play');
 
@@ -792,8 +807,11 @@ export function trackGameLaunch(
   activeProgression = {};
   reportedPerformance = undefined;
   lastRound = null;
-  activeFpsTracker = new FpsTracker();
-  activeFpsTracker.start();
+  activeFpsTracker = null;
+  if (measureFps) {
+    activeFpsTracker = new FpsTracker();
+    activeFpsTracker.start();
+  }
 
   activeInputTracker = new InputTracker();
   activeInputTracker.start();

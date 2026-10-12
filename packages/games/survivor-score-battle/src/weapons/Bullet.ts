@@ -234,8 +234,20 @@ export class BulletPool {
     }
   }
 
-  public getActiveBullets(): Bullet[] {
-    return this.pool.filter((b) => b.active);
+  /** update の途中で再利用する、アクティブな弾の一覧(毎フレーム新しい配列を作らない) */
+  private readonly activeBuf: Bullet[] = [];
+
+  /**
+   * その時点でアクティブな弾の一覧(スナップショット)。返す配列は次の呼び出しまで有効で、呼び出し側は保持しない。
+   * ループ中に新しく撃たれた弾は含まれない(以前の filter の結果と同じ)。
+   */
+  public getActiveBullets(): readonly Bullet[] {
+    const buf = this.activeBuf;
+    buf.length = 0;
+    for (let i = 0; i < this.maxBullets; i++) {
+      if (this.pool[i].active) buf.push(this.pool[i]);
+    }
+    return buf;
   }
 
   public update(dt: number) {

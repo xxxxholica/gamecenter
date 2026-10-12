@@ -45,6 +45,14 @@ export class ResultsPrizePileManager {
   private sparkleGeo: THREE.BoxGeometry;
   private containerGroup: THREE.Group = new THREE.Group();
   private spotlight: THREE.SpotLight | null = null;
+  /** 結果画面の照明(スポット・補助光)。光の数が変わると全ての材質のシェーダーが作り直されて止まるので、最初に1度だけ置いて、強さだけを変える */
+  private lightGroup: THREE.Group | null = null;
+  private ambientFill: THREE.AmbientLight | null = null;
+  private lanternFill: THREE.PointLight | null = null;
+  private static readonly SPOT_INTENSITY = 3.4;
+  private static readonly AMBIENT_INTENSITY = 1.35;
+  private static readonly LANTERN_INTENSITY = 2.2;
+  private sparkleMats: THREE.MeshBasicMaterial[] = [];
   private deskMesh: THREE.Group | null = null;
   private isActive: boolean = false;
   /** この山を置く x のずれ(オンライン対戦: 4人分の山を、各レーンの前に並べる)。 */
@@ -63,6 +71,28 @@ export class ResultsPrizePileManager {
 
   constructor() {
     this.sparkleGeo = new THREE.BoxGeometry(0.022, 0.022, 0.022);
+    // 火花の材質は、色ごとに1つだけ作って使い回す(火花ごとに作らない)
+    this.sparkleMats = [0xffd700, 0xff3b30, 0x00e5ff, 0xffffff, 0xff9500].map((color) => new THREE.MeshBasicMaterial({ color }));
+  }
+
+  /** 結果画面の照明を、強さ0で先にシーンへ置く(ゲーム開始時に1度だけ呼ぶ)。結果画面で光を足すと、全ての材質のシェーダーが作り直されて、画面が止まる */
+  public prepareLights(scene: THREE.Scene): void {
+    if (this.lightGroup) return;
+    this.lightGroup = new THREE.Group();
+    this.spotlight = new THREE.SpotLight(0xffeedd, 0, 7.0, Math.PI / 2.8, 0.5, 1.1);
+    this.spotlight.position.set(0.38, 2.70, 1.95);
+    this.spotlight.target.position.set(0.38, 0.90, 1.38);
+    this.ambientFill = new THREE.AmbientLight(0xffedd8, 0);
+    this.lanternFill = new THREE.PointLight(0xff9944, 0, 10.0);
+    this.lanternFill.position.set(0, 2.4, 1.2);
+    this.lightGroup.add(this.spotlight, this.spotlight.target, this.ambientFill, this.lanternFill);
+    scene.add(this.lightGroup);
+  }
+
+  private setLights(on: boolean): void {
+    if (this.spotlight) this.spotlight.intensity = on ? ResultsPrizePileManager.SPOT_INTENSITY : 0;
+    if (this.ambientFill) this.ambientFill.intensity = on && this.fillLights ? ResultsPrizePileManager.AMBIENT_INTENSITY : 0;
+    if (this.lanternFill) this.lanternFill.intensity = on && this.fillLights ? ResultsPrizePileManager.LANTERN_INTENSITY : 0;
   }
 
   // Get standardized weight in grams for each prize type
@@ -166,21 +196,10 @@ export class ResultsPrizePileManager {
     this.deskMesh = this.buildDeskTable();
     this.containerGroup.add(this.deskMesh);
 
-    // 2. Focused warm golden spotlight aimed directly at desk tabletop
-    this.spotlight = new THREE.SpotLight(0xffeedd, 3.4, 7.0, Math.PI / 2.8, 0.5, 1.1);
-    this.spotlight.position.set(0.38, 2.70, 1.95);
-    this.spotlight.target.position.set(0.38, 0.90, 1.38);
-    this.containerGroup.add(this.spotlight);
-    this.containerGroup.add(this.spotlight.target);
-
-    // 3. Warm Ambient & Lantern Fill Lights to keep background bright and festive (no dark gloom)
-    if (this.fillLights) {
-      const ambientFill = new THREE.AmbientLight(0xffedd8, 1.35);
-      const lanternWarmFill = new THREE.PointLight(0xff9944, 2.2, 10.0);
-      lanternWarmFill.position.set(0, 2.4, 1.2);
-      this.containerGroup.add(ambientFill);
-      this.containerGroup.add(lanternWarmFill);
-    }
+    // 2・3. 照明(机を狙う暖色のスポットと、背景を明るく保つ補助光)。足さずに、置いてある照明の強さを上げる
+    this.prepareLights(scene);
+    if (this.lightGroup) this.lightGroup.position.x = this.offsetX;
+    this.setLights(true);
 
     // Items list: if 0 defeated, give a small cute consolation prize
     const itemsToSpawn: DefeatedPrizeRecord[] =
@@ -365,11 +384,8 @@ export class ResultsPrizePileManager {
 
   // Spawn festive sparkles upon landing
   private spawnImpactSparkles(pos: THREE.Vector3) {
-    const colors = [0xffd700, 0xff3b30, 0x00e5ff, 0xffffff, 0xff9500];
     for (let i = 0; i < 6; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: colors[Math.floor(Math.random() * colors.length)],
-      });
+      const mat = this.sparkleMats[Math.floor(Math.random() * this.sparkleMats.length)];
       const mesh = new THREE.Mesh(this.sparkleGeo, mat);
       mesh.position.copy(pos);
       mesh.position.x += (Math.random() - 0.5) * 0.06;
@@ -639,8 +655,7 @@ export class ResultsPrizePileManager {
       const p = this.sparkles[i];
       p.life += dt;
       if (p.life >= p.maxLife) {
-        this.containerGroup.remove(p.mesh);
-        p.mesh.geometry.dispose();
+        this.containerGroup.remove(p.mesh); // 形と材質は全員で共有しているので、ここで dispose しない(GPU のデータが毎回作り直しになる)
         this.sparkles.splice(i, 1);
       } else {
         p.vel.y -= 7.0 * dt;
@@ -659,9 +674,9 @@ export class ResultsPrizePileManager {
 
     for (const p of this.sparkles) {
       this.containerGroup.remove(p.mesh);
-      p.mesh.geometry.dispose();
     }
     this.sparkles = [];
+    this.setLights(false);
 
     this.items = [];
 
@@ -669,7 +684,6 @@ export class ResultsPrizePileManager {
       scene.remove(this.containerGroup);
     }
     this.containerGroup.clear();
-    this.spotlight = null;
     this.deskMesh = null;
   }
 }

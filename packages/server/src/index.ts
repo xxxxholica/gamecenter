@@ -50,7 +50,9 @@ function clientIp(req: http.IncomingMessage): string {
 /** 許可する Origin。環境変数 ONLINE_ALLOWED_ORIGINS(カンマ区切り。'*' で全許可=開発用)で上書きできる。 */
 const ALLOWED_ORIGINS = (process.env.ONLINE_ALLOWED_ORIGINS ?? 'https://game.hinata.works,http://localhost:5173,http://127.0.0.1:5173')
   .split(',').map((o) => o.trim()).filter(Boolean);
-const originAllowed = (origin: string) => ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin);
+/** 'https://game.hinata.works.' のように FQDN 表記(ホスト名の末尾にドット)で来る Origin も、ドット無しと同じホストとして扱う */
+const stripTrailingDot = (origin: string) => origin.replace(/\.(?=(:\d+)?$)/, '');
+const originAllowed = (origin: string) => ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(stripTrailingDot(origin));
 
 const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllowed, clientIp });
 

@@ -6,7 +6,7 @@ import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction.ts';
 import { Game } from './game.ts';
 import { installHomeReturn } from '../../../shared/homeReturn.ts';
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['title-fail-btn', 'title-success-btn']);
 

@@ -71,10 +71,14 @@ const COUNTER_PER_PRESS = 34; // 3回押すと反撃
 const COUNTER_DECAY_PER_SEC = 120; // 押さないと、溜まった分が減っていく
 const COUNTER_INVULN_SEC = 0.6; // 反撃のあと、しばらくは連続技を受けない
 const COUNTER_IMPULSE = 650; // 相手を押し返す強さ
-/** 張り手を当て続けると溜まるゲージ。満タンで次の1発が強い張り手になる */
-const HARITE_GAUGE_PER_HIT = 25; // 4発で満タン
-const HARITE_GAUGE_IDLE_SEC = 0.5; // この間当てないと、ゲージが減り始める
-const HARITE_GAUGE_DECAY_PER_SEC = 50;
+/**
+ * 張り手を当てると溜まるゲージ。連続で当てなくても減らない(ラウンドの始めに0へ戻る)。
+ * 溜まるほど通常の張り手の吹き飛びが段階的に強くなり、満タンで次の1発が強い張り手になる。
+ */
+const HARITE_GAUGE_PER_HIT = 20; // 5発で満タン
+const HARITE_GAUGE_STAGE = 20; // ゲージがこれだけ溜まるごとに1段階上がる
+/** 段階ごとの、通常の張り手の吹き飛びの倍率(0段階=ゲージが空のとき) */
+const HARITE_STAGE_KB = [1.0, 1.15, 1.3, 1.5, 1.7] as const;
 
 /** つかみを出したとき、この距離までの相手には自動で向き直る(m) */
 const GRAB_AIM_ASSIST_RANGE = 3.6;
@@ -124,9 +128,8 @@ export class SimFighter {
   public grabEscapeMeter = 0; // 掴まれている間、ボタンを押すたびに溜まる(100で脱出)
   public readonly grabHoldTime = GRAB_HOLD_TIME; // 掴んでから投げるまで(掴んだらすぐ投げる)
 
-  // 張り手ゲージ(当て続けると溜まる。満タンで次の張り手が強くなる)
+  // 張り手ゲージ(当てると溜まり、時間では減らない。段階で吹き飛びが強くなり、満タンで次の張り手が強くなる)
   public hariteGauge = 0; // 0〜100
-  private hariteIdle = 0;
   private hariteStrong = false;
 
   // 反撃(ハメ抜け)
@@ -202,7 +205,6 @@ export class SimFighter {
     this.counterMeter = 0;
     this.invulnTimer = 0;
     this.hariteGauge = 0;
-    this.hariteIdle = 0;
     this.hariteStrong = false;
     this.damagePercent = 0;
     this.body.collisionResponse = true;
@@ -255,12 +257,6 @@ export class SimFighter {
     }
     if (this.invulnTimer > 0) {
       this.invulnTimer = Math.max(0, this.invulnTimer - dt);
-    }
-
-    // 張り手を当てない時間が続くと、ゲージが減っていく
-    this.hariteIdle += dt;
-    if (this.hariteGauge > 0 && this.hariteIdle > HARITE_GAUGE_IDLE_SEC) {
-      this.hariteGauge = Math.max(0, this.hariteGauge - HARITE_GAUGE_DECAY_PER_SEC * dt);
     }
 
     // 落下チェック
@@ -898,15 +894,14 @@ export class SimFighter {
 
     if (attackType === 'harite') {
       baseDamage = 4;
-      baseImpulse = 180;
+      // 攻撃側のゲージが溜まっているほど強く吹き飛ばす(加算する前の段階で決める)
+      const stage = attacker ? Math.min(HARITE_STAGE_KB.length - 1, Math.floor(attacker.hariteGauge / HARITE_GAUGE_STAGE)) : 0;
+      baseImpulse = 180 * HARITE_STAGE_KB[stage];
       this.env.fx.particle('spawnHariteHit', this.body.position.x, 1.2, this.body.position.z);
       this.env.fx.sound('playHarite');
 
-      // 当て続けるほど、攻撃側の張り手ゲージが溜まる
-      if (attacker) {
-        attacker.hariteGauge = Math.min(100, attacker.hariteGauge + HARITE_GAUGE_PER_HIT);
-        attacker.hariteIdle = 0;
-      }
+      // 当てるほど、攻撃側の張り手ゲージが溜まる
+      if (attacker) attacker.hariteGauge = Math.min(100, attacker.hariteGauge + HARITE_GAUGE_PER_HIT);
     } else if (attackType === 'harite_strong') {
       baseDamage = 9;
       baseImpulse = 480;
@@ -914,7 +909,6 @@ export class SimFighter {
       this.env.requestHitStop(hitStopFor(0.9));
       this.env.fx.particle('triggerShake', 0.3);
       this.env.fx.sound('playBuchikamashiHit', 0.8);
-      if (attacker) attacker.hariteIdle = 0;
     } else {
       const chargePower = 1.0 + attackerChargeProgress * 1.4;
       baseDamage = 20 * chargePower;

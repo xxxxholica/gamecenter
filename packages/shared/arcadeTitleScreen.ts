@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import { buttonIconHtml } from './arcadeGuide';
+import { returnToHub } from './homeReturn';
 
+import cyberFighterLogo from './logos/cyber-2d-fighter-3d.webp';
 import ennichiLogo from './logos/ennichi-shateki.webp';
 import extremeEdgeLogo from './logos/extreme-edge-arcade.webp';
 import midnightSkywayLogo from './logos/midnight-skyway.webp';
@@ -9,8 +11,10 @@ import streetBBoyLogo from './logos/street-b-boy.webp';
 import sumoSmashLogo from './logos/sumo-smash-3d.webp';
 import taniRunnerLogo from './logos/tani-runner-124.webp';
 import towerStackLogo from './logos/tower-stack.webp';
+import { readGamepads } from './gamepadFrame';
 
 export const GAME_LOGOS: Record<string, string> = {
+  'cyber-2d-fighter-3d': cyberFighterLogo,
   'ennichi-shateki': ennichiLogo,
   'extreme-edge-arcade': extremeEdgeLogo,
   'midnight-skyway': midnightSkywayLogo,
@@ -24,6 +28,10 @@ export const GAME_LOGOS: Record<string, string> = {
 export interface ArcadeTitleScreenOptions {
   slug: string;
   logoUrl?: string; // 省略時は slug から GAME_LOGOS を自動解決
+  /** ロゴ画像がまだ無いゲーム用: 画像の代わりに出す固定のHTML(呼び出し側の定数。ユーザー入力は入れない) */
+  logoHtml?: string;
+  /** ロゴを縦にだけ引き伸ばす倍率(省略は1)。横長で上下に余白のある画像を、他のゲームのロゴと同じ高さに見せるとき用。幅は変えない */
+  logoStretchY?: number;
   accentColor: string;
   tagline?: string;
   startButtonLabel?: string;
@@ -78,6 +86,7 @@ function injectTitleScreenStyle(): void {
 
     .ats-logo-img {
       width: min(440px, 82vw);
+      scale: 1 var(--ats-logo-sy, 1);
       aspect-ratio: 16 / 9;
       object-fit: contain;
       display: block;
@@ -238,6 +247,8 @@ export class ArcadeTitleScreen {
     const {
       slug,
       logoUrl,
+      logoHtml,
+      logoStretchY = 1,
       tagline,
       startButtonLabel = 'スタート',
       customControlsHtml,
@@ -247,7 +258,7 @@ export class ArcadeTitleScreen {
 
     this.overlay.innerHTML = `
       <div class="ats-header">
-        <img class="ats-logo-img" src="${resolvedLogo}" alt="Game Logo" />
+        ${logoHtml && !resolvedLogo ? `<div class="ats-logo-html">${logoHtml}</div>` : `<img class="ats-logo-img" src="${resolvedLogo}" alt="Game Logo" style="--ats-logo-sy: ${Number(logoStretchY) || 1}" />`}
         ${tagline ? `<div class="ats-tagline">${tagline}</div>` : ''}
       </div>
 
@@ -316,6 +327,11 @@ export class ArcadeTitleScreen {
           e.preventDefault();
           this.triggerStart();
         }
+        // タイトルでの Backspace(アケコンは SELECT)は、ホーム(ハブ)へ戻る
+        if (e.code === 'Backspace' && !e.repeat) {
+          e.preventDefault();
+          returnToHub();
+        }
       };
       window.addEventListener('keydown', this.keyHandler);
     }
@@ -348,7 +364,7 @@ export class ArcadeTitleScreen {
     const checkPad = () => {
       if (!this.isVisible) return;
 
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const pads = readGamepads();
       let anyAction = false;
 
       for (const pad of pads) {

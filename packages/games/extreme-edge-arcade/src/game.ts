@@ -17,6 +17,7 @@ import { DemoInputManager } from './demo_input';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { RankingManager } from './ranking';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { ArcadePause } from '../../../shared/arcadePause';
 
 export type GameState =
   | 'TITLE'
@@ -37,6 +38,12 @@ export interface StageRecord {
 
 export class GameManager {
   private state: GameState = 'TITLE';
+  /** ポーズ(Backspace / SELECT): 種目の最中に止めて、最初からやり直せる */
+  private readonly pause = new ArcadePause({
+    accent: '#ffcc00',
+    isPlaying: () => this.state === 'STAGE_INTRO' || this.state === 'STAGE_PLAY',
+    onRestart: () => this.startGame(),
+  });
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private effects: EffectsManager;
@@ -236,6 +243,7 @@ export class GameManager {
     mountArcadeGuide({
       buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
       showHomeHint: true,
+      backLabel: 'ホームへ',
     });
 
     this.titleOverlay.style.display = 'none';
@@ -353,13 +361,13 @@ export class GameManager {
     // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
     const stageGuideOptions = [
       // Stage 1 (ドリンクバー)
-      { moveLabel: '上: ドリンクを止める', showHomeHint: true },
+      { moveLabel: '上: ドリンクを止める', showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 2 (スマホ充電)
-      { moveLabel: '上: ケーブルを挿す', showHomeHint: true },
+      { moveLabel: '上: ケーブルを挿す', showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 3 (目覚まし時計)
-      { moveLabel: '上: 時計を止める', showHomeHint: true },
+      { moveLabel: '上: 時計を止める', showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 4 (風船ふくらまし)
-      { moveLabel: '上: 空気を止める', showHomeHint: true },
+      { moveLabel: '上: 空気を止める', showHomeHint: true, backLabel: 'ポーズ' },
     ];
     if (stageGuideOptions[index]) {
       mountArcadeGuide(stageGuideOptions[index]);
@@ -435,6 +443,7 @@ export class GameManager {
 
   update(dt: number) {
     this.updateInputIndicators();
+    if (this.pause.isOpen) return;
 
     switch (this.state) {
       case 'TITLE': {
@@ -623,7 +632,7 @@ export class GameManager {
           }
           return;
         } else if (this.input.isCancelJustPressed()) {
-          window.location.href = '../../';
+          this.showTitle();
           return;
         }
         break;
@@ -695,6 +704,7 @@ export class GameManager {
         { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
 
     this.hudOverlay.style.display = 'none';

@@ -1,6 +1,7 @@
 // Gamepad API + Keyboard Input System
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
+import { readGamepads } from '../../../shared/gamepadFrame';
 
 export class InputManager {
   // Current states
@@ -53,7 +54,7 @@ export class InputManager {
     let kbBtn0 = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('KeyJ') || false;
     let kbBtn1 = this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyK') || false;
     let kbConfirm = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || false;
-    let kbCancel = this.keyboard.isDown('Escape') || this.keyboard.isDown('Backspace') || false;
+    let kbCancel = this.keyboard.isDown('Backspace') || false;
 
     // Smooth keyboard ramp for tilt mechanics (W, Up or Enter/Button0)
     if (kbUp || kbBtn0) {
@@ -70,7 +71,7 @@ export class InputManager {
     let gpAxisY = 0;
 
     // Poll Gamepad API
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     for (let i = 0; i < gamepads.length; i++) {
       const gp = gamepads[i];
       if (!gp || !gp.connected) continue;
@@ -171,7 +172,7 @@ export class InputManager {
     return this.confirm && !this.prevConfirm;
   }
 
-  // キャンセルボタンが押された瞬間（アケコン: Bボタン, キーボード: Escape / Backspace）
+  // キャンセルボタンが押された瞬間（アケコン: Bボタン, キーボード: Backspace）
   isCancelJustPressed(): boolean {
     return this.cancel && !this.prevCancel;
   }

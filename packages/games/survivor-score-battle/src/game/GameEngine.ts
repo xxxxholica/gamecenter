@@ -23,6 +23,7 @@ import { mountArcadeGuide, ArcadeGuideOptions } from '../../../../shared/arcadeG
 import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
 import { returnToHub } from '../../../../shared/homeReturn';
+import { ArcadePause } from '../../../../shared/arcadePause';
 import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
 import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
@@ -44,6 +45,7 @@ export class GameEngine {
   // Entities
   public player!: Player;
   public cpus: CpuPlayer[] = [];
+  private readonly contendersBuf: (Player | CpuPlayer)[] = [];
   public enemies: Enemy[] = [];
 
   // Camera
@@ -130,8 +132,16 @@ export class GameEngine {
     this.updateLeaderboard();
   }
 
+  /** ポーズ(Backspace / SELECT。P と Start でも開く): 止めて、やり直せる */
+  private readonly pauseUi = new ArcadePause({
+    accent: '#00f0ff',
+    isPlaying: () => this.state === 'PLAYING' && !this.countingDown && this.dyingTimer <= 0,
+    onRestart: () => this.beginMatch(),
+  });
+
   public update(dt: number) {
     const inputState = this.input.update();
+    if (this.pauseUi.isOpen) return;
 
     switch (this.state) {
       case 'TITLE': {
@@ -184,7 +194,7 @@ export class GameEngine {
 
         if (inputState.pause && this.dyingTimer <= 0) {
           this.sound.sfx.playMenuConfirm();
-          this.state = 'PAUSED';
+          this.pauseUi.show();
           return;
         }
 
@@ -255,10 +265,9 @@ export class GameEngine {
     }
 
     // 2. Update Contenders list
-    const allContenders = [
-      this.player,
-      ...this.cpus,
-    ];
+    const allContenders = this.contendersBuf;           // 毎フレーム作り直さず、同じ配列を詰め直す
+    allContenders.length = 0;
+    allContenders.push(this.player, ...this.cpus);
 
     // 3. Update Player
     const playerLeveled = this.player.updatePlayer(
@@ -1001,14 +1010,13 @@ export class GameEngine {
         moveLabel: '移動',
         buttons: [
           { indices: [3, 4, 5, 7], label: '必殺技', keyLabel: 'Shift / Space' },
-          { indices: [9], label: 'ポーズ', keyLabel: 'P' },
         ],
       },
-      PAUSED: { buttons: [{ indices: [0, 2, 9], label: '再開', keyLabel: 'Enter / Space' }] },
+      PAUSED: { buttons: [] }, // ポーズは共通のポーズ画面(ArcadePause)が出す。この状態は使わない
       LEVEL_UP: { moveLabel: '選択', buttons: [confirm] },
       RESULT: { moveLabel: '選択', buttons: [confirm] },
     };
-    mountArcadeGuide({ ...guides[this.state], showHomeHint: true });
+    mountArcadeGuide({ ...guides[this.state], showHomeHint: true, backLabel: this.state === 'TITLE' ? 'ホームへ' : this.state === 'PLAYING' ? 'ポーズ' : '戻る' });
   }
 
   private renderWorld(ctx: CanvasRenderingContext2D, width: number, height: number) {

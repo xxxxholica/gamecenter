@@ -44,7 +44,7 @@ export function openGameFrame(url: string, closed: () => void, gameId?: string):
   activeGameId = gameId;
   onClosed = closed;
   if (gameId) {
-    trackGameLaunch(gameId);
+    trackGameLaunch(gameId, undefined, undefined, false);
   }
   const el = document.createElement('iframe');
   el.src = url;

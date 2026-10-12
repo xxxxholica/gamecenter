@@ -5,9 +5,12 @@ import * as THREE from 'three';
 import type { TowerState } from '../../../../shared/towerProtocol';
 import { PIECES } from '../pieces';
 import { PLAYER_COLORS } from './net';
+import { BestMarker } from '../bestMarker';
 
 /** ステージどうしの間隔(m)。土台の幅 + すき間 */
 export const STAGE_SPACING = 16;
+/** 最高到達のブロックを、2人の間に置くときの位置(自分のステージの中心から、相手側へ何m)。間(間隔の半分=8m)の中で、2人のブロックが重ならない位置 */
+export const BETWEEN_TAG_X = 7;
 
 interface Ghost {
   piece: number;
@@ -24,72 +27,13 @@ interface Stage {
   offset: number;
   root: THREE.Group;
   ghosts: Ghost[];
-  label: Label;
+  color: string;
+  marker: BestMarker;
   state: TowerState;
   out: boolean;
   gone: boolean;
   grey: boolean;
   flash: number;
-}
-
-/** ステージの下に出す名札(名前・高さ・残機)。内容が変わったときだけ描き直す */
-class Label {
-  readonly sprite: THREE.Sprite;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly tex: THREE.CanvasTexture;
-  private last = '';
-
-  constructor(private readonly color: string) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = 512;
-    this.canvas.height = 128;
-    this.tex = new THREE.CanvasTexture(this.canvas);
-    this.tex.colorSpace = THREE.SRGBColorSpace;
-    this.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, fog: false }));
-    this.sprite.scale.set(10, 2.5, 1);
-    this.sprite.renderOrder = 10;
-  }
-
-  draw(name: string, h: number, lives: number, status: string, flash: boolean): void {
-    const key = `${name}|${h.toFixed(1)}|${lives}|${status}|${flash}`;
-    if (key === this.last) return;
-    this.last = key;
-    const g = this.canvas.getContext('2d')!;
-    g.clearRect(0, 0, 512, 128);
-    g.fillStyle = flash ? 'rgba(230, 57, 70, 0.92)' : 'rgba(8, 8, 14, 0.82)';
-    g.beginPath();
-    g.roundRect(8, 8, 496, 112, 22);
-    g.fill();
-    g.fillStyle = this.color;
-    g.fillRect(8, 8, 14, 112);
-    g.font = '800 36px system-ui, "Hiragino Kaku Gothic ProN", sans-serif';
-    g.fillStyle = this.color;
-    g.textBaseline = 'middle';
-    g.fillText(name, 40, 42, 300);
-    g.font = '900 44px Impact, "Arial Black", system-ui, sans-serif';
-    g.fillStyle = '#fff';
-    g.textAlign = 'right';
-    g.fillText(`${h.toFixed(1)}m`, 488, 44);
-    g.textAlign = 'left';
-    if (status) {
-      g.font = '900 34px system-ui, "Hiragino Kaku Gothic ProN", sans-serif';
-      g.fillStyle = '#ff8a93';
-      g.fillText(status, 40, 92);
-    } else {
-      // 残機はハート(ブロックの色の四角と見分けがつくように)
-      g.font = '900 34px system-ui, "Hiragino Kaku Gothic ProN", sans-serif';
-      for (let i = 0; i < 3; i++) {
-        g.fillStyle = i < lives ? '#ff4d6d' : 'rgba(255,255,255,0.22)';
-        g.fillText('♥', 40 + i * 40, 94);
-      }
-    }
-    this.tex.needsUpdate = true;
-  }
-
-  dispose(): void {
-    this.tex.dispose();
-    (this.sprite.material as THREE.SpriteMaterial).dispose();
-  }
 }
 
 export interface RivalStagesOptions {
@@ -101,7 +45,7 @@ export interface RivalStagesOptions {
 
 export class RivalStages {
   private stages: Stage[] = [];
-  private mine: { label: Label; name: string } | null = null;
+  private mine: { name: string; color: string } | null = null;
 
   constructor(private readonly scene: THREE.Scene, private readonly opts: RivalStagesOptions) {}
 
@@ -112,10 +56,7 @@ export class RivalStages {
     players.forEach((p, index) => {
       const color = PLAYER_COLORS[index % PLAYER_COLORS.length];
       if (p.id === myId) {
-        const label = new Label(color);
-        label.sprite.position.set(0, -2.2, 1.5);
-        this.scene.add(label.sprite);
-        this.mine = { label, name: `${p.name}（あなた）` };
+        this.mine = { name: p.name, color };
         return;
       }
       const offset = (index - myIndex) * STAGE_SPACING;
@@ -124,12 +65,12 @@ export class RivalStages {
       const platform = this.opts.makePlatform();
       root.add(platform);
       this.scene.add(root);
-      const label = new Label(color);
-      label.sprite.position.set(offset, -2.2, 1.5);
-      this.scene.add(label.sprite);
+      // 相手の最高到達の点線とブロック(ステージの中。線は相手の色)
+      const marker = new BestMarker({ color, width: 300, tagX: offset > 0 ? -BETWEEN_TAG_X : BETWEEN_TAG_X, stripe: color });
+      root.add(marker.group);
       this.stages.push({
-        id: p.id, name: p.name, index, offset, root, ghosts: [], label,
-        state: { h: 0, b: 0, d: 0, lv: 1, k: [] }, out: false, gone: false, grey: false, flash: 0,
+        id: p.id, name: p.name, index, offset, root, ghosts: [], color, marker,
+        state: { h: 0, b: 0, d: 0, lv: 1, k: [], it: [], n: [], f: 0 }, out: false, gone: false, grey: false, flash: 0,
       });
     });
   }
@@ -176,8 +117,21 @@ export class RivalStages {
     if (s) s.flash = 0.8;
   }
 
-  /** 毎フレーム: 届いた位置へ寄せる・名札を描く */
-  public tick(dt: number, mine: { h: number; drops: number; out: boolean }): void {
+  /** 自分の名前と色(上部のHUDに出す) */
+  public myInfo(): { name: string; color: string } | null {
+    return this.mine;
+  }
+
+  /** 相手のステージごとの表示用の情報(上部のHUDを置く位置と中身) */
+  public rivals(): { id: number; name: string; color: string; offset: number; drops: number; items: number[]; next: number[]; flags: number; out: boolean; gone: boolean; flash: boolean }[] {
+    return this.stages.map((s) => ({
+      id: s.id, name: s.name, color: s.color, offset: s.offset, drops: s.state.d, items: s.state.it ?? [], next: s.state.n ?? [], flags: s.state.f ?? 0,
+      out: s.out, gone: s.gone, flash: s.flash > 0,
+    }));
+  }
+
+  /** 毎フレーム: 届いた位置へ寄せる・最高到達の線を動かす */
+  public tick(dt: number): void {
     const k = Math.min(1, dt * 14);
     for (const s of this.stages) {
       for (const g of s.ghosts) {
@@ -186,25 +140,18 @@ export class RivalStages {
         g.obj.rotation.z += (g.a - g.obj.rotation.z) * k;
       }
       s.flash = Math.max(0, s.flash - dt);
-      const status = s.gone ? '退出' : s.out ? '脱落' : '';
-      s.label.draw(s.name, s.state.h, 3 - s.state.d, status, s.flash > 0);
+      s.marker.update(s.state.b, dt);
     }
-    if (this.mine) this.mine.label.draw(this.mine.name, mine.h, 3 - mine.drops, mine.out ? '脱落' : '', false);
   }
 
   public clear(): void {
     for (const s of this.stages) {
       for (const g of s.ghosts) disposeObject(g.obj);
       this.scene.remove(s.root);
-      this.scene.remove(s.label.sprite);
-      s.label.dispose();
+      s.marker.dispose();
     }
     this.stages = [];
-    if (this.mine) {
-      this.scene.remove(this.mine.label.sprite);
-      this.mine.label.dispose();
-      this.mine = null;
-    }
+    this.mine = null;
   }
 
   private syncGhosts(s: Stage): void {

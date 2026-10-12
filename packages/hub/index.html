@@ -16,6 +16,14 @@
       font-display: swap;
     }
 
+    /* グループの見出し用の、太くてポップなゴシック(Mochiy Pop One / SIL OFL)。見出しの文字だけのサブセット。 */
+    @font-face {
+      font-family: 'Mochiy Pop One';
+      src: url('./fonts/MochiyPopOne-Subset.woff2') format('woff2');
+      font-weight: 100 900;
+      font-display: swap;
+    }
+
     :root {
       --hand-font: 'Yusei Magic', 'Hiragino Maru Gothic ProN', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
     }
@@ -85,10 +93,10 @@
       align-items: center;
       width: fit-content;
       padding: 6px 18px 6px 14px;
-      font-family: 'Impact', 'Arial Black', system-ui, sans-serif;
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
+      font-family: 'Mochiy Pop One', 'Hiragino Maru Gothic ProN', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', system-ui, sans-serif;
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: 0.06em;
       border-radius: 4px 10px 4px 2px;
       box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
       margin-bottom: -2px;
@@ -97,32 +105,23 @@
       transition: transform 0.18s ease;
     }
 
-    #section-online .section-title {
-      background: #e0f2fe;
-      color: #0369a1;
-      border-left: 5px solid #0284c7;
-      transform: rotate(-0.8deg);
-    }
+    /* カードのホバー・選択時に光る色は、ゲームごとではなく、グループの色(見出しの付箋の縁と同じ) */
+    .game-section[data-group="easy"] .card { --accent: #22c55e; }
+    .game-section[data-group="party"] .card { --accent: #0284c7; }
+    .game-section[data-group="score"] .card { --accent: #eab308; }
+    .game-section[data-group="hard"] .card { --accent: #ef4444; }
 
-    #section-ranking .section-title {
-      background: #fef08a;
-      color: #854d0e;
-      border-left: 5px solid #eab308;
-      transform: rotate(0.6deg);
-    }
-
-    #section-other .section-title {
-      background: #fce7f3;
-      color: #9d174d;
-      border-left: 5px solid #ec4899;
-      transform: rotate(-0.5deg);
-    }
+    /* グループごとの付箋の色(見出しの左の縁と同じ色の、薄い背景) */
+    .game-section[data-group="easy"] .section-title { background: #dcfce7; color: #166534; border-left: 5px solid #22c55e; transform: rotate(-0.6deg); }
+    .game-section[data-group="party"] .section-title { background: #e0f2fe; color: #0369a1; border-left: 5px solid #0284c7; transform: rotate(0.5deg); }
+    .game-section[data-group="score"] .section-title { background: #fef08a; color: #854d0e; border-left: 5px solid #eab308; transform: rotate(-0.5deg); }
+    .game-section[data-group="hard"] .section-title { background: #fee2e2; color: #991b1b; border-left: 5px solid #ef4444; transform: rotate(-0.4deg); }
 
     .section-note {
       font-family: var(--hand-font);
-      font-weight: 600;
-      font-size: 0.8rem;
-      color: #64748b;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #475569;
       letter-spacing: 0.04em;
     }
 
@@ -138,25 +137,56 @@
       }
     }
 
-    /* オンライン開催状況バッジ (白ボックスに黒文字) */
-    .card-online-badge {
+    /* オンライン対戦に対応したゲームの印(いつも出す)。開催中は点灯、誰かが待機中なら点が点滅する */
+    .card-online-pill {
       position: absolute;
       top: 12px;
       left: 12px;
       z-index: 2;
       display: inline-flex;
       align-items: center;
+      gap: 7px;
       padding: 5px 12px;
-      border-radius: 6px;
-      background: #ffffff;
-      border: 1.5px solid #000000;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-      font-size: 0.8rem;
-      font-family: var(--hand-font);
-      font-weight: 600;
-      color: #000000;
-      letter-spacing: 0.05em;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78);
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
       pointer-events: none;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    /* 地球儀のアイコン(形は mask で切り抜き、色は background で決める): 閉鎖中は灰色、開催中は青、誰かが待機中なら青が点滅 */
+    .card-online-pill::before {
+      content: '';
+      width: 17px;
+      height: 17px;
+      background-color: #94a3b8;
+      -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='9.5'/><ellipse cx='12' cy='12' rx='4' ry='9.5'/><path d='M2.5 12h19M4.2 7h15.6M4.2 17h15.6'/></svg>") center / contain no-repeat;
+      mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='9.5'/><ellipse cx='12' cy='12' rx='4' ry='9.5'/><path d='M2.5 12h19M4.2 7h15.6M4.2 17h15.6'/></svg>") center / contain no-repeat;
+    }
+    .card-online-pill[data-state="open"],
+    .card-online-pill[data-state="waiting"] {
+      background: #ffffff;
+      border-color: #000000;
+      color: #000000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .card-online-pill[data-state="open"]::before,
+    .card-online-pill[data-state="waiting"]::before {
+      background-color: #2563eb;
+      filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.6));
+    }
+    .card-online-pill[data-state="waiting"]::before {
+      animation: onlineWaiting 1s ease-in-out infinite;
+    }
+    @keyframes onlineWaiting {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card-online-pill[data-state="waiting"]::before { animation: none; }
     }
 
 
@@ -525,30 +555,46 @@
     body.pad-mode .card.pressed {
       transform: translateY(-2px) scale(0.98);
     }
+
+    /* グループを入れ替える時の、画面全体のリフレッシュの動き: 上へ消える → 下から入る。光の帯が画面を走る */
+    #hub-container {
+      transition: opacity 0.38s ease, transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    #hub-container.refresh-out {
+      opacity: 0;
+      transform: translateY(-28px) scale(0.985);
+    }
+    #hub-container.refresh-in {
+      opacity: 0;
+      transform: translateY(28px) scale(0.985);
+      transition: none;
+    }
+    .hub-sweep {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: -30vh;
+      height: 30vh;
+      z-index: 50;
+      pointer-events: none;
+      opacity: 0;
+      /* 背景(方眼メモ帳)の色に合わせた帯。通り過ぎる所の絵を、背景の色で消していく */
+      background: linear-gradient(to bottom, rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 70%, rgba(250, 249, 246, 0.98) 100%);
+    }
+    .hub-sweep.run {
+      animation: hubSweep 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes hubSweep {
+      0% { top: -30vh; opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { top: 100vh; opacity: 0; }
+    }
   </style>
 </head>
 <body>
   <div id="hub-container">
-    <section class="game-section" id="section-online" style="display: none;">
-      <div class="section-header">
-        <h2 class="section-title">ONLINE</h2>
-      </div>
-      <div class="game-grid" id="grid-online"></div>
-    </section>
-
-    <section class="game-section" id="section-ranking">
-      <div class="section-header">
-        <h2 class="section-title">RANKING</h2>
-      </div>
-      <div class="game-grid" id="grid-ranking"></div>
-    </section>
-
-    <section class="game-section" id="section-other">
-      <div class="section-header">
-        <h2 class="section-title">CASUAL</h2>
-      </div>
-      <div class="game-grid" id="grid-other"></div>
-    </section>
+    <!-- グループ(遊び方のスタイル)の見出しとゲーム一覧は、main.ts が作る -->
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

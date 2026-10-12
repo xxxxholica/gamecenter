@@ -1,4 +1,4 @@
-import { games, GameEntry } from './games';
+import { games, GameEntry, GROUPS, GroupDef } from './games';
 import { createArcadeInput } from './arcadeInput';
 import { mountArcadeGuide } from '../../shared/arcadeGuide';
 import { mountFullscreenKey } from '../../shared/fullscreenKey';
@@ -41,6 +41,13 @@ if (isFramedHub) {
 }
 
 
+/** オンラインの状態: closed=開催されていない / open=開催中 / waiting=開催中で、誰かが待機中 */
+function onlineState(status?: PublicStatus | null): 'closed' | 'open' | 'waiting' {
+  if (!status || !status.open) return 'closed';
+  const waiting = status.phase === 'lobby' && status.players >= 1 && status.players < status.max;
+  return waiting ? 'waiting' : 'open';
+}
+
 // ===== ランキングHTML生成 =====
 /** クリアした記録は、名前のすぐ右に ★ を付けて表示する */
 function renderRowsHtml(entries: LeaderboardEntry[]): string {
@@ -70,13 +77,29 @@ function entriesFor(slug: string, variantId?: string): LeaderboardEntry[] {
   return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 5);
 }
 
-// ===== セクション要素 =====
-const secOnline = document.querySelector<HTMLElement>('#section-online')!;
-const gridOnline = document.querySelector<HTMLDivElement>('#grid-online')!;
-const secRanking = document.querySelector<HTMLElement>('#section-ranking')!;
-const gridRanking = document.querySelector<HTMLDivElement>('#grid-ranking')!;
-const secOther = document.querySelector<HTMLElement>('#section-other')!;
-const gridOther = document.querySelector<HTMLDivElement>('#grid-other')!;
+// ===== グループ(遊び方のスタイル)の並び =====
+const hubContainer = document.querySelector<HTMLElement>('#hub-container')!;
+/** グループの入れ替えの時に、画面を上から下へ走る光の帯 */
+const hubSweep = document.createElement('div');
+hubSweep.className = 'hub-sweep';
+document.body.appendChild(hubSweep);
+
+/**
+ * 何も操作しないまま、この時間がたつと、画面の一番上へ戻して、グループを1つ上げる(下のグループが上へ上がり、一番上は一番下へ回る)。
+ * 操作(マウス・スクロール・キー・タッチ・アケコン)があれば、数え直す。開いた時は GROUPS の固定の順番。
+ */
+const GROUP_ROTATE_IDLE_MS = 30_000;
+/** 最後に操作があった(または、前回入れ替えた)時刻 */
+let lastActivityAt = Date.now();
+function markActive(): void {
+  lastActivityAt = Date.now();
+}
+/** グループを上げた回数(GROUPS の数で一周する) */
+let rotationIndex = 0;
+/** 上げた回数 n に応じた、グループの並び(先頭の n 個が、末尾へ回る) */
+function groupOrderFor(n: number): GroupDef[] {
+  return [...GROUPS.slice(n), ...GROUPS.slice(0, n)];
+}
 
 // コース/難易度バリアントを持つカードのローテーション管理
 interface VariantRotator {
@@ -94,7 +117,6 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
   const card = document.createElement('div');
   card.className = 'card';
   card.dataset.slug = game.slug;
-  card.style.setProperty('--accent', game.accent);
 
   const def = GAME_LEADERBOARD_DEFS[game.slug];
   let rankingHtml = '';
@@ -127,18 +149,10 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
     `;
   }
 
-  // オンライン開催中のバッジ (黒ボックス白文字: 試合進行中なら「対戦中」、待機・ロビーなら「募集中」)
-  let onlineBadgeHtml = '';
-  if (onlineStatus && onlineStatus.open) {
-    const isPlaying = onlineStatus.phase === 'racing' || onlineStatus.players >= onlineStatus.max;
-    const badgeText = isPlaying ? '対戦中' : `対戦相手を募集中(${onlineStatus.players}/${onlineStatus.max})`;
-    onlineBadgeHtml = `
-      <div class="card-online-badge">${badgeText}</div>
-    `;
-  }
-
-
-
+  // オンライン対戦に対応したゲームの印(いつも出す。開催中は点灯、誰かが待機中なら点が点滅)
+  const onlineBadgeHtml = game.online
+    ? `<div class="card-online-pill" data-state="${onlineState(onlineStatus)}">オンライン対戦</div>`
+    : '';
 
   card.innerHTML = `
     <a class="card-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
@@ -203,7 +217,10 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
 
 // 取得したランキングで、全カードの表示を更新する
 async function refreshBoards() {
-  boards = await loadAllLeaderboards();
+  const next = await loadAllLeaderboards();
+  // 通信に失敗した時は空で返ってくる。表示中のランキングを、空で消さない
+  if (Object.keys(next).length === 0 && Object.keys(boards).length > 0) return;
+  boards = next;
   for (const game of games) {
     const def = GAME_LEADERBOARD_DEFS[game.slug];
     if (!def || !def.hasScore) continue;
@@ -224,46 +241,30 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
   try {
     const statuses = await fetchAllOnlineStatuses();
 
-    // 1. オンライン開催中のゲーム
-    const onlineGames = games.filter((g) => statuses[g.slug]?.open === true);
-    const onlineSlugs = new Set(onlineGames.map((g) => g.slug));
-
-    // 2. ランキング対応ゲーム（オンライン開催中以外で hasScore: true）
-    const rankingGames = games.filter(
-      (g) => !onlineSlugs.has(g.slug) && GAME_LEADERBOARD_DEFS[g.slug]?.hasScore
-    );
-    const rankingSlugs = new Set(rankingGames.map((g) => g.slug));
-
-    // 3. その他ゲーム（上記以外）
-    const otherGames = games.filter(
-      (g) => !onlineSlugs.has(g.slug) && !rankingSlugs.has(g.slug)
-    );
-
     // 再描画前の選択中ゲームのslugを保持（再描画後に選択位置を確実に復元するため）
     const prevSelectedSlug = cards[current]?.dataset.slug;
 
-    // グリッドとローテーターを初期化
-    gridOnline.innerHTML = '';
-    gridRanking.innerHTML = '';
-    gridOther.innerHTML = '';
+    // ローテーターを初期化して、グループごとの見出しとカードを作り直す
     rotators.length = 0;
-
-    // オンライン対戦対応セクション（開催中ゲームがある時のみ表示）
-    if (onlineGames.length > 0) {
-      secOnline.style.display = '';
-      onlineGames.forEach((g) => gridOnline.appendChild(createCard(g, statuses[g.slug])));
-    } else {
-      secOnline.style.display = 'none';
-    }
-
-    // ランキング対応セクション
-    secRanking.style.display = rankingGames.length > 0 ? '' : 'none';
-    rankingGames.forEach((g) => gridRanking.appendChild(createCard(g)));
-
-    // その他セクション
-    secOther.style.display = otherGames.length > 0 ? '' : 'none';
-    otherGames.forEach((g) => gridOther.appendChild(createCard(g)));
-
+    hubContainer.innerHTML = '';
+    groupOrderFor(rotationIndex).forEach((group) => {
+      const groupGames = games.filter((g) => g.group === group.id);
+      if (groupGames.length === 0) return;
+      const section = document.createElement('section');
+      section.className = 'game-section';
+      section.id = `section-${group.id}`;
+      section.dataset.group = group.id;
+      section.innerHTML = `
+        <div class="section-header">
+          <h2 class="section-title">${group.title}</h2>
+          <span class="section-note">${group.note}</span>
+        </div>
+        <div class="game-grid"></div>
+      `;
+      const grid = section.querySelector<HTMLDivElement>('.game-grid')!;
+      groupGames.forEach((g) => grid.appendChild(createCard(g, statuses[g.slug])));
+      hubContainer.appendChild(section);
+    });
 
     cards = Array.from(document.querySelectorAll<HTMLDivElement>('.card'));
     await refreshBoards();
@@ -281,11 +282,16 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
   }
 }
 
+/** ランキングを取り直す間隔 */
+const BOARD_REFRESH_MS = 30_000;
+
 // ===== 時間経過でコース/難易度ランキングをローテーション切替 =====
 const ROTATION_INTERVAL_MS = 4000;
 let rotationTimer: number | null = null;
 
 function rotateVariants() {
+  // ゲームを開いている間は、見えないカードを書き換えない(ゲームと同じスレッドで、スタイル計算・再描画が走るのを避ける)
+  if (isGameFrameOpen()) return;
   rotators.forEach((rotator) => {
     const def = GAME_LEADERBOARD_DEFS[rotator.slug];
     if (!def || !def.variants || def.variants.length <= 1) return;
@@ -330,7 +336,7 @@ function setPressed(pressed: boolean) {
 function scrollCardIntoView(index: number) {
   const card = cards[index];
   if (!card) return;
-  // 最上段(最初の行)のカードの場合はページ最上部までスクロールして「オンライン対戦対応」見出しを完全に見せる
+  // 最上段(最初の行)のカードの場合はページ最上部までスクロールして、一番上のグループの見出しを完全に見せる
   const firstCardTop = cards[0]?.offsetTop ?? 0;
   if (card.offsetTop <= firstCardTop + 15) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -449,6 +455,7 @@ document.addEventListener('visibilitychange', () => {
     stopRotation();
   } else {
     startRotation();
+    markActive();
     void renderSections();
   }
 });
@@ -463,6 +470,7 @@ function launchSelected(slug?: string) {
   if (shouldOpenInFrame()) {
     openGameFrame(url, () => {
       setPressed(false);
+      markActive(); // ゲームから戻った時から、30秒を数える
       void renderSections(targetSlug, true);
     }, targetSlug);
   } else {
@@ -474,12 +482,15 @@ function launchSelected(slug?: string) {
 if (!isFramedHub) {
   createArcadeInput({
     onActivate() {
+      markActive();
       if (!isGameFrameOpen()) setPadMode(true);
     },
     onMove(dx, dy) {
+      markActive();
       if (!isGameFrameOpen()) moveSelection(dx, dy);
     },
     onConfirmDown() {
+      markActive();
       if (isGameFrameOpen()) return;
       setPadMode(true);
       setPressed(true);
@@ -487,40 +498,67 @@ if (!isFramedHub) {
     onConfirmUp() {
       if (!isGameFrameOpen()) launchSelected();
     },
-  });
+  }, isGameFrameOpen);
 }
 
-// オンライン開催状況の定期差分更新 (セクション構成が変わらない限りDOMを再生成せず、バッジの文字のみ更新)
-// ユーザーのスクロール位置を絶対に勝手に戻さない
+// 30秒ごとに、下のグループを1つ上げる(一番上のグループは、一番下へ回る)。
+// 作り直さずに、セクションの並びだけを入れ替える(動画も選択も保ったまま)。ゲームを開いている間と、タブが隠れている間は、戻った時に追いつく。
+let isRotating = false;
+/** 操作がないまま一定時間たったら、画面の一番上へ戻して、グループを入れ替える */
+function rotateGroupsIfIdle() {
+  if (isRotating || cards.length === 0 || document.hidden || isGameFrameOpen()) return;
+  if (Date.now() - lastActivityAt < GROUP_ROTATE_IDLE_MS) return;
+  markActive(); // 次は、入れ替えてから、また30秒後
+  rotateGroups();
+}
+
+function rotateGroups() {
+  // 動きを減らす設定の環境では、アニメーションなしで入れ替える
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    applyRotation();
+    return;
+  }
+
+  // 画面全体を、一度上へ消して → 一番上へ戻して並びを入れ替え → 下から入ってくる(リフレッシュする動き)。同時に、背景色の帯が画面を走る
+  isRotating = true;
+  hubSweep.classList.remove('run');
+  void hubSweep.offsetWidth; // アニメーションを最初からやり直す
+  hubSweep.classList.add('run');
+  hubContainer.classList.add('refresh-out');
+  window.setTimeout(() => {
+    applyRotation();
+    hubContainer.classList.add('refresh-in'); // 下に置いた状態を、動きなしで作ってから
+    void hubContainer.offsetWidth;
+    hubContainer.classList.remove('refresh-out', 'refresh-in'); // 元の位置へ戻る動き
+    window.setTimeout(() => { isRotating = false; }, 400);
+  }, 380);
+}
+
+function applyRotation() {
+  rotationIndex = (rotationIndex + 1) % GROUPS.length;
+  const sections = new Map(
+    Array.from(hubContainer.querySelectorAll<HTMLElement>('.game-section')).map((el) => [el.dataset.group as string, el]),
+  );
+  groupOrderFor(rotationIndex).forEach((g) => {
+    const el = sections.get(g.id);
+    if (el) hubContainer.appendChild(el);
+  });
+
+  // 画面の一番上へ戻して、選択も、新しい一番上のグループの先頭のカードに移す
+  cards = Array.from(document.querySelectorAll<HTMLDivElement>('.card'));
+  window.scrollTo(0, 0);
+  goTo(0);
+}
+
+// オンライン開催状況の定期更新: 印の状態(点灯・点滅)だけを書き換える。セクションは作り直さないので、並びもスクロール位置も動かない
 async function updateOnlineStatuses() {
   try {
     const statuses = await fetchAllOnlineStatuses();
-    const onlineGames = games.filter((g) => statuses[g.slug]?.open === true);
-    const newOnlineSlugs = new Set(onlineGames.map((g) => g.slug));
-
-    const currentOnlineCards = Array.from(gridOnline.querySelectorAll<HTMLDivElement>('.card'));
-    const currentOnlineSlugs = new Set(currentOnlineCards.map((c) => c.dataset.slug));
-
-    const changed =
-      newOnlineSlugs.size !== currentOnlineSlugs.size ||
-      [...newOnlineSlugs].some((s) => !currentOnlineSlugs.has(s));
-
-    if (changed) {
-      // 開催状態が変わった場合のみ再描画 (自動スクロールは一切しない)
-      await renderSections(null, false);
-    } else {
-      // 構成が変わらない通常時は、バッジのテキストだけをインプレース更新
-      currentOnlineCards.forEach((card) => {
-        const slug = card.dataset.slug;
-        if (!slug) return;
-        const status = statuses[slug];
-        const badge = card.querySelector<HTMLElement>('.card-online-badge');
-        if (badge && status) {
-          const isPlaying = status.phase === 'racing' || status.players >= status.max;
-          badge.textContent = isPlaying ? '対戦中' : `対戦相手を募集中(${status.players}/${status.max})`;
-        }
-      });
-    }
+    document.querySelectorAll<HTMLDivElement>('.card').forEach((card) => {
+      const slug = card.dataset.slug;
+      const pill = card.querySelector<HTMLElement>('.card-online-pill');
+      if (slug && pill) pill.dataset.state = onlineState(statuses[slug]);
+    });
   } catch {
     // 通信エラー時は無視
   }
@@ -547,10 +585,28 @@ if (!isFramedHub) {
     }
   }, 5000);
 
+  // 操作がないまま30秒たったかを、1秒ごとに見る
+  setInterval(rotateGroupsIfIdle, 1000);
+
+  // プレイヤーの操作があれば、入れ替えまでの30秒を数え直す
+  for (const type of ['mousedown', 'wheel', 'keydown', 'touchstart', 'touchmove', 'pointerdown']) {
+    window.addEventListener(type, markActive, { passive: true });
+  }
+  window.addEventListener('mousemove', (e) => {
+    if (e.movementX !== 0 || e.movementY !== 0) markActive();
+  }, { passive: true });
+
+  // ランキングの定期更新(リロードしなくても、新しい記録が出る)。表示中のカードの中身だけを書き換える
+  setInterval(() => {
+    if (!document.hidden && !isGameFrameOpen()) void refreshBoards();
+  }, BOARD_REFRESH_MS);
+
   // ウィンドウフォーカス復帰時にも即座にステータスをチェック
   window.addEventListener('focus', () => {
     if (!isGameFrameOpen()) {
       void updateOnlineStatuses();
+      void refreshBoards();
     }
+    markActive(); // ウィンドウに戻ってきたことも、操作として数える
   });
 }

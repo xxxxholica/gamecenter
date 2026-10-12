@@ -1,5 +1,6 @@
 import { InputState } from '../types';
 import { KeyboardTracker } from '../../../../shared/keyboardTracker';
+import { readGamepads } from '../../../../shared/gamepadFrame';
 
 export class InputManager {
   private static instance: InputManager | null = null;
@@ -71,7 +72,7 @@ export class InputManager {
     let gamepadConnected = false;
 
     // 1. Poll Gamepad
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     let activePad: Gamepad | null = null;
 
     if (this.gamepadIndex !== null && gamepads[this.gamepadIndex]) {
@@ -124,7 +125,7 @@ export class InputManager {
       const btnConfirm = rawButtons[0] || rawButtons[2]; // A or X
       const btnCancel = rawButtons[1];                   // B
       const btnSpecial = rawButtons[3] || rawButtons[5] || rawButtons[7] || rawButtons[4]; // Y, RB, RT, LB
-      const btnPause = rawButtons[9] || rawButtons[8];   // Start or Back
+      const btnPause = rawButtons[9];                    // Start(Back = SELECT は Backspace として共通のポーズが受ける)
 
       if (btnConfirm) confirm = true;
       if (btnCancel) cancel = true;
@@ -153,7 +154,7 @@ export class InputManager {
       confirm = true;
     }
 
-    if (this.keysDown.has('Backspace') || this.keysDown.has('Escape') || this.keysDown.has('KeyX')) {
+    if (this.keysDown.has('Backspace') || this.keysDown.has('KeyX')) {
       cancel = true;
     }
 
@@ -168,7 +169,7 @@ export class InputManager {
       special = true;
     }
 
-    if (this.keysDown.has('KeyP') || this.keysDown.has('Backspace') || this.keysDown.has('Escape')) {
+    if (this.keysDown.has('KeyP')) {
       pause = true;
     }
 
@@ -224,7 +225,6 @@ export class InputManager {
     if (action === 'cancel') {
       return (
         this.prevKeysDown.has('Backspace') ||
-        this.prevKeysDown.has('Escape') ||
         this.prevKeysDown.has('KeyX') ||
         !!this.prevGamepadButtons[1]
       );
@@ -246,10 +246,7 @@ export class InputManager {
     if (action === 'pause') {
       return (
         this.prevKeysDown.has('KeyP') ||
-        this.prevKeysDown.has('Backspace') ||
-        this.prevKeysDown.has('Escape') ||
-        !!this.prevGamepadButtons[9] ||
-        !!this.prevGamepadButtons[8]
+        !!this.prevGamepadButtons[9]
       );
     }
     return false;

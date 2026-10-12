@@ -5,31 +5,38 @@ import { InputManager, InputState } from './engine/input';
 import { SoundManager } from './engine/audio';
 import { Player, BoundingBox2D } from './entities/player';
 import { Stage, STAGE_CONFIGS, FINAL_STAGE, DEFAULT_BACKGROUND, DEFAULT_FOG_DENSITY } from './world/stage';
+import { INITIAL_LIVES, stageClearBonus } from './world/rewards';
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock } from './entities/objects';
 import { SurveillanceDrone } from './entities/enemies';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['btn-result-title']);
 
-mountArcadeGuide({
+const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
     { indices: [0], label: 'ジャンプ', keyLabel: 'Space' },
     { indices: [1, 2], label: 'スピン攻撃', keyLabel: 'Shift / X' },
   ],
   showHomeHint: true,
+  backLabel: 'ポーズ',
 });
+const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+mountTitleGuide();
 
 /** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
 const RESPAWN_MIN_TIME = 30;
+/** ステージの開始地点。チェックポイントを通過していないときの再開地点にもなる */
+const STAGE_SPAWN = { x: 1.5, y: 0.5 } as const;
 /** スピンがドローンに届く、本体の上下の余裕(m)。どの角度からでも落とせるようにする */
 const DRONE_SPIN_REACH = 0.6;
 
@@ -58,6 +65,12 @@ class StreetBBoyGame {
 
   private state: GameState = 'title';
   private stateTimer: number = 0;
+  /** ポーズ(Backspace / SELECT): プレイ中に止めて、やり直せる */
+  private readonly pause = new ArcadePause({
+    accent: '#ffe600',
+    isPlaying: () => this.state === 'playing' && !this.countingDown && !!this.player && !this.player.isDead,
+    onRestart: () => this.retryFromResult(),
+  });
 
   // Gameplay metrics
   private currentStage: number = 1;
@@ -67,7 +80,7 @@ class StreetBBoyGame {
   /** ステージ開始前の 3・2・1・GO! の間は true(時間が進まず、操作できない) */
   private countingDown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
-  private lives: number = 3;
+  private lives: number = INITIAL_LIVES;
   // 分析用: 1プレイ内の統計
   private lastDeathCause = '';
   private deathsByCause: Record<string, number> = {};
@@ -98,6 +111,8 @@ class StreetBBoyGame {
 
   // 最後に通過したチェックポイント(ミスした時の再開地点)
   private checkpoint: { x: number; y: number } | null = null;
+  // ミスから再開(またはゲームオーバー)までの待ちタイマー。やり直し・タイトルに戻るときに取り消す
+  private respawnTimer: number | null = null;
 
   // ?debug=collision のときだけ有効な、判定の可視化
   private collisionDebug: CollisionDebugOverlay | null = null;
@@ -128,6 +143,15 @@ class StreetBBoyGame {
     this.sound = new SoundManager();
     this.hud = new HudManager();
 
+    // 結果画面の Backspace(アケコンは SELECT)は、タイトルへ戻る
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Backspace' || e.repeat) return;
+      if ((this.state === 'game_over' || this.state === 'clear') && !this.hud.isNameEntryOpen && performance.now() >= this.resultArmTime) {
+        e.preventDefault();
+        this.setupTitleScene();
+      }
+    });
+
     if (CollisionDebugOverlay.isRequested()) {
       this.collisionDebug = new CollisionDebugOverlay(this.scene);
     }
@@ -156,7 +180,8 @@ class StreetBBoyGame {
       if (!btn) return;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (performance.now() < this.resultArmTime) return;
+        // 順位の確認中・名前登録中は、キー・パッドと同じく受け付けない(登録が出る前に次のゲームが始まってしまう)
+        if (this.hud.isNameEntryOpen || performance.now() < this.resultArmTime) return;
         action();
       });
       btn.addEventListener('mouseenter', () => {
@@ -211,6 +236,7 @@ class StreetBBoyGame {
         { indices: [1], label: '終了' },
       ],
       showHomeHint: true,
+      backLabel: 'タイトルへ',
     });
   }
 
@@ -252,6 +278,7 @@ class StreetBBoyGame {
 
     this.state = 'title';
     this.stateTimer = 0;
+    mountTitleGuide();
     this.hud.showTitle(false);
     this.hud.showRanking(false);
     this.hud.showDemoBanner(false);
@@ -320,7 +347,7 @@ class StreetBBoyGame {
     this.currentStage = 1;
     this.score = 0;
     this.timeLeft = this.getStageInitialTime(this.currentStage);
-    this.lives = 3;
+    this.lives = INITIAL_LIVES;
     this.lastDeathCause = '';
     this.deathsByCause = {};
     this.cassettesTaken = 0;
@@ -339,9 +366,9 @@ class StreetBBoyGame {
     this.sound.setBaseTempo(this.stage.config.tempo);
     this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     this.player = new Player();
-    this.player.reset(1.5, 0.5);
+    this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
     this.scene.add(this.player.mesh);
-    this.camera.position.set(1.5, 2.5, 13.0);
+    this.camera.position.set(STAGE_SPAWN.x, 2.5, 13.0);
 
     this.hud.showTitle(false);
     this.hud.showRanking(false);
@@ -355,6 +382,7 @@ class StreetBBoyGame {
       this.hud.hideCenterBanner();
     } else {
       this.state = 'playing';
+      mountPlayGuide();
       this.hud.showDemoBanner(false);
       this.beginStageCountdown();
       this.sound.startBgm();
@@ -373,6 +401,10 @@ class StreetBBoyGame {
 
   private cleanupGameplay(): void {
     this.goalBlastTimer = 0;
+    if (this.respawnTimer !== null) {
+      window.clearTimeout(this.respawnTimer);
+      this.respawnTimer = null;
+    }
     this.countdownHandle?.cancel();
     this.countingDown = false;
     if (this.player) {
@@ -412,9 +444,9 @@ class StreetBBoyGame {
     this.sound.setBaseTempo(this.stage.config.tempo);
     this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
     if (this.player) {
-      this.player.reset(1.5, 0.5);
+      this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
     }
-    this.camera.position.set(1.5, 2.5, 13.0);
+    this.camera.position.set(STAGE_SPAWN.x, 2.5, 13.0);
 
     this.state = 'playing';
     this.stateTimer = 0;
@@ -461,6 +493,12 @@ class StreetBBoyGame {
     this.lastTime = timestamp;
 
     const inputState = this.input.update();
+
+    // ポーズ中は進めない(描画だけ続ける)
+    if (this.pause.isOpen) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
 
     // 1. 無操作デモは撤廃。タイトル画面を常時維持する。
 
@@ -1158,7 +1196,7 @@ class StreetBBoyGame {
 
     // Time Bonus Calculation
     const timeBonus = Math.floor(this.timeLeft) * 100;
-    const stageBonus = (this.currentStage === FINAL_STAGE) ? 10000 : 3000;
+    const stageBonus = stageClearBonus(this.currentStage);
     this.addScore(timeBonus + stageBonus);
 
     // 縦穴を落ちてきたゴールは、爆発で華々しく飾る
@@ -1285,13 +1323,14 @@ class StreetBBoyGame {
     this.score = Math.floor(this.score / 2);
     this.hud.updateScore(this.score);
 
-    window.setTimeout(() => {
+    this.respawnTimer = window.setTimeout(() => {
+      this.respawnTimer = null;
       if (this.lives > 0) {
-        // 通過済みのチェックポイントがあればそこから。無ければ、穴の上にならない安全な足場から再開する
+        // 通過済みのチェックポイントがあればそこから。無ければ、ステージの開始地点から再開する
         if (this.player && this.stage) {
-          const safePos = this.checkpoint
+          const safePos: { x: number; y: number } = this.checkpoint
             ? { x: this.checkpoint.x, y: this.checkpoint.y + 0.3 }
-            : this.stage.getSafeRespawnPosition(this.player.x);
+            : STAGE_SPAWN;
           // タイムアップでのミスは、再開後すぐにまたタイムアップにならないよう時間を戻す
           if (this.timeLeft < RESPAWN_MIN_TIME) {
             this.timeLeft = RESPAWN_MIN_TIME;

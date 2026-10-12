@@ -1,3 +1,4 @@
+import { readGamepads } from './gamepadFrame';
 // アケコン(Gamepad API 標準マッピング)の入力ヘルパー。
 // レバー(十字キー12-15 / 左スティック)とボタンを読み取り、「今押された瞬間」だけを返すエッジ検出を提供する。
 
@@ -18,7 +19,7 @@ const EMPTY: PadSnapshot = { up: false, down: false, left: false, right: false, 
 
 /** 接続中の最初のゲームパッドの現在状態。未接続なら全て未押下。 */
 export function readPad(): PadSnapshot {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pads = readGamepads();
   for (const pad of pads) {
     if (!pad || !pad.connected) continue;
     const b = pad.buttons;

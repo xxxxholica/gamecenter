@@ -6,13 +6,14 @@ import { GameManager } from './game';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 
-// アケコン/ゲームパッドのSELECT長押しでホーム(ハブ)へ戻る
+// 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
 watchResultAutoReturn(['btn-result-title']);
 
 mountArcadeGuide({
   buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
   showHomeHint: true,
+  backLabel: 'ホームへ',
 });
 
 function initApp() {

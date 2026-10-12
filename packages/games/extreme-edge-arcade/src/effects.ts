@@ -29,6 +29,13 @@ export class EffectsManager {
   // Particles
   private particles: Particle[] = [];
   private particleGroup: THREE.Group;
+  /**
+   * 粒の形は、種類・大きさの段階ごとに共有する(粒ごとに作って捨てると、GPUへの転送と破棄が演出のたびに起きる)。
+   * 材質は、粒ごとに透明度を変えて消えていくので共有しない。
+   */
+  private readonly shapes = new Map<string, THREE.BufferGeometry>();
+  /** 同時に出せる粒の上限(連続して演出が重なっても、描画する数が増え続けない。超えたら古い粒から消す) */
+  private static readonly MAX_PARTICLES = 400;
 
   constructor(camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.camera = camera;
@@ -38,6 +45,28 @@ export class EffectsManager {
 
     this.particleGroup = new THREE.Group();
     this.scene.add(this.particleGroup);
+  }
+
+  private shape(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
+    let g = this.shapes.get(key);
+    if (!g) { g = make(); this.shapes.set(key, g); }
+    return g;
+  }
+
+  private addParticle(p: Particle): void {
+    this.particles.push(p);
+    while (this.particles.length > EffectsManager.MAX_PARTICLES) {
+      const old = this.particles.shift()!;
+      this.particleGroup.remove(old.mesh);
+      (old.mesh.material as THREE.Material).dispose();
+    }
+  }
+
+  /** 共有している形を破棄する(ゲームを作り直す時) */
+  dispose() {
+    this.clear();
+    for (const g of this.shapes.values()) g.dispose();
+    this.shapes.clear();
   }
 
   setCameraBase(pos: THREE.Vector3, target: THREE.Vector3) {
@@ -128,12 +157,7 @@ export class EffectsManager {
 
       if (p.life >= p.maxLife) {
         this.particleGroup.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        if (Array.isArray(p.mesh.material)) {
-          p.mesh.material.forEach(m => m.dispose());
-        } else {
-          p.mesh.material.dispose();
-        }
+        (p.mesh.material as THREE.Material).dispose();          // 形は共有なので破棄しない
         this.particles.splice(i, 1);
         continue;
       }
@@ -161,11 +185,12 @@ export class EffectsManager {
   // Spawn bursting chunks (for meat bun explosion, food splat, plastic bits)
   spawnExplosionChunks(pos: THREE.Vector3, color: number, count = 25, size = 0.08) {
     for (let i = 0; i < count; i++) {
-      const geom = new THREE.BoxGeometry(
-        size * (0.6 + Math.random() * 0.8),
-        size * (0.6 + Math.random() * 0.8),
-        size * (0.6 + Math.random() * 0.8)
-      );
+      const v = Math.floor(Math.random() * 6);                // 大きさの違うかけらを6通りから選ぶ
+      const geom = this.shape(`chunk:${size}:${v}`, () => new THREE.BoxGeometry(
+        size * (0.6 + 0.8 * ((v * 0.37) % 1)),
+        size * (0.6 + 0.8 * ((v * 0.61 + 0.2) % 1)),
+        size * (0.6 + 0.8 * ((v * 0.83 + 0.5) % 1))
+      ));
       const mat = new THREE.MeshStandardMaterial({
         color: color,
         roughness: 0.8,
@@ -190,7 +215,7 @@ export class EffectsManager {
       );
 
       this.particleGroup.add(mesh);
-      this.particles.push({
+      this.addParticle({
         mesh,
         velocity,
         angularVelocity,
@@ -205,7 +230,8 @@ export class EffectsManager {
   // Liquid splash droplets
   spawnLiquidSplash(pos: THREE.Vector3, color: number, count = 30) {
     for (let i = 0; i < count; i++) {
-      const geom = new THREE.SphereGeometry(0.04 + Math.random() * 0.03, 6, 6);
+      const v = Math.floor(Math.random() * 4);
+      const geom = this.shape(`splash:${v}`, () => new THREE.SphereGeometry(0.04 + v * 0.01, 6, 6));
       const mat = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
@@ -223,7 +249,7 @@ export class EffectsManager {
       );
 
       this.particleGroup.add(mesh);
-      this.particles.push({
+      this.addParticle({
         mesh,
         velocity,
         angularVelocity: new THREE.Vector3(),
@@ -238,7 +264,8 @@ export class EffectsManager {
   // Smoke / Steam puffs
   spawnSmoke(pos: THREE.Vector3, color = 0x222222, count = 15) {
     for (let i = 0; i < count; i++) {
-      const geom = new THREE.SphereGeometry(0.08 + Math.random() * 0.08, 6, 6);
+      const v = Math.floor(Math.random() * 4);
+      const geom = this.shape(`smoke:${v}`, () => new THREE.SphereGeometry(0.08 + v * 0.027, 6, 6));
       const mat = new THREE.MeshBasicMaterial({
         color: color,
         transparent: true,
@@ -258,7 +285,7 @@ export class EffectsManager {
       );
 
       this.particleGroup.add(mesh);
-      this.particles.push({
+      this.addParticle({
         mesh,
         velocity,
         angularVelocity: new THREE.Vector3(),
@@ -273,7 +300,7 @@ export class EffectsManager {
   // Sparks
   spawnSparks(pos: THREE.Vector3, count = 20) {
     for (let i = 0; i < count; i++) {
-      const geom = new THREE.BoxGeometry(0.02, 0.02, 0.06);
+      const geom = this.shape('spark', () => new THREE.BoxGeometry(0.02, 0.02, 0.06));
       const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.copy(pos);
@@ -286,7 +313,7 @@ export class EffectsManager {
       ).normalize();
 
       this.particleGroup.add(mesh);
-      this.particles.push({
+      this.addParticle({
         mesh,
         velocity: dir.multiplyScalar(speed),
         angularVelocity: new THREE.Vector3(10, 10, 10),
@@ -301,12 +328,7 @@ export class EffectsManager {
   clear() {
     for (const p of this.particles) {
       this.particleGroup.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      if (Array.isArray(p.mesh.material)) {
-        p.mesh.material.forEach(m => m.dispose());
-      } else {
-        p.mesh.material.dispose();
-      }
+      (p.mesh.material as THREE.Material).dispose();
     }
     this.particles = [];
     this.trauma = 0;

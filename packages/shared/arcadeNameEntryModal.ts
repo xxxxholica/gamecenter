@@ -16,6 +16,8 @@ import { PadEdge, startPadLoop } from './arcadePad';
 import { setupResultMenu, applyResultMenuFocus } from './arcadeResultMenu';
 import { randomArcadeName } from './arcadeRandomName';
 import { setButtonSuffix, formatSeconds } from './arcadeAutoAction';
+import { showInputShield } from './inputShield';
+import { runEntryFlow } from './highScoreEntryFlowCore';
 
 /** リザルトでスコアを見せてから登録画面を出すまでの待ち時間 */
 export const NAME_ENTRY_AFTER_RESULT_MS = 2200;
@@ -1017,26 +1019,19 @@ export interface HighScoreEntryFlowOptions {
  * 結果画面の「順位の確認 → 上位に入っていれば名前入力 → 登録」の流れ。
  * 順位の確認はサーバーへの問い合わせなので、終わるまでは結果画面の操作を止める(setBlocked)。
  * 上位に入らない・通信に失敗したときは、名前入力を出さずに操作を戻す。
+ *
+ * 止めている間(順位の確認中・名前入力が出るまでの待ち・名前入力中)は、見えないシールド(inputShield.ts)で画面全体を覆い、
+ * マウスのクリックが結果画面のボタンへ届かないようにする。キーボード・パッドは setBlocked を見る各ゲームの処理で止める。
+ * 返す関数で、この流れを取り消せる(結果画面を離れるとき用。予約した名前入力を出さず、止めていた操作とシールドを戻す)。
  */
-export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): void {
+export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): () => void {
   const { slug, score, variantId, modal, setBlocked, onName, onClosed } = options;
-  setBlocked(true);
-  void checkHighScore(slug, score, variantId).then((check) => {
-    if (!check.isRankIn) {
-      setBlocked(false);
-      return;
-    }
-    mountNameEntryModal({
-      ...modal,
-      rankDisplay: `第${check.rank}位`,
-      onComplete: async (name) => {
-        try {
-          return await onName(name);
-        } finally {
-          setBlocked(false);
-          onClosed?.();
-        }
-      },
-    });
-  });
+  return runEntryFlow(
+    {
+      check: () => checkHighScore(slug, score, variantId),
+      showShield: showInputShield,
+      mountModal: ({ rank, onComplete }) => mountNameEntryModal({ ...modal, rankDisplay: `第${rank}位`, onComplete }),
+    },
+    { setBlocked, onName, onClosed },
+  );
 }

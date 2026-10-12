@@ -1,0 +1,161 @@
+// プレイ中・メニュー中のBGM(Web Audio で作るので、音源ファイルは要らない)。
+// 4小節(C - Am - F - G)を繰り返す。メニューは静かなアルペジオとパッド、プレイ中はそこにドラムとメロディが加わる。
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+
+export type BgmScene = 'menu' | 'play';
+
+const STORAGE_KEY = 'tower-stack:bgm-muted';
+const BPM = 112;
+const STEP = 60 / BPM / 4;             // 16分音符の長さ(秒)
+const LOOKAHEAD = 0.14;                // 先に予約しておく時間(秒)
+const MASTER = 0.45;
+
+// 和音: 根音(MIDI)と、第3音までの半音数
+const CHORDS: { root: number; third: number }[] = [
+  { root: 48, third: 4 }, // C
+  { root: 45, third: 3 }, // Am
+  { root: 41, third: 4 }, // F
+  { root: 43, third: 4 }, // G
+];
+// メロディ(8分音符 × 8 × 4小節。null は休み)。C のペンタトニックを中心にした、控えめな旋律
+const LEAD: (number | null)[][] = [
+  [79, null, 76, null, 79, 81, 79, null],
+  [81, null, 79, null, 76, null, 74, 76],
+  [84, null, 81, null, 79, null, 81, 79],
+  [74, null, 76, 79, null, 76, 74, null],
+];
+
+const hz = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
+
+export class Bgm {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private noise: AudioBuffer | null = null;
+  private scene: BgmScene = 'menu';
+  private timer: number | null = null;
+  private nextTime = 0;
+  private step = 0;
+  private muted = false;
+
+  constructor(private readonly getContext: () => AudioContext | null) {
+    try { this.muted = localStorage.getItem(STORAGE_KEY) === '1'; } catch { /* 読めなくても続行 */ }
+  }
+
+  get isMuted(): boolean { return this.muted; }
+
+  /** 最初の操作のあとに呼ぶ(ブラウザは操作の前には音を出せない)。音を出す準備をして、鳴らし始める */
+  unlock(): void {
+    if (this.ctx) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    this.ctx = ctx;
+    this.noise = createWhiteNoiseBuffer(ctx, 1);
+    this.master = ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : MASTER;
+    this.master.connect(ctx.destination);
+    this.nextTime = ctx.currentTime + 0.1;
+    this.timer = window.setInterval(() => this.tick(), 25);
+  }
+
+  setScene(scene: BgmScene): void {
+    this.scene = scene;
+  }
+
+  toggleMute(): boolean {
+    this.muted = !this.muted;
+    try { localStorage.setItem(STORAGE_KEY, this.muted ? '1' : '0'); } catch { /* 保存できなくても続行 */ }
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : MASTER, this.ctx.currentTime, 0.05);
+    this.unlock();
+    return this.muted;
+  }
+
+  private tick(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') { void ctx.resume(); this.nextTime = ctx.currentTime + 0.1; return; }
+    while (this.nextTime < ctx.currentTime + LOOKAHEAD) {
+      this.play(this.step, this.nextTime);
+      this.step = (this.step + 1) % 64;
+      this.nextTime += STEP;
+    }
+  }
+
+  private note(time: number, freq: number, dur: number, type: OscillatorType, vol: number, cutoff = 0): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(vol, time + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    let out: AudioNode = osc;
+    if (cutoff) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = cutoff;
+      osc.connect(f);
+      out = f;
+    }
+    out.connect(gain).connect(this.master!);
+    osc.start(time);
+    osc.stop(time + dur + 0.02);
+  }
+
+  private hit(time: number, kind: 'kick' | 'snare' | 'hat'): void {
+    const ctx = this.ctx!;
+    if (kind === 'kick') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.setValueAtTime(140, time);
+      osc.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+      gain.gain.setValueAtTime(0.5, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
+      osc.connect(gain).connect(this.master!);
+      osc.start(time);
+      osc.stop(time + 0.18);
+      return;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = kind === 'snare' ? 1500 : 7000;
+    const gain = ctx.createGain();
+    const dur = kind === 'snare' ? 0.14 : 0.04;
+    gain.gain.setValueAtTime(kind === 'snare' ? 0.28 : 0.1, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    src.connect(f).connect(gain).connect(this.master!);
+    src.start(time);
+    src.stop(time + dur + 0.02);
+  }
+
+  /** 16分音符1つぶんを鳴らす(step は 0〜63 = 4小節) */
+  private play(step: number, time: number): void {
+    const bar = Math.floor(step / 16);
+    const s = step % 16;
+    const chord = CHORDS[bar];
+    const tones = [chord.root + 12, chord.root + 12 + chord.third, chord.root + 19, chord.root + 24];
+    const playing = this.scene === 'play';
+
+    // パッド: 小節の頭に、和音を長く
+    if (s === 0) for (const m of [chord.root + 12, chord.root + 12 + chord.third, chord.root + 19]) this.note(time, hz(m), STEP * 15, 'sawtooth', playing ? 0.025 : 0.035, 900);
+    // ベース: 8分音符。根音と1オクターブ上を交互に
+    if (s % 2 === 0) this.note(time, hz(s % 4 === 2 ? chord.root : chord.root - 12 + (s % 8 === 6 ? 7 : 0)), STEP * 1.8, 'triangle', 0.16);
+    // アルペジオ: メニューは8分、プレイ中は16分
+    if (playing || s % 2 === 0) {
+      const idx = [0, 1, 2, 3, 2, 1, 2, 1][(playing ? s : s / 2) % 8];
+      this.note(time, hz(tones[idx]), STEP * (playing ? 1.4 : 2.6), 'square', playing ? 0.035 : 0.03, 2400);
+    }
+    if (!playing) return;
+    // ドラム
+    if (s % 4 === 0) this.hit(time, 'kick');
+    if (s === 4 || s === 12) this.hit(time, 'snare');
+    if (s % 2 === 0) this.hit(time, 'hat');
+    // メロディ(8分音符)
+    if (s % 2 === 0) {
+      const m = LEAD[bar][s / 2];
+      if (m !== null) this.note(time, hz(m), STEP * 3, 'triangle', 0.12);
+    }
+  }
+}

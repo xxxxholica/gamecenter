@@ -44,7 +44,6 @@ export class MapSelectScreen {
       <div class="map-cards-container-arcade">
         ${STAGES.map((st, i) => `
         <div class="map-card-arcade${i === 0 ? ' active' : ''}" data-map="${st.id}">
-          <div class="map-num-badge">STAGE ${String(i + 1).padStart(2, '0')}</div>
           ${courseOutlineSvg(st.id)}
           <div class="map-card-title-arcade">${st.title}</div>
           <div class="map-card-sub-arcade">${st.sub}</div>
@@ -202,7 +201,7 @@ export class MapSelectScreen {
         if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
           this.confirm();
-        } else if (e.code === 'Escape' || (!this.onlineMode && e.code === 'Backspace')) {
+        } else if ((!this.onlineMode && e.code === 'Backspace')) {
           e.preventDefault();
           this.events.onBack();
         } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {

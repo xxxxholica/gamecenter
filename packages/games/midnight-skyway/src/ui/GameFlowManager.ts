@@ -29,7 +29,7 @@ export class GameFlowManager {
     this.keyListener = (e: KeyboardEvent) => {
       // Global hotkeys depending on screen
       if (this.currentScreen === 'RACE') {
-        if (e.code === 'Escape' || e.code === 'Backspace' || e.code === 'KeyP') {
+        if (e.code === 'Backspace' || e.code === 'KeyP') {
           e.preventDefault();
           this.callbacks.onTogglePause?.();
         }

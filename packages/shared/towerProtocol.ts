@@ -40,6 +40,12 @@ export interface TowerState {
   lv: number;
   /** タワーのブロック */
   k: BlockSnap[];
+  /** 持っているアイテム(0=ツタ 1=セメント 2=バリア 3=回復。使う順) */
+  it: number[];
+  /** 次と、その次のピース(PIECES の添字) */
+  n: number[];
+  /** 構え中の状態(ビット: 1=ツタ準備OK / 2=バリア展開中) */
+  f: number;
 }
 
 export interface PlayerInfo {

@@ -13,16 +13,16 @@ gamecenter/
       school-corridor-runner/  # テンパレラン (Three.js)
       extreme-edge-arcade/     # 極限ギリギリ選手権 (Three.js)
       tani-runner-124/         # 単位増殖ラン (Three.js)
-      phaser-fighter/          # STREET STRIKER（ストリートストライカー） (Phaser 3)
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
       midnight-skyway/         # ミッドナイト・スカイウェイ (Three.js, 3Dレース / PLATEAU・ヘルシンキの3D都市モデル)
-    shared/homeReturn.ts      # 全ゲーム共通: SELECT長押しでハブへ戻る
+    shared/homeReturn.ts      # 全ゲーム共通: 戻る操作(Backspace / アケコンのSELECT)の統一、Escapeの無効化、ハブへ戻る処理
+    shared/arcadePause.ts     # 全ゲーム共通: プレイ中のポーズ画面(再開 / やり直す / ゲームを終了)
   scripts/assemble.mjs        # 各パッケージのbuildをdist/に集約
   scripts/dev-all.mjs         # hub + 全ゲームのdevサーバーを単一プロセス・単一ポートで起動
 ```
 
-各ゲームは独立したVite + TypeScriptプロジェクト(描画はThree.jsまたはPhaser 3)。hubはゲーム一覧を表示し、各ゲームへリンクするだけの薄いランディングページ。ゲーム一覧・説明文は`packages/hub/src/games.ts`が唯一の情報源(single source of truth)。
+各ゲームは独立したVite + TypeScriptプロジェクト(描画はThree.js)。hubはゲーム一覧を表示し、各ゲームへリンクするだけの薄いランディングページ。ゲーム一覧・説明文は`packages/hub/src/games.ts`が唯一の情報源(single source of truth)。
 
 ## 開発
 
@@ -38,7 +38,7 @@ npm run dev
 1つのゲームだけ単体で開発したい場合:
 
 ```bash
-npm run dev -w packages/games/phaser-fighter
+npm run dev -w packages/games/street-b-boy
 ```
 
 hub単体のプレビュー(この状態ではゲームへのリンクは404になる。ビルド後に確認するか`npm run dev`を使うこと):
@@ -68,7 +68,6 @@ dist/
     school-corridor-runner/
     extreme-edge-arcade/
     tani-runner-124/
-    phaser-fighter/
     ennichi-shateki/
     street-b-boy/
     midnight-skyway/
@@ -109,7 +108,7 @@ https://game.hinata.works/ で公開している。
 
 1. `packages/games/<slug>/` に新しいVite+TypeScriptプロジェクトを作成する(既存ゲームの`package.json`/`vite.config.ts`を雛形にする)。
    - `vite.config.ts` に `base: './'` を設定すること(`dist/games/<slug>/` にネストして配置されるため)。
-2. エントリ(`src/main.ts`)で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼び、SELECT(キーボードはBackspace)長押しでホームへ戻れるようにする。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにすること。
+2. エントリ(`src/main.ts`)で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼び、戻る操作を Backspace(アケコンは SELECT)に統一する(Escape は無効になる)。タイトルの Backspace はホームへ戻り、メニューでは一つ前へ戻り、プレイ中は `ArcadePause`(`packages/shared/arcadePause.ts`)のポーズ画面を開く。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにすること。
 3. `packages/hub/src/games.ts` にエントリを追加する(タイトル・説明文・サムネイル画像・アクセントカラー)。サムネイルは `packages/hub/public/thumbnails/<slug>.webp` に置く。
 4. `npm install`(workspaceが自動検出される)→ `npm run build` で確認。
 

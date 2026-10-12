@@ -380,7 +380,18 @@ export class HudRenderer {
   }
 
   // HP/XPバーと、その上のTIME/SCORE/SPECIAL段の配置。他の要素(コンボ、ボスHP)の基準にもなる。
+  private statusLayoutCache: { width: number; height: number; value: ReturnType<HudRenderer['computeStatusLayout']> } | null = null;
+
+  /** 配置は画面の大きさだけで決まるので、大きさが変わらない限り測り直さない(毎フレーム measureText を5回呼んでいた) */
   private statusLayout(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    const c = this.statusLayoutCache;
+    if (c && c.width === width && c.height === height) return c.value;
+    const value = this.computeStatusLayout(ctx, width, height);
+    this.statusLayoutCache = { width, height, value };
+    return value;
+  }
+
+  private computeStatusLayout(ctx: CanvasRenderingContext2D, width: number, height: number) {
     const barW = 440;
     const barX = (width - barW) / 2;
     const barY = height - 58;

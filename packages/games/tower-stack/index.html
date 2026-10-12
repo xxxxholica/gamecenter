@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>グラグラタワー - TOWER STACK</title>
     <style>
+      :root { --heart-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='1 4 30 25'%3E%3Cpath d='M16 28 L5 16.5 C1.5 12.5 3 6 8.5 5.5 C12 5.2 14.5 7 16 9.5 C17.5 7 20 5.2 23.5 5.5 C29 6 30.5 12.5 27 16.5 Z' fill='%23ff4d6d'/%3E%3C/svg%3E"); }
       :root { --accent: #ffd166; }
       * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; color: #fff;
@@ -20,113 +21,137 @@
       .value { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: 34px;
         font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: 0.02em; }
       .value small { font-size: 16px; margin-left: 4px; }
-      #left { top: 14px; left: 14px; min-width: 180px; }
-      #left .row + .row { margin-top: 10px; }
-      #right { top: 14px; right: 14px; width: 180px; }
+      #left { top: 14px; left: 50%; transform: translateX(-50%) scale(var(--hs, 1.7)); transform-origin: top center; min-width: 0; display: flex; align-items: flex-start; gap: 12px;
+        padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
+      .hud-group .row { text-align: center; }
+      .hud-group .label { font-size: 12px; }
+      /* 残機・アイテム・次は同じ幅(40px×3 + すきま6px×2 = 132px)にそろえる */
+      .hud-group .row { width: 132px; }
+      .hud-group .hd, .hud-group .hi { justify-content: space-between; }
+      #right { top: 14px; right: 14px; width: 180px; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
       #right .row + .row { margin-top: 12px; }
 
-      #drops { display: flex; gap: 6px; margin-top: 5px; }
-      #drops i { font-style: normal; font-size: 26px; line-height: 1; color: #ff4d6d; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
-      #drops i::before { content: '♥'; }
-      #drops i.lost { color: rgba(255, 255, 255, 0.22); text-shadow: none; }
+      .hd { display: flex; gap: 6px; margin-top: 4px; }
+      .hd i { display: block; flex: none; width: 40px; height: 40px; background: var(--heart-img) center / contain no-repeat;
+        filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
+      .hd i.lost { filter: grayscale(1) opacity(0.3); }
 
-      #next { display: grid; grid-template-columns: repeat(4, 20px); grid-template-rows: repeat(2, 20px); width: 86px; height: 42px; align-content: center; justify-content: start;
-        gap: 2px; margin-top: 6px; }
-      #next i { border-radius: 3px; }
-      #next .next-special { grid-column: 1 / -1; grid-row: 1 / -1; align-self: center; font-size: 20px; font-weight: 900; color: #fff; white-space: nowrap; }
+      .hn { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+      .nbox { display: grid; box-sizing: border-box; gap: 2px; align-content: center; justify-content: center; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
+      .nbox.big, .nbox.small { flex: 1; min-width: 0; height: 40px; }
+      .narrow { flex: none; width: 8px; font-size: 10px; text-align: center; color: #fff; opacity: 0.85; }
+      .nbox i { border-radius: 3px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22), inset 0 2px 0 rgba(255, 255, 255, 0.28); }
+      .nbox svg { grid-column: 1 / -1; grid-row: 1 / -1; width: 100%; height: 100%; }
 
-      #items { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; min-height: 96px; }
-      .item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px;
-        font-size: 14px; font-weight: 800; color: #111; opacity: 0.5; }
-      .item:first-child { opacity: 1; outline: 2px solid #fff; }
-      .item.glue { background: #7ddc6a; }
-      .item.cement { background: #cfd6dd; }
-      .item.shield { background: #7bdff2; }
-      .item.heal { background: #ff8fa3; }
+      .icell { display: flex; flex-direction: column; align-items: center; width: 40px; }
+      .iname.empty { opacity: 0.55; }
+      .iname { margin-top: 2px; min-height: 13px; font-size: 10px; font-weight: 800; letter-spacing: 0; white-space: nowrap; text-align: center; }
+      .hi { display: flex; gap: 6px; margin-top: 4px; }
+      /* アイコンだけの四角いスロット */
+      .item { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
+      .item svg { width: 40px; height: 40px; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
+      .item.ready svg { animation: itemPulse 1.2s ease-in-out infinite; }
+      @keyframes itemPulse { 50% { filter: drop-shadow(0 0 6px #fff) drop-shadow(0 0 10px #fff); } }
+      .item.slot { position: relative; color: #fff; font-size: 11px; font-weight: 800; line-height: 1.1; text-align: center; opacity: 0.9; }
+      .item.slot span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
       .empty { font-size: 12px; opacity: 0.6; line-height: 1.5; }
+      /* 右下寄りに出す「(ボタン) ツタを使用」 */
+      /* オンライン対戦: HUDは各自のステージの上(横位置と大きさは main.ts が合わせる)。名前はステージの下 */
+      /* ステージの下の名前: プレイヤーの色の色のボックスに、太いゴシック体で白い文字(色は main.ts が付ける) */
+      .stage-name { position: absolute; bottom: 16px; transform: translateX(-50%); display: none; white-space: nowrap;
+        font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', system-ui, sans-serif; font-size: 22px; font-weight: 900; letter-spacing: 0.06em;
+        color: #fff; padding: 5px 20px 6px; border-radius: 10px; border: 3px solid #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+      body.online .stage-name { display: block; }
+      .stage-name small { margin-left: 10px; font-size: 14px; font-weight: 900; color: #fff; opacity: 0.9; }
+      #item-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 6%; display: none; align-items: center; gap: 10px; padding: 8px 16px;
+        background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 0; font-size: 18px; font-weight: 800; white-space: nowrap; }
+      #item-hint.show { display: flex; }
+      /* オンラインでは、画面の下端にステージ名の札(bottom:16px、高さ約40px)が並ぶので、その上に収める */
+      body.online #item-hint { bottom: calc(16px + 52px); }
+      #item-hint .ih-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; box-sizing: border-box; border: 2px solid #fff; border-radius: 10px; background: #555; }
+      #item-hint .ih-icon.glue { background: #2e9b3e; }
+      #item-hint .ih-icon.cement { background: #6c7580; }
+      #item-hint .ih-icon.heal { background: #d6304f; }
+      #item-hint .ih-icon svg { width: 32px; height: 32px; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px #000) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.9)); }
+      #item-hint small { font-size: 22px; font-weight: 700; opacity: 0.85; }
+      #item-hint .agc-inline { display: inline-flex; align-items: center; gap: 4px; }
       #status { font-size: 12px; font-weight: 700; line-height: 1.5; min-height: 18px; color: var(--accent); }
 
-      #banner { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); padding: 10px 32px 12px;
-        font-family: 'Impact', 'Arial Black', system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
-        font-size: 30px; letter-spacing: 0.06em; white-space: nowrap; text-align: center;
-        background: rgba(8, 8, 14, 0.88); border-top: 3px solid #e63946; border-bottom: 3px solid #e63946;
-        color: #ff8a93; display: none; }
-      #banner.good { border-color: #4fd6a0; color: #9af0cf; }
-      #banner small { display: block; margin-top: 2px; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
-        font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
+      #edge-alert { position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: 0; }
+      #edge-alert.warn { box-shadow: inset 0 0 90px 30px rgba(230, 57, 70, 0.9); animation: edge-warn 1s ease-in-out infinite; }
+      #edge-alert.warn.urgent { animation-duration: 0.4s; }
+      @keyframes edge-warn { 0%, 100% { opacity: 0.1; } 50% { opacity: 1; } }
+      #event-label { position: fixed; top: calc(var(--hud-bottom, 11%) + 8px); left: 50%; transform: translateX(-50%); z-index: 21; pointer-events: none; display: none; align-items: center; gap: 8px;
+        padding: 6px 18px; border: 3px solid #e63946; background: rgba(0, 0, 0, 0.6); color: #ff8a93; font-size: 20px; font-weight: 900; letter-spacing: 0.06em; white-space: nowrap; }
+      #event-label svg { width: 28px; height: 28px; }
+      #event-label b { min-width: 3.4em; text-align: left; font-variant-numeric: tabular-nums; }
+      #event-label.warn { display: flex; background: #e63946; color: #fff; animation: label-warn 0.5s steps(2) infinite; }
+      #event-label.active { display: flex; }
+      @keyframes label-warn { 50% { opacity: 0.35; } }
+      #event-fx { position: fixed; inset: 0; pointer-events: none; z-index: 19; overflow: hidden; }
+      #event-fx i { position: absolute; display: none; }
+      #event-fx[class^="fx-"] i { display: block; }
+      #edge-alert.active.k-wind.right { background: linear-gradient(90deg, rgba(230, 57, 70, 0.6), transparent 22%); animation: edge-sway 2.4s ease-in-out infinite; }
+      #edge-alert.active.k-wind.left { background: linear-gradient(270deg, rgba(230, 57, 70, 0.6), transparent 22%); animation: edge-sway 2.4s ease-in-out infinite; }
+      #edge-alert.active.k-speed { background: radial-gradient(ellipse at center, transparent 58%, rgba(255, 176, 32, 0.7)); animation: edge-flicker 0.35s steps(2) infinite; }
+      #edge-alert.active.k-meteor { background: linear-gradient(180deg, rgba(255, 90, 30, 0.8), transparent 30%); animation: edge-flash 1.3s linear infinite; }
+      @keyframes edge-sway { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+      @keyframes edge-flicker { 0% { opacity: 0.45; } 100% { opacity: 1; } }
+      @keyframes edge-flash { 0%, 100% { opacity: 0.4; } 8% { opacity: 1; } 16% { opacity: 0.5; } 24% { opacity: 0.95; } 40% { opacity: 0.4; } }
+      #event-label.active.k-speed, #event-label.warn.k-speed { border-color: #ffb020; color: #ffd27a; }
+      #event-label.warn.k-speed { background: #ffb020; color: #3a2600; }
+      #event-label.active.k-meteor { border-color: #ff6a2a; color: #ffa070; }
+      #event-label.warn.k-meteor { background: #ff6a2a; color: #fff; }
+      #event-fx.fx-wind i { top: var(--p); left: 0; width: 130px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8)); animation: fx-wind-r calc(var(--d) * 2.2) linear var(--dl) infinite; }
+      #event-fx.fx-wind.left i { background: linear-gradient(270deg, transparent, rgba(255, 255, 255, 0.8)); animation-name: fx-wind-l; }
+      #event-fx.fx-speed i { left: var(--p); top: 0; width: 2px; height: 240px; background: linear-gradient(180deg, transparent, rgba(255, 220, 120, 0.9)); animation: fx-fall calc(var(--d) * 0.3) linear var(--dl) infinite; }
+      #event-fx.fx-meteor i:nth-child(2n) { display: none; }
+      #event-fx.fx-meteor i { left: var(--p); top: 0; width: 14px; height: 14px; border-radius: 50%; background: #ffb870; box-shadow: 0 0 10px 3px rgba(255, 120, 40, 0.9), 0 -36px 16px -4px rgba(255, 100, 30, 0.7); animation: fx-meteor calc(var(--d) * 2.2) linear var(--dl) infinite; }
+      @keyframes fx-wind-r { 0% { transform: translate(-160px, 0); } 25% { transform: translate(25vw, -18px); } 50% { transform: translate(50vw, 12px); } 75% { transform: translate(75vw, -14px); } 100% { transform: translate(100vw, 0); } }
+      @keyframes fx-wind-l { 0% { transform: translate(100vw, 0); } 25% { transform: translate(75vw, -18px); } 50% { transform: translate(50vw, 12px); } 75% { transform: translate(25vw, -14px); } 100% { transform: translate(-160px, 0); } }
+      @keyframes fx-fall { from { transform: translateY(-260px); } to { transform: translateY(100vh); } }
+      @keyframes fx-meteor { from { transform: translate(0, -80px) rotate(18deg); } to { transform: translate(-40vh, 110vh) rotate(18deg); } }
+
+      #banner { position: absolute; top: max(20%, calc(var(--hud-bottom, 0px) + 72px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+      #banner .bn { box-sizing: border-box; width: 400px; max-width: calc(100vw - 24px); height: 118px; padding: 8px 20px; display: flex; flex-direction: column; justify-content: center;
+        font-family: system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif; font-weight: 900;
+        font-size: 28px; letter-spacing: 0.06em; white-space: nowrap; text-align: center; overflow: hidden;
+        background: rgba(8, 8, 14, 0.88); border-top: 3px solid #8fa3c0; border-bottom: 3px solid #8fa3c0;
+        color: #dbe4f0; }
+      /* 種類ごとの色: アイテム獲得=金 / アイテム使用=緑 / 防御=水色 / 邪魔イベント=赤 / レベルアップ=橙 / ほか=灰青 */
+      #banner .bn.k-get { border-color: #ffd166; color: #ffd166; }
+      #banner .bn.k-use { border-color: #4fd6a0; color: #9af0cf; }
+      #banner .bn.k-event { border-color: #e63946; color: #ff8a93; }
+      #banner .b-head { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.2; }
+      #banner .b-head svg { width: 38px; height: 38px; flex: none; }
+      #banner small { display: block; margin-top: 2px; font-family: inherit;
+        font-size: 14px; font-weight: 700; letter-spacing: 0.04em; color: #fff; overflow: hidden; text-overflow: ellipsis; }
 
       #match { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 8px 22px; display: none; white-space: nowrap;
         font-size: 18px; font-weight: 800; letter-spacing: 0.06em; background: rgba(8, 8, 14, 0.82); border: 1px solid var(--accent);
         border-radius: 999px; font-variant-numeric: tabular-nums; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
-      /* オンライン対戦: ステージを並べるので、左右のパネルを小さくする */
-      /* オンライン対戦: ステージを画面いっぱいに並べるので、UI(状況・高さ・残機・NEXT・アイテム・ボタンガイド)を
-         上部の1本のバーにまとめる。要素は main.ts の setOnlineLayout() がこのバーへ移す */
-      #topbar { position: fixed; top: 10px; left: 0; right: 0; margin: 0 auto; width: max-content; display: none; align-items: stretch; gap: 8px;
-        max-width: calc(100vw - 20px); pointer-events: none; z-index: 6; }
-      body.online #topbar { display: flex; }
-      #topbar > * { position: static !important; inset: auto !important; transform: none !important; margin: 0 !important; }
-      #topbar > * { flex: none; }
-      #topbar .label { white-space: nowrap; }
-      #topbar #drops { flex-wrap: nowrap; }
-      /* バー全体を1つの枠にし、中の項目は枠を外して区切り線で分ける */
-      #topbar { background: rgba(8, 8, 14, 0.85); border: 1px solid rgba(255, 255, 255, 0.14); border-left: 4px solid var(--accent);
-        border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); padding: 4px 6px; gap: 0; }
-      #topbar > * { background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
-      #topbar > * + * { border-left: 1px solid rgba(255, 255, 255, 0.16) !important; }
-      #topbar .panel { padding: 6px 14px; }
-      #topbar .value { font-size: 24px; }
-      #topbar #match { display: flex !important; align-items: center; justify-content: center; text-align: center; white-space: normal;
-        width: 170px; font-size: 14px; line-height: 1.4; border-radius: 10px; padding: 6px 12px; }
-      #topbar #left { min-width: 0; display: flex; gap: 16px; align-items: center; }
-      #topbar #left .row:first-child { display: none; }
-      #topbar #left .row + .row, #topbar #right .row + .row { margin-top: 0; }
-      #topbar #drops i { width: 20px; height: 20px; }
-      #topbar #right { width: auto; display: flex; gap: 16px; align-items: center; }
-      #topbar #next { margin-top: 2px; }
-      #topbar #items { flex-direction: row; min-height: 0; margin-top: 2px; }
-      #topbar .item { padding: 3px 7px; font-size: 13px; }
-      #topbar .empty { max-width: 9em; }
-      #topbar #status:empty { display: none; }
-      #topbar #agc-guide { flex-direction: column; justify-content: center; gap: 4px; padding: 6px 14px; box-shadow: none; width: max-content; max-width: none; }
-      /* レベルアップの演出(画面中央) */
-      #speedup { position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; white-space: nowrap;
-        font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(48px, 11vh, 96px); font-style: italic; letter-spacing: 0.04em;
-        color: #fff; -webkit-text-stroke: 3px #e63946; paint-order: stroke fill; text-shadow: 0 0 24px rgba(255, 120, 60, 0.85), 0 6px 0 #7a1020; }
-      #speedup.show { animation: speedPop 1.4s ease-out forwards; }
-      @keyframes speedPop {
-        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) skewX(-12deg); }
-        15% { opacity: 1; transform: translate(-50%, -50%) scale(1.2) skewX(-12deg); }
-        28% { transform: translate(-50%, -50%) scale(1) skewX(-12deg); }
-        75% { opacity: 1; transform: translate(-50%, -50%) scale(1) skewX(-12deg); }
-        100% { opacity: 0; transform: translate(-30%, -50%) scale(1.05) skewX(-12deg); }
-      }
       /* オンライン対戦のスタート前カウントダウン(画面中央) */
       #countdown { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none;
         font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(80px, 22vh, 180px); color: #ffd166;
         -webkit-text-stroke: 4px #1a1330; paint-order: stroke fill; text-shadow: 0 8px 0 #1a1330; }
-      /* オンライン対戦: 左上(移動・回転)と右上(アイテム・ホーム)に分けたボタンガイド。左のパネルは名札と重複するので出さない */
-      .agc-root.agc-top-right { top: 14px; bottom: auto; left: auto; right: 14px; }
-      body.online #left { display: none; }
       /* ── リザルト ── */
       #result-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
         background: rgba(5, 7, 18, 0.72); z-index: 100; }
       #result-modal.show { display: flex; }
-      .result-content { width: min(92vw, 460px); padding: clamp(14px, 3vh, 28px) 24px; text-align: center;
+      .result-content { width: min(92vw, 460px); padding: clamp(20px, 4vh, 36px) 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 26px);
         background: rgba(8, 8, 14, 0.94); border: 2px solid var(--accent);
         box-shadow: 0 0 34px rgba(255, 209, 102, 0.35); animation: resultPop 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
       @keyframes resultPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-      .result-badge { font-size: 12px; font-weight: 700; letter-spacing: 0.3em; color: var(--accent); }
       .result-title { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(30px, 6vh, 46px);
-        letter-spacing: 0.06em; margin-top: 4px; }
-      .result-label { margin-top: clamp(6px, 1.6vh, 14px); font-size: 12px; font-weight: 700; letter-spacing: 0.24em; opacity: 0.7; }
+        letter-spacing: 0.06em; line-height: 1; }
       #result-score { font-family: 'Impact', 'Arial Black', system-ui, sans-serif; font-size: clamp(44px, 10vh, 76px);
         line-height: 1.05; color: var(--accent); font-variant-numeric: tabular-nums; }
-      #result-detail { font-size: 15px; font-weight: 700; }
-      #result-record { min-height: 22px; margin: 4px 0 clamp(8px, 2vh, 18px); font-size: 14px; font-weight: 700; opacity: 0.85; }
+      #result-record { font-size: 14px; font-weight: 700; opacity: 0.85; }
+      #result-record:empty { display: none; }
       #result-record.new { color: #7ddc6a; opacity: 1; }
-      #result-ranking { margin: 0 auto clamp(8px, 2vh, 16px); width: min(100%, 340px); font-size: 14px; }
-      .rank-head { font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); margin-bottom: 4px; }
-      .rank-row { display: flex; align-items: center; gap: 10px; padding: 3px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      #result-ranking { width: min(100%, 340px); font-size: 14px; }
+      .rank-head { font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); margin-bottom: 8px; }
+      .rank-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
         font-weight: 700; font-variant-numeric: tabular-nums; }
       .rank-row .rank-no { width: 2.6em; text-align: left; }
       .rank-row.r1 .rank-no { color: #ffd700; }
@@ -140,36 +165,34 @@
   </head>
   <body>
     <div id="hud">
-      <div id="topbar"></div>
-      <div id="left" class="panel">
-        <div class="row"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
-        <div class="row"><div class="label">いまの高さ</div><div class="value"><span id="height">0.0</span><small>m</small></div></div>
-        <div class="row"><div class="label">残機</div><div id="drops"><i></i><i></i><i></i></div></div>
+      <div id="my-name" class="stage-name"></div>
+      <div id="left" class="panel hud-group">
+        <div class="row"><div class="label">残機</div><div id="drops" class="hd"><i></i><i></i><i></i></div></div>
+        <div class="row" id="items-row"><div class="label">アイテム</div><div id="items" class="hi"></div></div>
+        <div class="row" id="next-row"><div class="label">次</div><div id="next" class="hn"></div></div>
       </div>
       <div id="right" class="panel">
-        <div class="row"><div class="label">NEXT</div><div id="next"></div></div>
-        <div class="row"><div class="label">アイテム</div><div id="items"></div></div>
         <div class="row"><div id="status"></div></div>
       </div>
+      <div id="item-hint"></div>
       <div id="match"></div>
       <div id="banner"></div>
-      <div id="speedup"></div>
       <div id="countdown"></div>
     </div>
 
+    <div id="event-fx"></div>
+    <div id="edge-alert"></div>
+    <div id="event-label"></div>
+
     <div id="result-modal">
       <div class="result-content">
-        <div class="result-badge">◆ ブロックを3個落とした ◆</div>
         <h2 class="result-title">GAME OVER</h2>
-        <div class="result-label">SCORE</div>
         <div id="result-score">0</div>
-        <div id="result-detail"></div>
         <div id="result-record"></div>
         <div id="result-ranking"></div>
         <div id="result-menu">
           <button id="result-btn-retry">再挑戦</button>
           <button id="result-btn-title">タイトルに戻る</button>
-          <button id="result-btn-exit">ゲームを終了</button>
         </div>
       </div>
     </div>

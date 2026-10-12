@@ -116,6 +116,8 @@ const onlineServer = spawn(process.execPath, ['--watch', 'src/index.ts'], {
     ...process.env,
     ONLINE_START_OPEN: '1',
     ONLINE_ALLOWED_ORIGINS: '*',
+    // 開発中は、プレイチケット(最短プレイ時間・秒あたりの得点上限)の検証をしない。ランキングの動作確認がすぐできるように
+    LEADERBOARD_TICKET_MODE: 'off',
     ONLINE_PROXY_SECRET: DEV_PROXY_SECRET,
     ONLINE_ADMIN_PORT: String(ONLINE_ADMIN_PORT),
     ONLINE_ADMIN_USER: process.env.ONLINE_ADMIN_USER ?? 'admin',

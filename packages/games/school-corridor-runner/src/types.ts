@@ -62,6 +62,6 @@ export interface GameInputState {
   throwBomb: boolean;     // 後方互換
   startOrRetry: boolean;  // スタート / リトライ / 確定
   menuNav: number[];      // メニュー移動(押した瞬間。上・左 = -1 / 下・右 = +1)
-  cancel?: boolean;       // キャンセル / 終了 (Bボタン / Escape)
+  cancel?: boolean;       // キャンセル / 終了 (Bボタン / Backspace)
   anyKey: boolean;        // デモからの復帰など
 }

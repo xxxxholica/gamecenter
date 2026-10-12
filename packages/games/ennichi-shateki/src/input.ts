@@ -1,5 +1,6 @@
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { KeyboardTracker, SCROLL_KEYS } from '../../../shared/keyboardTracker';
+import { readGamepads } from '../../../shared/gamepadFrame';
 
 export interface InputState {
   aimX: number;
@@ -45,6 +46,13 @@ export class ArcadeInput {
 
   // Touch
   private touchJustTapped: boolean = false;
+
+  // アケコン(十字キー・スティック)の照準。レバーは倒すか倒さないかなので、最高速のままだと細かく狙えない。
+  // 低い速さで動き出して、倒し続けるほど速くなる(細かい狙いと、大きな移動の両立)
+  private readonly PAD_SPEED_MAX = 1.0;   // 画面の幅(2.0)を、約2秒で横切る最高速
+  private readonly PAD_SPEED_START = 0.35;  // 倒し始めの速さ(最高速に対する割合)
+  private readonly PAD_RAMP_SEC = 0.5;      // 倒し始めから最高速になるまで
+  private padHoldSec = 0;
 
   // Rapid fire timer for continuous barrage
   private rapidFireTimer: number = 0;
@@ -123,6 +131,8 @@ export class ArcadeInput {
   public update(dt: number): InputState {
     let rawMoveX = 0;
     let rawMoveY = 0;
+    let padMoveX = 0; // アケコン・ゲームパッドの分だけ(キーボードより低い感度で動かす)
+    let padMoveY = 0;
     let normalPressed = false;
     let explosivePressed = false;
     let startPressed = false;
@@ -158,7 +168,7 @@ export class ArcadeInput {
     }
 
     // 2. Gamepad API
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gamepads = readGamepads();
     for (let i = 0; i < gamepads.length; i++) {
       const pad = gamepads[i];
       if (!pad) continue;
@@ -170,19 +180,19 @@ export class ArcadeInput {
       if (Math.abs(ax1) > DEADZONE) padNavY = ax1;
 
       if (Math.abs(ax0) > DEADZONE) {
-        rawMoveX += (ax0 - Math.sign(ax0) * DEADZONE) / (1.0 - DEADZONE);
+        padMoveX += (ax0 - Math.sign(ax0) * DEADZONE) / (1.0 - DEADZONE);
         hasAnyInput = true;
       }
       if (Math.abs(ax1) > DEADZONE) {
-        rawMoveY -= (ax1 - Math.sign(ax1) * DEADZONE) / (1.0 - DEADZONE);
+        padMoveY -= (ax1 - Math.sign(ax1) * DEADZONE) / (1.0 - DEADZONE);
         hasAnyInput = true;
       }
 
       // D-Pad
-      if (pad.buttons[12]?.pressed) { rawMoveY += 1.0; hasAnyInput = true; }
-      if (pad.buttons[13]?.pressed) { rawMoveY -= 1.0; hasAnyInput = true; }
-      if (pad.buttons[14]?.pressed) { rawMoveX -= 1.0; hasAnyInput = true; }
-      if (pad.buttons[15]?.pressed) { rawMoveX += 1.0; hasAnyInput = true; }
+      if (pad.buttons[12]?.pressed) { padMoveY += 1.0; hasAnyInput = true; }
+      if (pad.buttons[13]?.pressed) { padMoveY -= 1.0; hasAnyInput = true; }
+      if (pad.buttons[14]?.pressed) { padMoveX -= 1.0; hasAnyInput = true; }
+      if (pad.buttons[15]?.pressed) { padMoveX += 1.0; hasAnyInput = true; }
       if (pad.buttons[12]?.pressed) padNavY = -1;
       if (pad.buttons[13]?.pressed) padNavY = 1;
       if (pad.buttons[14]?.pressed) padNavX = -1;
@@ -223,11 +233,19 @@ export class ArcadeInput {
       this.lastInputTime = performance.now();
     }
 
+    // アケコンの倒し続けた時間(離したら最初から)
+    padMoveX = Math.max(-1, Math.min(1, padMoveX));
+    padMoveY = Math.max(-1, Math.min(1, padMoveY));
+    const padActive = Math.abs(padMoveX) > 0.01 || Math.abs(padMoveY) > 0.01;
+    this.padHoldSec = padActive ? this.padHoldSec + dt : 0;
+    const padRamp = this.PAD_SPEED_START + (1 - this.PAD_SPEED_START) * Math.min(1, this.padHoldSec / this.PAD_RAMP_SEC);
+    const padSpeed = this.PAD_SPEED_MAX * padRamp;
+
     // Apply movement
-    if (Math.abs(rawMoveX) > 0.01 || Math.abs(rawMoveY) > 0.01) {
+    if (Math.abs(rawMoveX) > 0.01 || Math.abs(rawMoveY) > 0.01 || padActive) {
       const speed = 1.6;
-      this.aimX += rawMoveX * speed * dt;
-      this.aimY += rawMoveY * speed * dt;
+      this.aimX += (rawMoveX * speed + padMoveX * padSpeed) * dt;
+      this.aimY += (rawMoveY * speed + padMoveY * padSpeed) * dt;
       this.aimX = Math.max(-0.95, Math.min(0.95, this.aimX));
       this.aimY = Math.max(-0.95, Math.min(0.95, this.aimY));
     }
@@ -282,8 +300,8 @@ export class ArcadeInput {
       shootExplosiveJustPressed,
       startJustPressed,
       hasAnyInput,
-      left: rawMoveX < -0.3,
-      right: rawMoveX > 0.3,
+      left: rawMoveX + padMoveX < -0.3,
+      right: rawMoveX + padMoveX > 0.3,
       menuNav: this.menuNav.take(),
     };
   }
@@ -308,5 +326,6 @@ export class ArcadeInput {
     this.prevMouseLeft = false;
     this.prevMouseRight = false;
     this.rapidFireTimer = 0;
+    this.padHoldSec = 0;
   }
 }

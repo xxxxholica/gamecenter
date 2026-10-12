@@ -126,6 +126,13 @@ export abstract class StreamedCityMap extends MapBase {
   protected pending = new Set<string>();
   protected lastStreamMs = 0;
   private renderer: THREE.WebGLRenderer | null = null;
+  /**
+   * 建物テクスチャの異方性フィルタ。近くのチャンクは4(斜めから見る壁の見え方は十分で、16より GPU のサンプリングが軽い)、
+   * 遠景(far tier。縮小テクスチャで、遠くを見るだけ)は1。実機の上限を超えない値にする。
+   */
+  private chunkAnisotropy = 4;
+  /** file → チャンク(updateStreaming が毎回全チャンクを走査しないための索引) */
+  private chunkIndex: Map<string, StreamChunk> | null = null;
   /** Chunks whose textures are still being uploaded to the GPU, a few per frame. */
   private uploadJobs: { textures: THREE.Texture[]; resolve: () => void }[] = [];
   private farObjects = new Map<string, THREE.Object3D>();
@@ -249,7 +256,9 @@ export abstract class StreamedCityMap extends MapBase {
           if (this.disposed) return;
           const gltf = await this.loader!.loadAsync(this.modelBase + 'far/' + c.file);
           if (this.disposed) { this.disposeObject(gltf.scene); return; }
+          this.chunkAnisotropy = 1;                           // 遠景のテクスチャは縮小済みで、遠くを見るだけ(prepareChunk は同期)
           this.prepareChunk(gltf.scene);
+          this.chunkAnisotropy = 4;
           await this.stageUpload(gltf.scene);
           if (this.disposed) { this.disposeObject(gltf.scene); return; }
           const key = this.keyOf(c.file);
@@ -314,11 +323,14 @@ export abstract class StreamedCityMap extends MapBase {
   /** Chunks within `radius` of (x, z), nearest first. */
   protected wanted(x: number, z: number, radius: number): StreamChunk[] {
     if (!this.manifest) return [];
-    return this.manifest.chunks
-      .map((c) => ({ c, d: this.boxDistance(c, x, z) }))
-      .filter((e) => e.d <= radius)
-      .sort((a, b) => a.d - b.d)
-      .map((e) => e.c);
+    // 半径内のものだけを集めてから並べる(全チャンク分のオブジェクトを作らない)
+    const near: { c: StreamChunk; d: number }[] = [];
+    for (const c of this.manifest.chunks) {
+      const d = this.boxDistance(c, x, z);
+      if (d <= radius) near.push({ c, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    return near.map((e) => e.c);
   }
 
   /**
@@ -332,7 +344,7 @@ export abstract class StreamedCityMap extends MapBase {
    * near/far crossfade doesn't also swap the shading style.
    */
   protected convertMaterial(old: THREE.MeshStandardMaterial): THREE.Material {
-    if (old.map) old.map.anisotropy = 16;
+    if (old.map) old.map.anisotropy = Math.min(this.chunkAnisotropy, this.renderer?.capabilities.getMaxAnisotropy() ?? this.chunkAnisotropy);
     const mat = new THREE.MeshLambertMaterial({
       ...(old.map ? { map: old.map } : { color: old.color }),
       flatShading: true,
@@ -439,9 +451,10 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
     if (now - this.lastStreamMs < 400) return;
     this.lastStreamMs = now;
 
+    const index = (this.chunkIndex ??= new Map(this.manifest.chunks.map((k) => [k.file, k])));
     for (const [file, obj] of this.resident) {
-      const c = this.manifest.chunks.find((k) => k.file === file)!;
-      if (this.boxDistance(c, x, z) > this.unloadRadius) {
+      const c = index.get(file);
+      if (c && this.boxDistance(c, x, z) > this.unloadRadius) {
         this.group.remove(obj);
         this.disposeObject(obj);
         this.resident.delete(file);

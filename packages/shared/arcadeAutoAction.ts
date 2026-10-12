@@ -1,5 +1,6 @@
 // 全ゲーム共通: 「無操作で自動実行される」ボタンのカウントダウン表示と、リザルトの自動タイトル復帰。
 // 自動で何が起きるかをボタン自身に出す(例: 「タイトルに戻る(30秒)」)。
+import { readGamepads } from './gamepadFrame';
 
 /** ボタン末尾に「(30秒)」のような括弧付きの残り時間を出す。text が空なら消す。ボタン本来の文言は変えない。 */
 export function setButtonSuffix(button: HTMLElement | null, text: string): void {
@@ -24,6 +25,9 @@ export function formatSeconds(sec: number): string {
 }
 
 function isShown(el: HTMLElement): boolean {
+  // checkVisibility は、スタイルとレイアウトツリーだけを更新して答える(getBoundingClientRect のような強制レイアウトを起こさない)。
+  // ゲーム中は HUD が毎フレーム書き換わるので、ここで強制レイアウトを起こすと、その分が毎回 250ms ごとに重なる。
+  if (typeof el.checkVisibility === 'function') return el.checkVisibility({ checkVisibilityCSS: true });
   const r = el.getBoundingClientRect();
   if (r.width === 0 || r.height === 0) return false;
   const cs = getComputedStyle(el);
@@ -32,7 +36,7 @@ function isShown(el: HTMLElement): boolean {
 
 /** ゲームパッドのボタンやスティックが動いているか。 */
 function padActive(): boolean {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const pads = readGamepads();
   for (const pad of pads) {
     if (!pad) continue;
     for (const b of pad.buttons) if (b.pressed) return true;
@@ -56,19 +60,23 @@ export function watchResultAutoReturn(titleButtonIds: string[], seconds = 30): v
   }
 
   let wasShown = false;
-  window.setInterval(() => {
+  // 結果画面が出ていない間(ほとんどの時間)はゆっくり、出ている間は250msごとに見る
+  const IDLE_CHECK_MS = 500;
+  const SHOWN_CHECK_MS = 250;
+  const check = (): number => {
+    if (document.hidden) return IDLE_CHECK_MS;
     const buttons = titleButtonIds.map((id) => document.getElementById(id));
     const shown = buttons.find((el): el is HTMLElement => !!el && isShown(el)) ?? null;
     // 画面に出ていないボタンに残った表示は消す
     for (const el of buttons) if (el && el !== shown) setButtonSuffix(el, '');
     if (!shown) {
       wasShown = false;
-      return;
+      return IDLE_CHECK_MS;
     }
     // リザルトが出た時点から数える(出る前の最後の操作から数えると、出た時にもう残りが少ないことがある)
     if (!wasShown) touch();
     wasShown = true;
-    if (document.querySelector('.ane-overlay') || padActive()) touch();
+    if (document.querySelector('.ane-overlay, .ane-shield') || padActive()) touch();
 
     const remain = seconds - (performance.now() - last) / 1000;
     if (remain <= 0) {
@@ -78,5 +86,12 @@ export function watchResultAutoReturn(titleButtonIds: string[], seconds = 30): v
     } else {
       setButtonSuffix(shown, formatSeconds(remain));
     }
-  }, 250);
+    return SHOWN_CHECK_MS;
+  };
+  const run = (): void => {
+    let next = IDLE_CHECK_MS;
+    try { next = check(); } catch { /* 次の周期で再試行 */ }
+    window.setTimeout(run, next);
+  };
+  window.setTimeout(run, SHOWN_CHECK_MS);
 }

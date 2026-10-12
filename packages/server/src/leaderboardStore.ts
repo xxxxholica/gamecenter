@@ -60,6 +60,11 @@ function isStoredEntry(e: unknown): e is StoredEntry {
   return !!x && typeof x === 'object' && typeof x.id === 'string' && typeof x.score === 'number' && Number.isFinite(x.score) && typeof x.name === 'string';
 }
 
+export interface SubmitContext {
+  /** チケット発行からの経過時間(ms)。渡されたら、スコアが経過時間と釣り合うかも確かめる */
+  elapsedMs?: number;
+}
+
 export type SubmitInput = {
   name?: unknown;
   score?: unknown;
@@ -70,7 +75,7 @@ export type SubmitInput = {
 
 export type SubmitResult =
   | { ok: true; rank: number; entries: LeaderboardEntry[] }
-  | { ok: false; error: 'unknown_board' | 'bad_score' | 'bad_ghost' };
+  | { ok: false; error: 'unknown_board' | 'bad_score' | 'bad_ghost' | 'implausible_score' };
 
 export type SetRoleOptions =
   | { on: false }
@@ -79,6 +84,30 @@ export type SetRoleOptions =
 function today(): string {
   const jst = new Date(Date.now() + 9 * 3600 * 1000);
   return jst.toISOString().split('T')[0].replace(/-/g, '/');
+}
+
+/** 1サンプル(0.1秒)で動いてよい最大距離(m)。車の最高速よりずっと大きい値で、偽の軌跡(瞬間移動・ランダム)だけを弾く */
+const GHOST_MAX_STEP_M = 40;
+/** 復活などでの瞬間移動を許す回数 */
+const GHOST_MAX_JUMPS = 5;
+/** 完走した軌跡なら、進行率(5つ目の値)はゴール近くまで届く(ゴールは 0.98: TimeAttackManager の SECTOR_FRACTIONS) */
+const GHOST_MIN_FINAL_PROGRESS = 0.95;
+
+/** 軌跡が「走った」形か: サンプル間の移動が現実的で、進行率がゴール近くまで届いている。 */
+function ghostIsPlausible(s: number[]): boolean {
+  const n = s.length / GHOST_STRIDE;
+  let jumps = 0;
+  let maxProgress = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const progress = s[i * GHOST_STRIDE + 4];
+    if (progress > maxProgress) maxProgress = progress;
+    if (i === 0) continue;
+    const dx = s[i * GHOST_STRIDE] - s[(i - 1) * GHOST_STRIDE];
+    const dy = s[i * GHOST_STRIDE + 1] - s[(i - 1) * GHOST_STRIDE + 1];
+    const dz = s[i * GHOST_STRIDE + 2] - s[(i - 1) * GHOST_STRIDE + 2];
+    if (Math.hypot(dx, dy, dz) > GHOST_MAX_STEP_M && ++jumps > GHOST_MAX_JUMPS) return false;
+  }
+  return maxProgress >= GHOST_MIN_FINAL_PROGRESS;
 }
 
 /** ゴーストの形式を検証し、正規化したコピーを返す。不正なら null。 */
@@ -92,6 +121,7 @@ export function validateGhost(raw: unknown, timeMs: number): GhostTrace | null {
   // 軌跡の長さは、記録したタイムと(おおよそ)一致するはず
   const traceMs = (g.s.length / GHOST_STRIDE - 1) * GHOST_SAMPLE_MS;
   if (Math.abs(traceMs - timeMs) > 2000) return null;
+  if (!ghostIsPlausible(g.s as number[])) return null;
   return {
     v: 1,
     timeMs,
@@ -107,7 +137,24 @@ function scoreInRange(def: GameLeaderboardDef, score: number, variant?: string):
   if (!Number.isFinite(score)) return false;
   const v = def.variants?.find((x) => x.id === variant);
   const [lo, hi] = def.scoreOrder === 'asc' ? [1000, 3_600_000] : [1, 1_000_000_000];
-  return score >= Math.max(lo, v?.minScore ?? lo) && score <= Math.min(hi, v?.maxScore ?? hi);
+  const min = Math.max(lo, def.minScore ?? lo, v?.minScore ?? lo);
+  const max = Math.min(hi, def.maxScore ?? hi, v?.maxScore ?? hi);
+  return score >= min && score <= max;
+}
+
+/** 通信の遅れ・端末の時計のずれの余裕(ms)。タイムアタックの申告タイムが、経過時間より長いことを許す幅 */
+const ELAPSED_SLACK_MS = 5000;
+
+/**
+ * 起動(チケット発行)からの経過時間と、申告スコアが釣り合うか。経過は、サーバーの時計で測った値。
+ *   - タイム(asc): 申告タイムより短い間に走り終えることはできない
+ *   - 点数(desc): 最短プレイ時間に満たない・1秒あたりの上限(maxScorePerSec)を超える点は出せない
+ */
+function scorePlausible(def: GameLeaderboardDef, score: number, elapsedMs: number): boolean {
+  if (def.scoreOrder === 'asc') return elapsedMs + ELAPSED_SLACK_MS >= score;
+  if (def.minRunMs !== undefined && elapsedMs < def.minRunMs) return false;
+  if (def.maxScorePerSec !== undefined && score > def.maxScorePerSec * (elapsedMs / 1000 + ELAPSED_SLACK_MS / 1000)) return false;
+  return true;
 }
 
 export class LeaderboardStore {
@@ -152,6 +199,12 @@ export class LeaderboardStore {
     return def;
   }
 
+  /** スコアを受け付けるゲームか(バリアントは問わない。プレイチケットの発行先の確認用) */
+  hasBoard(slug: string): boolean {
+    const def = getLeaderboardDef(slug);
+    return !!def && def.hasScore;
+  }
+
   /** すべての枠のキー(ハブの一括取得用) */
   keys(): string[] {
     const keys: string[] = [];
@@ -184,11 +237,12 @@ export class LeaderboardStore {
     return this.boards.get(boardKey(slug, variant))?.entries.find((e) => e.id === id)?.ghost ?? null;
   }
 
-  submit(slug: string, variant: string | undefined, input: SubmitInput): SubmitResult {
+  submit(slug: string, variant: string | undefined, input: SubmitInput, ctx: SubmitContext = {}): SubmitResult {
     const def = this.def(slug, variant);
     if (!def) return { ok: false, error: 'unknown_board' };
     const score = typeof input.score === 'number' ? input.score : NaN;
     if (!scoreInRange(def, score, variant)) return { ok: false, error: 'bad_score' };
+    if (ctx.elapsedMs !== undefined && !scorePlausible(def, score, ctx.elapsedMs)) return { ok: false, error: 'implausible_score' };
 
     const key = boardKey(slug, variant);
     const board = this.boards.get(key) ?? { rev: this.revisionOf(slug, variant), entries: [] };
