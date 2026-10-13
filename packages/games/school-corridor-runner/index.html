@@ -702,6 +702,12 @@
     .hidden {
       display: none !important;
     }
+
+    /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+    .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+    }
+    .agc-label, .ats-tagline { font-weight: 800 !important; }
   </style>
 </head>
 <body>
@@ -764,7 +770,7 @@
       <h1 class="game-main-title">Tempale Run</h1>
       <h2 class="game-sub-title">テンパるラン - 廊下は走るな -</h2>
 
-      <button id="btn-start" class="press-start-btn" style="margin-top: 24px;">学校から脱出する</button>
+      <button id="btn-start" class="press-start-btn" style="margin-top: 24px;">スタート</button>
       <div class="attract-notice">10秒無入力でデモ走行開始</div>
     </div>
 

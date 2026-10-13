@@ -46,8 +46,11 @@ export interface RacerInfo {
   car: CarSpec;
 }
 
-/** 20Hzで送る自車の姿勢。[x, y, z, rotY, speed, steer, roll, pitch, drift(0|1), progress] */
-export type CarState = [number, number, number, number, number, number, number, number, number, number];
+/**
+ * 20Hzで送る自車の姿勢。[x, y, z, rotY, speed, steer, roll, pitch, drift(0|1), progress, boost(0〜1)]
+ * boost は後から足した項目で、無い(10個)状態も受け付ける(相手の炎を出すのに使う)。
+ */
+export type CarState = [number, number, number, number, number, number, number, number, number, number] | [number, number, number, number, number, number, number, number, number, number, number];
 
 /**
  * 武装車両の発砲。k: 'g'=機関砲(2連) / 'm'=ミサイル。o: 発射位置[x,y,z]、f: 向き[x,z](正規化済み)、tg: 狙っている参加者id(NPCや無目標は null)。

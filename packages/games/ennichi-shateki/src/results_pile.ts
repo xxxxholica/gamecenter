@@ -140,10 +140,6 @@ export class ResultsPrizePileManager {
     this.defeatedItems.push({ type, name });
   }
 
-  public getDefeatedCount(): number {
-    return this.defeatedItems.length;
-  }
-
   // Get detailed breakdown of what items and how many were acquired
   public getDefeatedBreakdown(): PrizeBreakdownEntry[] {
     const map = new Map<string, PrizeBreakdownEntry>();
@@ -165,12 +161,6 @@ export class ResultsPrizePileManager {
     }
 
     return Array.from(map.values()).sort((a, b) => b.weight - a.weight);
-  }
-
-  /** 倒した景品の内訳(種類→個数)をまとめて設定する(オンライン対戦: サーバーから届いた結果から山を作る)。 */
-  public setDefeated(counts: Record<string, number>) {
-    this.defeatedItems = [];
-    for (const [type, n] of Object.entries(counts)) for (let i = 0; i < n; i++) this.defeatedItems.push({ type, name: type });
   }
 
   // Reset tracking at start of new round

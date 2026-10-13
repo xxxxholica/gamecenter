@@ -239,34 +239,6 @@ export class CarBodyGenerator {
   }
 
   /**
-   * Builds an individual structural pillar (A-Pillar, B-Pillar, C-Pillar) connecting waistline to roof.
-   */
-  public static buildPillar(
-    start: THREE.Vector3,
-    end: THREE.Vector3,
-    width: number,
-    thickness: number,
-    material: THREE.Material
-  ): THREE.Mesh {
-    const dir = new THREE.Vector3().subVectors(end, start);
-    const len = dir.length();
-    const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-
-    const geo = new THREE.BoxGeometry(width, len, thickness);
-    // Align geometry with direction vector
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.position.copy(center);
-
-    // Orientation
-    const up = new THREE.Vector3(0, 1, 0);
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
-    mesh.setRotationFromQuaternion(quaternion);
-    mesh.castShadow = true;
-
-    return mesh;
-  }
-
-  /**
    * Builds an integrated structural cabin base rail that firmly connects the lower body
    * to the upper pillars (A, B, C, D) and windshield/window frames.
    * Completely eliminates gaps between lower body and upper cabin frame!

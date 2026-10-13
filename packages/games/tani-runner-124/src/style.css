@@ -200,47 +200,54 @@ html, body {
   -webkit-text-stroke: 3px #000;
 }
 
-/* 失敗判定: 「留年」（赤の特大文字） */
-.fail-text {
-  font-size: clamp(56px, 20vh, 140px);
+/* 結果カード: 取得単位を主役に、「卒業」「留年」はハンコのように斜めに押す */
+.result-card {
+  max-width: 720px;
+}
+
+.result-stage {
+  position: relative;
+  display: inline-block;
+  padding: 0 clamp(8px, 2vw, 24px);
+}
+
+.result-stamp {
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translate(22%, -38%) rotate(14deg);
+  padding: 0.05em 0.35em 0.05em 0.5em;
+  font-size: clamp(30px, 9vh, 72px);
   font-weight: 900;
-  color: #ff0022;
-  letter-spacing: 16px;
-  margin-bottom: clamp(10px, 4vh, 40px);
-  text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
-  -webkit-text-stroke: 4px #000;
-  animation: red-rumble 0.6s infinite alternate;
+  letter-spacing: 0.15em;
+  line-height: 1.15;
+  color: #ff2b3d;
+  border: 0.1em solid #ff2b3d;
+  border-radius: 0.18em;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 0.04em #ff2b3d, 0 0 24px rgba(255, 43, 61, 0.45);
+  text-shadow: none;
+  white-space: nowrap;
+  opacity: 0;
+}
+.result-stamp.stamped {
+  opacity: 1;
+  animation: stamp-slam 0.3s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.result-stamp.fail {
+  color: #1e6bff;
+  border-color: #1e6bff;
+  box-shadow: inset 0 0 0 0.04em #1e6bff, 0 0 24px rgba(30, 107, 255, 0.45);
+  background: #ffffff;
 }
 
-@keyframes red-rumble {
-  0% { filter: drop-shadow(0 0 20px #ff0000); transform: scale(1); }
-  100% { filter: drop-shadow(0 0 60px #ff0000); transform: scale(1.04); }
+@keyframes stamp-slam {
+  0% { transform: translate(22%, -38%) rotate(14deg) scale(2.6); opacity: 0; }
+  70% { transform: translate(22%, -38%) rotate(14deg) scale(0.94); opacity: 1; }
+  100% { transform: translate(22%, -38%) rotate(14deg) scale(1); opacity: 1; }
 }
-
-/* クリア判定: 「卒業」（黄の特大文字） */
-.success-text {
-  font-size: clamp(56px, 20vh, 140px);
-  font-weight: 900;
-  color: #ffe600;
-  letter-spacing: 16px;
-  margin-bottom: clamp(4px, 1.5vh, 16px);
-  text-shadow: 8px 8px 0 #000, -5px -5px 0 #000, 5px -5px 0 #000, -5px 5px 0 #000;
-  -webkit-text-stroke: 4px #000;
-  animation: gold-shine 0.8s infinite alternate;
-}
-
-@keyframes gold-shine {
-  0% { filter: drop-shadow(0 0 25px #ffe600); transform: scale(1); }
-  100% { filter: drop-shadow(0 0 70px #ffe600); transform: scale(1.04); }
-}
-
-.final-multiplier-text {
-  font-size: clamp(16px, 3.4vh, 28px);
-  font-weight: 800;
-  color: #00ff66;
-  letter-spacing: 3px;
-  margin-bottom: 6px;
-  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+@media (prefers-reduced-motion: reduce) {
+  .result-stamp.stamped { animation: none; }
 }
 
 .level-change-btn {
@@ -285,39 +292,50 @@ html, body {
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 
-/* 取得単位とランキング */
-.final-sub-text {
-  font-size: clamp(14px, 3vh, 24px);
-  font-weight: 800;
-  color: #ffd700;
-  letter-spacing: 3px;
-  margin: 0 0 clamp(10px, 3vh, 28px);
-  text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
+/* 取得単位: 数字と「単位」を同じ行に並べ、補足(難易度・倍率・リング)は1行にまとめて小さく添える */
+.final-score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(8px, 1.5vh, 16px);
+  margin-bottom: clamp(6px, 2vh, 16px);
 }
 
 .final-score-text {
-  font-size: clamp(56px, 16vh, 140px);
+  font-size: clamp(64px, 20vh, 160px);
   font-weight: 900;
   color: #ffea00;
   letter-spacing: 3px;
   line-height: 1.05;
-  margin-bottom: clamp(4px, 1.5vh, 12px);
   text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
   -webkit-text-stroke: 3px #000;
+  paint-order: stroke fill;
   white-space: nowrap;
 }
 
-/* 「単位」は数字の下の行に、数字より小さく添える */
 .final-score-unit {
-  font-size: clamp(20px, 5.5vh, 48px);
+  font-size: clamp(24px, 7vh, 56px);
   font-weight: 900;
   color: #ffea00;
-  letter-spacing: 6px;
-  line-height: 1.1;
-  margin-bottom: clamp(8px, 2vh, 18px);
-  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
-  -webkit-text-stroke: 2px #000;
-  paint-order: stroke fill;
+  letter-spacing: 4px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.final-details {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: clamp(10px, 3vh, 28px);
+  font-size: clamp(16px, 3.8vh, 30px);
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
+}
+.final-details > span + span {
+  margin-left: 0.7em;
+  padding-left: 0.7em;
+  border-left: 2px solid #55617f;
 }
 
 .ranking-list {
@@ -429,10 +447,6 @@ html, body {
   .game-title {
     font-size: 52px;
   }
-  .fail-text, .success-text {
-    font-size: 96px;
-    letter-spacing: 8px;
-  }
   .hud-center-num {
     font-size: 50px;
   }
@@ -477,10 +491,11 @@ html, body {
 }
 .launch-timing.hidden { display: none; }
 .launch-timing-label {
-  font-size: clamp(18px, 3.4vh, 30px);
+  font-size: clamp(20px, 4.2vh, 34px);
   font-weight: 900;
   color: #fff;
-  letter-spacing: 3px;
+  letter-spacing: 1px;
+  white-space: nowrap;
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 .launch-timing-bar {
@@ -515,3 +530,78 @@ html, body {
   color: #ffea00;
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
+
+/* =========================================================
+   難易度選択(共通のモード選択部品)の寸法: midnight-skyway のモード選択と同じ。
+   カードは同じ高さ、見出し・小見出しは折り返し、説明は専用のボックスに入れる。
+   ========================================================= */
+body .msel.msel-arcade .msel-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: calc(600 * var(--u));
+  min-height: 0;
+  padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(24 * var(--u));
+  overflow: hidden;
+  font-size: max(11px, calc(23 * var(--u)));
+}
+body .msel.msel-arcade .msel-card .art {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(150 * var(--u));
+  margin: calc(8 * var(--u)) 0 calc(14 * var(--u));
+}
+body .msel.msel-arcade .msel-card .t {
+  flex: none;
+  margin: calc(4 * var(--u)) 0;
+  font-size: max(15px, calc(36 * var(--u)));
+  line-height: 1.15;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+body .msel.msel-arcade .msel-card .s {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  font-size: max(11px, calc(24 * var(--u)));
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  margin: 0 0 calc(12 * var(--u));
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+body .msel.msel-arcade .msel-card .d {
+  flex: none;
+  box-sizing: border-box;
+  height: calc(270 * var(--u));
+  margin: auto 0 0;
+  padding: calc(10 * var(--u)) calc(16 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(8, 14, 26, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 3px solid var(--msel-accent);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
+  font-size: max(11px, calc(25 * var(--u)));
+  line-height: 1.8;
+  white-space: pre-line;
+}
+body .msel.msel-arcade .msel-bar button { gap: 0.6em; }
+.msel-guide { display: inline-flex; align-items: center; flex: none; }
+
+/* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+.agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+}
+.agc-label, .ats-tagline { font-weight: 800 !important; }

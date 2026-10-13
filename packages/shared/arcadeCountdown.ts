@@ -18,6 +18,10 @@ export interface ArcadeCountdownOptions {
 export interface ArcadeCountdownHandle {
   /** 途中で止める(onGo は呼ばれない)。タイトルへ戻る時などに使う */
   cancel: () => void;
+  /** 一時停止する(ポーズ画面を開いた時)。数字の残り時間は、再開するまで進まない */
+  pause: () => void;
+  /** 一時停止を解く。止めた時の残りから続ける */
+  resume: () => void;
 }
 
 const STEP_MS = 800;
@@ -101,6 +105,16 @@ export function startArcadeCountdown(options: ArcadeCountdownOptions): ArcadeCou
 
   let timer = 0;
   let finished = false;
+  /** 次の数字に進む処理と、その予定時刻(一時停止の間は、残り時間を覚えておく) */
+  let next: (() => void) | null = null;
+  let dueAt = 0;
+  let pausedLeft: number | null = null;
+
+  const schedule = (fn: () => void, ms: number): void => {
+    next = fn;
+    dueAt = performance.now() + ms;
+    timer = window.setTimeout(fn, ms);
+  };
 
   const finish = (): void => {
     finished = true;
@@ -122,12 +136,12 @@ export function startArcadeCountdown(options: ArcadeCountdownOptions): ArcadeCou
       show(String(remaining), false);
       beep(660, 120);
       options.onTick?.(remaining);
-      timer = window.setTimeout(() => step(remaining - 1), STEP_MS);
+      schedule(() => step(remaining - 1), STEP_MS);
     } else {
       show('GO!', true);
       beep(1320, 380);
       options.onGo();
-      timer = window.setTimeout(finish, GO_HOLD_MS);
+      schedule(finish, GO_HOLD_MS);
     }
   };
 
@@ -136,6 +150,17 @@ export function startArcadeCountdown(options: ArcadeCountdownOptions): ArcadeCou
   return {
     cancel: () => {
       if (!finished) finish();
+    },
+    pause: () => {
+      if (finished || pausedLeft !== null) return;
+      pausedLeft = Math.max(0, dueAt - performance.now());
+      window.clearTimeout(timer);
+    },
+    resume: () => {
+      if (finished || pausedLeft === null || !next) return;
+      const left = pausedLeft;
+      pausedLeft = null;
+      schedule(next, left);
     },
   };
 }

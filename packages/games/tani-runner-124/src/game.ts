@@ -17,7 +17,7 @@ import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
 import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
-import { mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
+import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
@@ -88,6 +88,9 @@ export class Game {
   // Third-person camera tracking
   private camPos: THREE.Vector3 = new THREE.Vector3(0, 6.0, 10.0);
   private camLookAt: THREE.Vector3 = new THREE.Vector3(0, 1.5, -6.0);
+  /** 壁にぶつかった後のカメラの目標(毎フレーム new しない) */
+  private readonly crashCamPos = new THREE.Vector3();
+  private readonly crashCamLook = new THREE.Vector3();
 
   // HUD Elements
   private hudElem: HTMLElement | null = null;
@@ -229,8 +232,8 @@ export class Game {
       slug: 'tani-runner-124',
       accentColor: '#00e676',
       tagline: '124単位集めて 留年の壁を打ち破れ！',
-      startButtonLabel: '開始',
-      promptLabel: 'PRESS START / SPACE / 画面クリック',
+      startButtonLabel: 'スタート',
+      promptLabel: 'PRESS START / ENTER / 画面クリック',
       onStart: () => {
         this.openLevelSelect();
       },
@@ -273,15 +276,14 @@ export class Game {
   }
 
   private showTitleGuide(): void {
-    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
   }
 
-  private showRunGuide(): void {
+  /** プレイ中のガイド。カウントダウン中はポーズできないので、移動だけ出して、ホーム/ポーズの行は出さない */
+  private showRunGuide(pausable = true): void {
     mountArcadeGuide({
-      moveLabel: '←→ 隊列操作 / ↓ 隊列を絞る',
-      keyMoveLabel: 'A/D/←→ 隊列操作 / S/↓ 絞る',
-      buttons: [{ indices: [0, 1, 7], label: 'ジャンプのタイミング・加速', keyLabel: 'Space / Enter' }],
-      showHomeHint: true,
+      moveLabel: '移動',
+      showHomeHint: pausable,
       backLabel: 'ポーズ',
     });
   }
@@ -306,7 +308,7 @@ export class Game {
     this.successScreen?.classList.add('hidden');
     this.bonusHudElem?.classList.add('hidden');
     this.showLaunchTiming(false);
-    this.showRunGuide();
+    this.showRunGuide(false);
     if (this.hudElem) this.hudElem.style.display = 'block';
 
     sound.init();
@@ -320,6 +322,7 @@ export class Game {
       accentColor: '#00e676',
       onGo: () => {
         this.state = 'RUNNING';
+        this.showRunGuide();
         sound.startRunningBgm();
       },
     });
@@ -389,7 +392,9 @@ export class Game {
   /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#00e676',
-    isPlaying: () => this.state === 'RUNNING' || this.state === 'WALL_CRASH' || this.state === 'BONUS_LAUNCH' || this.state === 'BONUS_FLIGHT',
+    isPlaying: () => this.state === 'COUNTDOWN' || this.state === 'RUNNING' || this.state === 'WALL_CRASH' || this.state === 'BONUS_LAUNCH' || this.state === 'BONUS_FLIGHT',
+    onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    onClose: () => this.countdown?.resume(),
     onRestart: () => this.startGame(),
   });
 
@@ -710,8 +715,8 @@ export class Game {
     this.crowd.updateRunning(dt, 0);
 
     // Dynamic cinematic camera shifting to side-angle
-    this.camPos.lerp(new THREE.Vector3(7.0, 4.5, this.world.bossWallZ + 12.0), dt * 5.0);
-    this.camLookAt.lerp(new THREE.Vector3(0, 2.0, this.world.bossWallZ - 20.0), dt * 5.0);
+    this.camPos.lerp(this.crashCamPos.set(7.0, 4.5, this.world.bossWallZ + 12.0), dt * 5.0);
+    this.camLookAt.lerp(this.crashCamLook.set(0, 2.0, this.world.bossWallZ - 20.0), dt * 5.0);
 
     // 押した場合は結果を少し見せてから、押さなかった場合は時間切れで飛ぶ
     const done = this.launchPressed ? this.bonusTimer - this.launchLockedAt >= 0.6 : this.bonusTimer >= LAUNCH_WINDOW_SEC;
@@ -737,6 +742,9 @@ export class Game {
     if (!box) return;
     box.classList.toggle('hidden', !show);
     if (show) {
+      // 押すボタンをアイコンで示す(プレイ中のガイドには出さないため、ここで教える)
+      const label = box.querySelector('.launch-timing-label');
+      if (label) label.innerHTML = `${buttonIconHtml([0])} タイミングよくジャンプ`;
       const zone = document.getElementById('launch-timing-zone');
       if (zone) {
         zone.style.left = `${(LAUNCH_ZONE_CENTER - LAUNCH_ZONE_HALF) * 100}%`;
@@ -836,7 +844,10 @@ export class Game {
     sound.stopBgm();
     sound.playGameOverJingle();
 
+    const failLevelEl = document.getElementById('fail-level-display');
+    if (failLevelEl) failLevelEl.textContent = LEVELS[this.level].label;
     this.failScreen?.classList.remove('hidden');
+    this.stampResult(this.failScreen, 700);
     this.openResultMenu(['retry-fail-btn', 'title-fail-btn', 'exit-fail-btn']);
   }
 
@@ -858,8 +869,10 @@ export class Game {
       itemsCollected: this.pickupsCollected,
       extraStats: { requirement: this.graduationRequirement, creditsAtWall: this.creditsAtWall, maxMultiplier: this.maxAchievedMultiplier, ringsHit: this.ringsHit, ringsTotal: this.world.rings.length },
     });
+    const levelEl = document.getElementById('final-level-display');
+    if (levelEl) levelEl.textContent = LEVELS[this.level].label;
     if (this.finalRingElem) {
-      this.finalRingElem.textContent = `${LEVELS[this.level].label}　リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
+      this.finalRingElem.textContent = `リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
     }
     if (this.finalScoreElem) {
       countUpText(this.finalScoreElem, `${score}`);
@@ -867,6 +880,8 @@ export class Game {
 
     this.bonusHudElem?.classList.add('hidden');
     this.successScreen?.classList.remove('hidden');
+    // 数字の加算(約1.45秒)と、最後の弾みが終わってから押す
+    this.stampResult(this.successScreen, 1700);
     this.openResultMenu(['retry-success-btn', 'title-success-btn', 'exit-success-btn']);
 
     runHighScoreEntryFlow({
@@ -877,6 +892,18 @@ export class Game {
       setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
       onName: (name) => RankingStore.add(score, this.level, name),
     });
+  }
+
+  /** ハンコを、delayMs 後に「ポン」と音を鳴らして押す(単位が出そろってから) */
+  private stampResult(screen: HTMLElement | null, delayMs: number): void {
+    const stamp = screen?.querySelector('.result-stamp');
+    if (!screen || !stamp) return;
+    stamp.classList.remove('stamped');
+    window.setTimeout(() => {
+      if (screen.classList.contains('hidden')) return;
+      stamp.classList.add('stamped');
+      sound.playStamp();
+    }, delayMs);
   }
 
   private openResultMenu(buttonIds: string[]): void {

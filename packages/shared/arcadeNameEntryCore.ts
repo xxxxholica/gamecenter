@@ -5,9 +5,12 @@ import { readPad } from './arcadePad';
 
 export const MAX_NAME_LENGTH = 5;
 
-// キーボードグリッド構造: 10列 × 6行
+// キーボードグリッド構造: 10列 × 7行
 // 行0〜4: カタカナ五十音＋記号・空白 (10列)
-// 行5: 機能キー (5キー、各2列幅相当: 濁点, 半濁点, 小文字, 一字削除, 決定)
+// 行5: 機能キー (4キー: 濁点, 半濁点, 小文字, 一字削除)
+// 行6: フッターの登録ボタン (1つ)。最初のカーソルはここ(何も入力しなければ匿名で登録される)
+export const ACTION_ROW = 5;
+export const FOOTER_ROW = 6;
 export const KEYBOARD_GRID: string[][] = [
   ['ア', 'カ', 'サ', 'タ', 'ナ', 'ハ', 'マ', 'ヤ', 'ラ', 'ワ'],
   ['イ', 'キ', 'シ', 'チ', 'ニ', 'ヒ', 'ミ', '・', 'リ', 'ヲ'],
@@ -17,7 +20,7 @@ export const KEYBOARD_GRID: string[][] = [
 ];
 
 export interface ActionKeyDef {
-  id: 'dakuten' | 'handakuten' | 'small' | 'backspace' | 'confirm';
+  id: 'dakuten' | 'handakuten' | 'small' | 'backspace';
   label: string;
   subLabel: string;
 }
@@ -27,8 +30,10 @@ export const ACTION_KEYS: ActionKeyDef[] = [
   { id: 'handakuten', label: '゜', subLabel: '半濁点' },
   { id: 'small', label: '小', subLabel: '小文字' },
   { id: 'backspace', label: '⌫', subLabel: '１字消去' },
-  { id: 'confirm', label: '決定', subLabel: '登録' },
 ];
+
+/** 行ごとの列数 */
+const ROW_COLS = [10, 10, 10, 10, 10, ACTION_KEYS.length, 1];
 
 // 濁点変換マップ (相互トグル)
 const DAKUTEN_MAP: Record<string, string> = {
@@ -80,8 +85,8 @@ const SMALL_MAP: Record<string, string> = {
 
 export interface NameEntryState {
   name: string;             // 現在入力された名前 (最大5文字)
-  cursorRow: number;        // キーボード行 0〜5
-  cursorCol: number;        // キーボード列 (行0〜4は0〜9, 行5は0〜4)
+  cursorRow: number;        // キーボード行 0〜6
+  cursorCol: number;        // キーボード列 (行0〜4は0〜9, 行5は0〜3, 行6は0)
   timeRemaining: number;    // 残り時間 (秒)
   isConfirmed: boolean;
   maxLen: number;
@@ -90,12 +95,14 @@ export interface NameEntryState {
 export interface NameEntryCallbacks {
   onChange: (state: NameEntryState) => void;
   onConfirm: (name: string) => void;
-  onCancel?: () => void;
 }
 
 export interface NameEntryOptions {
   initialName?: string;
+  /** 放置の時間切れ(秒)。何も操作しないまま過ぎたら、入力済みの名前(なければ匿名)で確定する。操作のたびに数え直す */
   timeLimitSec?: number;
+  /** 開いた直後の、キーボード・パッドの決定操作を受け付けない時間(ms)。直前まで連打していた操作で、文字が入る・キャンセルされるのを防ぐ */
+  armDelayMs?: number;
 }
 
 export class ArcadeNameEntryCore {
@@ -104,6 +111,8 @@ export class ArcadeNameEntryCore {
   private timerId: number | null = null;
   private rafId: number | null = null;
   private isDestroyed = false;
+  private armedAt = 0;
+  private timeLimitSec = 60;
 
   // アケコン・レバー入力リピート制御
   private holdDirection: 'up' | 'down' | 'left' | 'right' | null = null;
@@ -112,17 +121,15 @@ export class ArcadeNameEntryCore {
 
   constructor(callbacks: NameEntryCallbacks, options: NameEntryOptions = {}) {
     this.callbacks = callbacks;
+    this.armedAt = performance.now() + (options.armDelayMs ?? 0);
+    this.timeLimitSec = options.timeLimitSec ?? 60;
 
     // 初期ネーム
-    let initName = (options.initialName ?? '').trim();
-    if (initName === 'ゲスト') {
-      initName = '';
-    }
-    initName = initName.slice(0, MAX_NAME_LENGTH);
+    const initName = (options.initialName ?? '').trim().slice(0, MAX_NAME_LENGTH);
 
     this.state = {
       name: initName,
-      cursorRow: 0,
+      cursorRow: FOOTER_ROW,
       cursorCol: 0,
       timeRemaining: options.timeLimitSec ?? 60,
       isConfirmed: false,
@@ -136,9 +143,9 @@ export class ArcadeNameEntryCore {
     this.callbacks.onChange(this.state);
   }
 
+  /** 入力された名前。空のまま確定したときは空文字(呼び出し側が、予約した匿名名に置き換える) */
   public getFormattedName(): string {
-    const trimmed = this.state.name.trim();
-    return trimmed.length > 0 ? trimmed : 'ゲスト';
+    return this.state.name.trim();
   }
 
   public confirm(): void {
@@ -153,16 +160,17 @@ export class ArcadeNameEntryCore {
   public appendChar(char: string): void {
     if (this.state.name.length >= MAX_NAME_LENGTH) return;
     this.state.name += char;
-    // 5文字入力完了時は自動で「決定」キー(row:5, col:4)へカーソルを案内
+    // 5文字入力完了時は自動で「決定」ボタンへカーソルを案内
     if (this.state.name.length >= MAX_NAME_LENGTH) {
-      this.state.cursorRow = 5;
-      this.state.cursorCol = 4;
+      this.state.cursorRow = FOOTER_ROW;
+      this.state.cursorCol = 0;
     }
     this.callbacks.onChange(this.state);
   }
 
   // 末尾1文字削除
   public backspace(): void {
+    this.touch();
     if (this.state.name.length > 0) {
       this.state.name = this.state.name.slice(0, -1);
       this.callbacks.onChange(this.state);
@@ -205,13 +213,16 @@ export class ArcadeNameEntryCore {
   // 指定キーの実行（クリックや決定ボタン押下時）
   public triggerKey(row: number, col: number): void {
     if (this.state.isConfirmed || this.isDestroyed) return;
+    this.touch();
 
     if (row < 5) {
       const char = KEYBOARD_GRID[row]?.[col];
       if (char) {
         this.appendChar(char);
       }
-    } else if (row === 5) {
+    } else if (row === FOOTER_ROW) {
+      this.confirm();
+    } else if (row === ACTION_ROW) {
       const action = ACTION_KEYS[col];
       if (!action) return;
       switch (action.id) {
@@ -227,9 +238,6 @@ export class ArcadeNameEntryCore {
         case 'backspace':
           this.backspace();
           break;
-        case 'confirm':
-          this.confirm();
-          break;
       }
     }
   }
@@ -239,48 +247,22 @@ export class ArcadeNameEntryCore {
     this.triggerKey(this.state.cursorRow, this.state.cursorCol);
   }
 
-  // レバー・方向キーによる移動（ラップアラウンド対応）
+  // レバー・方向キーによる移動（ラップアラウンド対応）。行ごとに列数が違うので、行をまたぐときは位置が近い列へ寄せる
   public moveCursor(dir: 'up' | 'down' | 'left' | 'right'): void {
+    this.touch();
     let { cursorRow, cursorCol } = this.state;
+    const rows = ROW_COLS.length;
 
-    if (dir === 'up') {
-      if (cursorRow === 0) {
-        // 最上段から上へ -> 最下段（機能キー行: 行5）の対応位置へワープ
-        cursorRow = 5;
-        cursorCol = Math.min(4, Math.floor(cursorCol / 2));
-      } else if (cursorRow === 5) {
-        // 機能キー行から上へ -> 文字行（行4）の対応位置
-        cursorRow = 4;
-        cursorCol = Math.min(9, cursorCol * 2);
-      } else {
-        cursorRow -= 1;
-      }
-    } else if (dir === 'down') {
-      if (cursorRow === 4) {
-        // 行4から下へ -> 機能キー行（行5）へ
-        cursorRow = 5;
-        cursorCol = Math.min(4, Math.floor(cursorCol / 2));
-      } else if (cursorRow === 5) {
-        // 最下段から下へ -> 最上段（行0）の対応位置へワープ
-        cursorRow = 0;
-        cursorCol = Math.min(9, cursorCol * 2);
-      } else {
-        cursorRow += 1;
-      }
+    if (dir === 'up' || dir === 'down') {
+      const nextRow = (cursorRow + (dir === 'up' ? -1 : 1) + rows) % rows;
+      // 現在位置の中心(0〜1)を、移動先の列数に当てはめる
+      const center = (cursorCol + 0.5) / ROW_COLS[cursorRow];
+      cursorCol = Math.min(ROW_COLS[nextRow] - 1, Math.floor(center * ROW_COLS[nextRow]));
+      cursorRow = nextRow;
     } else if (dir === 'left') {
-      if (cursorRow === 5) {
-        // 行5は5列
-        cursorCol = (cursorCol - 1 + 5) % 5;
-      } else {
-        // 行0〜4は10列
-        cursorCol = (cursorCol - 1 + 10) % 10;
-      }
-    } else if (dir === 'right') {
-      if (cursorRow === 5) {
-        cursorCol = (cursorCol + 1) % 5;
-      } else {
-        cursorCol = (cursorCol + 1) % 10;
-      }
+      cursorCol = (cursorCol - 1 + ROW_COLS[cursorRow]) % ROW_COLS[cursorRow];
+    } else {
+      cursorCol = (cursorCol + 1) % ROW_COLS[cursorRow];
     }
 
     if (cursorRow !== this.state.cursorRow || cursorCol !== this.state.cursorCol) {
@@ -291,6 +273,7 @@ export class ArcadeNameEntryCore {
   }
 
   public setCursor(row: number, col: number): void {
+    this.touch();
     if (this.state.cursorRow !== row || this.state.cursorCol !== col) {
       this.state.cursorRow = row;
       this.state.cursorCol = col;
@@ -309,32 +292,39 @@ export class ArcadeNameEntryCore {
     }, 1000);
   }
 
+  /** 操作があったら、放置の時間切れを数え直す */
+  private touch(): void {
+    this.state.timeRemaining = this.timeLimitSec;
+  }
+
+  private isArmed(): boolean {
+    return performance.now() >= this.armedAt;
+  }
+
   private handleKeyDown = (e: KeyboardEvent) => {
     if (this.isDestroyed || this.state.isConfirmed) return;
 
-    if (e.key === 'ArrowUp') {
+    if (e.code === 'KeyW') {
       e.preventDefault();
       this.moveCursor('up');
-    } else if (e.key === 'ArrowDown') {
+    } else if (e.code === 'KeyS') {
       e.preventDefault();
       this.moveCursor('down');
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.code === 'KeyA') {
       e.preventDefault();
       this.moveCursor('left');
-    } else if (e.key === 'ArrowRight') {
+    } else if (e.code === 'KeyD') {
       e.preventDefault();
       this.moveCursor('right');
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey || (this.state.cursorRow === 5 && this.state.cursorCol === 4)) {
-        // Ctrl+Enter または 決定キーフォーカス時: 即確定
+      if (!this.isArmed()) return;
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+Enter: 即確定
         this.confirm();
       } else {
         this.triggerCurrent();
       }
-    } else if (e.code === 'Space') {
-      e.preventDefault();
-      this.triggerCurrent();
     } else if (e.key === 'Backspace') {
       e.preventDefault();
       this.backspace();
@@ -375,7 +365,7 @@ export class ArcadeNameEntryCore {
       const prev9 = !!this.prevButtonStates[9];
 
       // A / X / Y ボタン押下（エッジ）
-      if ((btn0 && !prev0) || (btn2 && !prev2) || (btn3 && !prev3)) {
+      if (((btn0 && !prev0) || (btn2 && !prev2) || (btn3 && !prev3)) && this.isArmed()) {
         this.triggerCurrent();
       }
 
@@ -385,7 +375,7 @@ export class ArcadeNameEntryCore {
       }
 
       // START ボタン押下（エッジ）: 決定
-      if (btn9 && !prev9) {
+      if (btn9 && !prev9 && this.isArmed()) {
         this.confirm();
       }
 

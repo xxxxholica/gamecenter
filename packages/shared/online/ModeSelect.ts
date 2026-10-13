@@ -1,4 +1,5 @@
 import { PadEdge, startPadLoop } from '../arcadePad';
+import { buttonIconHtml } from '../arcadeGuide';
 
 export interface ModeItem {
   id: string;
@@ -24,6 +25,8 @@ export interface ModeSelectOptions {
   parent?: HTMLElement;
   /** arcade 版の見た目(左上に大きな見出し、斜めの角ばったカードとボタン)にする */
   arcade?: boolean;
+  /** 戻る / 決定ボタンに、押すボタン・キーのガイドアイコンを付ける(結果・ポーズ画面と同じ) */
+  buttonGuide?: boolean;
   /** 選択中の項目が変わった時(表示した時・矢印・クリック・項目の差し替えで位置が変わった時)に、その項目の id で呼ぶ */
   onFocus?: (id: string) => void;
 }
@@ -123,7 +126,7 @@ export function ensureModeSelectStyle(): void {
 
 /**
  * 遊び方の選択(オフライン / オンライン対戦 など)。ゲーム共通。
- * ←→・A/D・レバー左右で選び、Enter/Space/A/START で決定、Esc/B で戻る。disabled の項目は選べない(グレーアウト)。
+ * A/D・レバー左右で選び、Enter/A/START で決定、Backspace/B で戻る。disabled の項目は選べない(グレーアウト)。
  */
 export class ModeSelect {
   private readonly root: HTMLElement;
@@ -139,6 +142,7 @@ export class ModeSelect {
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
 
+
   constructor(opts: ModeSelectOptions, onSelect: (id: string) => void, onBack: () => void) {
     this.onSelect = onSelect;
     this.onBack = onBack;
@@ -148,6 +152,11 @@ export class ModeSelect {
     this.root.className = 'msel';
     applyModeSelectAccent(this.root, opts);
     if (opts.arcade) this.root.classList.add('msel-arcade');
+    const setLabel = (btn: HTMLElement, text: string, indices: number[], key: string) => {
+      if (!opts.buttonGuide) { btn.textContent = text; return; }
+      btn.innerHTML = `<span class="msel-guide">${buttonIconHtml(indices, key)}</span>`;
+      btn.append(Object.assign(document.createElement('span'), { textContent: text }));
+    };
     const titleBar = document.createElement('div');
     titleBar.className = 'msel-title';
     const titleMain = document.createElement('div');
@@ -160,11 +169,11 @@ export class ModeSelect {
     bar.className = 'msel-bar';
     const back = document.createElement('button');
     back.className = 'msel-back';
-    back.textContent = opts.backLabel ?? 'タイトルへ';
+    setLabel(back, opts.backLabel ?? 'タイトルへ', [1], 'Backspace');
     back.onclick = () => this.onBack();
     const go = document.createElement('button');
     go.className = 'msel-go';
-    go.textContent = '決定';
+    setLabel(go, '決定', [0], 'Enter');
     go.onclick = () => this.confirm();
     bar.append(back, go);
     this.root.append(titleBar, this.cardsEl, bar);
@@ -240,9 +249,9 @@ export class ModeSelect {
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.visible) return;
-        if (e.code === 'ArrowLeft' || e.code === 'ArrowUp' || e.code === 'KeyA' || e.code === 'KeyW') { e.preventDefault(); this.step(-1); }
-        else if (e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'KeyD' || e.code === 'KeyS') { e.preventDefault(); this.step(1); }
-        else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') { e.preventDefault(); this.confirm(); }
+        if (e.code === 'KeyA' || e.code === 'KeyW') { e.preventDefault(); this.step(-1); }
+        else if (e.code === 'KeyD' || e.code === 'KeyS') { e.preventDefault(); this.step(1); }
+        else if (e.code === 'Enter') { e.preventDefault(); this.confirm(); }
         else if (e.code === 'Backspace') { e.preventDefault(); this.onBack(); }
       };
       window.addEventListener('keydown', this.keyHandler);

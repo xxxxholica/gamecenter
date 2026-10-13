@@ -54,7 +54,7 @@ export class RaceDirector {
     this.map = map;
     map.setGoalVisible(false);                                  // not there at the start
     this.carName = car.specs.name;
-    this.hud.setRaceMode(this.active, map.showAltitude);
+    this.hud.setRaceMode(this.active);
     const cc = this.scene.carController;
     if (cc) {
       cc.driftBoostEnabled = this.active;
@@ -120,7 +120,6 @@ export class RaceDirector {
     const cc = this.scene.carController;
     if (cc) {
       this.hud.updateDrift(cc.driftScore, cc.driftChain, cc.driftChainTime, cc.boostTimer, cc.boostMax);
-      if (this.map?.showAltitude) this.hud.updateAltitude(cc.position.y - this.map.startPosition.y);
     }
     // the goal hologram shows up once the run is well under way (past halfway), and only while racing
     this.map?.setGoalVisible(this.ta.state === 'RACING' && progress > 0.5 && progress < 0.99);

@@ -9,11 +9,9 @@ export class Stage3Phone implements Stage {
   numberText = 'STAGE 2';
   title = 'スマホ充電';
   mission = '残量0.000%ブラックアウト直前に挿入せよ！';
-  instruction = 'レバー上でケーブルを挿す';
+  instruction = 'Enter / A でケーブルを挿す';
   briefing: StageBriefing = {
-    headline: 'スマホに充電ケーブルを挿す',
-    ok: '0%になる直前にケーブルを挿す',
-    ng: '0%で電源が落ちる・早すぎ',
+    headline: '0%になる前に挿せ',
   };
   limitLabel = 'バッテリー消費';
 
@@ -302,8 +300,8 @@ export class Stage3Phone implements Stage {
         this.phoneGroup.position.x = 0;
       }
 
-      // Check lever forward or Enter (push cable)
-      if (input.isLeverUp() || input.wasLeverUpPressed() || input.wasButton0Pressed()) {
+      // Enter / A (push cable)
+      if (input.wasButton0Pressed()) {
         // Slam cable into port!
         this.targetCableZ = this.pluggedZ;
       }

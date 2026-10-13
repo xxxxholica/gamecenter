@@ -31,6 +31,10 @@ export class RemoteCar {
   public speed = 0;
   public progress = 0;
   public valid = false;
+  /** 受信した、ステア・ドリフト中(0|1)・ブーストの強さ(0〜1)。演出に使う */
+  public steer = 0;
+  public drift = 0;
+  public boost = 0;
   /** マシンの種類(CarSpec.type)。武装車両の射程の判定に使う。 */
   public readonly carType: string;
   /** 撃破されて復帰するまでの時刻(performance.now)。この間は非表示・攻撃対象外。 */
@@ -78,6 +82,9 @@ export class RemoteCar {
     this.rotY = p.yaw;
     this.speed = p.speed;
     this.progress = p.progress;
+    this.steer = p.steer;
+    this.drift = p.drift;
+    this.boost = p.boost;
     this.valid = true;
 
     const g = this.car.group;

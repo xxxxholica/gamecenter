@@ -209,6 +209,36 @@ if (typeof window !== 'undefined' && typeof window.location?.pathname === 'strin
   if (m) beginLeaderboardRun(m[1]);
 }
 
+// ===== 匿名名の予約 =====
+// 登録ウィンドウを出したときに、サーバーで匿名名(匿名A…)を1つ予約する。使われなければ破棄する。
+// 予約の札は、そのあとの saveLeaderboardScore が自動で添える(各ゲームの呼び出しは変えなくてよい)。
+let anonToken: string | null = null;
+
+/** 匿名名を予約する。失敗(通信エラー・予約の上限)は null(名前なしで登録すればサーバーが採番する) */
+export async function reserveAnonName(): Promise<{ token: string; name: string } | null> {
+  try {
+    const data = await request('POST', `${API}/anon-name/reserve`, {});
+    if (typeof data?.token !== 'string' || typeof data?.name !== 'string') return null;
+    anonToken = data.token;
+    return { token: data.token, name: data.name };
+  } catch {
+    return null;
+  }
+}
+
+/** 使われなかった予約を破棄する(ページを離れるときにも送れるよう keepalive) */
+export function releaseAnonName(token: string): void {
+  if (anonToken === token) anonToken = null;
+  try {
+    void fetch(`${API}/anon-name/release`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch { /* 通信できなくても、サーバー側で期限が来れば破棄される */ }
+}
+
 export interface SaveLeaderboardOptions {
   /** ステージを最後までクリアした記録なら true。ホームのランキングで、名前の右に ★ が付く */
   cleared?: boolean;
@@ -230,6 +260,8 @@ export async function saveLeaderboardScore(
   // 札は1回きり: 使うために取り出し、次のプレイ用の札をすぐ取りに行く(取れなかった場合はここで取る)
   const pending = ticketSlug === slug ? ticketPromise : null;
   ticketPromise = null;
+  const token = anonToken;   // 予約した匿名名の札は、この登録で使い切る(サーバーが使う・破棄するのどちらでも)
+  anonToken = null;
   try {
     const ticket = (pending ? await pending : null) ?? (await fetchTicket(slug));
     const data = await request('POST', boardPath(slug, variantId), {
@@ -239,6 +271,7 @@ export async function saveLeaderboardScore(
       cleared: options.cleared === true ? true : undefined,
       ghost: options.ghost,
       ticket: ticket ?? undefined,
+      anonToken: token ?? undefined,
     });
     const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
     const rank = typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1;

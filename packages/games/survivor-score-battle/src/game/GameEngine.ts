@@ -135,7 +135,9 @@ export class GameEngine {
   /** ポーズ(Backspace / SELECT。P と Start でも開く): 止めて、やり直せる */
   private readonly pauseUi = new ArcadePause({
     accent: '#00f0ff',
-    isPlaying: () => this.state === 'PLAYING' && !this.countingDown && this.dyingTimer <= 0,
+    isPlaying: () => this.state === 'PLAYING' && this.dyingTimer <= 0,
+    onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    onClose: () => this.countdown?.resume(),
     onRestart: () => this.beginMatch(),
   });
 
@@ -327,8 +329,7 @@ export class GameEngine {
       this.enemies,
       allContenders,
       this.sound,
-      this.screenEffects,
-      this.damageNumbers
+      this.screenEffects
     );
 
     if (waveResult.spawnBoss) {
@@ -1009,14 +1010,14 @@ export class GameEngine {
       PLAYING: {
         moveLabel: '移動',
         buttons: [
-          { indices: [3, 4, 5, 7], label: '必殺技', keyLabel: 'Shift / Space' },
+          { indices: [3, 4, 5, 7], label: 'ソードストーム', keyLabel: 'Space' },
         ],
       },
       PAUSED: { buttons: [] }, // ポーズは共通のポーズ画面(ArcadePause)が出す。この状態は使わない
       LEVEL_UP: { moveLabel: '選択', buttons: [confirm] },
       RESULT: { moveLabel: '選択', buttons: [confirm] },
     };
-    mountArcadeGuide({ ...guides[this.state], showHomeHint: true, backLabel: this.state === 'TITLE' ? 'ホームへ' : this.state === 'PLAYING' ? 'ポーズ' : '戻る' });
+    mountArcadeGuide({ ...guides[this.state], showHomeHint: true, backLabel: this.state === 'TITLE' ? 'ホームへ戻る' : this.state === 'PLAYING' ? 'ポーズ' : '戻る' });
   }
 
   private renderWorld(ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -1107,7 +1108,6 @@ export class GameEngine {
       width,
       height,
       this.player,
-      this.standings,
       this.waveDirector.gameTime,
       this.waveDirector.activeBoss,
       this.waveDirector.warningBannerText,

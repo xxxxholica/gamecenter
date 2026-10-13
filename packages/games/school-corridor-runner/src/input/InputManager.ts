@@ -4,7 +4,6 @@ import { KeyboardTracker } from '../../../../shared/keyboardTracker';
 import { readGamepads } from '../../../../shared/gamepadFrame';
 
 export class InputManager {
-  private lastInputTime: number = Date.now();
 
   // キーボード状態
   private menuNav = new MenuNav();
@@ -13,7 +12,6 @@ export class InputManager {
     // スペースキーや矢印キー、Enterキーでのスクロール・既定動作防止
     preventDefaultKeys: ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD'],
     onKeyDown: (e) => {
-      this.lastInputTime = Date.now();
       this.menuNav.pushKey(e);
     },
     // 押下中のキーを全て離した扱いにする(次の keydown / repeat が新規押下として届く)
@@ -82,22 +80,14 @@ export class InputManager {
       input.slide = true;
     }
 
-    // 統合投擲攻撃（Enterキーメイン、および互換キー Space / J / K / Z / X）
+    // 統合投擲攻撃（Enterキーメイン、および互換キー Space）
     const isAttackJustPressed =
       this.keysPressedThisFrame.has('Enter') ||
-      this.keysPressedThisFrame.has('Space') ||
-      this.keysPressedThisFrame.has('KeyJ') ||
-      this.keysPressedThisFrame.has('KeyK') ||
-      this.keysPressedThisFrame.has('KeyZ') ||
-      this.keysPressedThisFrame.has('KeyX');
+      this.keysPressedThisFrame.has('Space');
 
     const isAttackHolding =
       this.keysDown.has('Enter') ||
-      this.keysDown.has('Space') ||
-      this.keysDown.has('KeyJ') ||
-      this.keysDown.has('KeyK') ||
-      this.keysDown.has('KeyZ') ||
-      this.keysDown.has('KeyX');
+      this.keysDown.has('Space');
 
     if (isAttackJustPressed || (isAttackHolding && this.attackCooldown <= 0)) {
       input.attack = true;
@@ -121,7 +111,6 @@ export class InputManager {
 
     if (this.keysPressedThisFrame.size > 0) {
       input.anyKey = true;
-      this.lastInputTime = Date.now();
     }
 
     // 2. HTML5 Gamepad API 優先判定（接続されていればオーバーライド/合成）
@@ -163,7 +152,6 @@ export class InputManager {
       if (justMovedLeft) {
         input.laneLeft = true;
         input.anyKey = true;
-        this.lastInputTime = Date.now();
       }
 
       const justMovedRight =
@@ -172,7 +160,6 @@ export class InputManager {
       if (justMovedRight) {
         input.laneRight = true;
         input.anyKey = true;
-        this.lastInputTime = Date.now();
       }
 
       this.lastAxis0 = axis0;
@@ -183,13 +170,11 @@ export class InputManager {
       if (isUp && !wasUp) {
         input.jump = true;
         input.anyKey = true;
-        this.lastInputTime = Date.now();
       }
 
       // 軸1 (レバー下) または 十字キー下: スライディング（ホールド判定）
       if (axis1 > threshold || dpadDown) {
         input.slide = true;
-        this.lastInputTime = Date.now();
       }
 
       this.lastAxis1 = axis1;
@@ -214,7 +199,6 @@ export class InputManager {
         input.throwBomb = true;
         input.anyKey = true;
         this.attackCooldown = this.ATTACK_INTERVAL;
-        this.lastInputTime = Date.now();
       }
 
       // 確定: ボタン0 (アケコン Aボタン) の新規押下
@@ -222,7 +206,6 @@ export class InputManager {
       if (btn0Pressed && !wasBtn0) {
         input.startOrRetry = true;
         input.anyKey = true;
-        this.lastInputTime = Date.now();
       }
 
       // 戻る / キャンセル: ボタン1 (アケコン Bボタン) の新規押下
@@ -230,7 +213,6 @@ export class InputManager {
       if (btn1Pressed && !wasBtn1) {
         input.cancel = true;
         input.anyKey = true;
-        this.lastInputTime = Date.now();
       }
 
       this.lastButtons = buttons.map(b => b.pressed);
@@ -243,20 +225,6 @@ export class InputManager {
     this.keysPressedThisFrame.clear();
 
     return input;
-  }
-
-  /**
-   * 最後の入力から経過した時間（秒）を取得
-   */
-  public getIdleTimeSeconds(): number {
-    return (Date.now() - this.lastInputTime) / 1000;
-  }
-
-  /**
-   * 入力タイムスタンプを強制リセット
-   */
-  public resetIdleTimer(): void {
-    this.lastInputTime = Date.now();
   }
 
   public destroy(): void {

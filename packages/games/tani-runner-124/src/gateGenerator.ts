@@ -376,12 +376,3 @@ function fallbackGateConfigs(zs: number[], level: LevelId = 'kosen'): GateConfig
   ];
   return zs.map((z, i) => ({ z, left: fixed[i % fixed.length][0], right: fixed[i % fixed.length][1] }));
 }
-
-/** 最善手を選び続けた場合の最終人数(検証・デバッグ用) */
-export function bestPathCount(configs: GateConfig[], startCount: number = 4): number {
-  let count = startCount;
-  for (const c of configs) {
-    count = Math.max(gateResult(count, c.left).survivors, gateResult(count, c.right).survivors);
-  }
-  return count;
-}

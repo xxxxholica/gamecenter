@@ -49,7 +49,8 @@ export class LevelUpScreen {
         id: `weapon_up_${pick}`,
         category: 'WEAPON_UPGRADE',
         weaponType: pick,
-        title: `${meta.name} LV.${nextLvl}`,
+        title: meta.name,
+        level: nextLvl,
         description: lvlConfig.description,
         rarity: nextLvl === 8 ? 'LEGENDARY' : 'RARE',
       });
@@ -63,7 +64,7 @@ export class LevelUpScreen {
         id: `weapon_new_${pick}`,
         category: 'WEAPON_NEW',
         weaponType: pick,
-        title: `NEW ${meta.name}`,
+        title: meta.name,
         description: meta.levels[0].description,
         rarity: 'EPIC',
       });
@@ -274,17 +275,36 @@ export class LevelUpScreen {
       ctx.strokeRect(-cardW / 2, -cardH / 2, cardW, cardH);
       ctx.shadowBlur = 0;
 
-      // カード内は上から レア度 / アイコン / タイトル / 説明
+      // カード内は上から アイコン / タイトル / 説明(レア度は文字では出さず、枠とアイコンの色で示す)
       const y0 = -cardH / 2;
-      ctx.font = '900 18px Impact, sans-serif';
-      ctx.fillStyle = accent;
-      ctx.fillText(card.rarity, 0, y0 + 34);
+      // ブロックを置く分、NEW / LV のカードはアイコンを少し上げる
+      // NEW と LV(強化)は、同じ形のブロックで技名の上に出す(色だけ変える)
+      const badge = card.category === 'WEAPON_NEW'
+        ? { text: 'NEW', color: '#ffe600' }
+        : card.level !== undefined
+          ? { text: `LV${card.level}`, color: '#00f0ff' }
+          : null;
+      const hasBadge = badge !== null;
+      drawIcon(ctx, card.weaponType ?? card.statType, 0, y0 + (hasBadge ? 104 : 120), 96, accent);
 
-      drawIcon(ctx, card.weaponType ?? card.statType, 0, y0 + 120, 96, accent);
-
+      // 新しい武器は、技名の上に、NEW / LV を塗りつぶしのブロックで囲んで出す
       ctx.font = '900 26px Impact, sans-serif';
       ctx.fillStyle = '#ffffff';
-      this.wrapText(ctx, card.title, 0, y0 + 216, cardW - 40, 34);
+      this.wrapText(ctx, card.title, 0, y0 + (hasBadge ? 224 : 216), cardW - 40, 34);
+      if (badge) {
+        const bw = 62;
+        const bh = 28;
+        const bx = -bw / 2;
+        const by = y0 + 166;
+        ctx.fillStyle = badge.color;
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(bx, by, bw, bh);
+        ctx.font = '900 22px Impact, sans-serif';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(badge.text, 0, by + bh / 2 + 1);
+      }
 
       ctx.font = '700 20px sans-serif';
       ctx.fillStyle = '#aaccdd';
@@ -304,7 +324,7 @@ export class LevelUpScreen {
     y: number,
     maxWidth: number,
     lineHeight: number
-  ) {
+  ): string[] {
     const chars = text.split('');
     const lines: string[] = [];
     let line = '';
@@ -327,5 +347,6 @@ export class LevelUpScreen {
     }
 
     lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+    return lines;
   }
 }

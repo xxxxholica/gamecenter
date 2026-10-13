@@ -1,5 +1,7 @@
+import { buttonIconHtml } from '../../../../shared/arcadeGuide';
 import { CarSpecs } from '../models/CarBase';
 import { CAR_PALETTES, type CarType, type ColorPreset } from '../../../../shared/carPalette';
+import { btnHtml, setBtnLabel } from './btnGuide';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
 import { carOutlineSvg } from './carOutline';
 
@@ -30,6 +32,8 @@ interface CarCardData {
   sub: string;
   gauges: GaugeData[];
   specMain: string;
+  /** 武器を積んでいる車。オンライン対戦では武器が使えないので、特性をグレーにする */
+  armed?: boolean;
 }
 
 const CAR_CARDS: CarCardData[] = [
@@ -71,6 +75,7 @@ const CAR_CARDS: CarCardData[] = [
       { label: '攻撃力', value: 4, colorClass: 'red' },
     ],
     specMain: 'ツイン機関銃・重装甲突撃',
+    armed: true,
   },
   {
     id: 'missile_truck_j',
@@ -84,6 +89,7 @@ const CAR_CARDS: CarCardData[] = [
       { label: '攻撃力', value: 5, colorClass: 'red' },
     ],
     specMain: '8連装ミサイル・長距離砲撃',
+    armed: true,
   },
 ];
 
@@ -129,7 +135,7 @@ export class CarSelectScreen {
           <!-- Machine cards -->
           <div class="car-card-list-arcade">
             ${CAR_CARDS.map((c) => `
-            <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}" data-car="${c.id}" tabindex="0">
+            <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}${c.armed ? ' armed' : ''}" data-car="${c.id}" tabindex="0">
               ${carOutlineSvg(c.id)}
               <div class="car-card-title-arcade">${c.name}</div>
               <div class="car-card-sub-arcade">${c.sub}</div>
@@ -149,6 +155,7 @@ export class CarSelectScreen {
                   <span class="spec-badge">特性</span>
                 </div>
                 <div class="spec-main-digital">${c.specMain}</div>
+                ${c.armed ? '<div class="spec-disabled">武器は利用不可</div>' : ''}
               </div>
             </div>`).join('')}
           </div>
@@ -156,15 +163,9 @@ export class CarSelectScreen {
 
       <!-- Action buttons -->
       <div class="arcade-action-bar">
-        <button id="cs-btn-back" class="arcade-btn-back">戻る</button>
-        <button id="cs-btn-cycle-color" class="arcade-color-cycle-btn" type="button" title="カラー変更">
-          <span class="color-chip-preview" id="cs-color-chip"></span>
-          <div class="color-info-text">
-            <span class="color-name-arcade" id="cs-color-name">キネティックイエロー</span>
-            <span class="color-sub-hint">カラー変更</span>
-          </div>
-        </button>
-        <button id="cs-btn-next" class="arcade-btn-go glow">決定</button>
+        <button id="cs-btn-back" class="arcade-btn-back">${btnHtml('戻る', [1], 'Backspace')}</button>
+        <button id="cs-btn-cycle-color" class="arcade-btn-back" type="button"><span class="btn-guide">${buttonIconHtml([2, 3, 4, 5], 'C')}</span><span class="btn-label-col"><span class="btn-label">カラー変更</span><span class="btn-current"><i class="color-chip-preview" id="cs-color-chip"></i><span id="cs-color-name"></span></span></span></button>
+        <button id="cs-btn-next" class="arcade-btn-go glow">${btnHtml('決定', [0], 'Enter')}</button>
       </div>
     `;
 
@@ -195,8 +196,9 @@ export class CarSelectScreen {
   /** オンライン対戦の待機中の表示にする(決定ボタンを隠し、戻るは「退出」)。 */
   public setOnlineMode(on: boolean): void {
     this.onlineMode = on;
+    this.container.classList.toggle('car-select-online', on);   // 武器を積んだ車の特性をグレーにして、利用不可と出す
     const back = this.container.querySelector<HTMLElement>('#cs-btn-back');
-    if (back) back.textContent = on ? '退出' : '戻る';
+    setBtnLabel(back, on ? '退出' : '戻る');
     if (!on) this.takenBodies = new Set();
   }
 
@@ -264,15 +266,6 @@ export class CarSelectScreen {
     this.emitPick();
   }
 
-  public setColorIndex(index: number): void {
-    const colors = this.getColorsForCar(this.currentCarType);
-    if (index >= 0 && index < colors.length) {
-      this.selectedColorIndex[this.currentCarType] = index;
-      this.applyCurrentColor();
-      this.emitPick();
-    }
-  }
-
   private applyCurrentColor(): void {
     const colors = this.getColorsForCar(this.currentCarType);
     const idx = this.selectedColorIndex[this.currentCarType];
@@ -324,22 +317,22 @@ export class CarSelectScreen {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible) return;
         if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;     // 名前の入力中にマシン操作へ誤爆しない
-        if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+        if (e.code === 'KeyS') {
           e.preventDefault();
           this.selectNextCar();
-        } else if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+        } else if (e.code === 'KeyW') {
           e.preventDefault();
           this.selectPrevCar();
-        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+        } else if (e.code === 'KeyD') {
           e.preventDefault();
           this.selectNextCar();
-        } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+        } else if (e.code === 'KeyA') {
           e.preventDefault();
           this.selectPrevCar();
-        } else if (e.code === 'KeyC' || e.code === 'KeyX' || e.code === 'Tab') {
+        } else if (e.code === 'KeyC') {
           e.preventDefault();
           this.cycleColor();
-        } else if (e.code === 'Enter' || e.code === 'Space') {
+        } else if (e.code === 'Enter') {
           e.preventDefault();
           this.events.onNext();
         } else if (e.code === 'Backspace') {

@@ -736,28 +736,6 @@ class SoundSystem {
     clickOsc.stop(t + 0.045);
   }
 
-  // Digital scale weight measurement beep: "ピッ"
-  public playDigitalBeep(freq = 1760) {
-    if (document.hidden) return;
-    this.ensureAudioActive();
-    if (!this.ctx || !this.masterGain) return;
-    if (this.shouldThrottle('digitalBeep', 40)) return;
-
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, t);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.20, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(t);
-    osc.stop(t + 0.07);
-  }
-
   // ==========================================
   // 祭囃子 (Matsuri Bayashi) Procedural BGM
   // ==========================================

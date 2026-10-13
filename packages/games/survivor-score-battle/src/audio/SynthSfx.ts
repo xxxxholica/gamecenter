@@ -119,26 +119,6 @@ export class SynthSfx {
     osc.stop(now + 0.18);
   }
 
-  /** Enemy hit sound */
-  playEnemyHit() {
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(320, now);
-    osc.frequency.exponentialRampToValueAtTime(90, now + 0.04);
-
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-
-    osc.start(now);
-    osc.stop(now + 0.04);
-  }
-
   /** Enemy defeated / pop sound with combo pitch scaling */
   playKill(comboCount: number = 0) {
     const now = this.ctx.currentTime;
@@ -256,41 +236,6 @@ export class SynthSfx {
 
     osc.start(now);
     osc.stop(now + 0.35);
-  }
-
-  /** Special burst activation (Massive screen wipe impact) */
-  playSpecialBurst() {
-    const now = this.ctx.currentTime;
-    // Sub-bass sweep
-    const subOsc = this.ctx.createOscillator();
-    const subGain = this.ctx.createGain();
-    subOsc.type = 'sine';
-    subOsc.frequency.setValueAtTime(120, now);
-    subOsc.frequency.exponentialRampToValueAtTime(30, now + 0.8);
-    subGain.gain.setValueAtTime(0.45, now);
-    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
-
-    subOsc.connect(subGain);
-    subGain.connect(this.sfxGain);
-    subOsc.start(now);
-    subOsc.stop(now + 0.8);
-
-    // High explosion noise
-    this.playExplosion(true);
-
-    // Cosmic laser rise
-    const sweep = this.ctx.createOscillator();
-    const sweepGain = this.ctx.createGain();
-    sweep.type = 'sawtooth';
-    sweep.frequency.setValueAtTime(200, now);
-    sweep.frequency.exponentialRampToValueAtTime(2200, now + 0.4);
-    sweepGain.gain.setValueAtTime(0.25, now);
-    sweepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-
-    sweep.connect(sweepGain);
-    sweepGain.connect(this.sfxGain);
-    sweep.start(now);
-    sweep.stop(now + 0.5);
   }
 
   /** Boss Warning Klaxon Siren */

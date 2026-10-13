@@ -556,16 +556,4 @@ export class Traffic {
     return list;
   }
 
-  /**
-   * Returns positions of opposite traffic cars for HUD minimap display.
-   */
-  public getOppositeCarPositions(): THREE.Vector2[] {
-    const list: THREE.Vector2[] = [];
-    for (const c of this.cars) {
-      if (!c.isForward) {
-        list.push(new THREE.Vector2(c.obj.position.x, c.obj.position.z));
-      }
-    }
-    return list;
-  }
 }

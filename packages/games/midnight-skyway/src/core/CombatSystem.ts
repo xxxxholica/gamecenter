@@ -13,6 +13,14 @@ function playSfx(call: (sfx: any) => void): void {
   }
 }
 
+const MLRS_MAX_AMMO = 8;
+const MLRS_MIN_SALVO = 3;          // これ以上たまっていればロックオンで一斉射できる
+const MLRS_AMMO_REGEN = 0.7;       // 1発回復するまでの秒
+const MLRS_SALVO_INTERVAL = 0.11;  // 一斉射の発射間隔
+const SEDAN_BURST_SHOTS = 14;      // Combat Sedan: 1ロックあたりの連射数
+const SEDAN_BURST_INTERVAL = 0.065;
+const SEDAN_BURST_COOLDOWN = 0.7;
+
 export interface CombatTarget {
   id: string;
   isPlayer: boolean;
@@ -131,6 +139,8 @@ export class CombatSystem {
 
   /** レース開始フラグ: 開始前（カウントダウン中等）はガンナー・ミサイルの照準・発射を禁止 */
   public raceStarted = true;
+  /** false: 武器を使えない(オンライン対戦)。自車の照準・発砲を止め、他のプレイヤーの発砲も無視する。 */
+  public weaponsEnabled = true;
 
   // Player combat status
   public playerHp = 3;
@@ -141,6 +151,14 @@ export class CombatSystem {
   public playerRespawnTimer = 0;
   public playerInvincibleTimer = 0;
   public playerShootCooldown = 0;
+  /** ロックオン1回あたりの連射(残り発数・次弾までの秒・撃ち続ける標的) */
+  private playerBurstLeft = 0;
+  private playerBurstTimer = 0;
+  private playerBurstTarget: CombatTarget | null = null;
+  /** Truck J MLRS の残弾(時間で回復し、ロックオンで残弾を全て撃ち切る) */
+  public playerMissileAmmo = MLRS_MAX_AMMO;
+  private missileAmmoTimer = 0;
+  private lastLockedId: string | null = null;
   private rearPipeFlameTimer = 0;
   public timeSinceLastDamage = 0;
   private autoRepairTimer = 0;
@@ -281,6 +299,11 @@ export class CombatSystem {
     this.playerRespawnTimer = 0;
     this.playerInvincibleTimer = 0;
     this.playerShootCooldown = 0;
+    this.playerBurstLeft = 0;
+    this.playerBurstTarget = null;
+    this.playerMissileAmmo = MLRS_MAX_AMMO;
+    this.missileAmmoTimer = 0;
+    this.lastLockedId = null;
     this.rearPipeFlameTimer = 0;
     this.timeSinceLastDamage = 0;
     this.autoRepairTimer = 0;
@@ -465,7 +488,7 @@ export class CombatSystem {
     }
 
     // 3. Auto-targeting and firing for Player (レース開始前は使用不可)
-    if (this.raceStarted && this.playerController?.canDrive !== false) {
+    if (this.weaponsEnabled && this.raceStarted && this.playerController?.canDrive !== false) {
       this.updatePlayerCombat(dt);
     } else {
       this.currentLockOn = null;
@@ -598,14 +621,63 @@ export class CombatSystem {
       }
     }
 
-    // Auto-fire when target is locked and cooldown elapsed
+    // ロックオンした瞬間のSE
+    const lockedId = bestTarget?.id ?? null;
+    if (lockedId && lockedId !== this.lastLockedId) playSfx((s) => s.lockOn());
+    this.lastLockedId = lockedId;
+
+    // MLRS 残弾の自然回復(一斉射が撃てる量に届いた瞬間にSE)
+    if (isMissileTruck && this.playerBurstLeft <= 0 && this.playerMissileAmmo < MLRS_MAX_AMMO) {
+      this.missileAmmoTimer += dt;
+      if (this.missileAmmoTimer >= MLRS_AMMO_REGEN) {
+        this.missileAmmoTimer = 0;
+        this.playerMissileAmmo++;
+        if (this.playerMissileAmmo === MLRS_MIN_SALVO || this.playerMissileAmmo === MLRS_MAX_AMMO) {
+          playSfx((s) => s.reloadTick(this.playerMissileAmmo === MLRS_MAX_AMMO));
+        }
+      }
+    }
+
+    // ロックオン1回あたりの連射/一斉射を進める
+    if (this.playerBurstLeft > 0) {
+      const tgt = bestTarget ?? (this.playerBurstTarget && !this.playerBurstTarget.isDead ? this.playerBurstTarget : null);
+      if (!tgt) {
+        this.playerBurstLeft = 0;
+        this.playerShootCooldown = isMissileTruck ? 0.5 : SEDAN_BURST_COOLDOWN;
+      } else {
+        this.playerBurstTarget = tgt;
+        this.playerBurstTimer -= dt;
+        while (this.playerBurstLeft > 0 && this.playerBurstTimer <= 0) {
+          if (isCombatSedan) {
+            this.fireMachineGun('player', pPos, fwd, tgt, true);
+            this.playerBurstTimer += SEDAN_BURST_INTERVAL;
+          } else {
+            this.fireHomingMissile('player', pPos, fwd, tgt, true);
+            this.playerBurstTimer += MLRS_SALVO_INTERVAL;
+          }
+          this.playerBurstLeft--;
+        }
+        this.playerShootCooldown = Math.max(this.playerShootCooldown, 0.05);
+        if (this.playerBurstLeft <= 0) {
+          this.playerShootCooldown = isMissileTruck ? 0.5 : SEDAN_BURST_COOLDOWN;
+          playSfx((s) => s.burstEnd(isMissileTruck));
+        }
+      }
+      return;
+    }
+
+    // ロックオン中でクールダウンが明けたら連射開始
     if (bestTarget && this.playerShootCooldown <= 0) {
       if (isCombatSedan) {
-        this.fireMachineGun('player', pPos, fwd, bestTarget);
-        this.playerShootCooldown = 0.45; // Rapid 2-burst rate
-      } else if (isMissileTruck) {
-        this.fireHomingMissile('player', pPos, fwd, bestTarget);
-        this.playerShootCooldown = 2.0; // 2 seconds MLRS salvo reload
+        this.playerBurstLeft = SEDAN_BURST_SHOTS;
+      } else if (isMissileTruck && this.playerMissileAmmo >= MLRS_MIN_SALVO) {
+        this.playerBurstLeft = this.playerMissileAmmo; // 残弾を全て発射
+        this.playerMissileAmmo = 0;
+        this.missileAmmoTimer = 0;
+      }
+      if (this.playerBurstLeft > 0) {
+        this.playerBurstTarget = bestTarget;
+        this.playerBurstTimer = 0;
       }
     }
   }
@@ -679,15 +751,15 @@ export class CombatSystem {
   }
 
   /** Fires twin machine gun bullets with muzzle fire and tracer from Combat Sedan's roof turret */
-  public fireMachineGun(shooterId: string, origin: THREE.Vector3, forward: THREE.Vector3, target: CombatTarget): void {
-    playSfx((s) => s.machineGun());
+  public fireMachineGun(shooterId: string, origin: THREE.Vector3, forward: THREE.Vector3, target: CombatTarget, rapid = false): void {
+    playSfx((s) => s.machineGun(rapid));
 
     let shooterSpeed = 0;
     // Firing recoil vibration on shooter vehicle & camera trauma shake
     if (shooterId === 'player') {
       shooterSpeed = this.playerController?.speed ?? 0;
-      this.playerController?.applyRecoilKick(0.018, (Math.random() - 0.5) * 0.012);
-      this.onCameraShake?.(0.14);
+      this.playerController?.applyRecoilKick(rapid ? 0.007 : 0.018, (Math.random() - 0.5) * 0.012);
+      this.onCameraShake?.(rapid ? 0.05 : 0.14);
     } else if (this.traffic) {
       const npcIdx = parseInt(shooterId.replace('npc_', ''), 10);
       const npc = this.traffic.cars[npcIdx];
@@ -731,13 +803,13 @@ export class CombatSystem {
   }
 
   /** Fires a heavy homing rocket with smoke trail */
-  public fireHomingMissile(shooterId: string, origin: THREE.Vector3, forward: THREE.Vector3, target: CombatTarget): void {
-    playSfx((s) => s.missileLaunch());
+  public fireHomingMissile(shooterId: string, origin: THREE.Vector3, forward: THREE.Vector3, target: CombatTarget, rapid = false): void {
+    playSfx((s) => s.missileLaunch(rapid));
 
     // Heavy rocket launch recoil kick & camera trauma
     if (shooterId === 'player') {
-      this.playerController?.applyRecoilKick(0.085, (Math.random() - 0.5) * 0.035);
-      this.onCameraShake?.(0.55);
+      this.playerController?.applyRecoilKick(rapid ? 0.04 : 0.085, (Math.random() - 0.5) * 0.035);
+      this.onCameraShake?.(rapid ? 0.28 : 0.55);
     } else if (this.traffic) {
       const npcIdx = parseInt(shooterId.replace('npc_', ''), 10);
       const npc = this.traffic.cars[npcIdx];
@@ -963,6 +1035,7 @@ export class CombatSystem {
 
   /** 他のプレイヤーの発砲を受けた: 同じ弾・ミサイルを自分の画面でも飛ばす(当たるのは自分の車だけ。ダメージは自分で決める)。 */
   public spawnRemoteFire(fromId: number, e: FireEvent): void {
+    if (!this.weaponsEnabled) return;
     const shooterId = `remote_${fromId}`;
     const targets = this.getAllTargets(shooterId);
     // 狙われているのが自分なら、ホーミングの標的は自車。他のプレイヤーならその車。NPCや無目標なら直進

@@ -14,7 +14,9 @@ export class TitleScreen {
       accentColor: '#00e5ff',
       tagline: '夜の都市高架を駆け抜けるタイムアタック',
       startButtonLabel: 'スタート',
-      promptLabel: 'PRESS START / SPACE / 画面クリック',
+      promptLabel: 'PRESS START / ENTER / 画面クリック',
+      startKeys: ['Enter'],
+      startKeyLabel: 'Enter',
       onStart: () => {
         events.onStart();
       },

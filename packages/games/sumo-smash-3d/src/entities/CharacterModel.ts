@@ -192,7 +192,7 @@ export class CharacterModel {
         this.animateBuchikamashiCharge(chargeProgress);
         break;
       case 'buchikamashi_rush':
-        this.animateBuchikamashiRush(stateProgress);
+        this.animateBuchikamashiRush();
         break;
       case 'shiko':
         this.animateShiko(stateProgress);
@@ -201,13 +201,13 @@ export class CharacterModel {
         this.animateGrabAttempt(stateProgress);
         break;
       case 'grab_holding':
-        this.animateGrabHolding(stateProgress);
+        this.animateGrabHolding();
         break;
       case 'throw':
         this.animateThrow(stateProgress);
         break;
       case 'grabbed':
-        this.animateGrabbed(stateProgress);
+        this.animateGrabbed();
         break;
       case 'guard':
         this.animateGuard();
@@ -407,7 +407,7 @@ export class CharacterModel {
     this.rightLegGroup.rotation.x = 0.4;
   }
 
-  private animateBuchikamashiRush(progress: number) {
+  private animateBuchikamashiRush() {
     // ぶちかまし突進（頭突きロケット姿勢）
     this.bodyGroup.position.y = 0.6;
     this.bodyGroup.rotation.x = 0.95; // ほぼ水平に頭から突っ込む
@@ -430,7 +430,6 @@ export class CharacterModel {
       this.leftArmGroup.rotation.z = lift * 0.5;
     } else if (progress < 0.75) {
       // 振り下ろし〜着地ドスン！
-      const smash = (progress - 0.5) / 0.25;
       this.bodyGroup.position.y = 0.65; // 深く沈み込む
       this.bodyGroup.rotation.z = 0;
       this.rightLegGroup.rotation.z = 0;
@@ -471,7 +470,7 @@ export class CharacterModel {
     this.rightHandMesh.rotation.x = (Math.PI * 0.4) * reach;
   }
 
-  private animateGrabHolding(progress: number) {
+  private animateGrabHolding() {
     // がっぷり四つ（相手のマワシをガッチリ両手で引きつけ、胸を突き合わせて組み合う）
     const grappleTremble = Math.sin(this.animTimer * 18.0) * 0.015;
     this.bodyGroup.position.y = 0.76 + grappleTremble;
@@ -520,7 +519,7 @@ export class CharacterModel {
     }
   }
 
-  private animateGrabbed(progress: number) {
+  private animateGrabbed() {
     // 掴まれ拘束中（マワシを掴まれて体が少し浮き上がり、足がバタつく無防備リアクション）
     const struggle = Math.sin(this.animTimer * 16.0) * 0.08;
     this.bodyGroup.position.y = 0.96 + Math.abs(struggle) * 0.04;

@@ -50,8 +50,6 @@ export class SpatialGrid<T extends HasPosition> {
     const minCy = Math.floor((y - radius) / this.cellSize);
     const maxCy = Math.floor((y + radius) / this.cellSize);
 
-    const r2 = radius * radius;
-
     for (let cx = minCx; cx <= maxCx; cx++) {
       for (let cy = minCy; cy <= maxCy; cy++) {
         const list = this.grid.get(this.getKey(cx, cy));

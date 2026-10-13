@@ -73,6 +73,16 @@ let sharedPacer: RequestPacer | null = null;
  * Base class for maps made of many GLB chunks that are streamed in around the car and released behind it,
  * with a drivable corridor around a baked road profile (Y follows the profile, the car is pushed back at the edges).
  */
+/**
+ * GPUへ転送し終えたテクスチャの元画像(デコード済みの ImageBitmap)を解放する。
+ * three.js は転送後も元画像を保持し続けるが、一度転送した画像は再転送されないので(version が変わらない限り)、
+ * 4096px のアトラスでは1枚あたり約64MBのメインメモリがそのまま無駄になる。見た目には影響しない。
+ */
+function releaseUploadedImage(tex: THREE.Texture): void {
+  const img = tex.image as { close?: () => void } | null;
+  if (img && typeof img.close === 'function') img.close();
+}
+
 export abstract class StreamedCityMap extends MapBase {
   /** URL prefix of the chunk directory (with trailing slash); it must contain manifest.json. */
   protected abstract readonly modelBase: string;
@@ -195,6 +205,7 @@ export abstract class StreamedCityMap extends MapBase {
       for (const tex of set) {
         try {
           this.renderer.initTexture(tex);
+          releaseUploadedImage(tex);
         } catch {
           // ignore texture init errors
         }
@@ -225,7 +236,7 @@ export abstract class StreamedCityMap extends MapBase {
     while (this.uploadJobs.length > 0 && performance.now() - t0 < 6) {
       const job = this.uploadJobs[0];
       const tex = job.textures.shift();
-      if (tex) r.initTexture(tex);
+      if (tex) { r.initTexture(tex); releaseUploadedImage(tex); }
       if (job.textures.length === 0) { this.uploadJobs.shift(); job.resolve(); }
     }
   }

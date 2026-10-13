@@ -65,6 +65,8 @@ export interface UpgradeCard {
   weaponType?: WeaponType;
   statType?: StatBoostType;
   title: string;
+  /** 武器の強化カードで、強化後のレベル(カードに LV のブロックで出す) */
+  level?: number;
   description: string;
   rarity: 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 }

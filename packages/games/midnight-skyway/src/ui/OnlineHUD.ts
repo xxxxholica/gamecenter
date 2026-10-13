@@ -196,7 +196,7 @@ export class OnlineHUD {
       });
       if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
       this.keyHandler = (e) => {
-        if (e.key === ' ' || e.key === 'Enter' || e.key === 'Backspace') this.onLeave();
+        if (e.key === 'Enter' || e.key === 'Backspace') this.onLeave();
       };
       window.addEventListener('keydown', this.keyHandler);
     }
@@ -215,7 +215,4 @@ export class OnlineHUD {
     }
   }
 
-  public isResultOpen(): boolean {
-    return this.result.style.display === 'flex';
-  }
 }

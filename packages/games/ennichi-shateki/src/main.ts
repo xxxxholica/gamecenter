@@ -28,13 +28,13 @@ watchResultAutoReturn(['res-btn-title']);
 const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: 'ねらう',
   buttons: [
-    { indices: [0], label: '通常弾' },
-    { indices: [1, 2, 7], label: 'バクダン弾' },
+    { indices: [0], label: '通常弾', keyLabel: 'Space / Enter' },
+    { indices: [1, 2, 7], label: 'バクダン弾', keyLabel: 'X / Shift' },
   ],
   showHomeHint: true,
   backLabel: 'ポーズ',
 });
-const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 mountTitleGuide();
 
 type GameState = 'title' | 'playing' | 'results';
@@ -64,7 +64,9 @@ class ArcadeCorkShooter {
   /** ポーズ(Backspace / SELECT): 的当ての最中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ff4d4f',
-    isPlaying: () => this.state === 'playing' && !this.offlineCountdown,
+    isPlaying: () => this.state === 'playing',
+    onOpen: () => this.countdownHandle?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    onClose: () => this.countdownHandle?.resume(),
     onRestart: () => {
       this.state = 'results'; // startGame は、プレイ中だと何もしないので、先に外す
       this.prizePileManager.cleanup(this.scene);
@@ -120,6 +122,10 @@ class ArcadeCorkShooter {
 
   // 3D vectors
   private aimTargetWorld: THREE.Vector3 = new THREE.Vector3();
+  /** 狙いの先を求める時の使い回し(毎フレーム new しない) */
+  private readonly aimNdc = new THREE.Vector2();
+  private readonly aimPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.55);
+  private readonly aimHit = new THREE.Vector3();
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
 
   constructor() {
@@ -317,7 +323,7 @@ class ArcadeCorkShooter {
         accentColor: '#ff4d4f',
         tagline: 'むげん連射のお祭りアクション',
         startButtonLabel: 'スタート',
-        promptLabel: 'PRESS START / ボタンで開始',
+        promptLabel: 'PRESS START / ボタンでスタート',
         onStart: () => {
           this.onStartPressed();
         },
@@ -806,11 +812,9 @@ class ArcadeCorkShooter {
   }
 
   private updateAimPlane() {
-    this.raycaster.setFromCamera(new THREE.Vector2(this.input.aimX, this.input.aimY), this.camera);
-    const aimPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.55);
-    const hitPoint = new THREE.Vector3();
-    if (this.raycaster.ray.intersectPlane(aimPlane, hitPoint)) {
-      this.aimTargetWorld.copy(hitPoint);
+    this.raycaster.setFromCamera(this.aimNdc.set(this.input.aimX, this.input.aimY), this.camera);
+    if (this.raycaster.ray.intersectPlane(this.aimPlane, this.aimHit)) {
+      this.aimTargetWorld.copy(this.aimHit);
     } else {
       this.aimTargetWorld.copy(this.camera.position).addScaledVector(this.raycaster.ray.direction, 3.0);
     }

@@ -11,7 +11,7 @@ export interface InputState {
   jumpReleased: boolean;
   spinPressed: boolean;
   startPressed: boolean;
-  /** メニュー確定: Enter / Space / アケコンA (W・矢印上のジャンプでは確定しない) */
+  /** メニュー確定: Enter / アケコンA (W・矢印上のジャンプでは確定しない) */
   confirmPressed: boolean;
   /** メニュー移動(押した瞬間。上・左 = -1 / 下・右 = +1) */
   menuNav: number[];
@@ -52,24 +52,19 @@ export class InputManager {
     this.lastInputTime = performance.now();
   }
 
-  public getIdleDurationSeconds(): number {
-    return (performance.now() - this.lastInputTime) / 1000;
-  }
-
   public update(): InputState {
     // 1. Keyboard inputs
     const kLeft = this.keysHeld.has('KeyA') || this.keysHeld.has('ArrowLeft');
     const kRight = this.keysHeld.has('KeyD') || this.keysHeld.has('ArrowRight');
     const kDown = this.keysHeld.has('KeyS') || this.keysHeld.has('ArrowDown');
     
-    const kJump = this.keysHeld.has('Space') || this.keysHeld.has('KeyZ') || this.keysHeld.has('KeyJ') || this.keysHeld.has('KeyW') || this.keysHeld.has('ArrowUp');
-    const kJumpPressed = this.keysJustPressed.has('Space') || this.keysJustPressed.has('KeyZ') || this.keysJustPressed.has('KeyJ') || this.keysJustPressed.has('KeyW') || this.keysJustPressed.has('ArrowUp');
-    const kJumpReleased = this.keysJustReleased.has('Space') || this.keysJustReleased.has('KeyZ') || this.keysJustReleased.has('KeyJ') || this.keysJustReleased.has('KeyW') || this.keysJustReleased.has('ArrowUp');
+    const kJump = this.keysHeld.has('Space');
+    const kJumpPressed = this.keysJustPressed.has('Space');
+    const kJumpReleased = this.keysJustReleased.has('Space');
 
-    const kSpinPressed = this.keysJustPressed.has('ShiftLeft') || this.keysJustPressed.has('ShiftRight') || 
-                         this.keysJustPressed.has('KeyX') || this.keysJustPressed.has('KeyK');
+    const kSpinPressed = this.keysJustPressed.has('KeyX') || this.keysJustPressed.has('KeyK');
     
-    const kStartPressed = this.keysJustPressed.has('Enter') || this.keysJustPressed.has('Space') || this.keysJustPressed.has('KeyW');
+    const kStartPressed = this.keysJustPressed.has('Enter') || this.keysJustPressed.has('Space');
 
     // 2. Gamepad API
     let gLeft = false;
@@ -155,7 +150,7 @@ export class InputManager {
       jumpReleased: kJumpReleased || gJumpReleased,
       spinPressed: kSpinPressed || gSpinPressed,
       startPressed: kStartPressed,
-      confirmPressed: this.keysJustPressed.has('Enter') || this.keysJustPressed.has('Space') || gJumpPressed,
+      confirmPressed: this.keysJustPressed.has('Enter') || gJumpPressed,
       menuNav: this.menuNav.take(),
       anyActionPressed: anyAction,
       lastInputTime: this.lastInputTime

@@ -24,7 +24,7 @@ import { Bgm } from './bgm';
 import type { PublicStatus } from '../../../shared/online/core';
 import { ATTACK_EVERY, ATTACK_KINDS, MAX_SNAP_BLOCKS, STATE_INTERVAL_MS } from '../../../shared/towerProtocol';
 import type { BlockSnap, PlayerInfo, ResultEntry, ServerMsg, TowerState } from '../../../shared/towerProtocol';
-import { createNet, fetchTowerStatus, PLAYER_COLORS, PLAYER_COLORS_LIGHT } from './online/net';
+import { createNet, fetchTowerStatus, PLAYER_COLORS_LIGHT } from './online/net';
 import { WaitScreen } from './online/WaitScreen';
 import { RivalStages, STAGE_SPACING, BETWEEN_TAG_X } from './online/RivalStages';
 import { readGamepads } from '../../../shared/gamepadFrame';
@@ -48,12 +48,14 @@ if (isPreview) {
 // 画面左下の共通ボタンガイド (場面ごとに差し替える)
 /** ボタンガイドを出す(オンライン対戦で左右に分けた右側の分も片付ける) */
 const mountGuide = (opts: Parameters<typeof mountArcadeGuide>[0]) => mountArcadeGuide(opts);
-const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 const mountGuidePlay = () => mountGuide({
-  moveLabel: '移動 / 下で早く落とす',
+  moveLabel: '移動',
+  keyMoveKeys: 'A / D',
   buttons: [
-    { indices: [0, 2], label: '回転', keyLabel: 'Space / Z' },
-    { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Enter / X' },
+    { indices: [0, 2], label: '回転', keyLabel: 'W' },
+    { indices: [13], label: '落とす', keyLabel: 'S' },
+    { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Enter' },
   ],
   showHomeHint: true, backLabel: 'ポーズ',
 });
@@ -170,8 +172,6 @@ scene.add(sun, sun.target);
 const rim = new THREE.DirectionalLight(0x9fc4ff, 0.7);
 rim.position.set(10, 4, -12);
 scene.add(rim);
-
-const cellGeo = new RoundedBoxGeometry(0.97, 0.97, 0.97, 3, 0.1);
 
 // ブロックの影を受ける奥の壁(透明。影だけ映る)。カメラについてくる
 const shadowWall = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.38 }));
@@ -848,9 +848,9 @@ function readInput(): Input {
   inp.right = keys.has('ArrowRight') || keys.has('KeyD');
   inp.down = keys.has('ArrowDown') || keys.has('KeyS');
   const kp = (...codes: string[]) => codes.some((c) => keyPressed.has(c));
-  inp.rotate = kp('Space', 'KeyZ', 'ArrowUp', 'KeyW');
-  inp.item = kp('Enter', 'KeyX', 'ShiftLeft', 'ShiftRight');
-  inp.confirm = kp('Space', 'Enter');
+  inp.rotate = kp('KeyW');
+  inp.item = kp('Enter');
+  inp.confirm = kp('Enter');
   keyPressed.clear();
 
   const pads = readGamepads();
@@ -888,7 +888,6 @@ let stateTime = 0;
 
 let current: Block | null = null; // 操作中のブロック
 let currentReleased = false; // collide イベントで立つ
-let currentTouched: CANNON.Body | null = null;
 let targetX = 0;
 let targetAngle = 0;
 let fastDrop = false;
@@ -971,18 +970,14 @@ function spawnPiece(): void {
   block.body.allowSleep = false;
   current = block;
   currentReleased = false;
-  currentTouched = null;
   targetX = 0;
   targetAngle = 0;
   if (glueArmed) {
     block.mat.emissive.setHex(VINE_COLOR);
     block.mat.emissiveIntensity = 0.55;
   }
-  block.body.addEventListener('collide', (e: { body: CANNON.Body }) => {
-    if (current === block && !currentReleased) {
-      currentReleased = true;
-      currentTouched = e.body;
-    }
+  block.body.addEventListener('collide', () => {
+    if (current === block && !currentReleased) currentReleased = true;
   });
   renderNext();
 }
@@ -996,7 +991,7 @@ function onLanded(block: Block): void {
   const nextLevel = Math.min(MAX_LEVEL, 1 + Math.floor(placed / LEVEL_EVERY));
   if (nextLevel > level) {
     level = nextLevel;
-    showLevelUp(level);
+    showLevelUp();
     beep(500, 0.1, 'square', 0.07);
     setTimeout(() => beep(750, 0.16, 'square', 0.07), 110);
   }
@@ -1804,10 +1799,6 @@ function beginOnlineMatch(m: Extract<ServerMsg, { t: 'start' }>): void {
   net.send({ t: 'loaded' });
 }
 
-function playerName(id: number): string {
-  return match?.players.find((p) => p.id === id)?.name ?? '???';
-}
-
 /** おじゃま: 自分宛てならイベントを起こす。自分が送ったものは効果音だけ鳴らす */
 function onAttack(m: Extract<ServerMsg, { t: 'atk' }>): void {
   if (!match) return;
@@ -2009,7 +2000,7 @@ function renderOnlineHud(): void {
 }
 
 /** レベルが上がった: バナーで知らせる(落下が速くなる) */
-function showLevelUp(lv: number): void {
+function showLevelUp(): void {
   shake = Math.max(shake, 0.25);
 }
 
@@ -2322,7 +2313,7 @@ const pauseSolo = new ArcadePause({
   isPlaying: () => state === 'playing' && mode === 'solo' && !demoActive && !isPreview,
   onRestart: () => startGame(),
 });
-const pauseOnline = new ArcadePause({
+new ArcadePause({
   accent: ACCENT,
   isPlaying: () => state === 'playing' && mode === 'online' && !!match && !match.stopped && !isPreview,
   exitLabel: '退出',
@@ -2438,6 +2429,6 @@ if (import.meta.env.DEV) {
     event: (k: EventKind) => startEvent(k),
     next: (i: number) => { nextIndex = i; renderNext(); },
     get vines() { return vines.length; },
-    speedup: () => showLevelUp(2),
+    speedup: () => showLevelUp(),
   };
 }

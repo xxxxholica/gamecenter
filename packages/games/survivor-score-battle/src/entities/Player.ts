@@ -8,7 +8,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { ParticleSystem } from '../effects/ParticleSystem';
 import { DamageNumbers } from '../effects/DamageNumbers';
 import { ScreenEffects } from '../effects/ScreenEffects';
-import { PickupPool, PickupItem } from '../items/ExpGem';
+import { PickupPool } from '../items/ExpGem';
 import { Field } from '../world/Field';
 import { ContenderState } from '../types';
 

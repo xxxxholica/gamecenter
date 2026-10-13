@@ -20,7 +20,6 @@ export class InputManager {
   private cancel = false;
   private prevCancel = false;
 
-  private leverX = 0; // -1 to 1
   private leverY = 0; // -1 (up) to 1 (down)
   private smoothTiltY = 0; // for keyboard analog ramp (0 to 1 forward)
 
@@ -49,11 +48,9 @@ export class InputManager {
     // Reset default
     let kbUp = this.keyboard.isDown('KeyW') || this.keyboard.isDown('ArrowUp') || false;
     let kbDown = this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown') || false;
-    let kbLeft = this.keyboard.isDown('KeyA') || this.keyboard.isDown('ArrowLeft') || false;
-    let kbRight = this.keyboard.isDown('KeyD') || this.keyboard.isDown('ArrowRight') || false;
-    let kbBtn0 = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('KeyJ') || false;
+    let kbBtn0 = this.keyboard.isDown('Enter') || false;
     let kbBtn1 = this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyK') || false;
-    let kbConfirm = this.keyboard.isDown('Enter') || this.keyboard.isDown('Space') || false;
+    let kbConfirm = this.keyboard.isDown('Enter') || false;
     let kbCancel = this.keyboard.isDown('Backspace') || false;
 
     // Smooth keyboard ramp for tilt mechanics (W, Up or Enter/Button0)
@@ -79,7 +76,7 @@ export class InputManager {
       this.gamepadConnected = true;
 
       // Buttons (0: A/Cross, 1: B/Circle, 2: X/Square, 3: Y/Triangle)
-      if (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed) gpBtn0 = true;
+      if (gp.buttons[0]?.pressed) gpBtn0 = true;
       if (gp.buttons[1]?.pressed || gp.buttons[3]?.pressed) gpBtn1 = true;
 
       // Strict confirm (Button 0 = A) and cancel (Button 1 = B)
@@ -102,12 +99,6 @@ export class InputManager {
     this.btn1 = gpBtn1 || kbBtn1;
     this.confirm = gpConfirm || kbConfirm;
     this.cancel = gpCancel || kbCancel;
-
-    if (Math.abs(gpAxisX) > 0.15) {
-      this.leverX = gpAxisX;
-    } else {
-      this.leverX = kbRight ? 1 : kbLeft ? -1 : 0;
-    }
 
     this.menuNav.updatePad(gpAxisX, gpAxisY);
     this.frameNav = this.menuNav.take();
@@ -150,14 +141,6 @@ export class InputManager {
     return this.leverY < -0.4;
   }
 
-  // Forward tilt amount (0.0 to 1.0)
-  getForwardTilt(): number {
-    if (this.leverY < -0.1) {
-      return Math.min(1.0, Math.abs(this.leverY));
-    }
-    return this.smoothTiltY;
-  }
-
   // Lever down (Toaster popup)
   isLeverDown(): boolean {
     return this.leverY > 0.3;
@@ -167,7 +150,7 @@ export class InputManager {
     return this.leverY > 0.5;
   }
 
-  // 確定ボタンが押された瞬間（アケコン: Aボタン, キーボード: Enter / Space）
+  // 確定ボタンが押された瞬間（アケコン: Aボタン, キーボード: Enter）
   isConfirmJustPressed(): boolean {
     return this.confirm && !this.prevConfirm;
   }
@@ -185,10 +168,6 @@ export class InputManager {
   /** このフレームで起きたメニュー移動(上・左 = -1 / 下・右 = +1)。 */
   takeMenuNav(): number[] {
     return this.frameNav;
-  }
-
-  getLeverX(): number {
-    return this.leverX;
   }
 
   isGamepadConnected(): boolean {

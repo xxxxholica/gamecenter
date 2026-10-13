@@ -1,5 +1,5 @@
 import { GameEngine } from './game/GameEngine';
-import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
+import { installHomeReturn } from '../../../shared/homeReturn';
 
 installHomeReturn();
 

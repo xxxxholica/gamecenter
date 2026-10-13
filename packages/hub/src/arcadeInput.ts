@@ -126,20 +126,20 @@ export function createArcadeInput(handlers: ArcadeInputHandlers, isSuspended: ()
 
   // ===== キーボード(キーボードエンコーダ経由のアケコンを含む) =====
   const KEY_DIRECTIONS: Record<string, Direction> = {
-    ArrowLeft: { dx: -1, dy: 0 },
-    ArrowRight: { dx: 1, dy: 0 },
-    ArrowUp: { dx: 0, dy: -1 },
-    ArrowDown: { dx: 0, dy: 1 },
+    KeyA: { dx: -1, dy: 0 },
+    KeyD: { dx: 1, dy: 0 },
+    KeyW: { dx: 0, dy: -1 },
+    KeyS: { dx: 0, dy: 1 },
   };
-  const CONFIRM_KEYS = ['Enter', 'Space'];
+  const CONFIRM_KEYS = ['Enter'];
 
-  // リンクやボタンにフォーカスがあるときの Enter/Space はブラウザ標準の動作に任せる
+  // リンクやボタンにフォーカスがあるときの Enter はブラウザ標準の動作に任せる
   const isInteractiveTarget = (target: EventTarget | null) =>
     target instanceof HTMLElement && target.closest('a, button') !== null;
 
   window.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
-    const dir = KEY_DIRECTIONS[e.key];
+    const dir = KEY_DIRECTIONS[e.code];
     if (dir) {
       e.preventDefault();
       handlers.onMove(dir.dx, dir.dy);

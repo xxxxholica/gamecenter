@@ -58,6 +58,24 @@ class SoundEngine {
     osc2.stop(now + 0.5);
   }
 
+  // ハンコを押す音: 「ポン」と沈む低い音に、紙に当たる短いノイズを重ねる
+  public playStamp(): void {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(70, now + 0.12);
+    gain.gain.setValueAtTime(0.7, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.25);
+    this.playNoise(0.06, 0.35);
+  }
+
   // Game Start Jingle
   public playStartJingle(): void {
     if (!this.ctx || !this.masterGain) return;
@@ -181,49 +199,6 @@ class SoundEngine {
     this.playNoise(0.15, 0.35);
   }
 
-  // Formation shift sound
-  public playFormationShift(): void {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(300, now);
-    osc.frequency.exponentialRampToValueAtTime(900, now + 0.12);
-
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(now);
-    osc.stop(now + 0.15);
-  }
-
-  // Boss Warning Siren
-  public playBossAlarm(): void {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(400, now);
-    osc.frequency.linearRampToValueAtTime(800, now + 0.25);
-    osc.frequency.linearRampToValueAtTime(400, now + 0.5);
-
-    gain.gain.setValueAtTime(0.3, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(now);
-    osc.stop(now + 0.55);
-  }
-
   // Rocket Launch (Shoot Student at Boss / Flight Boost)
   public playShootRocket(): void {
     if (!this.ctx || !this.masterGain) return;
@@ -280,23 +255,6 @@ class SoundEngine {
     this.playNoise(0.3, 0.14);
   }
 
-  // Body Bounce Sound
-  public playBounce(): void {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(130, now);
-    osc.frequency.exponentialRampToValueAtTime(45, now + 0.12);
-    gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.12);
-  }
-
   // Multiplier Line Crossing Ping
   public playMultiplierDing(pitchFreq: number = 880): void {
     if (!this.ctx || !this.masterGain) return;
@@ -311,29 +269,6 @@ class SoundEngine {
     gain.connect(this.masterGain);
     osc.start(now);
     osc.stop(now + 0.2);
-  }
-
-  // Boss Wall Impact
-  public playWallImpact(): void {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(120, now);
-    osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
-
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(now);
-    osc.stop(now + 0.18);
-
-    this.playNoise(0.12, 0.4);
   }
 
   // Boss Wall Destroyed (Epic Explosion)
@@ -466,46 +401,6 @@ class SoundEngine {
 
       this.bgmStep++;
     }, 91);
-  }
-
-  // Boss Battle Fast Urgency BGM
-  public startBossBgm(): void {
-    this.stopBgm();
-    if (!this.ctx || !this.masterGain) return;
-
-    this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.setValueAtTime(0.28, this.ctx.currentTime);
-    this.bgmGain.connect(this.masterGain);
-
-    this.bgmStep = 0;
-    // 170 BPM (16th notes = ~88ms) intense D-minor alarm bass
-    const bossFreqs = [146.83, 155.56, 146.83, 174.61, 146.83, 196.00, 174.61, 155.56];
-
-    this.bgmInterval = window.setInterval(() => {
-      if (!this.ctx || !this.bgmGain) return;
-      const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-
-      const note = bossFreqs[this.bgmStep % bossFreqs.length];
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(note, t);
-
-      g.gain.setValueAtTime(0.35, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-
-      osc.connect(g);
-      g.connect(this.bgmGain);
-
-      osc.start(t);
-      osc.stop(t + 0.08);
-
-      if (this.bgmStep % 2 === 0) {
-        this.playHiHat(t);
-      }
-
-      this.bgmStep++;
-    }, 88);
   }
 
   private playHiHat(t: number): void {

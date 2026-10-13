@@ -8,11 +8,9 @@ export interface StageResult {
   judgmentText: string; // "大惨事" or "成功"
 }
 
-/** 種目の始まる前に見せる説明。見出し1行(何をする種目か)・してよいこと・してはいけないことを伝える */
+/** 種目の始まる前に大きく出す一言 */
 export interface StageBriefing {
-  headline: string; // 種目名と操作を1フレーズにまとめた見出し。例: 目覚まし時計を止める
-  ok: string; // 何をすればよいか
-  ng: string; // 何をすると駄目か(大惨事・失敗)
+  headline: string; // 何をする種目かを一言で。例: 溢れる前に止めろ
 }
 
 export interface Stage {
@@ -22,7 +20,7 @@ export interface Stage {
   mission: string; // e.g. "泡を溢れさせずにフチ極限まで注げ！"
   instruction: string; // e.g. "ENTER長押しで注ぐ・離して停止"
   limitLabel: string; // e.g. "液面・泡限界"
-  briefing: StageBriefing; // 開始前の説明カード
+  briefing: StageBriefing; // 開始前に大きく出す一言
   init(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
   start(): void;
   update(dt: number, input: InputManager): StageResult | null;

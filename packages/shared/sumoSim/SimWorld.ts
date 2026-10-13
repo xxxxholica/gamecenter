@@ -93,7 +93,6 @@ export class SimWorld {
   /** 強い当たりの一瞬、動きを止める残り(秒) */
   public hitStopRemaining = 0;
 
-  private readonly C: Cannon;
   private readonly world: CANNONNS.World;
   private readonly opts: SimOptions;
   private nokottaTimer: number | null = null;
@@ -102,7 +101,6 @@ export class SimWorld {
   private readonly fell = new Set<SimFighter>();
 
   constructor(C: Cannon, opts: SimOptions) {
-    this.C = C;
     this.opts = opts;
     this.wins = new Array(opts.count).fill(0);
 

@@ -1,4 +1,4 @@
-import { setText, setWidth, setHeight } from '../../../../shared/hudDom';
+import { setText, setHeight } from '../../../../shared/hudDom';
 import { uiLayerHtml } from './uiTemplate';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 export type GameMode = 'pve' | 'pvp';
@@ -287,17 +287,6 @@ export class UIManager {
     if (badge) badge.textContent = text;
   }
 
-  public openHowToPlay() {
-    this.howToPlayModalEl.classList.add('show');
-    // 画面が低いときは全体が収まるように縮める(アケコンではスクロールできないため)
-    const content = this.howToPlayModalEl.querySelector<HTMLElement>('.guide-modal-content');
-    if (content) {
-      content.style.transform = '';
-      const scale = Math.min(1, (window.innerHeight - 24) / content.offsetHeight);
-      content.style.transform = scale < 1 ? `scale(${scale})` : '';
-    }
-  }
-
   public closeHowToPlay() {
     if (!this.isHowToPlayOpen()) return;
     this.howToPlayModalEl.classList.remove('show');
@@ -429,11 +418,4 @@ export class UIManager {
     }
   }
 
-  public hideBanner() {
-    if (this.bannerTimer) {
-      clearTimeout(this.bannerTimer);
-      this.bannerTimer = null;
-    }
-    this.bannerEl.classList.remove('show');
-  }
 }

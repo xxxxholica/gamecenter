@@ -34,13 +34,11 @@ installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
 watchResultAutoReturn(['result-btn-title']);
 
-// games/<slug>/ 配下からハブ(ルート)へは2階層上
-const HUB_URL = '../../';
 const ACCENT = '#e63946';
 const isPreviewMode = () => typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
 
 // 画面左下の共通ボタンガイド(場面ごとに差し替える)
-const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 const guideModeSelect = () => mountArcadeGuide({
   moveLabel: 'モード選択',
   buttons: [
@@ -52,8 +50,8 @@ const guideModeSelect = () => mountArcadeGuide({
 const guideBattle = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
-    { indices: [0, 2], label: '打撃　ちょん押し=張り手　長押し=ぶちかまし', keyLabel: 'Space / J' },
-    { indices: [1, 3], label: 'つかみ', keyLabel: 'K / E' },
+    { indices: [0, 2], label: '打撃', keyLabel: 'Space' },
+    { indices: [1, 3], label: 'つかみ', keyLabel: 'K' },
   ],
   showHomeHint: true,
   backLabel: 'ポーズ',
@@ -155,12 +153,6 @@ class SumoGame {
     isPlaying: () => this.gameState === 'battle' && !!this.cpu && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
     onRestart: () => this.startCpuBattle(),
   });
-  private readonly pauseOnline = new ArcadePause({
-    accent: ACCENT,
-    isPlaying: () => this.gameState === 'battle' && !!this.match && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
-    exitLabel: '退出',
-    onExit: () => { this.leaveOnline(); returnToHub(); },
-  });
   private onlineWired = false;
   private onlineYou = 0;
   private startingFlow = false;
@@ -168,6 +160,13 @@ class SumoGame {
   private noticeTimer: number | null = null;
 
   constructor() {
+    // オンライン対戦用のポーズ(相手がいるので止めず、退出だけできる)。作るだけで、キー入力を自分で受ける
+    new ArcadePause({
+      accent: ACCENT,
+      isPlaying: () => this.gameState === 'battle' && !!this.match && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
+      exitLabel: '退出',
+      onExit: () => { this.leaveOnline(); returnToHub(); },
+    });
     // 1. Three.js シーン初期化（明るくクリアなアリーナ空間）
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x191b22);
@@ -253,7 +252,7 @@ class SumoGame {
     // リサイズ監視
     window.addEventListener('resize', this.onWindowResize.bind(this));
 
-    // リザルトのメニュー移動(WASD / 矢印)は押した瞬間をためておく
+    // リザルトのメニュー移動(WASD)は押した瞬間をためておく
     window.addEventListener('keydown', (e) => {
       if (this.uiManager.isVictoryModalOpen() && this.menuNav.pushKey(e)) e.preventDefault();
     });
@@ -553,7 +552,7 @@ class SumoGame {
     }
     if (!this.isInputArmed()) return;
 
-    if (padConfirm || this.inputManager.isKeyTriggered('Enter', 'Space')) {
+    if (padConfirm || this.inputManager.isKeyTriggered('Enter')) {
       this.uiManager.confirmCurrentResultSelection();
     } else if (padExit) {
       returnToHub();

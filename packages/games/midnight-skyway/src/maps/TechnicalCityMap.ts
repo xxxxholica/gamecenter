@@ -39,7 +39,6 @@ export interface TechnicalCityConfig {
   carLift?: number;
   /** How much the road gradient works on the car (see StreamedCityMap.gradeEffect). */
   gradeEffect?: number;
-  showAltitude?: boolean;
   girderDepth?: number;
   pillarSpacing?: number;
   /** Lit windows of the buildings at night (see StreamedCityMap.nightLook): colour, share lit, window cell size in metres. */
@@ -55,7 +54,6 @@ export interface TechnicalCityConfig {
 export abstract class TechnicalCityMap extends StreamedCityMap {
   public readonly metadata: MapMetadata;
   public override readonly competitive = true;
-  public override readonly showAltitude: boolean;
 
   public readonly startPosition: THREE.Vector3;
   public readonly startRotationY: number;
@@ -64,6 +62,8 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
   protected readonly road: THREE.Vector3[];
   private readonly support: number[];
   private readonly roadWidth: number;
+
+  public override getRoadWidth(): number | null { return this.roadWidth; }
   private goal: GoalHologram | null = null;
   private lights: StreetLights | null = null;
   private streets: THREE.Group | null = null;
@@ -75,7 +75,6 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
     this.metadata = cfg.metadata;
     this.modelBase = cfg.modelBase;
     this.roadWidth = cfg.course.roadWidth ?? 13.5;
-    this.showAltitude = cfg.showAltitude ?? false;
     this.hasFarTier = true;
     this.loadRadius = cfg.loadRadius;
     this.unloadRadius = cfg.unloadRadius;

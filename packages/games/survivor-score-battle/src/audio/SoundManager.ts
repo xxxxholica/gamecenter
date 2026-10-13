@@ -88,13 +88,6 @@ export class SoundManager {
     }
   }
 
-  public setMasterVolume(vol: number) {
-    this.masterVol = Math.max(0, Math.min(1, vol));
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.masterVol, this.ctx.currentTime);
-    }
-  }
-
   public setBgmVolume(vol: number) {
     this.bgmVol = Math.max(0, Math.min(1, vol));
     if (this.bgmGain && this.ctx) {

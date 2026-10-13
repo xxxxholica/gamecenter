@@ -156,69 +156,6 @@ html, body {
   display: none !important;
 }
 
-.title-screen-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 32px;
-}
-
-.title-sup-tag {
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 8px;
-  color: #00f0ff;
-  text-shadow: 0 0 12px #00f0ff;
-}
-
-.title-main-logo {
-  font-size: 72px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 8px;
-  line-height: 1.0;
-  background: linear-gradient(180deg, #ffffff 0%, #d0e8ff 35%, #00bbff 75%, #0044aa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 30px rgba(0, 187, 255, 0.6)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.9));
-  transform: skewX(-8deg);
-}
-
-.title-sub-logo {
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: 10px;
-  color: #ffcc00;
-  text-shadow: 0 0 20px #ffaa00;
-  margin-top: 6px;
-  transform: skewX(-8deg);
-}
-
-.title-prompt {
-  margin-top: 16px;
-}
-
-.prompt-text {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  color: #ffffff;
-  text-shadow: 0 0 18px #00f0ff, 0 0 30px #00f0ff;
-  animation: promptBlink 0.9s infinite alternate ease-in-out;
-}
-
-@keyframes promptBlink {
-  from { opacity: 0.35; transform: scale(0.97); }
-  to { opacity: 1.0; transform: scale(1.03); }
-}
-
-.title-footer-compact {
-  font-size: 11px;
-  letter-spacing: 2px;
-  color: #64748b;
-}
-
 /* =========================================================
    2. CAR SELECT SCREEN (SHOWCASE LAYOUT)
    ========================================================= */
@@ -230,28 +167,7 @@ html, body {
 }
 
 #screen-car-select .arcade-title-bar,
-#screen-car-select .car-select-left-column,
 #screen-car-select .arcade-action-bar {
-  pointer-events: auto;
-}
-
-.car-select-content-arcade {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 1080px;
-  width: 100%;
-  margin: auto 0;
-  position: relative;
-  pointer-events: none;
-}
-
-.car-select-left-column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 300px;
-  z-index: 10;
   pointer-events: auto;
 }
 
@@ -276,32 +192,6 @@ html, body {
   outline: none;
 }
 
-.car-card-focus-bar {
-  width: 4px;
-  height: 28px;
-  background: #00f0ff;
-  border-radius: 2px;
-  opacity: 0;
-  transform: scaleY(0.4);
-  transition: all 0.15s ease-out;
-  box-shadow: 0 0 10px #00f0ff;
-}
-
-.car-card-arcade.active .car-card-focus-bar {
-  opacity: 1;
-  transform: scaleY(1.0);
-  animation: focusBarPulse 0.8s infinite alternate ease-in-out;
-}
-
-@keyframes focusBarPulse {
-  from { opacity: 0.7; box-shadow: 0 0 6px #00f0ff; }
-  to { opacity: 1; box-shadow: 0 0 16px #00f0ff; }
-}
-
-.car-card-inner {
-  flex: 1;
-}
-
 .car-card-arcade:hover {
   background: rgba(20, 30, 48, 0.92);
   border-color: #48658b;
@@ -313,28 +203,6 @@ html, body {
   border-color: #00f0ff;
   box-shadow: 0 0 25px rgba(0, 240, 255, 0.45);
   transform: skewX(-6deg) translateX(8px);
-}
-
-.car-badge-arcade {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: #00f0ff;
-}
-
-.car-name-arcade {
-  font-size: 20px;
-  font-weight: 900;
-  font-style: italic;
-  color: #ffffff;
-  margin: 1px 0 6px 0;
-}
-
-/* Center Spacer so 3D car is 100% visible */
-.car-center-showcase-spacer {
-  flex: 1;
-  min-width: 240px;
-  pointer-events: none;
 }
 
 /* Segmented Gauges */
@@ -384,44 +252,6 @@ html, body {
 .g-blocks span.on.red {
   background: #ff3344;
   box-shadow: 0 0 7px #ff3344;
-}
-
-.g-val {
-  font-size: 10px;
-  font-weight: 800;
-  color: #a0aec0;
-  font-family: ui-monospace, monospace;
-}
-
-/* Single Button Color Control Panel */
-.color-change-panel-arcade {
-  background: rgba(12, 18, 28, 0.85);
-  border: 1px solid rgba(0, 240, 255, 0.35);
-  border-radius: 4px;
-  padding: 10px 14px;
-  transform: skewX(-6deg);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-}
-
-.color-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.arcade-sub-lbl {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #ffaa00;
-}
-
-.color-count-tag {
-  font-size: 10px;
-  font-weight: 800;
-  color: #00f0ff;
-  font-family: ui-monospace, monospace;
 }
 
 .arcade-color-cycle-btn {
@@ -474,28 +304,6 @@ html, body {
   font-weight: 800;
   color: #00f0ff;
   letter-spacing: 0.5px;
-}
-
-.color-dots-bar {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-top: 8px;
-}
-
-.color-dot-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.color-dot-indicator.active {
-  background: #00f0ff;
-  box-shadow: 0 0 8px #00f0ff;
-  transform: scale(1.3);
 }
 
 /* =========================================================
@@ -606,6 +414,11 @@ html, body {
    ========================================================= */
 
 #drive-hud-container {
+  --hud-accent: #8ec9dc;
+  --hud-warn: #e2b05e;
+  --hud-danger: #d8605f;
+  --hud-mono: ui-monospace, Menlo, Consolas, monospace;
+  --hud-sans: Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -615,48 +428,80 @@ html, body {
   pointer-events: auto;
 }
 
-/* Top Left: Transparent Minimap (No Background) */
+/* Top Left: Minimap — 四隅のかぎ括弧(速いほど明るい)と、淡い背景 */
 .hud-minimap-arcade {
+  --b: rgba(142, 201, 220, calc(0.4 + var(--fx-speed, 0) * 0.55));
   position: absolute;
   top: 18px;
   left: 20px;
-  background: transparent;
-  border: none;
   padding: 0;
   pointer-events: none;
+  background:
+    linear-gradient(var(--b), var(--b)) top left / 26px 2px no-repeat,
+    linear-gradient(var(--b), var(--b)) top left / 2px 26px no-repeat,
+    linear-gradient(var(--b), var(--b)) top right / 26px 2px no-repeat,
+    linear-gradient(var(--b), var(--b)) top right / 2px 26px no-repeat,
+    linear-gradient(var(--b), var(--b)) bottom left / 26px 2px no-repeat,
+    linear-gradient(var(--b), var(--b)) bottom left / 2px 26px no-repeat,
+    linear-gradient(var(--b), var(--b)) bottom right / 26px 2px no-repeat,
+    linear-gradient(var(--b), var(--b)) bottom right / 2px 26px no-repeat,
+    radial-gradient(circle at center, rgba(5, 9, 20, 0.5), rgba(5, 9, 20, 0.12) 85%);
 }
 
 #minimap-canvas {
   display: block;
   background: transparent;
   border: none;
+  /* 縁へ向かってなだらかに消す(遠くの道を、はっきり見せすぎない) */
+  -webkit-mask-image: radial-gradient(ellipse at 50% 70%, #000 52%, transparent 98%);
+  mask-image: radial-gradient(ellipse at 50% 70%, #000 52%, transparent 98%);
 }
 
-/* Top Center: Pure Digital Lap Timer (where TIME LEFT originally was, no LAP or BEST label) */
+/* Under the minimap: Lap Timer — 枠なしの大きな数字と、速度で明るくなる下線 */
 .hud-timer-arcade {
   position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%) skewX(-8deg);
+  top: 296px;
+  left: 20px;
+  width: 270px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 24px;
-  background: linear-gradient(135deg, rgba(8, 14, 24, 0.85) 0%, rgba(14, 22, 36, 0.92) 100%);
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  border-radius: 4px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 240, 255, 0.25);
+  flex-direction: column;
+  align-items: stretch;
   pointer-events: none;
   z-index: 30;
 }
+.hud-timer-row { position: relative; display: flex; align-items: center; gap: 12px; padding-bottom: 8px; }
+.hud-timer-row::after {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--hud-accent) 0%, var(--hud-accent) 70%, transparent);
+  box-shadow: 0 0 12px var(--hud-accent);
+  opacity: calc(0.3 + var(--fx-speed, 0) * 0.7);
+  transform-origin: left;
+  transform: scaleX(calc(0.55 + var(--fx-speed, 0) * 0.45));
+}
+
+.hud-timer-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  color: var(--hud-accent);
+  filter: drop-shadow(0 0 calc(4px + var(--fx-speed, 0) * 8px) rgba(142, 201, 220, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
 
 .hud-time-main {
-  font-size: 34px;
+  font-size: 36px;
   font-weight: 900;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-style: italic;
+  font-family: var(--hud-mono);
   color: #ffffff;
-  letter-spacing: 2px;
-  text-shadow: 0 0 14px rgba(0, 240, 255, 0.75);
+  letter-spacing: 3px;
+  text-align: left;
+  text-shadow: 0 0 calc(10px + var(--fx-speed, 0) * 16px) rgba(142, 201, 220, 0.8), 0 3px 10px rgba(0, 0, 0, 0.85);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -673,111 +518,66 @@ html, body {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.8);
   pointer-events: none;
   z-index: 20;
-  max-width: 650px;
+  white-space: nowrap;
   text-align: right;
   line-height: 1.4;
 }
 
-/* Sector Banner Anchor (Floats directly underneath the top-center lap timer) */
-.hud-sector-banner-anchor {
+/* Bottom: 1/4 円の速度メーター(隅に数字とギア)、その下にドリフトとブーストの残量 */
+.hud-band {
   position: absolute;
-  top: 72px;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-  text-align: center;
-  z-index: 100;
-}
-
-.hud-sector-banner {
-  padding: 4px 12px;
-  font-size: 13px;
-  font-weight: 900;
-  border-radius: 2px;
-  display: inline-block;
-  transform: skewX(-10deg);
-}
-
-.sector-fast {
-  background: #00ff66;
-  color: #05070c;
-  box-shadow: 0 0 12px rgba(0, 255, 102, 0.7);
-}
-
-.sector-slow {
-  background: #ff0044;
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(255, 0, 68, 0.7);
-}
-
-/* Bottom Right: Large 1/4 Circle (Quadrant) Floating Speedometer (No box, no gear) */
-.hud-speedo-arcade {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  transform: none;
+  right: 28px;
+  bottom: 24px;
+  width: min(250px, 24vw);
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   pointer-events: none;
   z-index: 20;
 }
-
-/* 1/4 Circle Meter Container (Prominent Arcade Scale) */
-.hybrid-meter-container {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.meter-dial-svg {
-  width: 220px;
-  height: 220px;
-  overflow: visible;
-  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.95));
-}
-
-.meter-dial-svg text {
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 1.0);
-  user-select: none;
-}
-
-/* Compact Digital Speed Readout (inside 1/4 circle corner) */
-.speedo-digital-quarter {
+.speed-gauge { position: relative; aspect-ratio: 1; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.8)); }
+.sg-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.sg-seg { fill: none; stroke-width: var(--sg-w, 15px); stroke-linecap: butt; stroke: var(--hud-accent); opacity: 0.18; }
+.sg-seg.lv1 { stroke: var(--hud-warn); }
+.sg-seg.lv2 { stroke: var(--hud-danger); }
+.sg-seg.on { opacity: 1; }
+.sg-seg.peak { stroke: #fff; opacity: 0.9; }
+.sg-needle polygon { fill: #fff; filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7)); }
+.sg-label { fill: #9fb2d0; font: 900 9px var(--hud-mono); text-anchor: middle; dominant-baseline: central; text-shadow: 0 1px 3px #000; }
+.sg-label.red { fill: var(--hud-danger); }
+.sg-readout {
   position: absolute;
-  right: 24px;
-  bottom: 22px;
+  right: 2%;
+  bottom: 0;
   display: flex;
-  align-items: baseline;
-  gap: 3px;
-  pointer-events: none;
-  z-index: 2;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
 }
-
 .speedo-num {
-  font-size: 54px;
+  display: inline-block;
+  transform-origin: right bottom;
+  font-size: clamp(56px, 5.4vw, 86px);
   font-weight: 900;
   font-style: italic;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  color: #00f0ff;
-  line-height: 0.88;
-  text-shadow: 0 0 18px rgba(0, 240, 255, 0.8), 0 2px 8px rgba(0, 0, 0, 0.9);
-  letter-spacing: -2px;
+  font-family: var(--hud-mono);
+  color: var(--hud-accent);
+  letter-spacing: -3px;
+  text-shadow: 0 0 16px rgba(142, 201, 220, 0.7), 0 2px 8px rgba(0, 0, 0, 0.9);
 }
-
-.speedo-unit {
-  font-size: 13px;
-  font-weight: 900;
-  color: #8ba0c0;
-  letter-spacing: 0.8px;
+.sg-unit {
+  margin-top: 4px;
+  font: 900 13px var(--hud-sans);
+  letter-spacing: 0.2em;
+  color: #9fb2d0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
 }
+/* 160km/h〜: レッドゾーン。赤の目盛りが点滅する */
+.hud-band.redline .sg-seg.lv2.on { animation: hudRedline 0.18s steps(2) infinite; }
+@keyframes hudRedline { 50% { filter: brightness(1.7) saturate(1.3); } }
+/* ブースト中: 数字が白く光る */
+.hud-band.boosting .speedo-num { color: #fff !important; text-shadow: 0 0 22px var(--hud-accent), 0 0 46px rgba(142, 201, 220, 0.85), 0 2px 8px rgba(0, 0, 0, 0.9) !important; }
 
 /* Center Countdown */
 .hud-countdown {
@@ -789,15 +589,15 @@ html, body {
   font-weight: 900;
   font-style: italic;
   font-family: ui-monospace, monospace;
-  color: #ffff00;
-  text-shadow: 0 0 35px rgba(255, 255, 0, 0.95), 0 4px 16px #000;
+  color: #e8dcae;
+  text-shadow: 0 0 35px rgba(232, 220, 174, 0.95), 0 4px 16px #000;
   pointer-events: none;
   animation: countdownPulse 0.5s ease-out;
 }
 
 .hud-countdown.go {
-  color: #00ff66;
-  text-shadow: 0 0 45px rgba(0, 255, 102, 1.0), 0 4px 16px #000;
+  color: #8fd3a6;
+  text-shadow: 0 0 45px rgba(143, 211, 166, 1.0), 0 4px 16px #000;
   font-size: 130px;
 }
 
@@ -825,7 +625,7 @@ html, body {
 
 .hud-arcade-modal-box {
   background: #0d121c;
-  border: 2px solid #00f0ff;
+  border: 2px solid #8ec9dc;
   border-radius: 4px;
   padding: 28px 40px;
   text-align: center;
@@ -834,20 +634,20 @@ html, body {
   overflow-y: auto;
   box-sizing: border-box;
   transform: skewX(-4deg);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 240, 255, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(142, 201, 220, 0.35);
 }
 
 .arcade-modal-title {
   font-size: 28px;
   font-weight: 900;
   letter-spacing: 3px;
-  color: #00f0ff;
+  color: #8ec9dc;
   margin-bottom: 12px;
 }
 
 .arcade-modal-title.gold {
-  color: #ffcc00;
-  text-shadow: 0 0 20px rgba(255, 204, 0, 0.6);
+  color: #e2b05e;
+  text-shadow: 0 0 20px rgba(226, 176, 94, 0.6);
   font-size: 34px;
 }
 
@@ -910,137 +710,148 @@ html, body {
 
 .arcade-modal-buttons button:hover, .hud-arcade-result-buttons button:hover {
   background: #25354f;
-  border-color: #00f0ff;
+  border-color: #8ec9dc;
 }
 
 .arcade-btn-primary {
-  background: linear-gradient(135deg, #00f0ff 0%, #0088cc 100%) !important;
+  background: linear-gradient(135deg, #8ec9dc 0%, #0088cc 100%) !important;
   color: #05070c !important;
   border: none !important;
-  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 15px rgba(142, 201, 220, 0.5);
 }
 
 .arcade-btn-primary:hover {
   background: linear-gradient(135deg, #33f5ff 0%, #0099ee 100%) !important;
-  box-shadow: 0 0 25px rgba(0, 240, 255, 0.8);
+  box-shadow: 0 0 25px rgba(142, 201, 220, 0.8);
 }
 
 /* =========================================================
    6. STAGE LOADING SCREEN
    ========================================================= */
 
+/* ロード画面のステージ名用(ステージ名の文字だけのサブセット。ライセンスは src/fonts/README.txt) */
+@font-face {
+  font-family: 'Dela Gothic One';
+  src: url('./fonts/DelaGothicOne-Stage.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
 #screen-stage-loading {
-  justify-content: center;
+  /* 背景の車と街(ガレージの景色)を隠さない。マッチング待機と同じく、下にカードを出す */
+  --ld-rgb: 0, 240, 255;            /* メーターの値で、シアン → 黄 → 赤に変わる(JS) */
+  --ld-lv: 0;
+  justify-content: flex-end;
   align-items: center;
-  background: radial-gradient(circle at center, rgba(14, 22, 36, 0.94) 0%, rgba(5, 7, 12, 0.98) 100%);
+  /* 速くなるほど、画面の縁が赤く光る。下は、文字とメーターが背景に溶けないよう、枠ではなく暗いぼかしを敷く */
+  background:
+    linear-gradient(to top, rgba(2, 4, 10, 0.88) 0%, rgba(2, 4, 10, 0.62) 20%, rgba(2, 4, 10, 0.2) 36%, transparent 48%),
+    radial-gradient(ellipse at center, transparent 52%, rgba(var(--ld-rgb), calc(var(--ld-lv) * var(--ld-lv) * 0.42)) 100%);
+  pointer-events: none;
   z-index: 60;
 }
 
 .stage-loading-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: 100%;
-  max-width: 500px;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: min(900px, 94vw);
+  margin-bottom: 5vh;
+  padding: 0 26px;
   text-align: center;
-  gap: 16px;
+  gap: 12px;
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
 }
-
-.stage-loading-badge {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 4px;
-  color: #00f0ff;
-  background: rgba(0, 240, 255, 0.12);
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  padding: 4px 14px;
-  border-radius: 2px;
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
-}
+#screen-stage-loading.leaving .stage-loading-wrap { opacity: 0; transform: translateY(14px); }
+#screen-stage-loading.redline .stage-loading-wrap { animation: ldRedline 0.18s steps(2) infinite; }
+@keyframes ldRedline { 50% { filter: brightness(1.25) saturate(1.2); } }
 
 .stage-loading-title {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
   text-align: center;
 }
 
-.stage-num-block {
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 4px;
-  color: #00f0ff;
-  text-shadow: 0 0 16px rgba(0, 240, 255, 0.7);
-  text-transform: uppercase;
-}
-
 .stage-name-block {
-  font-size: 32px;
-  font-weight: 900;
-  letter-spacing: 2px;
+  font-family: 'Dela Gothic One', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo UI', sans-serif;
+  font-size: clamp(32px, 6vh, 52px);
+  font-weight: 400;                      /* Dela Gothic One は太さが1種類(太字指定すると擬似太字になる) */
+  letter-spacing: 0.14em;
+  line-height: 1.15;
   color: #ffffff;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+  transform: skewX(-9deg);               /* 走行中のHUDと同じ、前へ倒れた斜体 */
+  /* 黒い縁取りと、メーターと同じ色の光(明るい背景の上でも読める) */
+  -webkit-text-stroke: 6px rgba(0, 0, 0, 0.85);
+  paint-order: stroke fill;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.9), 0 0 18px rgba(var(--ld-rgb), 0.8), 0 0 42px rgba(var(--ld-rgb), calc(0.4 + var(--ld-lv) * 0.5));
+}
+/* ステージ名の下に、メーターの色の斜めの帯 */
+.stage-name-block::after {
+  content: '';
+  display: block;
+  width: 38%;
+  height: 5px;
+  margin: 8px auto 0;
+  background: rgb(var(--ld-rgb));
+  box-shadow: 0 0 14px rgba(var(--ld-rgb), 0.9);
 }
 
-.stage-loading-bar-wrap {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
+/* 進行メーター: 走行中の速度バーと同じ、斜めのセグメントバー(数字・目盛りは出さない) */
+.ld-speed { display: flex; align-items: flex-end; gap: 16px; }
+.ld-meter { flex: 1; min-width: 0; padding: 8px 0 14px; }
+.ld-bar { --sk: -14deg; position: relative; height: clamp(26px, 4.6vh, 40px); transform: skewX(var(--sk)); filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 3px 8px rgba(0, 0, 0, 0.85)); }
+.ld-track, .ld-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #8ec9dc 0%, #8ec9dc 38%, #e2b05e 58%, #ff6a3d 74%, #d8605f 88%);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 19px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 19px);
 }
-
-.stage-loading-bar {
-  width: 100%;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+.ld-track { opacity: 0.4; }
+/* 光らせる: クリップより外側に出る光は切られるので、親(ld-glow)に drop-shadow を掛ける。メーターが進むほど強く・広く光る */
+.ld-glow {
+  position: absolute;
+  inset: 0;
+  filter:
+    drop-shadow(0 0 4px rgba(var(--ld-rgb), 1))
+    drop-shadow(0 0 calc(10px + var(--ld-lv) * 14px) rgba(var(--ld-rgb), 0.95))
+    drop-shadow(0 0 calc(24px + var(--ld-lv) * 30px) rgba(var(--ld-rgb), 0.75));
+  animation: ldGlowPulse 0.9s ease-in-out infinite alternate;
 }
+@keyframes ldGlowPulse { from { opacity: 0.85; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ld-glow { animation: none; } }
+.ld-fill { clip-path: inset(0 100% 0 0); filter: brightness(1.3) saturate(1.2); }
 
-.stage-loading-fill {
-  width: 0%;
-  height: 100%;
-  background: linear-gradient(90deg, #00f0ff 0%, #ffcc00 100%);
-  box-shadow: 0 0 15px #00f0ff;
-  border-radius: 4px;
-  transition: width 0.12s linear;
-}
-
-.stage-loading-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.stage-loading-status {
-  color: #94a3b8;
-  letter-spacing: 1px;
-}
-
-.stage-loading-percent {
-  color: #00f0ff;
-  font-family: ui-monospace, monospace;
+/* ロードから走行シーンへの切り替え: 暗転 → 明転(場面の入れ替えは真っ暗の間に行う) */
+.stage-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  background: #02040a;
+  opacity: 0;
 }
 
 .stage-loading-credit {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 12px;
+  color: #e2e8f0;
   letter-spacing: 0.5px;
   text-align: center;
-  margin-top: 10px;
+  margin-top: 6px;
+  -webkit-text-stroke: 3px rgba(0, 0, 0, 0.8);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 /* アケコンで選択中のメニューボタン(hover と同じ見た目) */
 .arcade-modal-buttons button.pad-focus, .hud-arcade-result-buttons button.pad-focus {
   background: #25354f;
-  border-color: #00f0ff;
-  box-shadow: 0 0 0 2px #00f0ff, 0 0 18px rgba(0, 240, 255, 0.7);
+  border-color: #8ec9dc;
+  box-shadow: 0 0 0 2px #8ec9dc, 0 0 18px rgba(142, 201, 220, 0.7);
 }
 
 /* ---------- Competitive race widgets (time limit, ghost gap, drift / boost) ---------- */
@@ -1061,11 +872,10 @@ html, body {
   gap: 10px;
   padding: 4px 18px;
   background: rgba(8, 12, 20, 0.78);
-  border: 1px solid rgba(0, 240, 255, 0.5);
+  border: 1px solid rgba(142, 201, 220, 0.5);
   transform: skewX(-10deg);
 }
-.hud-remaining-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #ffcc00; }
-.hud-remaining-num { font-size: 34px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(0, 240, 255, 0.7); }
+.hud-remaining-num { font-size: 34px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(142, 201, 220, 0.7); }
 .hud-remaining.low { border-color: #ff0044; }
 .hud-remaining.low .hud-remaining-num { color: #ff4466; animation: hudBlink 0.5s steps(2) infinite; }
 @keyframes hudBlink { 50% { opacity: 0.35; } }
@@ -1074,8 +884,8 @@ html, body {
   font-size: 15px;
   font-weight: 900;
   color: #05070c;
-  background: #00ff66;
-  box-shadow: 0 0 14px rgba(0, 255, 102, 0.8);
+  background: #8fd3a6;
+  box-shadow: 0 0 14px rgba(143, 211, 166, 0.8);
   transform: skewX(-10deg);
   animation: hudPop 0.35s ease-out;
 }
@@ -1084,25 +894,16 @@ html, body {
 .hud-ghost-gap { font-size: 16px; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
 .hud-ghost-gap.ahead { color: #00ff88; }
 .hud-ghost-gap.behind { color: #ff5577; }
-.hud-drift {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 260px;
-  pointer-events: none;
-  z-index: 30;
-}
-.hud-drift-line { font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 8px; }
-.hud-drift-tag { font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #ff0055; text-shadow: 0 0 10px rgba(255, 0, 85, 0.6); transition: all 0.15s ease-out; }
-.hud-drift-tag.ready { color: #00f0ff; text-shadow: 0 0 12px #00f0ff, 0 0 24px rgba(0, 240, 255, 0.85); }
-.hud-drift-chain { color: #ffcc00; font-size: 18px; font-weight: 900; text-shadow: 0 0 10px rgba(255, 204, 0, 0.7); }
-.hud-boost-bar { width: 240px; height: 8px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.25); transform: skewX(-20deg); }
-.hud-boost-fill { height: 100%; width: 0; background: linear-gradient(90deg, #00f0ff, #ffffff); }
-.hud-drift.boosting .hud-boost-fill { box-shadow: 0 0 12px #00f0ff; }
+.hud-drift { position: absolute; inset: 0; pointer-events: none; }
+.sg-boost-rail, .sg-boost-fill { fill: none; stroke-width: 5; stroke-linecap: butt; }
+.sg-boost-rail { stroke: rgba(159, 178, 208, 0.22); }
+.sg-boost-fill { stroke: #e2b05e; }
+.hud-drift.boosting .sg-boost-fill { stroke: #fff; filter: drop-shadow(0 0 6px var(--hud-accent)); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
+.hud-drift-line { min-height: 24px; font: 900 18px var(--hud-sans); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
+.hud-drift-tag { font: 900 13px var(--hud-sans); letter-spacing: 0.3em; color: var(--hud-danger); text-shadow: 0 0 10px rgba(216, 96, 95, 0.6); }
+.hud-drift-tag.ready { color: var(--hud-accent); text-shadow: 0 0 12px var(--hud-accent), 0 0 24px rgba(142, 201, 220, 0.85); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
+.hud-drift-chain { color: var(--hud-warn); font-size: 20px; font-weight: 900; font-style: italic; text-shadow: 0 0 10px rgba(226, 176, 94, 0.7); }
+@keyframes hudBoostPulse { from { filter: brightness(1); } to { filter: brightness(1.7); } }
 
 /* ---------- Result panel: beside the car (winning run), not a full-screen dim ---------- */
 .hud-result-modal.hud-result-side {
@@ -1122,9 +923,9 @@ html, body {
   padding: clamp(10px, 2.5vh, 22px) clamp(14px, 3vw, 30px);
   background: linear-gradient(135deg, rgba(6, 12, 24, 0.66) 0%, rgba(6, 12, 24, 0.36) 100%);
   backdrop-filter: blur(4px);
-  border: 1px solid rgba(0, 240, 255, 0.55);
-  border-left: 5px solid #00f0ff;
-  box-shadow: 0 0 26px rgba(0, 240, 255, 0.28);
+  border: 1px solid rgba(142, 201, 220, 0.55);
+  border-left: 5px solid #8ec9dc;
+  box-shadow: 0 0 26px rgba(142, 201, 220, 0.28);
   animation: resultSlideIn 0.5s ease-out;
 }
 @keyframes resultSlideIn {
@@ -1136,97 +937,11 @@ html, body {
 .hud-result-side .stat-line { color: #cbd5e1; }
 .hud-result-side .hud-arcade-result-buttons { flex-direction: column; align-items: stretch; gap: 8px; }
 .hud-result-side .hud-arcade-result-buttons button { background: rgba(24, 34, 51, 0.7); }
-.result-open .hud-minimap-arcade, .result-open .hud-race-top, .result-open .hud-drift, .result-open .hud-combat-panel { opacity: 0; transition: opacity 0.3s; }
-
-/* ---------- Combat & Weapons HUD Panel ---------- */
-.hud-combat-panel {
-  position: absolute;
-  top: 76px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  pointer-events: none;
-  z-index: 35;
-}
-.hud-hp-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 16px;
-  background: rgba(10, 16, 26, 0.85);
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  border-radius: 4px;
-  transform: skewX(-10deg);
-  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
-}
-.hud-hp-tag {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #00f0ff;
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
-}
-.hud-hp-blocks {
-  display: flex;
-  gap: 5px;
-}
-.hp-block {
-  width: 24px;
-  height: 9px;
-  border-radius: 2px;
-  transition: all 0.2s ease;
-}
-.hp-block.full {
-  background: #00f0ff;
-  box-shadow: 0 0 10px #00f0ff;
-}
-.hp-block.empty {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-.hud-lockon-wrap {
-  display: flex;
-  align-items: center;
-  padding: 3px 14px;
-  background: rgba(20, 10, 12, 0.88);
-  border: 1px solid rgba(255, 50, 70, 0.6);
-  border-radius: 4px;
-  transform: skewX(-8deg);
-  animation: lockonGlow 0.8s alternate infinite;
-}
-@keyframes lockonGlow {
-  0% { box-shadow: 0 0 6px rgba(255, 50, 70, 0.2); }
-  100% { box-shadow: 0 0 16px rgba(255, 50, 70, 0.6); }
-}
-.hud-lockon-indicator {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  color: #ff9999;
-}
-.hud-lockon-indicator.locked {
-  color: #ff3344;
-  text-shadow: 0 0 8px rgba(255, 50, 70, 0.9);
-  animation: lockBlink 0.35s steps(2) infinite;
-}
-.hud-lockon-indicator.warning {
-  color: #ffaa00;
-  text-shadow: 0 0 8px rgba(255, 170, 0, 0.8);
-}
-.hud-lockon-indicator.threat {
-  color: #ff1133;
-  text-shadow: 0 0 12px rgba(255, 0, 50, 1.0);
-  background: rgba(255, 0, 40, 0.25);
-  padding: 2px 8px;
-  border-radius: 4px;
-  animation: lockBlink 0.2s steps(2) infinite;
-}
-@keyframes lockBlink {
-  50% { opacity: 0.4; }
-}
+.result-open .hud-minimap-arcade,
+.result-open .hud-timer-arcade,
+.result-open .hud-race-top,
+.result-open .hud-band,
+.result-open .hud-edge { opacity: 0; transition: opacity 0.3s; }
 
 /* ---------- Car select: machine buttons in a row at the bottom centre, so the whole car stays visible ---------- */
 #screen-car-select .car-select-bottom { pointer-events: auto; }
@@ -1281,13 +996,6 @@ html, body {
   position: relative;
   display: flex;
   flex-direction: column;
-}
-.car-num-badge {
-  font-size: 0.85em;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #ff0055;
-  text-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
 }
 .car-card-title-arcade {
   font-size: 1.55em;
@@ -1440,12 +1148,22 @@ html, body {
   font-style: italic;
   color: #ffffff !important;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
-  line-height: 1.35;
+  line-height: 1.3;
   margin: 2px 0 1px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
+/* 特性の文は2行まで。1行の車も、2行ぶんの高さにそろえて、カードの下端をそろえる */
+.car-spec-arcade .spec-main-digital { font-size: 1.04em; min-height: 2.6em; }
+
+/* オンライン対戦: 武器を積んだ車の特性はグレーにして、武器は使えないと出す */
+.spec-disabled { display: none; font-size: 1.04em; font-weight: 900; line-height: 1.3; min-height: 2.6em; margin: 2px 0 1px 0; color: #aeb6c4; }
+.car-select-online .car-card-arcade.armed .car-spec-arcade { border-left-color: #6b7280; filter: grayscale(1); }
+.car-select-online .car-card-arcade.armed .spec-badge { color: #9aa3b2; background: rgba(154, 163, 178, 0.12); border-color: rgba(154, 163, 178, 0.35); text-shadow: none; }
+.car-select-online .car-card-arcade.armed .spec-main-digital { display: none; }
+.car-select-online .car-card-arcade.armed .spec-disabled { display: block; }
+.car-select-online .car-card-arcade.armed .gauge-row:last-child { opacity: 0.35; filter: grayscale(1); }
 
 /* Neon SVG vector vehicle styling */
 .car-outline .car-wire { fill: none; stroke: #00f0ff; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
@@ -1535,49 +1253,9 @@ html, body {
 #screen-map-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
 #screen-map-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
 
-
-
-/* Altitude readout (courses that climb) */
-.hud-altitude { position: absolute; left: 20px; pointer-events: none; z-index: 30; font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
-.hud-altitude-tag { font-size: 11px; letter-spacing: 2px; color: #00f0ff; }
-.hud-altitude-unit { font-size: 13px; color: #94a3b8; }
-
-/* ---------- Time of day select (day / night): like the other select screens, the machine stays visible ---------- */
-#screen-time-select, #screen-mode-select, #screen-ghost-select {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  pointer-events: none;
-  font-size: clamp(9px, min(1.15vw, 2.1vh), 18px);
-  padding: 1.8em 2.6em;
-}
-#screen-time-select .arcade-title-bar, #screen-mode-select .arcade-title-bar, #screen-ghost-select .arcade-title-bar,
-#screen-time-select .time-cards-container, #screen-mode-select .time-cards-container, #screen-ghost-select .time-cards-container,
-#screen-time-select .arcade-action-bar, #screen-mode-select .arcade-action-bar, #screen-ghost-select .arcade-action-bar { pointer-events: auto; }
-#screen-time-select .arcade-title-main, #screen-mode-select .arcade-title-main, #screen-ghost-select .arcade-title-main { font-size: 1.7em; padding: 0.3em 1.6em; }
-#screen-time-select .arcade-action-bar, #screen-mode-select .arcade-action-bar, #screen-ghost-select .arcade-action-bar { max-width: 82em; margin-bottom: 0; }
-#screen-time-select .arcade-btn-back, #screen-mode-select .arcade-btn-back, #screen-ghost-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
-#screen-time-select .arcade-btn-start, #screen-mode-select .arcade-btn-start, #screen-ghost-select .arcade-btn-start { padding: 0.8em 3em; font-size: 1.4em; }
-.time-cards-container {
-  display: flex;
-  gap: 1.6em;
-  width: 100%;
-  max-width: 58em;
-  margin: auto 0 1.2em 0;
-  justify-content: center;
-}
-/* the cards take their look (dark card, cyan frame and glow when selected) from .map-card-arcade, like the course select */
-.time-card { padding: 1.1em 1.4em; padding-bottom: 1.3em; }
-.time-card-art { height: 9em; display: flex; justify-content: center; align-items: center; margin: 0.3em 0 0.6em; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 3px; }
-.time-card-art svg { height: 82%; width: auto; }
-.time-card.day .time-card-art { background: linear-gradient(160deg, rgba(58, 118, 176, 0.75), rgba(126, 178, 214, 0.65)); }
-.time-card.night .time-card-art { background: linear-gradient(160deg, rgba(4, 8, 24, 0.85), rgba(22, 34, 76, 0.8)); }
-.time-card.active .time-card-art { border-color: rgba(0, 240, 255, 0.45); }
-.time-card-desc { font-size: 1em; line-height: 1.7; color: #aab6c8; margin-top: 0.4em; }
-
-/* ---------- The choice cards of other select screens (course / time of day) share one size ---------- */
-#screen-car-select, #screen-map-select, #screen-time-select, #screen-mode-select, #screen-ghost-select { --choice-w: 24em; --choice-h: 24em; }
-#screen-map-select .map-card-arcade,
-.time-card {
+/* ---------- The choice cards of the course / machine select share one size ---------- */
+#screen-car-select, #screen-map-select { --choice-w: 24em; --choice-h: 24em; }
+#screen-map-select .map-card-arcade {
   flex: 0 1 var(--choice-w);
   width: var(--choice-w);
   max-width: var(--choice-w);
@@ -1586,17 +1264,11 @@ html, body {
   box-sizing: border-box;
 }
 
-.time-card { display: flex; flex-direction: column; }
-.time-card-art { height: 9em; align-items: center; }
-.time-cards-container { max-width: none; gap: 1.4em; }
-
 /* ---------- 戻る / 決定 (レース開始) buttons: one size on every select screen ---------- */
 #screen-car-select .arcade-action-bar .arcade-btn-back,
 #screen-car-select .arcade-action-bar .arcade-btn-go,
 #screen-map-select .arcade-action-bar .arcade-btn-back,
-#screen-map-select .arcade-action-bar .arcade-btn-start,
-#screen-time-select .arcade-action-bar .arcade-btn-back, #screen-mode-select .arcade-action-bar .arcade-btn-back,
-#screen-time-select .arcade-action-bar .arcade-btn-start, #screen-mode-select .arcade-action-bar .arcade-btn-start {
+#screen-map-select .arcade-action-bar .arcade-btn-start {
   box-sizing: border-box;
   width: 13em;
   height: 3.4em;
@@ -1613,71 +1285,46 @@ html, body {
 .map-card-arcade.disabled { opacity: 0.38; filter: grayscale(1); cursor: not-allowed; }
 .map-card-arcade.disabled:hover { transform: skewX(-6deg); box-shadow: none; }     /* 浮き上がらない(カードの傾きは保つ) */
 
-/* ---------- Ghost select: three rank cards (1st / 2nd / 3rd). A rank with no run is greyed out (.disabled, see above) ---------- */
-.ghost-card .time-card-art { background: linear-gradient(160deg, rgba(14, 24, 44, 0.9), rgba(34, 52, 92, 0.8)); }
-.ghost-rank-num { font-size: 5.2em; font-weight: 900; font-style: italic; line-height: 1; color: #fff; text-shadow: 0 0 14px rgba(0, 240, 255, 0.45); }
-.ghost-card[data-rank="1"] .ghost-rank-num { color: #ffd700; text-shadow: 0 0 16px rgba(255, 215, 0, 0.5); }
-.ghost-card[data-rank="2"] .ghost-rank-num { color: #d0e0f0; text-shadow: 0 0 16px rgba(208, 224, 240, 0.45); }
-.ghost-card[data-rank="3"] .ghost-rank-num { color: #cd7f32; text-shadow: 0 0 16px rgba(205, 127, 50, 0.5); }
-.ghost-card.disabled .time-card-art { border-color: rgba(255, 255, 255, 0.05); }
-
 /* =========================================================
    新UI: 選択画面(マシン・コース・時間帯・ゴースト)を、モード選択(共通部品 ModeSelect の arcade 版)と同じ見た目にそろえる
    左上の見出し(小さなラベル + 大きな題字 + 斜めの下線)、少しだけ傾いた角ばったカード、角のないボタン(影つき)。寸法の単位 --u もモード選択と同じ
    ========================================================= */
-#screen-car-select, #screen-map-select, #screen-time-select, #screen-ghost-select { --u: min(0.074vh, 0.0625vw); }
-#screen-car-select .arcade-title-bar, #screen-map-select .arcade-title-bar, #screen-time-select .arcade-title-bar, #screen-ghost-select .arcade-title-bar { align-self: flex-start; margin: 0; transform: none; }
-#screen-car-select .arcade-title-bar::before, #screen-map-select .arcade-title-bar::before, #screen-time-select .arcade-title-bar::before, #screen-ghost-select .arcade-title-bar::before { display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); font-weight: 400; letter-spacing: 0.36em; }
+#screen-car-select, #screen-map-select { --u: min(0.074vh, 0.0625vw); }
+#screen-car-select .arcade-title-bar, #screen-map-select .arcade-title-bar { align-self: flex-start; margin: 0; transform: none; }
+#screen-car-select .arcade-title-bar::before, #screen-map-select .arcade-title-bar::before { display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); font-weight: 400; letter-spacing: 0.36em; }
 #screen-car-select .arcade-title-bar::before { content: 'MACHINE'; }
 #screen-map-select .arcade-title-bar::before { content: 'COURSE'; }
-#screen-time-select .arcade-title-bar::before { content: 'TIME OF DAY'; }
-#screen-ghost-select .arcade-title-bar::before { content: 'GHOST'; }
-#screen-car-select .arcade-title-main, #screen-map-select .arcade-title-main, #screen-time-select .arcade-title-main, #screen-ghost-select .arcade-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em; padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
-#screen-car-select .arcade-title-main::after, #screen-map-select .arcade-title-main::after, #screen-time-select .arcade-title-main::after, #screen-ghost-select .arcade-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: #00f0ff; transform: skewX(-20deg); }
-#screen-car-select .arcade-action-bar, #screen-map-select .arcade-action-bar, #screen-time-select .arcade-action-bar, #screen-ghost-select .arcade-action-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); max-width: none; gap: calc(18 * var(--u)); margin-bottom: 0; }
-#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start, #screen-time-select .arcade-action-bar .arcade-btn-back, #screen-time-select .arcade-action-bar .arcade-btn-go, #screen-time-select .arcade-action-bar .arcade-btn-start, #screen-ghost-select .arcade-action-bar .arcade-btn-back, #screen-ghost-select .arcade-action-bar .arcade-btn-go, #screen-ghost-select .arcade-action-bar .arcade-btn-start { box-sizing: border-box; width: auto; height: auto; min-width: calc(340 * var(--u)); padding: calc(20 * var(--u)) calc(52 * var(--u)); font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; animation: none; }
-#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-time-select .arcade-action-bar .arcade-btn-back, #screen-ghost-select .arcade-action-bar .arcade-btn-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
-#screen-car-select .arcade-action-bar .arcade-btn-back:hover, #screen-map-select .arcade-action-bar .arcade-btn-back:hover, #screen-time-select .arcade-action-bar .arcade-btn-back:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-back:hover { color: #fff; background: #34324a; border-color: #8a85a3; transform: none; }
-#screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start, #screen-time-select .arcade-action-bar .arcade-btn-go, #screen-time-select .arcade-action-bar .arcade-btn-start, #screen-ghost-select .arcade-action-bar .arcade-btn-go, #screen-ghost-select .arcade-action-bar .arcade-btn-start { color: #111; background: #00f0ff; border: 0; box-shadow: 6px 6px #006b73; }
-#screen-car-select .arcade-action-bar .arcade-btn-go:hover, #screen-car-select .arcade-action-bar .arcade-btn-start:hover, #screen-map-select .arcade-action-bar .arcade-btn-go:hover, #screen-map-select .arcade-action-bar .arcade-btn-start:hover, #screen-time-select .arcade-action-bar .arcade-btn-go:hover, #screen-time-select .arcade-action-bar .arcade-btn-start:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-go:hover, #screen-ghost-select .arcade-action-bar .arcade-btn-start:hover { background: #33f5ff; transform: scale(1.04); }
+#screen-car-select .arcade-title-main, #screen-map-select .arcade-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em; padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
+#screen-car-select .arcade-title-main::after, #screen-map-select .arcade-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: #00f0ff; transform: skewX(-20deg); }
+#screen-car-select .arcade-action-bar, #screen-map-select .arcade-action-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); max-width: none; gap: calc(18 * var(--u)); margin-bottom: 0; }
+#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start { box-sizing: border-box; width: auto; height: auto; min-width: calc(340 * var(--u)); padding: calc(20 * var(--u)) calc(52 * var(--u)); font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; animation: none; }
+#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
+#screen-car-select .arcade-action-bar .arcade-btn-back:hover, #screen-map-select .arcade-action-bar .arcade-btn-back:hover { color: #fff; background: #34324a; border-color: #8a85a3; transform: none; }
+#screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start { color: #111; background: #00f0ff; border: 0; box-shadow: 6px 6px #006b73; }
+#screen-car-select .arcade-action-bar .arcade-btn-go:hover, #screen-car-select .arcade-action-bar .arcade-btn-start:hover, #screen-map-select .arcade-action-bar .arcade-btn-go:hover, #screen-map-select .arcade-action-bar .arcade-btn-start:hover { background: #33f5ff; transform: scale(1.04); }
 .map-card-arcade, .car-card-arcade { border: 3px solid #334466; border-radius: 0; background: linear-gradient(150deg, #222335, #10101a); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); transform: skewX(-3deg); transition: transform 0.15s, border-color 0.15s; }
 .map-card-arcade:hover, .car-card-arcade:hover { background: linear-gradient(150deg, #222335, #10101a); border-color: #ffcc00; transform: skewX(-3deg) translateY(-6px); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 204, 0, 0.5); }
 .map-card-arcade.active, .car-card-arcade.active { background: linear-gradient(150deg, #123036, #0a1418); border-color: #00f0ff; transform: skewX(-3deg) translateY(-6px); box-shadow: 0 0 28px rgba(0, 240, 255, 0.55); }
 .car-select-bottom .car-card-arcade:hover, .car-select-bottom .car-card-arcade.active { transform: skewX(-3deg) translateY(-6px); }
 .map-card-arcade.disabled:hover { transform: skewX(-3deg); border-color: #334466; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
-.map-num-badge, .car-num-badge { color: #67687f; text-shadow: none; }
-.map-card-arcade.active .map-num-badge, .car-card-arcade.active .car-num-badge { color: #00f0ff; }
+.map-num-badge { color: #67687f; text-shadow: none; }
+.map-card-arcade.active .map-num-badge { color: #00f0ff; }
 .map-card-sub-arcade { color: #00f0ff; letter-spacing: 0.2em; }
 .map-card-title-arcade, .car-card-title-arcade { font-style: normal; letter-spacing: -0.02em; }
-.time-card-art { border: 0; border-radius: 0; }
 
-/* 見出しごとに文字サイズをそろえる(他のゲームのモード選択・キャラ選択と同じ): カードのタイトル 40 / サブ 14 / 説明 17 */
+/* 見出しごとに文字サイズをそろえる(他のゲームのモード選択・キャラ選択と同じ): カードのタイトル 40 / サブ 14 */
 #screen-car-select .map-card-title-arcade,
 #screen-map-select .map-card-title-arcade,
-#screen-time-select .map-card-title-arcade,
-#screen-ghost-select .map-card-title-arcade,
 #screen-car-select .car-card-title-arcade,
-#screen-map-select .car-card-title-arcade,
-#screen-time-select .car-card-title-arcade,
-#screen-ghost-select .car-card-title-arcade { font-size: max(15px, calc(40 * var(--u))); line-height: 1.1; }
+#screen-map-select .car-card-title-arcade { font-size: max(15px, calc(40 * var(--u))); line-height: 1.1; }
 #screen-car-select .map-card-sub-arcade,
 #screen-map-select .map-card-sub-arcade,
-#screen-time-select .map-card-sub-arcade,
-#screen-ghost-select .map-card-sub-arcade,
 #screen-car-select .car-card-sub-arcade,
-#screen-map-select .car-card-sub-arcade,
-#screen-time-select .car-card-sub-arcade,
-#screen-ghost-select .car-card-sub-arcade { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; margin-bottom: calc(10 * var(--u)); }
-#screen-car-select .time-card-desc,
-#screen-map-select .time-card-desc,
-#screen-time-select .time-card-desc,
-#screen-ghost-select .time-card-desc { font-size: max(10px, calc(17 * var(--u))); line-height: 1.6; color: #a6a8b9; }
+#screen-map-select .car-card-sub-arcade { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; margin-bottom: calc(10 * var(--u)); }
 
-/* 4つの選択画面は、外側の余白と間隔も同じにする(マシン選択だけ、独自の小さな余白になっていた) */
+/* 2つの選択画面は、外側の余白と間隔も同じにする(マシン選択だけ、独自の小さな余白になっていた) */
 #screen-car-select,
-#screen-map-select,
-#screen-time-select,
-#screen-ghost-select { padding: calc(40 * var(--u)) calc(48 * var(--u)); gap: calc(30 * var(--u)); box-sizing: border-box; }
+#screen-map-select { padding: calc(40 * var(--u)) calc(48 * var(--u)); gap: calc(30 * var(--u)); box-sizing: border-box; }
 /* マシン選択のカード列も、他の選択画面と同じ幅・同じ下の位置(中央、下のボタンの帯の真上)にそろえる */
 #screen-car-select .car-select-bottom { width: min(calc(1500 * var(--u)), 100%); max-width: none; align-self: center; margin: auto 0 0; }
 #screen-car-select .car-select-bottom .car-card-list-arcade { max-width: none; padding: 0; gap: calc(22 * var(--u)); }
@@ -1689,3 +1336,210 @@ html, body {
   min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; transform: none; overflow: visible; }
 #hud-pause-modal .arcade-modal-title { margin: 0; font: 900 clamp(28px, 7vh, 60px)/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.08em; color: #fff; text-shadow: none; }
 #hud-pause-modal .arcade-modal-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: #00f0ff; transform: skewX(-20deg); }
+
+/* ---------- HUD: 速度・ブースト・スリップストリームに合わせた画面の縁の光 ---------- */
+.hud-edge {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: screen;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 58%, rgba(0, 240, 255, calc(var(--fx-speed, 0) * 0.16 + var(--fx-boost, 0) * 0.42)) 100%),
+    radial-gradient(ellipse at center, transparent 62%, rgba(255, 255, 255, calc(var(--fx-slip, 0) * 0.22)) 100%);
+}
+.hud-edge.on { opacity: 1; }
+
+/* ---------- 区間タイム(タイマーの下に、同じ幅で常時表示) ---------- */
+.hud-sectors { display: grid; grid-template-rows: repeat(3, 34px); gap: 3px; margin-top: 8px; }   /* 区間の箱は、常に同じ高さ・同じ幅 */
+.sec-row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  gap: 10px;
+  padding: 0 10px 0 9px;
+  background: rgba(5, 9, 20, 0.5);
+  border-left: 3px solid rgba(255, 255, 255, 0.22);
+  font-family: var(--hud-mono);
+  color: rgba(255, 255, 255, 0.5);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.sec-name { font: 900 11px var(--hud-sans); letter-spacing: 0.2em; flex: none; width: 22px; color: #8ba0c0; }
+.sec-time { flex: 1; min-width: 0; line-height: 1; font-size: 20px; font-weight: 900; font-style: italic; font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
+.sec-delta { flex: none; min-width: 62px; line-height: 1; text-align: right; font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.sec-row.active { border-left-color: var(--hud-accent); background: rgba(0, 240, 255, 0.12); color: #fff; }
+.sec-row.done { color: #fff; border-left-color: #8ba0c0; }
+.sec-row.done.fast { border-left-color: var(--hud-ok, #00ff88); }
+.sec-row.done.fast .sec-delta { color: #00ff88; }
+.sec-row.done.slow { border-left-color: var(--hud-danger); }
+.sec-row.done.slow .sec-delta { color: var(--hud-danger); }
+.sec-row.flash { animation: secFlash 0.9s ease-out; }
+@keyframes secFlash { 0% { background: rgba(255, 255, 255, 0.45); } 100% { background: rgba(5, 9, 20, 0.5); } }
+
+/* =========================================================
+   選択カードの寸法をそろえる(マシン / コース / モード)
+   画面ごとに違ってよいのは枚数(=列の幅)だけ。カード全体・画像・下段の情報ボックスは同じ高さ・同じ位置にして、
+   画面を移っても目の置き場所が変わらないようにする。単位は --u(画面の高さ/幅に比例)。
+   文字は省略せず、枠に収まらない時は折り返す(タイトル・サブは伸びてよい。余白はそのぶん確保してある)。
+   ========================================================= */
+body :is(#screen-car-select, #screen-map-select) :is(.car-card-arcade, .map-card-arcade),
+body .msel.msel-arcade .msel-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: calc(600 * var(--u));
+  min-height: 0;
+  padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(24 * var(--u));
+  overflow: hidden;
+  font-size: max(11px, calc(23 * var(--u)));
+}
+/* コース選択のカード列: マシン選択と同じ幅(--u 基準)で、どの画面サイズでも1行に並べる(折り返さない) */
+body #screen-map-select .map-cards-container-arcade {
+  flex-wrap: nowrap;
+  justify-content: center;
+  width: min(calc(1500 * var(--u)), 100%);
+  max-width: none;
+  align-self: center;
+  margin: auto 0 0;
+  gap: calc(22 * var(--u));
+}
+body #screen-map-select .map-card-arcade { flex: 1 1 0; width: auto; min-width: 0; max-width: none; }
+/* 画像の枠 */
+body :is(#screen-car-select, #screen-map-select) :is(.car-outline, .map-outline),
+body .msel.msel-arcade .msel-card .art {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(150 * var(--u));
+  margin: calc(8 * var(--u)) 0 calc(14 * var(--u));
+}
+/* タイトル / サブ: 折り返してよい(省略しない) */
+body :is(#screen-car-select, #screen-map-select) :is(.car-card-title-arcade, .map-card-title-arcade),
+body .msel.msel-arcade .msel-card .t {
+  flex: none;
+  margin: calc(4 * var(--u)) 0;
+  font-size: max(15px, calc(36 * var(--u)));
+  line-height: 1.15;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+body :is(#screen-car-select, #screen-map-select) :is(.car-card-sub-arcade, .map-card-sub-arcade),
+body .msel.msel-arcade .msel-card .s {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  font-size: max(11px, calc(24 * var(--u)));
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  margin: 0 0 calc(12 * var(--u));
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+/* 下段の情報ボックス(特性 / 自己ベスト / 説明): 同じ高さ・同じ枠で、カードの下端にそろえる */
+body :is(#screen-car-select, #screen-map-select) :is(.car-spec-arcade, .map-record-arcade),
+body .msel.msel-arcade .msel-card .d {
+  flex: none;
+  box-sizing: border-box;
+  height: calc(124 * var(--u));
+  margin: auto 0 0;
+  padding: calc(10 * var(--u)) calc(16 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+body .msel.msel-arcade .msel-card .d {
+  /* マシンの特性ボックスと同じ見た目(枠・太字の斜体・白・影) */
+  background: linear-gradient(135deg, rgba(8, 14, 26, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 3px solid var(--msel-accent);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
+  font-size: max(11px, calc(25 * var(--u)));
+  line-height: 1.8;
+  height: calc(270 * var(--u));     /* モードの説明は、サブタイトルのすぐ下まで伸ばす(他の画面の下段より高い) */
+  white-space: pre-line;            /* 説明文の改行(・で始まる行)をそのまま出す */
+}
+/* 画像とサブの間の行(ゲージ / タグ) */
+body :is(#screen-car-select, #screen-map-select) :is(.arcade-gauges, .map-meta-row) { flex: none; margin: 0 0 calc(8 * var(--u)); }
+body #screen-map-select .map-meta-row { flex-wrap: wrap; }
+/* マシンの「特性」バッジ・コースの一言タグは、他の項目と内容が重なるので出さない */
+body #screen-car-select .spec-header-row,
+body #screen-map-select .meta-tag.highlight { display: none; }
+
+/* 補足の文字は大きめに(ゲージの名前・特性・自己ベスト・タグ) */
+body #screen-car-select .g-lbl { font-size: 0.85em; width: 3.6em; }
+body #screen-car-select .g-blocks span { height: 0.62em; }
+body #screen-car-select .spec-main-digital { font-size: 1.1em; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip; letter-spacing: 0.02em; }
+body #screen-car-select .spec-disabled { font-size: 1em; white-space: normal; }
+body #screen-map-select .rec-label { font-size: 0.85em; }
+body #screen-map-select .rec-time-digital { font-size: 1.9em; line-height: 1.2; }
+body #screen-map-select .meta-tag { font-size: 0.95em; padding: 0.25em 0.7em; white-space: nowrap; }
+
+/* 下のボタンの帯: カード列と同じ幅にする(左下のガイドと重なってよい)。半分の画面でも、ボタンがはみ出さない */
+body :is(#screen-car-select, #screen-map-select) .arcade-action-bar { width: min(calc(1500 * var(--u)), 100%); }
+/* 下のボタンの帯: 狭い画面でもボタンの文字が折れないようにする(帯の幅は、左下のガイドを避ける元の計算のまま) */
+body :is(#screen-car-select, #screen-map-select) .arcade-action-bar button { white-space: nowrap; }
+body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 1150px) {
+  body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn { padding: 0.4em 0.8em; gap: 0.5em; }
+  body #screen-map-select .time-chip, body #screen-car-select .color-chip-preview { display: none; }
+}
+body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn :is(.color-name-arcade, .color-sub-hint) { white-space: nowrap; }
+
+/* ボタンの中のガイド(押すボタン/キー): 結果・ポーズ画面と同じアイコンを文言の前に出す */
+body :is(#screen-car-select, #screen-map-select) .arcade-action-bar button,
+body .msel.msel-arcade .msel-bar button { gap: 0.6em; }
+.btn-guide, .msel-guide { display: inline-flex; align-items: center; flex: none; }
+.btn-label { white-space: nowrap; }
+
+/* コース選択の下バー中央: 時間帯(日中 / 夜間)の切り替え。マシン選択の「カラー変更」と同じ形 */
+#screen-map-select .arcade-action-bar .arcade-color-cycle-btn { width: auto; flex: 0 1 22em; min-width: 0; padding: 0.6em 1.2em; gap: 0.9em; transform: skewX(-10deg); }
+#screen-map-select .arcade-action-bar .arcade-color-cycle-btn:hover { transform: skewX(-10deg); }
+#screen-map-select .arcade-action-bar .arcade-color-cycle-btn.hidden { display: none; }
+#screen-map-select .color-name-arcade { font-size: 1.15em; }
+#screen-map-select .color-sub-hint { font-size: 0.85em; }
+#screen-map-select .time-chip { display: flex; align-items: center; justify-content: center; width: 3.2em; height: 2.2em; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.35); background: #0a1220; overflow: hidden; }
+#screen-map-select .time-chip svg { height: 90%; width: auto; }
+
+/* 「カラー変更」「時間帯変更」: 戻るボタンと同じ長方形・同じ大きさ(クラス arcade-btn-back を共用) */
+#screen-map-select .arcade-action-bar #ms-btn-time.hidden { display: none; }
+
+/* 変更ボタン: 「カラー変更 ● 名前」を1行に並べる。横長になってよい(高さは戻る・決定と同じ) */
+#screen-car-select .arcade-action-bar #cs-btn-cycle-color, #screen-map-select .arcade-action-bar #ms-btn-time { min-width: 0; padding-inline: calc(36 * var(--u)); }
+.btn-label-col { display: flex; flex-direction: row; align-items: center; gap: 0.7em; white-space: nowrap; }
+.btn-current { display: inline-flex; align-items: center; gap: 0.4em; padding-left: 0.7em; border-left: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85em; color: #00f0ff; }
+.btn-current .color-chip-preview { width: 1.1em; height: 1.1em; border-width: 1px; display: inline-block; }
+.btn-current .time-chip { display: inline-flex; width: 1.8em; height: 1.2em; }
+.btn-current .time-chip svg { height: 100%; width: auto; }
+body #screen-map-select .btn-current .time-chip, body #screen-car-select .btn-current .color-chip-preview { display: inline-flex; }
+
+/* マシン選択・コース選択の背景: モード選択と同じ、上下をうっすら暗くするぼかし(下のボタン帯と文字が背景に埋もれない) */
+#screen-car-select::before, #screen-map-select::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  animation: selBgIn 0.7s ease-out both;
+  background: linear-gradient(to bottom, #080b16d0 0%, #080b1600 24%, #080b1600 46%, #080b16dd 64%, #080b16f5 100%);
+}
+@keyframes selBgIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+.agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+}
+.agc-label, .ats-tagline { font-weight: 800 !important; }

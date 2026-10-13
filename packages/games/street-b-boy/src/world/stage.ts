@@ -1033,11 +1033,6 @@ export class Stage implements DogTerrain {
     return best;
   }
 
-  /** 大群があるステージか */
-  public get hasHorde(): boolean {
-    return this.horde !== null;
-  }
-
   /**
    * 毎フレーム(プレイヤーが動ける間)。大群の犬を後ろから出し、画面外へ落ちた犬・倒れて時間が経った犬を片付ける。
    * 大群のないステージでも、倒した敵の後片付けだけは行う。

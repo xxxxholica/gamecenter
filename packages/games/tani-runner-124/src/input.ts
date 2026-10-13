@@ -9,7 +9,7 @@ import { readGamepads } from '../../../shared/gamepadFrame';
 export interface InputState {
   moveX: number;           // -1 (left) to +1 (right)
   narrowFormation: boolean;// true when stick DOWN or 'S'/DownKey
-  actionPressed: boolean;  // Button 0 / Space / Z (held)
+  actionPressed: boolean;  // Button 0 / Enter (held)
   actionJustPressed: boolean;// Button 0 just pressed this frame
   lastConnectedPadName: string;
   hasGamepad: boolean;
@@ -102,8 +102,8 @@ export class InputManager {
     // Down (Narrow Formation)
     if (this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown')) narrow = true;
 
-    // Action (Space / Z)
-    if (this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('Enter')) action = true;
+    // Action (Enter)
+    if (this.keyboard.isDown('Enter')) action = true;
 
     // 2. Gamepad API Polling
     let hasPad = false;

@@ -161,6 +161,12 @@
       .rank-row.empty { opacity: 0.45; justify-content: center; }
       .rank-row.empty .rank-name { text-align: left; }
       .rank-row.me { background: rgba(255, 209, 102, 0.22); outline: 1px solid var(--accent); }
+
+      /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+      .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+        font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+      }
+      .agc-label, .ats-tagline { font-weight: 800 !important; }
     </style>
   </head>
   <body>

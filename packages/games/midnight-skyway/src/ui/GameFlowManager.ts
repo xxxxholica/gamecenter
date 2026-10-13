@@ -1,12 +1,10 @@
-export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'GHOST_SELECT' | 'TIME_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
+export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
 
 export interface GameFlowCallbacks {
   onEnterTitle: () => void;
   onEnterModeSelect: () => void;
   onEnterCarSelect: () => void;
   onEnterMapSelect: () => void;
-  onEnterGhostSelect: () => void;
-  onEnterTimeSelect: () => void;
   onEnterOnlineLobby: () => void;
   onEnterOnlineCourse: () => void;
   onEnterOnlineWait: () => void;
@@ -29,7 +27,7 @@ export class GameFlowManager {
     this.keyListener = (e: KeyboardEvent) => {
       // Global hotkeys depending on screen
       if (this.currentScreen === 'RACE') {
-        if (e.code === 'Backspace' || e.code === 'KeyP') {
+        if (e.code === 'Backspace') {
           e.preventDefault();
           this.callbacks.onTogglePause?.();
         }
@@ -58,16 +56,6 @@ export class GameFlowManager {
     this.callbacks.onEnterMapSelect();
   }
 
-  public goToGhostSelect(): void {
-    this.currentScreen = 'GHOST_SELECT';
-    this.callbacks.onEnterGhostSelect();
-  }
-
-  public goToTimeSelect(): void {
-    this.currentScreen = 'TIME_SELECT';
-    this.callbacks.onEnterTimeSelect();
-  }
-
   public goToOnlineLobby(): void {
     this.currentScreen = 'ONLINE_LOBBY';
     this.callbacks.onEnterOnlineLobby();
@@ -88,7 +76,4 @@ export class GameFlowManager {
     this.callbacks.onStartRace();
   }
 
-  public retryRace(): void {
-    this.callbacks.onRetryRace();
-  }
 }

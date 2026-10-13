@@ -1,5 +1,5 @@
 // オンライン待機画面などの「ボタンが並んだカード」を、アケコン・キーボードで操作する共通部品。
-//   レバー/矢印/WASD: ボタンを選ぶ / A・Enter・Space・Z: 決定 / B・Esc・Backspace: 戻る
+//   レバー/WASD: ボタンを選ぶ / A・Enter: 決定 / B・Backspace: 戻る
 import { PadEdge, startPadLoop } from '../arcadePad';
 
 /** props 付きで要素を作る小さな DOM ヘルパー。 */
@@ -20,7 +20,7 @@ export interface ButtonCardNavOptions {
   getCard: () => HTMLElement | null;
   /** false の間は入力を無視する(非表示中・他の画面が操作を受け持つ間)。 */
   isActive: () => boolean;
-  /** B・Esc・Backspace。 */
+  /** B・Backspace。 */
   onBack: () => void;
 }
 
@@ -64,7 +64,7 @@ export class ButtonCardNav {
       else if (p.any(0)) b[this.focus]?.click();
       else if (p.any(1)) this.opts.onBack();
     });
-    // キーボード: ←→↑↓・WASD でボタンを選ぶ / Enter・Space・Z で決定 / Esc・Backspace で戻る
+    // キーボード: WASD でボタンを選ぶ / Enter で決定 / Backspace で戻る
     this.keyHandler = (e: KeyboardEvent) => {
       if (!this.opts.isActive()) return;
       const b = this.buttons();
@@ -74,9 +74,9 @@ export class ButtonCardNav {
         this.focus = (this.focus + d + b.length) % b.length;
         this.apply();
       };
-      if (e.code === 'ArrowLeft' || e.code === 'ArrowUp' || e.code === 'KeyA' || e.code === 'KeyW') move(-1);
-      else if (e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'KeyD' || e.code === 'KeyS') move(1);
-      else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') {
+      if (e.code === 'KeyA' || e.code === 'KeyW') move(-1);
+      else if (e.code === 'KeyD' || e.code === 'KeyS') move(1);
+      else if (e.code === 'Enter') {
         e.preventDefault();
         // フォーカス中のボタンが標準動作でも反応して二重に押されないように
         (document.activeElement as HTMLElement | null)?.blur();

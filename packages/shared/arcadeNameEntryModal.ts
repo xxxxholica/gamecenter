@@ -7,20 +7,20 @@ import {
   MAX_NAME_LENGTH,
   KEYBOARD_GRID,
   ACTION_KEYS,
+  ACTION_ROW,
+  FOOTER_ROW,
   ArcadeNameEntryCore,
   NameEntryState,
 } from './arcadeNameEntryCore';
-import { checkHighScore, escapeHtml } from './arcadeLeaderboard';
-import { MenuNav } from './arcadeMenuNav';
-import { PadEdge, startPadLoop } from './arcadePad';
-import { setupResultMenu, applyResultMenuFocus } from './arcadeResultMenu';
-import { randomArcadeName } from './arcadeRandomName';
-import { setButtonSuffix, formatSeconds } from './arcadeAutoAction';
+import { checkHighScore, escapeHtml, reserveAnonName, releaseAnonName } from './arcadeLeaderboard';
 import { showInputShield } from './inputShield';
 import { runEntryFlow } from './highScoreEntryFlowCore';
 
 /** リザルトでスコアを見せてから登録画面を出すまでの待ち時間 */
 export const NAME_ENTRY_AFTER_RESULT_MS = 2200;
+
+/** 放置の時間切れ(秒)。登録ボタンに残り秒数を出す。何も操作しないまま過ぎたら、入力済みの名前(なければ匿名)で登録して閉じる。操作のたびに数え直す */
+const NAME_ENTRY_TIME_LIMIT_SEC = 20;
 
 export interface ArcadeNameEntryModalOptions {
   title: string;              // 見出し (例: "DRIVERS RECORD")
@@ -73,59 +73,28 @@ function injectStyles() {
     }
     .ane-overlay { transition: background 0.3s; }
 
-    /* 最初の確認(名前を残すか)。確認・入力・登録完了の3画面で同じ大きさにするため、
-       入力部品は消さずに隠して場所を残し、確認はカード全面に重ねる */
-    .ane-stage-ask > *:not(.ane-ask):not(.ane-corner),
-    .ane-stage-skip > *:not(.ane-completed-layer):not(.ane-corner) { visibility: hidden; }
-    .ane-stage-input .ane-ask,
-    .ane-stage-skip .ane-ask { display: none; }
-    .ane-ask {
-      position: absolute;
-      inset: 0;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(8px, 2vh, 20px);
-      padding: clamp(8px, 2vh, 20px);
-    }
-    .ane-ask .rm-col { width: min(80vw, 300px); }
-    .ane-ask-score {
-      font-size: clamp(14px, 2.6vh, 20px);
-      font-weight: 800;
-      letter-spacing: 2px;
-      color: #fff;
-    }
-    .ane-ask-score span { color: #aab2c4; font-weight: 700; margin-right: 8px; }
-    .ane-ask-trophy {
-      width: clamp(48px, 11vh, 92px);
-      height: auto;
-      filter: drop-shadow(0 0 14px rgba(255, 214, 64, 0.85));
-      animation: aneTrophyPop 0.7s cubic-bezier(0.2, 1.6, 0.4, 1) both, aneTrophyGlow 1.8s ease-in-out 0.7s infinite alternate;
-    }
-    @keyframes aneTrophyPop {
-      from { transform: scale(0.2) rotate(-12deg); opacity: 0; }
-      to { transform: scale(1) rotate(0); opacity: 1; }
-    }
-    @keyframes aneTrophyGlow {
-      from { filter: drop-shadow(0 0 8px rgba(255, 214, 64, 0.6)); }
-      to { filter: drop-shadow(0 0 22px rgba(255, 214, 64, 1)); }
-    }
-    .ane-ask-headline {
-      font-size: clamp(20px, 4vh, 32px);
-      font-weight: 900;
-      letter-spacing: 3px;
-      color: #ffd640;
-      text-shadow: 0 0 14px rgba(255, 214, 64, 0.6);
-      text-align: center;
-    }
-    .ane-ask-text {
-      font-size: clamp(13px, 2.4vh, 18px) !important;
-      font-weight: 700 !important;
-      letter-spacing: 2px !important;
-      color: #d6dbe6 !important;
-    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     /* 紙吹雪: 開いたときに降らせる(動きを減らす設定のときは出さない) */
     .ane-confetti {
@@ -238,55 +207,19 @@ function injectStyles() {
       letter-spacing: 0.05em;
     }
 
-    /* 60秒プログレスタイマーバー */
-    .ane-timer-wrap {
-      width: 100%;
-      max-width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: clamp(10px, 1.6vh, 18px);
-    }
+    
 
-    .ane-timer-bar-track {
-      flex: 1;
-      height: clamp(4px, 0.6vh, 6px);
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
-      overflow: hidden;
-    }
+    
 
-    .ane-timer-bar-fill {
-      height: 100%;
-      background: var(--ane-accent);
-      box-shadow: 0 0 8px var(--ane-accent);
-      transition: width 1s linear, background-color 0.3s;
-    }
+    
 
-    .ane-timer-bar-fill.urgent {
-      background: #ff1a40 !important;
-      box-shadow: 0 0 10px #ff1a40 !important;
-      animation: aneUrgentPulse 0.4s infinite alternate;
-    }
+    
 
-    @keyframes aneUrgentPulse {
-      from { opacity: 0.6; }
-      to { opacity: 1; }
-    }
+    
 
-    .ane-timer-text {
-      font-family: 'Impact', 'Arial Black', monospace;
-      font-size: clamp(0.8rem, 1.1vw, 0.96rem);
-      letter-spacing: 0.08em;
-      color: #9292a8;
-      min-width: 58px;
-      text-align: right;
-    }
+    
 
-    .ane-timer-text.urgent {
-      color: #ff2b4d !important;
-      font-weight: 900;
-    }
+    
 
     /* ========================================================
        ネームプレビュー表示領域 (5文字ボックス)
@@ -302,7 +235,7 @@ function injectStyles() {
     .ane-preview-label-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       width: 100%;
       max-width: clamp(280px, 60%, 540px);
       padding: 0 4px;
@@ -395,7 +328,7 @@ function injectStyles() {
     }
 
     .ane-kb-row.ane-actions-row {
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       margin-top: clamp(2px, 0.4vh, 4px);
     }
 
@@ -638,6 +571,214 @@ function injectStyles() {
       color: #ffffff;
       text-shadow: 0 0 24px rgba(255, 255, 255, 0.9);
     }
+
+    /* ========================================================
+       Windows 7(Aero)風。全ゲーム共通で、各テーマの色は使わずここで上書きする
+       ======================================================== */
+    .ane-overlay {
+      --w-pop: 'Meiryo UI', Meiryo, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif;
+      --w-btn: linear-gradient(#f2f2f2 0 49%, #ebebeb 50% 51%, #dddddd 52%, #cfcfcf);
+      --w-btn-hover: linear-gradient(#eaf6fd 0 49%, #d9f0fc 50% 51%, #bee6fd 52%, #a7d9f5);
+      --w-btn-sel: linear-gradient(#e5f4fc 0 49%, #c4e5f6 50% 51%, #98d1ef 52%, #68b3db);
+      --w-blue-bar: linear-gradient(#5b9bd9, #1f5fa8);
+      font-family: var(--w-pop);
+    }
+    .ane-overlay, .ane-overlay * { font-family: var(--w-pop) !important; font-weight: 700 !important; letter-spacing: 0.04em; }
+    .ane-overlay { background: rgba(0, 0, 0, 0.4); backdrop-filter: none; }
+    .ane-overlay.ane-light { background: rgba(0, 0, 0, 0.28); }
+
+    /* ガラス風のウィンドウ枠(中身は白い領域を ::before で敷く) */
+    .ane-overlay .ane-card.ane-card {
+      --ane-accent: #1f5fa8;
+      --ane-glow: rgba(51, 153, 255, 0.5);
+      isolation: isolate;
+      background: linear-gradient(135deg, rgba(196, 220, 245, 0.9), rgba(122, 168, 220, 0.88) 55%, rgba(176, 208, 240, 0.9));
+      backdrop-filter: blur(10px);
+      color: #111;
+      border: 1px solid rgba(0, 0, 0, 0.72);
+      border-radius: 8px;
+      padding: 4px 20px 20px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6), 0 10px 32px rgba(0, 0, 0, 0.65);
+    }
+    .ane-overlay .ane-card::before {
+      content: '';
+      position: absolute;
+      left: 8px; right: 8px; bottom: 8px; top: 34px;
+      background: #f0f0f0;
+      border: 1px solid #7d8fa8;
+      box-shadow: inset 0 0 0 1px #fff;
+      z-index: -1;
+    }
+    .ane-overlay .ane-corner { display: none; }
+    /* 入力画面は、順位・タイトル・スコアの表示をやめる(案内は、タイトルバーに「名前を入力してください」と出す) */
+    .ane-overlay .ane-header, .ane-overlay .ane-score-panel { display: none; }
+
+    /* タイトルバー */
+    .ane-titlebar {
+      align-self: stretch;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      height: 30px;
+      margin: 0 -20px 14px;
+      padding: 6px 8px 0 12px;
+      color: #000;
+      font-size: 14px;
+      text-shadow: 0 0 8px #fff, 0 0 8px #fff, 0 0 4px #fff;
+      text-align: left;
+    }
+    .ane-titlebar-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ane-titlebar-close {
+      flex: none;
+      width: 44px;
+      height: 19px;
+      margin: -6px 0 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(#e9a898 0 48%, #c64a3c 50%, #b01a14 52%, #d8573a);
+      border: 1px solid #5d1a1a;
+      border-top: 0;
+      border-radius: 0 0 5px 5px;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      text-shadow: 0 0 3px #400;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+      pointer-events: none;
+    }
+
+    /* 入力画面の見出し・スコア */
+    .ane-overlay .ane-rank-badge { background: linear-gradient(#5b9bd9, #1f5fa8) !important; color: #fff !important; border-radius: 3px; border: 0 !important; }
+    .ane-overlay .ane-title { color: #1b3f73 !important; text-shadow: none !important; }
+    .ane-overlay .ane-score-panel { background: #fff; border: 1px solid #b5bfcc; border-radius: 3px; }
+    .ane-overlay .ane-score-label { color: #333; opacity: 1; }
+    .ane-overlay .ane-score-val { color: #111 !important; text-shadow: none !important; }
+
+    
+    
+    
+    
+    
+
+    /* 名前の入力枠 */
+    .ane-overlay .ane-preview-label-row { color: #222; }
+    .ane-overlay .ane-char-counter { color: #1f5fa8; }
+    .ane-overlay .ane-preview-box { background: #fff; color: #111; border: 1px solid #abadb3; border-top-color: #5e6a7d; border-radius: 3px; box-shadow: none; }
+    .ane-overlay .ane-preview-box.filled { color: #111; border-color: #abadb3; border-top-color: #5e6a7d; }
+    .ane-overlay .ane-preview-box.current { background: #fff; border-color: #3399ff; box-shadow: 0 0 6px rgba(51, 153, 255, 0.7); }
+    .ane-overlay .ane-preview-box.current::after { background: #3399ff; box-shadow: none; }
+
+    /* キーボード(光沢ボタン。カーソル位置は青) */
+    .ane-overlay .ane-keyboard-container { background: transparent; border: 0; padding: 0; }
+    .ane-overlay .ane-key {
+      background: var(--w-btn); color: #111; border: 1px solid #707070; border-radius: 3px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+      transform: none; transition: none;
+    }
+    .ane-overlay .ane-key:hover { background: var(--w-btn-hover); border-color: #3c7fb1; transform: none; }
+    .ane-overlay .ane-key:active { background: linear-gradient(#e5f4fc, #c4e5f6 50%, #98d1ef); border-color: #2c628b; transform: none; }
+    .ane-overlay .ane-key.active {
+      background: var(--w-btn-sel) !important; color: #000 !important; border-color: #2c628b !important;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 0 8px rgba(51, 153, 255, 0.9) !important;
+      transform: none; animation: none;
+    }
+    .ane-overlay .ane-act-key, .ane-overlay .ane-act-confirm { background: var(--w-btn); color: #111; border: 1px solid #707070; }
+    .ane-overlay .ane-act-backspace { color: #111; }
+    .ane-overlay .ane-act-backspace.active, .ane-overlay .ane-act-confirm.active { background: var(--w-btn-sel) !important; color: #000 !important; border-color: #2c628b !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 0 8px rgba(51, 153, 255, 0.9) !important; }
+    .ane-overlay .ane-act-sub { opacity: 0.85; }
+
+    /* 確認画面 */
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
+    
+    
+
+    /* 登録完了 */
+    /* 白い面の中だけに出し、ウィンドウ枠・タイトルバーは残す */
+    .ane-overlay .ane-completed-layer { inset: 34px 8px 8px 8px; background: #f0f0f0; backdrop-filter: none; border-radius: 0; border: 1px solid #7d8fa8; box-shadow: inset 0 0 0 1px #fff; }
+    .ane-overlay .ane-complete-title { color: #1b3f73; text-shadow: none; }
+    .ane-overlay .ane-complete-name { color: #111; text-shadow: none; }
+
+    
+    .ane-overlay .ane-complete-name { -webkit-text-stroke: 4px #fff; paint-order: stroke fill; text-shadow: 0 2px 3px rgba(0, 20, 60, 0.35); }
+    
+    
+    
+    
+    
+    
+    /* 選択中の青いキー(黒い文字)は白縁のまま、タイトルバーは白い光を足す */
+    .ane-overlay .ane-titlebar-text { text-shadow: 0 0 8px #fff, 0 0 8px #fff, 0 1px 2px rgba(0, 20, 60, 0.35); }
+    .ane-overlay .ane-preview-box { -webkit-text-stroke: 0; text-shadow: none; }
+
+    /* 文字の可読性: 縁取り(stroke を塗りの下に敷く)と影で、どの背景の上でも読めるようにする */
+    .ane-overlay .ane-titlebar-text,
+    .ane-overlay .ane-complete-title,
+    .ane-overlay .ane-key,
+    .ane-overlay .ane-act-lbl,
+    .ane-overlay .ane-act-sub {
+      -webkit-text-stroke: 3px #fff;
+      paint-order: stroke fill;
+      text-shadow: 0 1px 2px rgba(0, 20, 60, 0.35);
+    }
+    .ane-overlay .ane-preview-box { -webkit-text-stroke: 0; text-shadow: none; }
+
+    
+    
+    
+    
+    
+
+    /* フッター: キャンセル(赤)と決定(緑)を1行に並べる */
+    .ane-overlay .ane-card.ane-card { width: min(94vw, 760px); }
+    /* 名前の枠の左のメダル */
+    .ane-overlay .ane-medal { flex: none; height: clamp(58px, 8.8vh, 88px); width: auto; margin-right: clamp(2px, 1vw, 12px); filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+    /* 何も入力していない間、枠に薄く見える匿名名 */
+    .ane-overlay .ane-preview-box.ghost { color: #aab2c0; }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    .ane-overlay .ane-footer { display: flex; gap: clamp(10px, 2.4vw, 22px); width: 100%; margin-top: clamp(8px, 1.6vh, 16px); }
+    .ane-overlay .ane-foot-key { flex: 1 1 0; transition: background 0.15s; height: clamp(40px, 6.4vh, 58px); font-size: clamp(16px, 2.8vh, 22px); letter-spacing: 0.1em; }
+    .ane-overlay .ane-foot-key.ane-foot-anon { background: linear-gradient(#e8786c 0 49%, #c4281c 50% 51%, #9c160c 52%, #bd2a1e); border-color: #5a0f0a; }
+    .ane-overlay .ane-foot-key.ane-foot-confirm { background: linear-gradient(#6fcf66 0 49%, #23921e 50% 51%, #146a14 52%, #1f8a1c); border-color: #0e4614; }
+    .ane-overlay .ane-foot-key.ane-foot-anon, .ane-overlay .ane-foot-key.ane-foot-confirm { color: #fff; -webkit-text-stroke: 0; text-shadow: 0 1px 0 #3a0905, 0 -1px 0 #3a0905, 1px 0 0 #3a0905, -1px 0 0 #3a0905, 0 2px 3px rgba(0, 0, 0, 0.6); filter: saturate(0.85) brightness(0.92); }
+    .ane-overlay .ane-foot-key.ane-foot-confirm { text-shadow: 0 1px 0 #072a0a, 0 -1px 0 #072a0a, 1px 0 0 #072a0a, -1px 0 0 #072a0a, 0 2px 3px rgba(0, 0, 0, 0.6); }
+    .ane-overlay .ane-foot-key.ane-foot-anon:hover { background: linear-gradient(#e8786c 0 49%, #c4281c 50% 51%, #9c160c 52%, #bd2a1e); border-color: #5a0f0a; }
+    .ane-overlay .ane-foot-key.ane-foot-confirm:hover { background: linear-gradient(#6fcf66 0 49%, #23921e 50% 51%, #146a14 52%, #1f8a1c); border-color: #0e4614; }
+    .ane-overlay .ane-foot-key.ane-foot-anon.active { background: linear-gradient(#e8786c 0 49%, #c4281c 50% 51%, #9c160c 52%, #bd2a1e) !important; color: #fff !important; filter: none; border-color: #ff6a5c !important; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 14px rgba(255, 70, 55, 0.95) !important; }
+    .ane-overlay .ane-foot-key.ane-foot-confirm.active { background: linear-gradient(#6fcf66 0 49%, #23921e 50% 51%, #146a14 52%, #1f8a1c) !important; color: #fff !important; filter: none; border-color: #5ae04e !important; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 14px rgba(70, 230, 60, 0.95) !important; }
   `;
   document.head.appendChild(style);
 }
@@ -687,7 +828,8 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   injectStyles();
 
   const overlay = document.createElement('div');
-  overlay.className = 'ane-overlay ane-light';
+  overlay.className = 'ane-overlay';
+
 
   // キーボードグリッドHTMLの構築
   const keyboardHtml = `
@@ -701,7 +843,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
       `).join('')}
       <div class="ane-kb-row ane-actions-row">
         ${ACTION_KEYS.map((act, c) => `
-          <div class="ane-key ane-act-key ane-act-${act.id}" data-row="5" data-col="${c}">
+          <div class="ane-key ane-act-key ane-act-${act.id}" data-row="${ACTION_ROW}" data-col="${c}">
             <span class="ane-act-lbl">${escapeHtml(act.label)}</span>
             <span class="ane-act-sub">${escapeHtml(act.subLabel)}</span>
           </div>
@@ -710,69 +852,73 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     </div>
   `;
 
+  // 名前の枠の左に置くメダル(順位で色が変わる: 1位=金、2位=銀、3位=銅、4位以降=鋼)
+  const rankNum = parseInt(/\d+/.exec(options.rankDisplay)?.[0] ?? '', 10);
+  const medalTones = rankNum === 1
+    ? ['#fff4b0', '#f5b800', '#b87800', '#7a4e00']
+    : rankNum === 2
+      ? ['#ffffff', '#c3ccd9', '#8a96a8', '#4d5a6e']
+      : rankNum === 3
+        ? ['#ffd9b5', '#e0883a', '#a85a1c', '#6a3408']
+        : ['#e6f0fb', '#8fb3dc', '#5683b6', '#2e5280'];
+  const crownHtml = `
+    <svg class="ane-medal ane-crown" viewBox="0 0 80 80" aria-hidden="true">
+      <defs>
+        <linearGradient id="aneCrownFace" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#fff4b0" />
+          <stop offset="0.5" stop-color="#f5b800" />
+          <stop offset="1" stop-color="#b87800" />
+        </linearGradient>
+      </defs>
+      <path d="M8 62L8 26L25 42L40 14L55 42L72 26L72 62Z" fill="url(#aneCrownFace)" stroke="#7a4e00" stroke-width="3" stroke-linejoin="round" />
+      <rect x="8" y="56" width="64" height="12" rx="3" fill="#d99a00" stroke="#7a4e00" stroke-width="3" />
+      <circle cx="8" cy="24" r="5" fill="#d8352a" stroke="#6e1610" stroke-width="2" />
+      <circle cx="40" cy="12" r="6" fill="#2f6fd0" stroke="#12356e" stroke-width="2" />
+      <circle cx="72" cy="24" r="5" fill="#d8352a" stroke="#6e1610" stroke-width="2" />
+      <circle cx="26" cy="62" r="3" fill="#fff" fill-opacity="0.9" />
+      <circle cx="40" cy="62" r="3.5" fill="#d8352a" stroke="#6e1610" stroke-width="1" />
+      <circle cx="54" cy="62" r="3" fill="#fff" fill-opacity="0.9" />
+      <path d="M16 34L22 46M34 30L38 22" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" />
+    </svg>
+  `;
+  const medalHtml = `
+    <svg class="ane-medal" viewBox="0 0 64 80" aria-hidden="true">
+      <defs>
+        <linearGradient id="aneMedalFace" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="${medalTones[0]}" />
+          <stop offset="0.5" stop-color="${medalTones[1]}" />
+          <stop offset="1" stop-color="${medalTones[2]}" />
+        </linearGradient>
+      </defs>
+      <path d="M14 2h14l10 30H24z" fill="#d8352a" stroke="#6e1610" stroke-width="2" stroke-linejoin="round" />
+      <path d="M50 2H36L26 32h14z" fill="#2f6fd0" stroke="#12356e" stroke-width="2" stroke-linejoin="round" />
+      <circle cx="32" cy="52" r="23" fill="url(#aneMedalFace)" stroke="${medalTones[3]}" stroke-width="3" />
+      <circle cx="32" cy="52" r="17" fill="none" stroke="${medalTones[3]}" stroke-opacity="0.45" stroke-width="2" />
+      <path d="M18 44c4-8 12-11 20-9" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" />
+      ${Number.isFinite(rankNum) ? `<text x="32" y="62" text-anchor="middle" font-size="26" font-weight="900" fill="${medalTones[3]}" stroke="#fff" stroke-opacity="0.55" stroke-width="1" paint-order="stroke">${rankNum}</text>` : ''}
+    </svg>
+  `;
+
   // プレビューボックス（5文字）HTMLの構築
   const previewBoxesHtml = Array.from({ length: MAX_NAME_LENGTH }, (_, i) => `
     <div class="ane-preview-box" id="ane-pbox-${i}"></div>
   `).join('');
 
   overlay.innerHTML = `
-    <div class="ane-card ${options.themeClass} ane-stage-ask">
-      <div class="ane-corner tl"></div>
-      <div class="ane-corner tr"></div>
-      <div class="ane-corner bl"></div>
-      <div class="ane-corner br"></div>
-
-      <div class="ane-header">
-        <span class="ane-rank-badge">${escapeHtml(options.rankDisplay)}</span>
-        <div class="ane-title">${escapeHtml(options.title)}</div>
-      </div>
-
-      <div class="ane-score-panel">
-        <span class="ane-score-label">最終スコア</span>
-        <span class="ane-score-val">${escapeHtml(options.scoreDisplay)}</span>
-      </div>
-
-      <div class="ane-timer-wrap">
-        <div class="ane-timer-bar-track">
-          <div class="ane-timer-bar-fill" id="ane-timer-bar" style="width: 100%;"></div>
-        </div>
-        <div class="ane-timer-text" id="ane-timer-val">残り 60秒</div>
-      </div>
+    <div class="ane-card ${options.themeClass}">
+      <div class="ane-titlebar" aria-hidden="true"><span class="ane-titlebar-text">ランキングに名前を残しましょう</span><span class="ane-titlebar-close">×</span></div>
 
       <div class="ane-preview-wrap">
-        <div class="ane-preview-label-row">
-          <span>登録名（5文字以内）</span>
-          <span class="ane-char-counter" id="ane-counter">0 / 5 文字</span>
-        </div>
         <div class="ane-slots-row">
+          ${rankNum === 1 ? crownHtml : medalHtml}
           ${previewBoxesHtml}
         </div>
       </div>
 
       ${keyboardHtml}
 
-      <div class="ane-ask">
-        <svg class="ane-ask-trophy" viewBox="0 0 64 64" aria-hidden="true">
-          <defs>
-            <linearGradient id="aneTrophyGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#fff2a8" />
-              <stop offset="0.55" stop-color="#ffd640" />
-              <stop offset="1" stop-color="#d9981c" />
-            </linearGradient>
-          </defs>
-          <path d="M16 8h32v14c0 10-6.5 17-16 17S16 32 16 22z" fill="url(#aneTrophyGrad)" stroke="#8a5a0c" stroke-width="2" stroke-linejoin="round" />
-          <path d="M16 12H8c0 9 3.5 14 10 15M48 12h8c0 9-3.5 14-10 15" fill="none" stroke="#e8b02a" stroke-width="4" stroke-linecap="round" />
-          <path d="M28 39h8v8h-8z" fill="#e8b02a" stroke="#8a5a0c" stroke-width="2" stroke-linejoin="round" />
-          <path d="M20 47h24l3 9H17z" fill="url(#aneTrophyGrad)" stroke="#8a5a0c" stroke-width="2" stroke-linejoin="round" />
-          <path d="M22 13c0 8 2 13 6 16" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="2.5" stroke-linecap="round" />
-        </svg>
-        <div class="ane-ask-headline">${escapeHtml(options.rankDisplay)}にランクイン</div>
-        <div class="ane-ask-score"><span>最終スコア</span>${escapeHtml(options.scoreDisplay)}</div>
-        <div class="ane-ask-text">記録に名前を残しますか？</div>
-        <div class="ane-ask-menu">
-          <button type="button" id="ane-ask-yes" tabindex="-1">名前を入力する</button>
-          <button type="button" id="ane-ask-no" tabindex="-1">おまかせで登録</button>
-        </div>
+      <div class="ane-footer">
+        <div class="ane-key ane-foot-key ane-foot-anon" id="ane-foot-key" data-row="${FOOTER_ROW}" data-col="0">匿名 で登録</div>
       </div>
 
       <div class="ane-completed-layer" id="ane-complete-layer" style="display: none;">
@@ -788,31 +934,53 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   const confetti = spawnConfetti(overlay, accent);
   playArcadeFanfare();
 
-  const timerBarEl = document.getElementById('ane-timer-bar');
-  const timerTextEl = document.getElementById('ane-timer-val');
-  const counterEl = document.getElementById('ane-counter');
+  // 登録ウィンドウを出したときに匿名名を予約する。キャンセル・空のまま確定・時間切れのときは、予約した匿名名で登録する。
+  // 使われないまま閉じた(予約の札が登録に使われなかった)ときは破棄する。
+  let anon = null as { token: string; name: string } | null;
+  let submitted = false;
+  let cleaned = false;
+  const anonReady = reserveAnonName().then((r) => {
+    anon = r;
+    if (r && cleaned) releaseAnonName(r.token);   // 予約が返る前に閉じられていた
+    else if (r) updateView(core.state);           // 薄く見せる匿名名と、ボタン・バーの文言を更新する
+    return r;
+  });
+  const onPageHide = () => { if (anon && !submitted) releaseAnonName(anon.token); };
+  window.addEventListener('pagehide', onPageHide);
+
+  const footKeyEl = document.getElementById('ane-foot-key');
 
   let prevActiveKeyEl: HTMLElement | null = null;
 
   const updateView = (state: NameEntryState) => {
-    // 1. ネームプレビューボックスの更新
+    // 登録される名前: 入力があればそれ、なければ(薄く見せている)予約した匿名名
+    const typed = state.name.trim();
+    const anonName = (anon as { name: string } | null)?.name ?? '匿名';
+    const registerName = typed || anonName;
+
+    // 1. ネームプレビューボックスの更新(何も入力していない間は、匿名名を薄く見せる)
     const chars = Array.from(state.name);
+    const ghost = typed ? [] : Array.from(anonName).slice(0, MAX_NAME_LENGTH);
     for (let i = 0; i < MAX_NAME_LENGTH; i++) {
       const box = document.getElementById(`ane-pbox-${i}`);
       if (!box) continue;
-      const char = chars[i] ?? '';
+      const char = chars[i] ?? ghost[i] ?? '';
       box.textContent = char;
-      box.classList.toggle('filled', char.length > 0);
+      box.classList.toggle('filled', (chars[i] ?? '').length > 0);
+      box.classList.toggle('ghost', !typed && !!ghost[i]);
       // 入力待ちカーソル位置（文字数がi、もしくは満杯なら末尾の次）
       const isCurrent = (i === chars.length && chars.length < MAX_NAME_LENGTH) || (chars.length === MAX_NAME_LENGTH && i === MAX_NAME_LENGTH - 1);
       box.classList.toggle('current', isCurrent);
     }
 
-    if (counterEl) {
-      counterEl.textContent = `${chars.length} / ${MAX_NAME_LENGTH} 文字`;
+    // 2. 登録ボタン: いつも「何で登録されるか」を書く(匿名=赤、入力した名前=緑)
+    if (footKeyEl) {
+      footKeyEl.textContent = `${registerName} で登録 (${state.timeRemaining}秒)`;
+      footKeyEl.classList.toggle('ane-foot-anon', !typed);
+      footKeyEl.classList.toggle('ane-foot-confirm', !!typed);
     }
 
-    // 2. キーボードのアクティブキー更新
+    // 3. キーボード・フッターのアクティブキー更新
     if (prevActiveKeyEl) {
       prevActiveKeyEl.classList.remove('active');
     }
@@ -823,37 +991,31 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
       currentKeyEl.classList.add('active');
       prevActiveKeyEl = currentKeyEl;
     }
-
-    // 3. タイマー更新 (60秒基準)
-    if (timerBarEl) {
-      const pct = Math.max(0, Math.min(100, (state.timeRemaining / 60) * 100));
-      timerBarEl.style.width = `${pct}%`;
-      timerBarEl.classList.toggle('urgent', state.timeRemaining <= 15);
-    }
-    if (timerTextEl) {
-      timerTextEl.textContent = `残り ${state.timeRemaining}秒`;
-      timerTextEl.classList.toggle('urgent', state.timeRemaining <= 15);
-    }
   };
 
   let isFinishing = false;
-  const finishAndSubmit = async (name: string) => {
+  const finishAndSubmit = async (name: string, isAnon = false) => {
     if (isFinishing) return;
     isFinishing = true;
+    submitted = true;
 
-    core?.destroy();
+    core.destroy();
 
     const completeLayer = document.getElementById('ane-complete-layer');
     const completeTitleEl = completeLayer?.querySelector<HTMLElement>('.ane-complete-title');
     const completeNameEl = document.getElementById('ane-complete-name-val');
-    if (completeLayer && completeNameEl) {
+    if (isAnon) {
+      // 匿名は完了表示を出さず、ウィンドウを消して登録だけ済ませる
+      confetti.remove();
+      overlay.style.display = 'none';
+    } else if (completeLayer && completeNameEl) {
       completeNameEl.textContent = name;
       completeLayer.style.display = 'flex';
     }
 
     // 通信の完了と最低限のアニメーション表示(850ms)の両方を待つ。
     // 通信中に画面遷移(iframeの破棄)が起きてWebKit/Safari等でリクエストが強制切断されるのを防ぐ。
-    const minWait = new Promise((resolve) => window.setTimeout(resolve, 850));
+    const minWait = new Promise((resolve) => window.setTimeout(resolve, isAnon ? 0 : 850));
     try {
       const [, res] = await Promise.all([minWait, Promise.resolve(options.onComplete(name))]);
       // 同時に他のプレイヤーが登録して枠外に押し出された場合(rank <= 0)のフィードバック
@@ -868,15 +1030,37 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     }
   };
 
-  let core: ArcadeNameEntryCore | null = null;
+  /** 薄く見せていた匿名名を濃くして(1文字ずつ)、少し見せてから、匿名で登録する */
+  const fillAnonAndSubmit = async () => {
+    const r = await anonReady;
+    const name = r?.name ?? '';
+    if (name) {
+      const chars = Array.from(name).slice(0, MAX_NAME_LENGTH);
+      for (let i = 0; i < chars.length; i++) {
+        const box = document.getElementById(`ane-pbox-${i}`);
+        if (box) { box.textContent = chars[i]; box.classList.remove('ghost'); box.classList.add('filled'); }
+        await new Promise((resolve) => window.setTimeout(resolve, 45));
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+    }
+    return finishAndSubmit(name, true);
+  };
 
-  // マウス/タッチ操作: 各キーをクリック/タップしたらそのキーを実行
+  // 名前を入力して確定。空のまま(時間切れ含む)なら匿名で登録する
+  const confirmTyped = (typed: string) => (typed ? finishAndSubmit(typed) : fillAnonAndSubmit());
+
+  // 開いた直後は少しだけ決定操作を受け付けない(直前の連打で、そのまま登録されないように)
+  const core = new ArcadeNameEntryCore(
+    { onChange: (state) => updateView(state), onConfirm: (name) => { void confirmTyped(name); } },
+    { initialName: options.initialName, timeLimitSec: NAME_ENTRY_TIME_LIMIT_SEC, armDelayMs: 500 },
+  );
+
+  // マウス/タッチ操作: 各キー・ボタンをクリック/タップしたらそれを実行
   const allKeys = overlay.querySelectorAll<HTMLElement>('.ane-key');
   allKeys.forEach((keyEl) => {
     keyEl.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!core) return;
       const row = parseInt(keyEl.getAttribute('data-row') ?? '0', 10);
       const col = parseInt(keyEl.getAttribute('data-col') ?? '0', 10);
       core.setCursor(row, col);
@@ -884,115 +1068,12 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     });
   });
 
-  // --- 最初の確認: 名前を入力するか、おまかせ(ランダム名)にするか ---
-  const askYes = document.getElementById('ane-ask-yes');
-  const askNo = document.getElementById('ane-ask-no');
-  const askItems = [
-    { button: askYes, color: accent },
-    { button: askNo, color: '#39ff88' },
-  ];
-  let askFocus = 0;
-  let askOpen = true;
-  const askArmTime = performance.now() + 500; // 直前まで連打していたボタンで決定しない
-  const askArmed = () => performance.now() >= askArmTime;
-  setupResultMenu(overlay.querySelector<HTMLElement>('.ane-ask-menu'), askItems);
-  const refreshAsk = () => applyResultMenuFocus(askItems, askFocus);
-
-  let stopAskPad: (() => void) | null = null;
-  let askAutoTimer = 0;
-  let inputStartTimer = 0;
-  const closeAsk = () => {
-    askOpen = false;
-    window.removeEventListener('keydown', onAskKey, true);
-    stopAskPad?.();
-    stopAskPad = null;
-    window.clearInterval(askAutoTimer);
-  };
-
-  const chooseInput = () => {
-    if (!askOpen) return;
-    closeAsk();
-    // 決定に使ったキー/ボタンが、そのままキーボードの最初の文字に入らないよう少し待つ
-    inputStartTimer = window.setTimeout(() => {
-      card.classList.remove('ane-stage-ask');
-      card.classList.add('ane-stage-input');
-      overlay.classList.remove('ane-light');
-      core = new ArcadeNameEntryCore(
-        { onChange: (state) => updateView(state), onConfirm: (name) => finishAndSubmit(name) },
-        { initialName: options.initialName, timeLimitSec: 60 },
-      );
-    }, 250);
-  };
-  const chooseRandom = () => {
-    if (!askOpen) return;
-    closeAsk();
-    // おまかせのときはキーボードを出さず、そのまま登録完了を見せる
-    card.classList.remove('ane-stage-ask');
-    card.classList.add('ane-stage-skip');
-    finishAndSubmit(randomArcadeName());
-  };
-  const confirmAsk = () => (askFocus === 0 ? chooseInput() : chooseRandom());
-  const moveAsk = (dir: number) => {
-    askFocus = (askFocus + dir + askItems.length) % askItems.length;
-    refreshAsk();
-  };
-
-  function onAskKey(e: KeyboardEvent): void {
-    if (!askOpen) return;
-    const dir = MenuNav.keyDir(e.code);
-    if (dir !== 0) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (!e.repeat) moveAsk(dir);
-    } else if (e.code === 'Enter' || e.code === 'Space') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (!e.repeat && askArmed()) confirmAsk();
-    }
-  }
-  window.addEventListener('keydown', onAskKey, true);
-
-  const askPadEdge = new PadEdge();
-  stopAskPad = startPadLoop(askPadEdge, (p) => {
-    if (!askOpen) return;
-    if (p.up || p.left) moveAsk(-1);
-    else if (p.down || p.right) moveAsk(1);
-    else if (!askArmed()) return;
-    else if (p.any(0)) confirmAsk();
-    else if (p.any(1)) chooseRandom();
-  });
-
-  askItems.forEach(({ button }, i) => {
-    button?.addEventListener('mouseenter', () => {
-      if (askFocus === i) return;
-      askFocus = i;
-      refreshAsk();
-    });
-    button?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!askArmed()) return;
-      askFocus = i;
-      confirmAsk();
-    });
-  });
-  refreshAsk();
-
-  // 放置されたら、おまかせで登録する。残り時間はボタンに出す
-  const ASK_AUTO_SEC = 20;
-  const askOpenedAt = performance.now();
-  const updateAskCountdown = () => {
-    const remain = ASK_AUTO_SEC - (performance.now() - askOpenedAt) / 1000;
-    if (remain <= 0) return chooseRandom();
-    setButtonSuffix(askNo, formatSeconds(remain));
-  };
-  updateAskCountdown();
-  askAutoTimer = window.setInterval(updateAskCountdown, 250);
-
   const cleanup = () => {
-    closeAsk();
-    window.clearTimeout(inputStartTimer);
+    cleaned = true;
+    window.removeEventListener('pagehide', onPageHide);
+    if (anon && !submitted) releaseAnonName(anon.token);
     confetti.remove();
-    core?.destroy();
+    core.destroy();
     if (overlay.parentNode) {
       overlay.parentNode.removeChild(overlay);
     }

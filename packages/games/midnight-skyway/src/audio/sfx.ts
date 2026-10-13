@@ -8,8 +8,10 @@ export class Sfx {
   private engine: {
     saw: OscillatorNode; square: OscillatorNode; filter: BiquadFilterNode; gain: GainNode;
     skidSrc: AudioBufferSourceNode; skidFilter: BiquadFilterNode; skidGain: GainNode;
+    windSrc: AudioBufferSourceNode; windFilter: BiquadFilterNode; windGain: GainNode;
   } | null = null;
   private engineMuted = false;
+  private rainLoop: { src: AudioBufferSourceNode; low: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   constructor(private readonly eng: AudioEngine) {}
 
@@ -119,6 +121,12 @@ export class Sfx {
     [79, 84, 88, 91].forEach((n, i) => this.tone('triangle', midiHz(n), midiHz(n), t + i * 0.05, 0.28, 0.13));
   }
 
+  /** 走行中の車の脇をかすめた時の風切り音 */
+  public nearMiss(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.3, 'bandpass', 4200, 700, 0.14, 0.04);
+  }
+
   /** 衝突。impact: 0〜1 */
   public crash(impact: number): void {
     const t = this.ctx.currentTime;
@@ -142,6 +150,55 @@ export class Sfx {
   public timeUp(): void {
     const t = this.ctx.currentTime;
     [67, 64, 60, 55].forEach((n, i) => this.tone('sawtooth', midiHz(n), midiHz(n) * 0.97, t + i * 0.2, 0.34, 0.11));
+  }
+
+  // ---------- 雨 ----------
+  /** 雨音を鳴らし続ける(高域のさあっという音と、低域の遠い雨音の2層) */
+  public startRain(): void {
+    if (this.rainLoop || !this.eng.running) return;
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.gain.setTargetAtTime(0.018, ctx.currentTime, 0.8);
+    const src = this.eng.noiseSource(true);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2200;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'peaking';
+    bp.frequency.value = 5200;
+    bp.gain.value = 5;
+    src.connect(hp);
+    hp.connect(bp);
+    bp.connect(gain);
+    const low = this.eng.noiseSource(true);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 520;
+    const lowGain = ctx.createGain();
+    lowGain.gain.value = 0.9;
+    low.connect(lp);
+    lp.connect(lowGain);
+    lowGain.connect(gain);
+    gain.connect(this.dest);
+    src.start(0, this.eng.noiseOffset());
+    low.start(0, this.eng.noiseOffset());
+    this.rainLoop = { src, low, gain };
+  }
+
+  public stopRain(): void {
+    const r = this.rainLoop;
+    if (!r) return;
+    this.rainLoop = null;
+    r.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.25);
+    window.setTimeout(() => { r.src.stop(); r.low.stop(); r.gain.disconnect(); }, 1500);
+  }
+
+  /** 遠雷 */
+  public thunder(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 2.6, 'lowpass', 420, 70, 0.5, 0.25);
+    this.noiseHit(t + 0.35, 1.8, 'lowpass', 240, 60, 0.35, 0.4);
   }
 
   // ---------- エンジン・ドリフト ----------
@@ -180,7 +237,20 @@ export class Sfx {
     skidGain.connect(this.dest);
     skidSrc.start();
 
-    this.engine = { saw, square, filter, gain, skidSrc, skidFilter, skidGain };
+    // 風切り音: 速いほど大きく、高くなる
+    const windSrc = this.eng.noiseSource(true);
+    const windFilter = ctx.createBiquadFilter();
+    windFilter.type = 'bandpass';
+    windFilter.Q.value = 0.7;
+    windFilter.frequency.value = 500;
+    const windGain = ctx.createGain();
+    windGain.gain.value = 0;
+    windSrc.connect(windFilter);
+    windFilter.connect(windGain);
+    windGain.connect(this.dest);
+    windSrc.start(0, this.eng.noiseOffset());
+
+    this.engine = { saw, square, filter, gain, skidSrc, skidFilter, skidGain, windSrc, windFilter, windGain };
     this.engineMuted = false;
   }
 
@@ -201,6 +271,50 @@ export class Sfx {
     e.skidFilter.frequency.setTargetAtTime(1500 + speedKmH * 8, t, 0.1);
   }
 
+  /** 毎フレーム呼ぶ: 速度(0〜1)とブースト(0〜1)に合わせた風切り音 */
+  public setWind(speed: number, boost: number): void {
+    const e = this.engine;
+    if (!e || this.engineMuted) return;
+    const t = this.ctx.currentTime;
+    const k = Math.pow(Math.min(1, Math.max(0, speed)), 2.2);
+    e.windGain.gain.setTargetAtTime(0.005 + k * 0.04 + boost * 0.02, t, 0.1);
+    e.windFilter.frequency.setTargetAtTime(380 + k * 1800 + boost * 700, t, 0.1);
+  }
+
+  /** 路肩の反射板(約32mごと)が脇を通り過ぎる音: 小さく短い「ヒュッ」。速いほど高く強い */
+  public whoosh(speed: number): void {
+    const k = Math.min(1, Math.max(0, speed));
+    if (k < 0.25) return;
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.16, 'bandpass', 1500 + k * 2200, 500, 0.008 + k * 0.02, 0.015);
+  }
+
+  /** 車とすれ違う音: 近いほど、相対速度が大きいほど強い。音程が下がる(ドップラー) */
+  public passBy(relSpeed: number, closeness: number): void {
+    const k = Math.min(1, Math.max(0, relSpeed / 60));
+    const c = Math.min(1, Math.max(0, closeness));
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.42, 'bandpass', 2600 + k * 1600, 380, (0.02 + 0.055 * k) * (0.4 + 0.6 * c), 0.03);
+    this.tone('sawtooth', 220 + k * 120, 90, t, 0.4, 0.012 * c);
+  }
+
+  /** ブースト開始: 吸気の音が高まり、低い衝撃が入る */
+  public boostStart(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.7, 'bandpass', 400, 4200, 0.08, 0.08);
+    this.tone('sine', 120, 38, t, 0.45, 0.09);
+    this.tone('sawtooth', 180, 520, t, 0.5, 0.02);
+  }
+
+  /** ブースト終了・アクセルを戻した時の、マフラーからの破裂音 */
+  public backfire(): void {
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      this.noiseHit(t + i * 0.07 + Math.random() * 0.03, 0.09, 'bandpass', 900 + Math.random() * 600, 300, 0.06, 0.003);
+    }
+    this.tone('square', 150, 60, t, 0.1, 0.02);
+  }
+
   /** ポーズ中などにエンジン音とスキール音を止める */
   public setEngineSuspended(suspended: boolean): void {
     this.engineMuted = suspended;
@@ -209,6 +323,74 @@ export class Sfx {
     const t = this.ctx.currentTime;
     e.gain.gain.setTargetAtTime(0, t, 0.04);
     e.skidGain.gain.setTargetAtTime(0, t, 0.04);
+    e.windGain.gain.setTargetAtTime(0, t, 0.04);
+  }
+
+  // ---------- 対戦相手のエンジン音(距離で小さく、左右に振る) ----------
+  private remoteEngines = new Map<number, { saw: OscillatorNode; square: OscillatorNode; filter: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode }>();
+
+  /**
+   * 相手の車のエンジン音を毎フレーム更新する(なければ作る)。speedKmH: 相手の速度、dist: 自車からの距離(m)、
+   * pan: 自車から見て左(-1)〜右(1)。遠い相手は無音にして止める。
+   */
+  public updateRemoteEngine(id: number, speedKmH: number, dist: number, pan: number): void {
+    if (!this.eng.running) return;
+    const MAX_DIST = 90;
+    let e = this.remoteEngines.get(id);
+    if (dist > MAX_DIST) {
+      if (e) this.removeRemoteEngine(id);
+      return;
+    }
+    const ctx = this.ctx;
+    if (!e) {
+      const saw = ctx.createOscillator();
+      const square = ctx.createOscillator();
+      saw.type = 'sawtooth';
+      square.type = 'square';
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.Q.value = 2;
+      const sq = ctx.createGain();
+      sq.gain.value = 0.35;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const pannerNode = ctx.createStereoPanner();
+      saw.connect(filter);
+      square.connect(sq);
+      sq.connect(filter);
+      filter.connect(gain);
+      gain.connect(pannerNode);
+      pannerNode.connect(this.dest);
+      saw.start();
+      square.start();
+      e = { saw, square, filter, gain, pan: pannerNode };
+      this.remoteEngines.set(id, e);
+    }
+    const t = ctx.currentTime;
+    // 速度から、自車と同じ形で回転数を推定する(アイドリング〜全開)
+    const r = Math.min(1, Math.max(0, speedKmH / 220));
+    const f = 40 + r * 135;
+    e.saw.frequency.setTargetAtTime(f, t, 0.05);
+    e.square.frequency.setTargetAtTime(f * 0.5, t, 0.05);
+    e.filter.frequency.setTargetAtTime(350 + r * 1500, t, 0.08);
+    const near = 1 - dist / MAX_DIST;
+    const vol = this.engineMuted ? 0 : (0.05 + r * 0.09) * near * near;
+    e.gain.gain.setTargetAtTime(vol, t, 0.08);
+    e.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.08);
+  }
+
+  public removeRemoteEngine(id: number): void {
+    const e = this.remoteEngines.get(id);
+    if (!e) return;
+    this.remoteEngines.delete(id);
+    const t = this.ctx.currentTime;
+    e.gain.gain.setTargetAtTime(0, t, 0.05);
+    e.saw.stop(t + 0.4);
+    e.square.stop(t + 0.4);
+  }
+
+  public stopRemoteEngines(): void {
+    for (const id of [...this.remoteEngines.keys()]) this.removeRemoteEngine(id);
   }
 
   public stopEngine(): void {
@@ -218,7 +400,10 @@ export class Sfx {
     const t = this.ctx.currentTime;
     e.gain.gain.setTargetAtTime(0, t, 0.05);
     e.skidGain.gain.setTargetAtTime(0, t, 0.05);
+    e.windGain.gain.setTargetAtTime(0, t, 0.05);
     window.setTimeout(() => {
+      e.windSrc.stop();
+      e.windGain.disconnect();
       e.saw.stop();
       e.square.stop();
       e.skidSrc.stop();
@@ -227,18 +412,43 @@ export class Sfx {
     }, 400);
   }
 
-  /** マシンガン発射音 (バースト射撃) */
-  public machineGun(): void {
+  /** マシンガン発射音 (rapid: 高レート連射中は1発ずつ軽く・音程を揺らす) */
+  public machineGun(rapid = false): void {
     const t = this.ctx.currentTime;
-    this.noiseHit(t, 0.06, 'bandpass', 1200, 300, 0.35, 0.002);
-    this.tone('sawtooth', 160, 40, t, 0.05, 0.25);
+    const j = rapid ? 0.85 + Math.random() * 0.35 : 1;
+    this.noiseHit(t, rapid ? 0.04 : 0.06, 'bandpass', 1400 * j, 350, rapid ? 0.26 : 0.35, 0.001);
+    this.tone('sawtooth', 190 * j, 45, t, rapid ? 0.035 : 0.05, rapid ? 0.18 : 0.25);
+    this.tone('square', 2400 * j, 900, t, 0.015, 0.05); // 銃口の金属的な「カン」
   }
 
-  /** ミサイル発射音 (ロケット点火 & 推進シュォォ音) */
-  public missileLaunch(): void {
+  /** ミサイル発射音 (ロケット点火 & 推進シュォォ音。rapid: 一斉射中) */
+  public missileLaunch(rapid = false): void {
     const t = this.ctx.currentTime;
-    this.noiseHit(t, 0.35, 'bandpass', 600, 1800, 0.45, 0.03);
-    this.tone('triangle', 180, 420, t, 0.3, 0.3);
+    const j = rapid ? 0.9 + Math.random() * 0.25 : 1;
+    this.noiseHit(t, rapid ? 0.45 : 0.35, 'bandpass', 600 * j, 1800, rapid ? 0.34 : 0.45, 0.03);
+    this.tone('triangle', 180 * j, 420, t, 0.3, rapid ? 0.22 : 0.3);
+    this.tone('sine', 90, 50, t, 0.12, 0.3); // 発射の「ボンッ」
+  }
+
+  /** ロックオンした瞬間のピピッ */
+  public lockOn(): void {
+    const t = this.ctx.currentTime;
+    this.tone('square', 1500, 1500, t, 0.05, 0.1);
+    this.tone('square', 2000, 2000, t + 0.07, 0.07, 0.1);
+  }
+
+  /** 連射/一斉射の撃ち終わり(リロード開始のガシャッ) */
+  public burstEnd(heavy: boolean): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.08, 'bandpass', heavy ? 700 : 1800, 300, 0.2, 0.002);
+    this.tone('square', heavy ? 140 : 260, 70, t, 0.07, 0.15);
+  }
+
+  /** 装填完了(full: 満タン) */
+  public reloadTick(full: boolean): void {
+    const t = this.ctx.currentTime;
+    this.tone('triangle', 900, 900, t, 0.05, 0.14);
+    if (full) this.tone('triangle', 1350, 1350, t + 0.07, 0.08, 0.14);
   }
 
   /** 被弾音 (金属スパーク・打撃) */
@@ -258,17 +468,4 @@ export class Sfx {
     this.tone('triangle', 80, 20, t, dur * 0.9, vol * 0.6);
   }
 
-  /** 道路崩落音 (ゴゴゴ…ガラガラ…) */
-  public roadCollapse(): void {
-    const t = this.ctx.currentTime;
-    this.noiseHit(t, 1.6, 'lowpass', 280, 60, 0.6, 0.08);
-    this.tone('sawtooth', 65, 25, t, 1.2, 0.4);
-  }
-
-  /** 道路回復音 (キラララ…) */
-  public roadRestore(): void {
-    const t = this.ctx.currentTime;
-    this.tone('sine', 380, 760, t, 0.35, 0.25);
-    this.tone('triangle', 580, 1160, t + 0.1, 0.4, 0.2);
-  }
 }

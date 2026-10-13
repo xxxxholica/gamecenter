@@ -60,7 +60,6 @@ export class Audience {
   constructor(config: Partial<AudienceConfig> = {}) {
     this.mesh = new THREE.Group();
 
-    const dohyoRadius = config.dohyoRadius ?? 9.2;
     const innerRadius = config.innerRadius ?? 10.6;
     const outerRadius = config.outerRadius ?? 29.5;
     const numRows = config.numRows ?? 13;
@@ -75,7 +74,7 @@ export class Audience {
     this.createTsuriyane();
 
     // 3. 観客のインスタンスメッシュ配置
-    this.createSpectators(innerRadius, outerRadius, numRows, dohyoRadius);
+    this.createSpectators(innerRadius, outerRadius, numRows);
   }
 
   /**
@@ -321,8 +320,7 @@ export class Audience {
   private createSpectators(
     innerR: number,
     outerR: number,
-    numRows: number,
-    dohyoRadius: number
+    numRows: number
   ) {
     // 観客の座標リストを計算
     const seatList: Array<{

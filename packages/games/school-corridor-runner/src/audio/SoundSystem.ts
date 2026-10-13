@@ -357,42 +357,6 @@ export class SoundSystem {
   }
 
   /**
-   * 生活指導の先生との激突音（警告音＋激突）
-   */
-  public playTeacherHit(): void {
-    this.initContext();
-    if (!this.ctx || !this.sfxGain) return;
-
-    const t = this.ctx.currentTime;
-    // 激突音
-    const osc1 = this.ctx.createOscillator();
-    const gain1 = this.ctx.createGain();
-    osc1.type = 'sawtooth';
-    osc1.frequency.setValueAtTime(180, t);
-    osc1.frequency.exponentialRampToValueAtTime(40, t + 0.4);
-    gain1.gain.setValueAtTime(0.7, t);
-    gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
-    osc1.connect(gain1);
-    gain1.connect(this.sfxGain);
-    osc1.start(t);
-    osc1.stop(t + 0.41);
-
-    // 怒声サイレン
-    const osc2 = this.ctx.createOscillator();
-    const gain2 = this.ctx.createGain();
-    osc2.type = 'square';
-    osc2.frequency.setValueAtTime(440, t);
-    osc2.frequency.setValueAtTime(350, t + 0.15);
-    osc2.frequency.setValueAtTime(440, t + 0.3);
-    gain2.gain.setValueAtTime(0.5, t);
-    gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.45);
-    osc2.connect(gain2);
-    gain2.connect(this.sfxGain);
-    osc2.start(t);
-    osc2.stop(t + 0.46);
-  }
-
-  /**
    * 看板くぐり抜け成功音
    */
   public playSignDodge(): void {

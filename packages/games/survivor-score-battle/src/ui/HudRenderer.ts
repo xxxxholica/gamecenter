@@ -1,20 +1,28 @@
-import { ContenderState } from '../types';
 import { Player } from '../entities/Player';
 import { Boss } from '../entities/Boss';
 import { PickupItem } from '../items/ExpGem';
 import { getInputMode } from '../../../../shared/arcadeGuide';
 
-/** SPECIAL が使える間、ランキング変動のバーと同じ場所に出すお知らせの周期(秒)と、1回に出しておく長さ(秒) */
-const SPECIAL_NOTICE_PERIOD = 12;
-const SPECIAL_NOTICE_SHOW = 3.5;
 /** SPECIAL を発動するボタン名(コントローラー / キーボード) */
 const SPECIAL_BUTTONS_PAD = ['Y', 'LB', 'RB', 'RT'];
-const SPECIAL_BUTTONS_KBD = ['Shift', 'Space'];
+const SPECIAL_BUTTONS_KBD = ['Space'];
+
+/** スペシャルの名前。ためている間は左から色で埋まり、満タンで虹色になる */
+const SPECIAL_NAME = 'SWORD STORM';
+/** スペシャル表示の文字 */
+const SPECIAL_TEXT_FONT = "900 38px Impact, 'Arial Black', sans-serif";
+const SPECIAL_TEXT_SPACING = '4px';
+
+/** HPバーの真上に置くスペシャル表示(準備中 / 発動)の高さ */
+const SPECIAL_GAUGE_H = 40;
 
 export class HudRenderer {
   /** SPECIAL が使える状態になってからの経過時間(秒)。使えない間は 0 */
   private specialReadyClock: number = 0;
-  private specialReady: boolean = false;
+  /** スペシャルの行の文字幅(入力モード・文言ごと) */
+  private readonly specialRowMetrics = new Map<string, { badgeW: number[]; labelW: number }>();
+  /** ボタンバッジの幅(キー表示か・文字ごと) */
+  private readonly badgeWidths = new Map<string, number>();
   private rankChangeText: string | null = null;
   private rankChangeTimer: number = 0;
   private rankChangeIsUp: boolean = true;
@@ -33,9 +41,8 @@ export class HudRenderer {
     }
   }
 
-  /** specialReady: SPECIAL を今すぐ発動できる状態か。使える間だけ周期的にお知らせを出す */
+  /** specialReady: SPECIAL を今すぐ発動できる状態か。使える間はゲージを点滅させる */
   public update(dt: number, specialReady: boolean = false) {
-    this.specialReady = specialReady;
     this.specialReadyClock = specialReady ? this.specialReadyClock + dt : 0;
     if (this.rankChangeTimer > 0) {
       this.rankChangeTimer -= dt;
@@ -45,45 +52,47 @@ export class HudRenderer {
     }
   }
 
-  /** 周期の最初の SPECIAL_NOTICE_SHOW 秒だけ出す(使えるようになった直後から。使うまで繰り返す) */
-  private isSpecialNoticeVisible(): boolean {
-    return this.specialReady && this.specialReadyClock % SPECIAL_NOTICE_PERIOD < SPECIAL_NOTICE_SHOW;
-  }
-
   /** ボタンガイドと同じ見た目のバッジを描く。pad時は丸、key時はキートップ調。描いた幅を返す */
-  private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number, isKey: boolean = false): number {
+  private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number, isKey: boolean = false, tint?: string | CanvasGradient): number {
     ctx.save();
     ctx.font = isKey
       ? "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
       : "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
-    const w = Math.max(30, ctx.measureText(label).width + (isKey ? 22 : 18));
+    const widthKey = `${isKey}|${label}`;
+    let w = this.badgeWidths.get(widthKey);
+    if (w === undefined) {
+      w = Math.max(30, ctx.measureText(label).width + (isKey ? 22 : 18));
+      this.badgeWidths.set(widthKey, w);
+    }
     const h = 30;
-    const r = isKey ? 6 : h / 2;
+    const r = isKey ? 6 : h / 2; // 角の丸み(キーは四角、パッドは丸)
+    const hh = h / 2;
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.moveTo(left + r, cy - r);
-    ctx.arcTo(left + w, cy - r, left + w, cy + r, r);
-    ctx.arcTo(left + w, cy + r, left, cy + r, r);
-    ctx.arcTo(left, cy + r, left, cy - r, r);
-    ctx.arcTo(left, cy - r, left + w, cy - r, r);
+    ctx.moveTo(left + r, cy - hh);
+    ctx.arcTo(left + w, cy - hh, left + w, cy + hh, r);
+    ctx.arcTo(left + w, cy + hh, left, cy + hh, r);
+    ctx.arcTo(left, cy + hh, left, cy - hh, r);
+    ctx.arcTo(left, cy - hh, left + w, cy - hh, r);
     ctx.closePath();
-    ctx.fillStyle = '#10131a';
+    // tint を指定すると、その色(黄色など)のボタンにする
+    ctx.fillStyle = typeof tint === 'string' ? 'rgba(255, 215, 0, 0.22)' : tint ? 'rgba(255, 255, 255, 0.2)' : isKey ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.14)';
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = isKey ? 2 : 2.5;
+    ctx.strokeStyle = tint ?? (isKey ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.35)');
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     if (isKey) {
       // キートップの下部ハイライト線
-      ctx.strokeStyle = '#94a3b8';
+      ctx.strokeStyle = tint ?? 'rgba(255, 255, 255, 0.75)';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(left + 2, cy + r - 1);
-      ctx.lineTo(left + w - 2, cy + r - 1);
+      ctx.moveTo(left + r, cy + hh - 1);
+      ctx.lineTo(left + w - r, cy + hh - 1);
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = tint ?? '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, left + w / 2, cy + (isKey ? 0 : 1));
@@ -91,57 +100,77 @@ export class HudRenderer {
     return w;
   }
 
-  /** 「(Y)(LB)(RB)(RT) で必殺技を発動」を1行で出す。入力モードに応じてキーボード用キーに自動切替 */
-  private renderSpecialNotice(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  /**
+   * 「[ボタン]SWORD STORM」の1行を cx を中心に出す。入力モードに応じてキーボード用キーに自動切替。
+   * progress が数値(0〜1)の間は、この1行そのものがゲージになり、左から色で埋まる。null なら満タン(虹色)
+   */
+  private renderSpecialRow(ctx: CanvasRenderingContext2D, cx: number, cy: number, label: string, progress: number | null) {
     const isPad = getInputMode() === 'gamepad';
     const buttons = isPad ? SPECIAL_BUTTONS_PAD : SPECIAL_BUTTONS_KBD;
-
-    const boxH = 75;
-    const boxY = height * 0.28;
-    const pulse = 0.65 + 0.35 * Math.sin(this.specialReadyClock * 6);
-
-    // 1行ぶんの幅を測る: ボタンのバッジ + 説明
-    const label = 'で必殺技を発動';
-    const badgeFont = isPad
-      ? "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
-      : "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
-    const labelFont = "700 24px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
     ctx.save();
-    ctx.font = badgeFont;
-    const badgeW = buttons.map((b) => Math.max(30, ctx.measureText(b).width + (isPad ? 18 : 22)));
-    ctx.font = labelFont;
-    const labelW = ctx.measureText(label).width;
-    ctx.restore();
-    const badgeGap = 8;
+    ctx.font = SPECIAL_TEXT_FONT;
+    ctx.letterSpacing = SPECIAL_TEXT_SPACING;
+    // 文字の幅は、入力モードと文言が同じなら変わらないので、最初の1回だけ測る(毎フレーム measureText しない)
+    const metricsKey = `${isPad}|${label}`;
+    let metrics = this.specialRowMetrics.get(metricsKey);
+    if (!metrics) {
+      ctx.font = isPad
+        ? "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
+        : "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+      const widths = buttons.map((b) => Math.max(30, ctx.measureText(b).width + (isPad ? 18 : 22)));
+      ctx.font = SPECIAL_TEXT_FONT;
+      ctx.letterSpacing = SPECIAL_TEXT_SPACING;
+      metrics = { badgeW: widths, labelW: ctx.measureText(label).width };
+      this.specialRowMetrics.set(metricsKey, metrics);
+    }
+    const { badgeW, labelW } = metrics;
+    const badgeGap = 6;
     const badgesW = badgeW.reduce((a, b) => a + b, 0) + badgeGap * (buttons.length - 1);
     const contentW = badgesW + 14 + labelW;
-    // 順位の上下のウィンドウ(RANK UP / RANK DOWN)と同じ大きさ。中身はこの幅に収まる
-    const boxW = Math.max(500, contentW + 64);
+    const left = cx - contentW / 2;
+    const textX = left + badgesW + 14;
 
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(5, 10, 25, 0.92)';
-    ctx.strokeStyle = '#ff1133';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = '#ff1133';
-    ctx.shadowBlur = 18 + 14 * pulse;
-    ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
-    ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
-    ctx.shadowBlur = 0;
+    // 文字の色(満タンは時間とともに流れる虹色)
+    let fill: string | CanvasGradient = '#ffd700';
+    if (progress === null) {
+      const hue = (this.specialReadyClock * 120) % 360;
+      const grad = ctx.createLinearGradient(left, 0, textX + labelW, 0); // ボタンから文字まで、1行ぜんたいで流れる虹色
+      for (let i = 0; i <= 6; i++) grad.addColorStop(i / 6, `hsl(${(hue + i * 60) % 360}, 100%, 60%)`);
+      fill = grad;
+    }
 
-    let x = (width - contentW) / 2;
-    ctx.textAlign = 'left';
-    buttons.forEach((b, i) => {
-      this.drawButtonBadge(ctx, b, x, boxY, !isPad);
-      x += badgeW[i] + badgeGap;
-    });
-    x += 14 - badgeGap;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = "700 24px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, x, boxY + 1);
+    const drawRow = (textFill: string | CanvasGradient, alpha: number, badgeTint?: string | CanvasGradient) => {
+      ctx.globalAlpha = alpha;
+      let x = left;
+      ctx.letterSpacing = '0px'; // ボタンの文字には字間を付けない
+      buttons.forEach((b, i) => {
+        this.drawButtonBadge(ctx, b, x, cy, !isPad, badgeTint);
+        x += badgeW[i] + badgeGap;
+      });
+      ctx.font = SPECIAL_TEXT_FONT;
+      ctx.letterSpacing = SPECIAL_TEXT_SPACING;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(label, textX, cy);
+      ctx.fillStyle = textFill;
+      ctx.fillText(label, textX, cy);
+    };
+
+    if (progress === null) {
+      drawRow(fill, 1, fill);
+    } else {
+      // 下地(まだ埋まっていない部分)を暗く出し、その上に、左から progress の分だけ明るい1行を重ねる
+      drawRow('#4a5566', 0.45);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left - 4, cy - SPECIAL_GAUGE_H / 2, (contentW + 8) * progress, SPECIAL_GAUGE_H);
+      ctx.clip();
+      drawRow(fill, 1, '#ffd700');
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -150,7 +179,6 @@ export class HudRenderer {
     width: number,
     height: number,
     player: Player,
-    contenders: ContenderState[],
     gameTime: number,
     activeBoss: Boss | null,
     warningBanner: string | null,
@@ -164,16 +192,13 @@ export class HudRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    const layout = this.statusLayout(ctx, width, height);
-    const comboBottom = layout.topY - 40;
-    const comboH = 56;
 
     // 2. Boss Health Bar (Bottom Center, above time/score row)
     if (activeBoss && activeBoss.alive) {
       const barW = 550;
       const barH = 26;
       const barX = (width - barW) / 2;
-      const barY = comboBottom - comboH - 10 - barH;
+      const barY = height - 58 - SPECIAL_GAUGE_H - 12 - 14 - barH; // HPバーとスペシャルゲージの上
       const hpPct = Math.max(0, activeBoss.hp / activeBoss.maxHp);
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
@@ -199,20 +224,14 @@ export class HudRenderer {
       ctx.fillText(`${activeBoss.bossName}  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
     }
 
-    // 3. Top-Right: Real-Time Ranking Leaderboard (Spectator Friendly!)
-    this.renderLeaderboard(ctx, width, contenders);
-
-    // 4. Center: Rank Up / Rank Down / #1 Cut-in Banner。ランキング変動が無いときは、SPECIAL のお知らせを同じ場所に出す
-    // SPECIAL が使える間は、順位の変動(RANK UP / DOWN / #1)は出さない。お知らせだけを周期的に出す
-    if (this.specialReady) {
-      if (this.isSpecialNoticeVisible()) this.renderSpecialNotice(ctx, width, height);
-    } else if (this.rankChangeText) {
+    // 4. Center: Rank Up / Rank Down / #1 Cut-in Banner
+    if (this.rankChangeText) {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       const isTop = this.rankChangeText.includes('#1');
-      const boxW = 500;   // RANK UP / RANK DOWN / YOU ARE #1 / SPECIAL のお知らせは、すべて同じ大きさ
+      const boxW = 500;
       const boxH = 75;
       const boxY = height * 0.28;
 
@@ -254,16 +273,6 @@ export class HudRenderer {
       ctx.restore();
     }
 
-    // 6. Combo Meter (above the score column)
-    if (player.comboCount > 0) {
-      this.renderComboMeter(
-        ctx,
-        layout.spanL + layout.colW * 1.5,
-        comboBottom - comboH + 19,
-        player
-      );
-    }
-
     // 7. Bottom Center: Special Gauge & HP Bar
     this.renderPlayerStatus(ctx, width, height, player, gameTime);
 
@@ -278,108 +287,7 @@ export class HudRenderer {
     ctx.restore();
   }
 
-  private renderLeaderboard(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    contenders: ContenderState[]
-  ) {
-    const boardW = 300;
-    const rowH = 34;
-    const boardX = width - boardW - 24;
-    const boardY = 20;
-
-    // Header
-    ctx.fillStyle = 'rgba(5, 12, 24, 0.88)';
-    ctx.strokeStyle = '#00f0ff';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 12;
-
-    const totalH = contenders.length * rowH + 16;
-    ctx.fillRect(boardX, boardY, boardW, totalH);
-    ctx.strokeRect(boardX, boardY, boardW, totalH);
-    ctx.shadowBlur = 0;
-
-    // 文字は各行の枠の縦中央に揃える
-    ctx.save();
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < contenders.length; i++) {
-      const c = contenders[i];
-      const y = boardY + 10 + i * rowH;
-      const isYou = c.isPlayer;
-      const isAlive = c.alive;
-
-      if (isYou) {
-        // Glowing highlight for player row
-        ctx.fillStyle = 'rgba(0, 240, 255, 0.22)';
-        ctx.fillRect(boardX + 6, y - 2, boardW - 12, rowH - 4);
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(boardX + 6, y - 2, boardW - 12, rowH - 4);
-      } else if (!isAlive) {
-        ctx.fillStyle = 'rgba(255, 34, 85, 0.12)';
-        ctx.fillRect(boardX + 6, y - 2, boardW - 12, rowH - 4);
-      }
-
-      // Rank number
-      ctx.font = '900 18px Impact, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = !isAlive ? '#666677' : i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#8899aa';
-      ctx.fillText(`${i + 1}`, boardX + 24, y + rowH / 2 - 4);
-
-      // Name
-      ctx.textAlign = 'left';
-      ctx.fillStyle = !isAlive ? '#884455' : isYou ? '#ffd700' : c.color;
-      ctx.font = isYou ? '900 18px Impact, sans-serif' : '700 16px Impact, sans-serif';
-      const isRespawning = !isAlive && c.respawnTimer && c.respawnTimer > 0;
-      const displayName = !isAlive ? (isRespawning ? `${c.name} ${Math.ceil(c.respawnTimer!)}s` : `${c.name} 脱落`) : c.name;
-      ctx.fillText(displayName, boardX + 46, y + rowH / 2 - 4);
-
-      // Score
-      ctx.textAlign = 'right';
-      ctx.fillStyle = !isAlive ? '#778899' : '#ffffff';
-      ctx.font = '900 18px Impact, sans-serif';
-      ctx.fillText(c.score.toLocaleString(), boardX + boardW - 16, y + rowH / 2 - 4);
-    }
-    ctx.restore();
-  }
-
-  // x, y はコンボ文字の中心。下にゲージが続く(全体の高さは約56px)
-  private renderComboMeter(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    player: Player
-  ) {
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Combo text
-    ctx.font = '900 38px Impact, sans-serif';
-    ctx.fillStyle = '#ff9900';
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 5;
-    ctx.shadowColor = '#ff5500';
-    ctx.shadowBlur = 18;
-
-    const countText = `COMBO ×${player.comboCount}`;
-    ctx.strokeText(countText, x, y);
-    ctx.fillText(countText, x, y);
-
-    // Combo decay bar
-    const barW = 180;
-    const barH = 6;
-    const pct = Math.max(0, player.comboTimer / player.comboDuration);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(x - barW / 2, y + 30, barW, barH);
-    ctx.fillStyle = '#ffaa00';
-    ctx.fillRect(x - barW / 2, y + 30, barW * pct, barH);
-
-    ctx.restore();
-  }
-
-  // HP/XPバーと、その上のTIME/SCORE/SPECIAL段の配置。他の要素(コンボ、ボスHP)の基準にもなる。
+  // HP/XPバーと、その上のTIME/SCORE/SPECIAL段の配置。他の要素(ボスHP)の基準にもなる。
   private statusLayoutCache: { width: number; height: number; value: ReturnType<HudRenderer['computeStatusLayout']> } | null = null;
 
   /** 配置は画面の大きさだけで決まるので、大きさが変わらない限り測り直さない(毎フレーム measureText を5回呼んでいた) */
@@ -449,19 +357,18 @@ export class HudRenderer {
       hpColor
     );
 
-    // 2. Time / Score / Special, above the HP bar (label over value, each centered)
+    // 2. TIME は左上、SCORE は右上、SPECIAL は HP バーの真上(ラベルが上、値が下)
     const mins = Math.floor(gameTime / 60);
     const secs = Math.floor(gameTime % 60);
     const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     const specPct = Math.min(1.0, player.specialGauge / 100);
-    const { colW, spanL, valueSize, labelSize, valueY, labelY } = this.statusLayout(ctx, width, height);
-    const colX = (i: number) => spanL + colW * (i + 0.5);
+    const { valueSize, labelSize } = this.statusLayout(ctx, width, height);
+    const margin = 24;
+    const topLabelY = margin + labelSize;
+    const topValueY = topLabelY + valueSize + 4;
     const cols = [
-      { x: colX(0), label: 'TIME', value: timeStr, color: '#00f0ff', glow: false },
-      { x: colX(1), label: 'SCORE', value: player.score.toLocaleString(), color: '#ffffff', glow: false },
-      player.isSpecialReady
-        ? { x: colX(2), label: 'SPECIAL', value: 'READY', color: '#ff1133', glow: true }
-        : { x: colX(2), label: 'SPECIAL', value: `${Math.floor(specPct * 100)}%`, color: '#ffd700', glow: false },
+      { x: margin, align: 'left' as CanvasTextAlign, label: 'TIME', value: timeStr, color: '#00f0ff' },
+      { x: width - margin, align: 'right' as CanvasTextAlign, label: 'SCORE', value: player.score.toLocaleString(), color: '#ffffff' },
     ];
     ctx.save();
     ctx.textAlign = 'center';
@@ -469,21 +376,22 @@ export class HudRenderer {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4;
     for (const col of cols) {
+      ctx.textAlign = col.align;
       ctx.font = `900 ${labelSize}px Impact, sans-serif`;
       ctx.fillStyle = '#8899aa';
-      ctx.strokeText(col.label, col.x, labelY);
-      ctx.fillText(col.label, col.x, labelY);
+      ctx.strokeText(col.label, col.x, topLabelY);
+      ctx.fillText(col.label, col.x, topLabelY);
       ctx.font = `900 ${valueSize}px Impact, sans-serif`;
       ctx.fillStyle = col.color;
-      if (col.glow) {
-        ctx.shadowColor = '#ff1133';
-        ctx.shadowBlur = 18;
-      }
-      ctx.strokeText(col.value, col.x, valueY);
-      ctx.fillText(col.value, col.x, valueY);
-      ctx.shadowBlur = 0;
+      ctx.strokeText(col.value, col.x, topValueY);
+      ctx.fillText(col.value, col.x, topValueY);
     }
     ctx.restore();
+
+    // 3. SPECIAL: HP バーの真上。ボタン表示も最初から出し、ためている間は1行ぜんたいが左から色で埋まるゲージになる。満タンで虹色
+    const cy = barY - 12 - SPECIAL_GAUGE_H / 2;
+    if (player.isSpecialReady) this.renderSpecialRow(ctx, width / 2, cy, SPECIAL_NAME, null);
+    else this.renderSpecialRow(ctx, width / 2, cy, SPECIAL_NAME, specPct);
   }
 
   private renderExpBar(

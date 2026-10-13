@@ -83,8 +83,8 @@ export class GameManager {
   private centerBanner!: HTMLElement;
   private fadeOverlay!: HTMLElement;
   private resultOverlay!: HTMLElement;
-  private briefOverlay!: HTMLElement;
   private briefTimer = 0.0;
+  private briefCount = -1;
 
   // Attract Overlays
   private demoBanner!: HTMLElement;
@@ -92,8 +92,7 @@ export class GameManager {
   private rankingOverlay!: HTMLElement;
 
   private hudRoundText!: HTMLElement;
-  private hudStageText!: HTMLElement;
-  private hudTimeText!: HTMLElement;
+  private hudActionGuide!: HTMLElement;
   private hudSubInfo!: HTMLElement;
 
   // Danger vignette overlays
@@ -106,9 +105,6 @@ export class GameManager {
   private resultArmTime = 0;
 
   // Arcade input status icons
-  private stickDot!: HTMLElement;
-  private btn0Indicator!: HTMLElement;
-  private btn1Indicator!: HTMLElement;
 
   constructor(
     scene: THREE.Scene,
@@ -139,7 +135,7 @@ export class GameManager {
   private setupPreview() {
     const style = document.createElement('style');
     style.textContent = `
-      #hud-overlay, #center-banner, #brief-overlay, #result-overlay, #title-overlay, #ranking-overlay,
+      #hud-overlay, #center-banner, #result-overlay, #title-overlay, #ranking-overlay,
       #danger-vignette, #danger-flash, #demo-banner, #demo-prompt, #agc-guide { display: none !important; }
     `;
     document.head.appendChild(style);
@@ -152,27 +148,21 @@ export class GameManager {
     this.centerBanner = document.getElementById('center-banner')!;
     this.fadeOverlay = document.getElementById('fade-overlay')!;
     this.resultOverlay = document.getElementById('result-overlay')!;
-    this.briefOverlay = document.getElementById('brief-overlay')!;
-    this.briefOverlay.addEventListener('click', () => this.dismissBriefing());
 
     this.demoBanner = document.getElementById('demo-banner')!;
     this.demoPrompt = document.getElementById('demo-prompt')!;
     this.rankingOverlay = document.getElementById('ranking-overlay')!;
 
     this.hudRoundText = document.getElementById('hud-round')!;
-    this.hudStageText = document.getElementById('hud-stage')!;
-    this.hudTimeText = document.getElementById('hud-time')!;
+    this.hudActionGuide = document.getElementById('hud-action-guide')!;
     this.hudSubInfo = document.getElementById('hud-sub-info')!;
     this.dangerVignette = document.getElementById('danger-vignette')!;
     this.dangerFlash = document.getElementById('danger-flash')!;
 
-    this.stickDot = document.getElementById('stick-dot')!;
-    this.btn0Indicator = document.getElementById('btn0-indicator')!;
-    this.btn1Indicator = document.getElementById('btn1-indicator')!;
 
     // Start button on title
     const startBtn = document.getElementById('btn-start')!;
-    startBtn.innerHTML = `${buttonIconHtml([0, 1, 2, 3])} ${startBtn.textContent}`;
+    startBtn.innerHTML = `${buttonIconHtml([0])} ${startBtn.textContent}`;
     startBtn.addEventListener('click', () => {
       if (this.state === 'TITLE') {
         this.startGame();
@@ -243,13 +233,12 @@ export class GameManager {
     mountArcadeGuide({
       buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
       showHomeHint: true,
-      backLabel: 'ホームへ',
+      backLabel: 'ホームへ戻る',
     });
 
     this.titleOverlay.style.display = 'none';
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';
-    this.briefOverlay.style.display = 'none';
     this.fadeOverlay.style.opacity = '0';
     this.resultOverlay.style.display = 'none';
     this.rankingOverlay.style.display = 'none';
@@ -268,8 +257,8 @@ export class GameManager {
         slug: 'extreme-edge-arcade',
         accentColor: '#ff2b4d',
         tagline: '日常のギリギリ連続チャレンジ',
-        startButtonLabel: '開始',
-        promptLabel: 'PRESS START / ボタンで開始',
+        startButtonLabel: 'スタート',
+        promptLabel: 'PRESS START / ボタンでスタート',
         onStart: () => {
           this.startGame();
         },
@@ -340,7 +329,7 @@ export class GameManager {
 
 
 
-  private loadStage(index: number, isRetry: boolean = false) {
+  private loadStage(index: number, _isRetry: boolean = false) {
     if (this.currentStage) {
       this.currentStage.cleanup(this.scene);
       this.currentStage = null;
@@ -352,40 +341,36 @@ export class GameManager {
     this.currentStage.init(this.scene, this.camera);
 
     this.currentJudgment = null;
+    this.hudActionGuide.classList.remove('danger');
 
     // Set HUD stage text & persistent operational guide
     this.updateRoundText(index);
-    this.hudStageText.textContent = this.currentStage.title;
-    this.hudTimeText.textContent = this.currentStage.getRemainingTime().toFixed(1);
 
-    // Update global arcade guide card for each stage's controls (全種目「レバー上」操作に統一)
+    // Update global arcade guide card for each stage's controls (全種目 Enter / A ボタンで止める操作に統一)
     const stageGuideOptions = [
       // Stage 1 (ドリンクバー)
-      { moveLabel: '上: ドリンクを止める', showHomeHint: true, backLabel: 'ポーズ' },
+      { buttons: [{ indices: [0], label: 'ドリンクを止める' }], showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 2 (スマホ充電)
-      { moveLabel: '上: ケーブルを挿す', showHomeHint: true, backLabel: 'ポーズ' },
+      { buttons: [{ indices: [0], label: 'ケーブルを挿す' }], showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 3 (目覚まし時計)
-      { moveLabel: '上: 時計を止める', showHomeHint: true, backLabel: 'ポーズ' },
+      { buttons: [{ indices: [0], label: '時計を止める' }], showHomeHint: true, backLabel: 'ポーズ' },
       // Stage 4 (風船ふくらまし)
-      { moveLabel: '上: 空気を止める', showHomeHint: true, backLabel: 'ポーズ' },
+      { buttons: [{ indices: [0], label: '風船を止める' }], showHomeHint: true, backLabel: 'ポーズ' },
     ];
     if (stageGuideOptions[index]) {
       mountArcadeGuide(stageGuideOptions[index]);
+      // 中央下にも同じ操作を大きく出す
+      const label = stageGuideOptions[index].buttons?.[0]?.label ?? '';
+      this.hudActionGuide.innerHTML = `${buttonIconHtml([0])}<small>${label}</small>`;
     }
 
-    if (isRetry) {
-      // やり直しは説明カードを飛ばし、すぐ準備に入る
-      this.state = 'STAGE_INTRO';
-      this.stateTimer = 0.5;
-      this.centerBanner.style.display = 'flex';
-      this.centerBanner.innerHTML = `<div class="banner-action pulse-text">READY</div>`;
-    } else {
-      // 種目の説明カードを出し、ボタンが押されるまで待つ(何をすればよいか分からないまま始まらないようにする)
-      this.state = 'STAGE_BRIEF';
-      this.briefTimer = 0.0;
-      this.centerBanner.style.display = 'none';
-      this.showBriefing(this.currentStage);
-    }
+    // 見出し(溢れる前に止めろ など)と3・2・1を同時に大きく出し、自動的に始まる(やり直しも同じ)
+    this.state = 'STAGE_BRIEF';
+    this.briefTimer = 0.0;
+    this.briefCount = -1;
+    this.centerBanner.style.display = 'flex';
+    this.centerBanner.style.setProperty('--dim', '1');
+    this.centerBanner.innerHTML = this.introHtml(this.currentStage.briefing.headline, '3');
 
     // Unfade screen
     this.fadeOverlay.style.opacity = '0';
@@ -408,41 +393,12 @@ export class GameManager {
     return this.attemptResults.reduce((a, b) => (b.scorePercent > a.scorePercent ? b : a));
   }
 
-  /** 種目の説明カード。やること・操作・成功と大惨事の条件を、開始前に短く見せる */
-  private showBriefing(stage: Stage) {
-    const b = stage.briefing;
+  private introHtml(headline: string, count: string): string {
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    this.briefOverlay.innerHTML = `
-      <div class="brief-card">
-        <div class="brief-stage">${esc(stage.numberText)}</div>
-        <div class="brief-row"><span class="brief-key">${esc(b.headline)}</span></div>
-        <div class="brief-row ok"><span class="brief-mark">◎</span>${esc(b.ok)}</div>
-        <div class="brief-row ng"><span class="brief-mark">×</span>${esc(b.ng)}</div>
-        <button type="button" class="brief-start-btn blink-1s" id="brief-proceed-btn">
-          ${buttonIconHtml([0, 1, 2, 3])} 決定して開始
-        </button>
-      </div>
-    `;
-    const proceedBtn = document.getElementById('brief-proceed-btn');
-    proceedBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.dismissBriefing();
-    });
-    this.briefOverlay.style.display = 'flex';
-  }
-
-  /** 説明カードを閉じて開始準備(READY)に入る */
-  private dismissBriefing() {
-    if (this.state !== 'STAGE_BRIEF' || this.briefTimer < 0.5) return;
-    this.briefOverlay.style.display = 'none';
-    this.state = 'STAGE_INTRO';
-    this.stateTimer = 0.5;
-    this.centerBanner.style.display = 'flex';
-    this.centerBanner.innerHTML = `<div class="banner-action pulse-text">READY</div>`;
+    return `${headline ? `<div class="intro-headline">${esc(headline)}</div>` : ''}<div class="intro-count">${count}</div>`;
   }
 
   update(dt: number) {
-    this.updateInputIndicators();
     if (this.pause.isOpen) return;
 
     switch (this.state) {
@@ -467,14 +423,22 @@ export class GameManager {
 
       case 'STAGE_BRIEF': {
         this.briefTimer += dt;
-        if (GameManager.PREVIEW && this.briefTimer >= 0.3) this.dismissBriefing();   // 収録: 説明カードは自動で閉じる
-        // 直前の連打で誤って閉じないよう、表示から0.5秒は受け付けない
-        if (this.briefTimer >= 0.5 && (this.input.wasButton0Pressed() || this.input.wasButton1Pressed() || this.input.wasLeverUpPressed())) {
-          this.dismissBriefing();
+        // 収録用: カウントダウンなしですぐ始める
+        const t = GameManager.PREVIEW ? 3.3 : this.briefTimer;
+        const count = t < 0 ? -1 : 3 - Math.floor(t);
+        // 暗幕は、カウントダウンの経過に合わせて3秒かけて完全に透明にする(数字の入れ替えで演出がやり直しにならないよう、毎フレーム直接指定)
+        this.centerBanner.style.setProperty('--dim', String(Math.max(0, 1 - Math.max(0, t) / 3)));
+        if (count > 0 && count !== this.briefCount) {
+          this.briefCount = count;
+          this.centerBanner.innerHTML = this.introHtml(this.currentStage!.briefing.headline, String(count));
+          sound.playTick(count === 1 ? 1500 : 1100);
         }
-        // 放置されたらタイトルへ戻す
-        if (this.briefTimer >= 60) {
-          this.showTitle();
+        if (t >= 3) {
+          // 見出しとカウントダウンは同時に消す
+          this.centerBanner.style.display = 'none';
+          this.centerBanner.style.removeProperty('--dim');
+          this.state = 'STAGE_INTRO';
+          this.stateTimer = 0;
         }
         break;
       }
@@ -482,7 +446,7 @@ export class GameManager {
       case 'STAGE_INTRO': {
         this.stateTimer -= dt;
         // 説明を閉じたボタンを離してから始める(押しっぱなしのまま操作が始まらないように)。長くても1.5秒で開始
-        const released = !this.input.isButton0() && !this.input.isLeverUp();
+        const released = !this.input.isButton0();
         if ((this.stateTimer <= 0 && released) || this.stateTimer <= -1.5) {
           // Intro finishes -> Start Active Play!
           this.state = 'STAGE_PLAY';
@@ -497,10 +461,6 @@ export class GameManager {
         if (!this.currentStage) break;
 
         const result = this.currentStage.update(dt, this.input);
-
-        // Update time HUD
-        const timeVal = this.currentStage.getRemainingTime().toFixed(1);
-        setText(this.hudTimeText, timeVal);
 
         // Update sub-metric (e.g. remaining water, battery percentage)
         const subInfo = this.currentStage.getSubInfo?.();
@@ -569,7 +529,7 @@ export class GameManager {
         if (this.stateTimer <= 0) {
           const last = this.currentJudgment;
           if (last && !last.success && this.attempt < GameManager.MAX_ATTEMPTS) {
-            // 失敗: 同じ種目をもう一度(説明カードは出さない)
+            // 失敗: 同じ種目をもう一度(見出しとカウントダウンから)
             this.attempt++;
             this.runRetries++;
             reportDeepAnalytics('progression_update', {
@@ -640,11 +600,26 @@ export class GameManager {
     }
   }
 
+  /** 1回の挑戦の評価。成功は、限界に近いほど上の段階。失敗は、0%(あふれた・割れた)なら「やりすぎ」、足りなかったなら「チキン野郎」 */
+  private static judgmentLabel(success: boolean, scorePercent: number): { text: string; color: string } {
+    if (!success) return scorePercent <= 0 ? { text: 'やりすぎ', color: '#ff1a1a' } : { text: 'チキン野郎', color: '#ff8800' };
+    const tiers: { min: number; text: string; color: string }[] = [
+      { min: 99.5, text: '神のギリギリ', color: '#ffe600' },
+      { min: 95, text: 'ギリギリの超越者', color: '#ffc400' },
+      { min: 85, text: 'ギリギリ名人', color: '#ff9e2c' },
+      { min: 70, text: '限界チャレンジャー', color: '#00ff66' },
+      { min: 50, text: 'そこそこギリギリ', color: '#8de8ff' },
+      { min: -Infinity, text: 'おっかなびっくり', color: '#ffd9a0' },
+    ];
+    return tiers.find((t) => scorePercent >= t.min)!;
+  }
+
   private enterJudgment() {
     this.state = 'STAGE_JUDGMENT';
     sound.stopBgm();
 
     // Immediately clear danger overlays & sub info
+    this.hudActionGuide.classList.remove('danger');
     this.dangerVignette.style.opacity = '0';
     this.dangerFlash.style.opacity = '0';
     this.hudSubInfo.style.display = 'none';
@@ -656,15 +631,18 @@ export class GameManager {
 
     // 1画面に詰め込まず、伝えることを1つずつ順に切り替えて見せる(点数は各ページに出したまま)
     const score = `<div class="judgment-score">${this.currentJudgment.scorePercent.toFixed(1)}%</div>`;
+    const label = GameManager.judgmentLabel(this.currentJudgment.success, this.currentJudgment.scorePercent);
+    const labelHtml = `<div class="judgment-label" style="color: ${label.color}">${label.text}</div>`;
     if (this.currentJudgment.success) {
-      this.judgmentPages.push({ html: `<div class="judgment-success">成功</div>${score}`, seconds: 1.2 });
+      this.judgmentPages.push({ html: `${labelHtml}${score}`, seconds: 1.2 });
     } else {
-      this.judgmentPages.push({ html: `<div class="judgment-fail">大惨事</div>${score}`, seconds: 1.2 });
+      this.judgmentPages.push({ html: `${labelHtml}${score}`, seconds: 1.2 });
       if (this.attempt < GameManager.MAX_ATTEMPTS) {
         this.judgmentPages.push({ html: `<div class="judgment-retry">もう一度挑戦</div>${score}`, seconds: 1.2 });
       }
     }
 
+    this.centerBanner.style.removeProperty('--dim');
     this.centerBanner.style.display = 'flex';
     this.centerBanner.innerHTML = this.judgmentPages[0].html;
     this.stateTimer = this.judgmentPages[0].seconds;
@@ -709,7 +687,6 @@ export class GameManager {
 
     this.hudOverlay.style.display = 'none';
     this.centerBanner.style.display = 'none';
-    this.briefOverlay.style.display = 'none';
     this.fadeOverlay.style.opacity = '0';
     this.dangerVignette.style.opacity = '0';
     this.dangerFlash.style.opacity = '0';
@@ -727,15 +704,15 @@ export class GameManager {
     let deviation = 50 + ((avgScore - 60) / 40) * 25;
     deviation = Math.min(88.0, Math.max(15.0, deviation));
 
-    // 総合評価の区分(平均スコア%の下限が高い順)。満点近くまで細かく分け、神は平均99%以上(偏差値約74.4)
+    // 総合評価の区分(平均スコア%の下限が高い順)。満点近くまで細かく分け、神は平均99.5%以上
     const RANKS: { min: number; text: string; color: string }[] = [
-      { min: 99, text: '神のギリギリ', color: '#ffe600' },
-      { min: 97, text: 'ギリギリの超越者', color: '#ffc400' },
-      { min: 93, text: 'ギリギリ名人', color: '#ff9e2c' },
-      { min: 88, text: 'ギリギリマスター', color: '#7dffb0' },
-      { min: 80, text: '限界チャレンジャー', color: '#00ff66' },
-      { min: 70, text: 'そこそこギリギリ', color: '#8de8ff' },
-      { min: 60, text: '安全第一', color: '#ffffff' },
+      { min: 99.5, text: '神のギリギリ', color: '#ffe600' },
+      { min: 98, text: 'ギリギリの超越者', color: '#ffc400' },
+      { min: 96, text: 'ギリギリ名人', color: '#ff9e2c' },
+      { min: 93, text: 'ギリギリマスター', color: '#7dffb0' },
+      { min: 88, text: '限界チャレンジャー', color: '#00ff66' },
+      { min: 78, text: 'そこそこギリギリ', color: '#8de8ff' },
+      { min: 65, text: '安全第一', color: '#ffffff' },
       { min: 45, text: 'おっかなびっくり', color: '#ffd9a0' },
       { min: 25, text: 'チキン野郎', color: '#ff8800' },
       { min: -Infinity, text: '大惨事常習犯', color: '#ff1a1a' },
@@ -744,18 +721,18 @@ export class GameManager {
     const rankText = grade.text;
     const rankColor = grade.color;
 
-    // Populate stage breakdown table
-    const tbody = document.getElementById('result-tbody')!;
-    tbody.innerHTML = '';
-    this.stageRecords.forEach((rec) => {
+    // 種目ごとの成績は、1つの表にまとめる(種目名・判定・スコア%)
+    const stagesEl = document.getElementById('result-stages-body')!;
+    stagesEl.replaceChildren(...this.stageRecords.map((rec) => {
       const row = document.createElement('tr');
-      const scoreColor = rec.success ? '#00ff66' : '#ff1a1a';
-      const statusText = rec.success ? `${rec.scorePercent.toFixed(1)}%` : '大惨事・0%';
-      const cells = [String(rec.stageNumber), rec.stageTitle, statusText].map((text) => Object.assign(document.createElement('td'), { textContent: text }));
-      cells[2].style.cssText = `color: ${scoreColor}; font-weight: bold;`;
-      row.append(...cells);
-      tbody.appendChild(row);
-    });
+      const cell = (className: string, text: string) => Object.assign(document.createElement('td'), { className, textContent: text });
+      const judge = cell('judge', rec.success ? '成功' : GameManager.judgmentLabel(false, rec.scorePercent).text);
+      judge.style.color = rec.success ? '#00ff66' : '#ff4d4d';
+      const pct = cell('pct', `${rec.scorePercent.toFixed(1)}%`);
+      pct.style.color = judge.style.color;
+      row.append(cell('title', rec.stageTitle), judge, pct);
+      return row;
+    }));
 
     const devEl = document.getElementById('deviation-val')!;
     countUpText(devEl, deviation.toFixed(1));
@@ -794,6 +771,7 @@ export class GameManager {
     // 80–90: vignette bright, slow pulse
     // 90–100: vignette full + rapid white flash
     this.flashTimer -= dt;
+    this.hudActionGuide.classList.toggle('danger', limitVal >= 70);
 
     if (limitVal < 60) {
       this.dangerVignette.style.opacity = '0';
@@ -828,30 +806,6 @@ export class GameManager {
 
       // Camera micro-shudder at critical
       this.effects.addTrauma(0.018 * t);
-    }
-  }
-
-  private updateInputIndicators() {
-    // Stick indicator dot offset
-    const tilt = this.input.getForwardTilt();
-    const isDown = this.input.isLeverDown();
-    let offsetY = 0;
-    if (tilt > 0.1) offsetY = -tilt * 10;
-    if (isDown) offsetY = 10;
-    this.stickDot.style.transform = `translate(-50%, -50%) translateY(${offsetY}px)`;
-
-    // Button 0
-    if (this.input.isButton0()) {
-      this.btn0Indicator.classList.add('active');
-    } else {
-      this.btn0Indicator.classList.remove('active');
-    }
-
-    // Button 1
-    if (this.input.isButton1()) {
-      this.btn1Indicator.classList.add('active');
-    } else {
-      this.btn1Indicator.classList.remove('active');
     }
   }
 }

@@ -63,6 +63,8 @@ export interface TimeAttackCallbacks {
 export class TimeAttackManager {
   public state: TimeAttackState = 'READY';
   public elapsedTimeMs: number = 0;
+  /** 今の区間に入ってからの経過時間(ms)。HUDの区間タイムの表示に使う。 */
+  public get currentSectorElapsedMs(): number { return Math.max(0, this.elapsedTimeMs - this.lastSectorStartMs); }
   public topSpeedKmH: number = 0;
 
   /** オンライン対戦のカウントダウン: GO までの残り時間(ms)。あればフレームの積算の代わりにこれで進める。 */

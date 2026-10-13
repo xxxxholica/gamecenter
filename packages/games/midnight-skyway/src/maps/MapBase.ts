@@ -39,11 +39,11 @@ export abstract class MapBase {
   /** Race rules on: ghost / pace-bot rival, time-limit checkpoints, drift points and boost. Off = plain time attack. */
   public readonly competitive: boolean = false;
 
-  /** Show the altitude readout (height above the start line) in the HUD: for courses that climb. */
-  public readonly showAltitude: boolean = false;
-
   /** Dense samples of the drivable closed route (~2 m apart) for the rival bot; null when the map has none. */
   public getRoutePoints(): THREE.Vector3[] | null { return null; }
+
+  /** 欄干の間の路面の幅(m)。走行ルートに沿った演出(反射板・鋲)に使う。分からなければ null。 */
+  public getRoadWidth(): number | null { return null; }
 
   /** How much the road gradient works on the car (0 = not at all): the rival bot drives with the same physics. */
   public getGradeEffect(): number { return 0; }

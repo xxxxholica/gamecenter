@@ -3,7 +3,6 @@
 const ACCENT = '#e63946';
 const SKIN = '#efc49b';
 const SKIN_DARK = '#d29f74';
-const SAND = '#c9a36a';
 const STRAW = '#e6c98a';
 
 /** 腰を落として組み合う力士(足元の中心が (x, floor)、右向き。dir=-1 で左向き) */

@@ -36,6 +36,10 @@ export interface ArcadeTitleScreenOptions {
   tagline?: string;
   startButtonLabel?: string;
   promptLabel?: string;
+  /** スタートに使うキー(KeyboardEvent.code)。省略時は Enter */
+  startKeys?: string[];
+  /** スタートボタンに出すキー表記(省略時は自動) */
+  startKeyLabel?: string;
   customControlsHtml?: string;
   onCustomControlsReady?: (container: HTMLElement) => void;
   onStart: () => void;
@@ -270,7 +274,7 @@ export class ArcadeTitleScreen {
         <div class="ats-action-row">
           <div class="ats-start-panel">
             <button class="ats-start-btn" type="button">
-              ${buttonIconHtml([0, 1, 2, 3, 9])}
+              ${buttonIconHtml([0, 1, 2, 3, 9], this.options.startKeyLabel)}
               <span>${startButtonLabel}</span>
             </button>
           </div>
@@ -322,8 +326,8 @@ export class ArcadeTitleScreen {
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
         if (!this.isVisible || this.isStarting) return;
-        // Space, Enter, or any game key starts
-        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX') {
+        // Enter or any game key starts
+        if ((this.options.startKeys ?? ['Enter']).includes(e.code)) {
           e.preventDefault();
           this.triggerStart();
         }

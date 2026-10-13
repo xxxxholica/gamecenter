@@ -1,4 +1,5 @@
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
+import { AutoPilot } from './core/AutoPilot';
 import { GarageScene } from './core/GarageScene';
 import { TrailJModel } from './models/TrailJModel';
 import { CrossJModel } from './models/CrossJModel';
@@ -13,7 +14,7 @@ import { MapBase } from './maps/MapBase';
 import { TokyoMap } from './maps/TokyoMap';
 import { HelsinkiTechnicalMap } from './maps/HelsinkiTechnicalMap';
 import { TokyoClimbMap } from './maps/TokyoClimbMap';
-import { STAGES, stageNumber } from './ui/stages';
+import { STAGES } from './ui/stages';
 import { RaceDirector } from './core/RaceDirector';
 import { TimeAttackManager } from './core/TimeAttackManager';
 
@@ -21,9 +22,7 @@ import { GameFlowManager } from './ui/GameFlowManager';
 import { TitleScreen } from './ui/TitleScreen';
 import { CarSelectScreen } from './ui/CarSelectScreen';
 import { MapSelectScreen } from './ui/MapSelectScreen';
-import { GhostSelectScreen } from './ui/GhostSelectScreen';
 import type { GhostTrace } from './core/Ghost';
-import { TimeSelectScreen } from './ui/TimeSelectScreen';
 import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
@@ -34,7 +33,7 @@ import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
 import { mulberry32 } from '../../../shared/online/seededRandom';
-import { fetchGhost, loadRawScores, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
+import { fetchGhost, loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { setTrafficRng } from './core/Traffic';
 import { LobbyScreen } from './ui/LobbyScreen';
@@ -55,9 +54,10 @@ installHomeReturn();
 watchResultAutoReturn(['res-btn-title']);
 
 // 画面ごとのアケコンガイド(左下。呼ぶたびに前の画面のカードと入れ替わる)
-const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート', keyLabel: 'Enter' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 const guideModeSelect = () => mountArcadeGuide({
   moveLabel: 'モード選択',
+  keyMoveKeys: 'WASD',
   buttons: [
     { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
@@ -66,8 +66,9 @@ const guideModeSelect = () => mountArcadeGuide({
 });
 const guideCarSelect = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
+  keyMoveKeys: 'WASD',
   buttons: [
-    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C / X' },
+    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C' },
     { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
@@ -75,32 +76,19 @@ const guideCarSelect = () => mountArcadeGuide({
 });
 const guideMapSelect = () => mountArcadeGuide({
   moveLabel: 'コース選択',
+  keyMoveKeys: 'WASD',
   buttons: [
+    { indices: [2, 3, 4, 5], label: '時間帯変更', keyLabel: 'C' },
     { indices: [0], label: '決定' },
-    { indices: [1], label: '戻る' },
-  ],
-  showHomeHint: true,
-});
-const guideGhostSelect = () => mountArcadeGuide({
-  moveLabel: 'ゴースト選択',
-  buttons: [
-    { indices: [0], label: '決定' },
-    { indices: [1], label: '戻る' },
-  ],
-  showHomeHint: true,
-});
-const guideTimeSelect = () => mountArcadeGuide({
-  moveLabel: '日中 / 夜間',
-  buttons: [
-    { indices: [0], label: 'レース開始' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
 });
 const guideLobby = () => mountArcadeGuide({
   moveLabel: 'マシン選択',
+  keyMoveKeys: 'WASD',
   buttons: [
-    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C / X' },
+    { indices: [2, 3, 4, 5], label: 'カラー変更', keyLabel: 'C' },
     { indices: [0], label: 'コース希望へ' },
     { indices: [1], label: '退出' },
   ],
@@ -108,6 +96,7 @@ const guideLobby = () => mountArcadeGuide({
 });
 const guideOnlineCourse = () => mountArcadeGuide({
   moveLabel: 'コース希望',
+  keyMoveKeys: 'WASD',
   buttons: [
     { indices: [0], label: '待機画面へ' },
     { indices: [1], label: 'マシン選択へ' },
@@ -116,37 +105,63 @@ const guideOnlineCourse = () => mountArcadeGuide({
 });
 const guideOnlineWait = () => mountArcadeGuide({
   moveLabel: 'ボタン選択',
+  keyMoveKeys: 'WASD',
   buttons: [
     { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
   showHomeHint: true,
 });
-const guideRace = () => mountArcadeGuide({
-  moveLabel: '↑走る ↓減速 ←→ハンドル',
-  keyMoveLabel: 'W/↑ 走る  S/↓ 減速  A/D/←→ ハンドル',
-  buttons: [
-    { indices: [0], label: 'ハンドブレーキ', keyLabel: 'Space' },
-    { indices: [3], label: '前方確認', keyLabel: 'V' },
-  ],
-  showHomeHint: true,
-  backLabel: 'ポーズ',
-});
+// レース中のガイドは、メニュー(ポーズ・結果)を開いている間だけ、メニュー用に入れ替える
+let raceGuideState: 'race' | 'pause' | 'result' = 'race';
+/** ロード中(ロード画面を出してから、明転が始まるまで)は、ガイドを出さない */
+let raceLoading = false;
+const guideRace = (hidden = false): HTMLElement => {
+  raceGuideState = 'race';
+  const root = mountArcadeGuide({
+    moveLabel: 'ハンドル',
+    keyMoveKeys: 'A / D',
+    buttons: [
+      { indices: [0], label: '加速', keyLabel: 'W' },
+      { indices: [1], label: 'ハンドブレーキ', keyLabel: 'Space' },
+      { indices: [3], label: '前方確認', keyLabel: 'V' },
+    ],
+    showHomeHint: true,
+    backLabel: 'ポーズ',
+  });
+  if (hidden) { root.style.transition = 'none'; root.style.opacity = '0'; }   // 明転に合わせて、あとから fadeGuide で出す
+  return root;
+};
+/** ボタンガイドを、ms かけて見えなく(to=0)/ 見えるように(to=1)する */
+const fadeGuide = (root: HTMLElement | null, to: 0 | 1, ms: number): void => {
+  if (!root) return;
+  void root.offsetWidth;
+  root.style.transition = `opacity ${ms}ms ${to ? 'ease-out' : 'ease-in'}`;
+  root.style.opacity = String(to);
+};
+const guideRaceMenu = (state: 'pause' | 'result') => {
+  raceGuideState = state;
+  mountArcadeGuide({
+    moveLabel: 'ボタン選択',
+    keyMoveKeys: 'WASD',
+    buttons: [{ indices: [0], label: '決定' }],
+    showHomeHint: true,
+    backLabel: state === 'pause' ? '再開' : 'タイトルへ',
+  });
+};
 
 window.addEventListener('DOMContentLoaded', async () => {
   const container = document.getElementById('canvas-container');
   const titleContainer = document.getElementById('screen-title');
   const carSelectContainer = document.getElementById('screen-car-select');
   const mapSelectContainer = document.getElementById('screen-map-select');
-  const timeSelectContainer = document.getElementById('screen-time-select');
-  const ghostSelectContainer = document.getElementById('screen-ghost-select');
   const stageLoadingContainer = document.getElementById('screen-stage-loading');
   const lobbyContainer = document.getElementById('screen-lobby');
   const modeSelectContainer = document.getElementById('screen-mode-select');
   const appEl = document.getElementById('app');
   const hudContainer = document.getElementById('drive-hud-container');
 
-  if (!container || !titleContainer || !carSelectContainer || !mapSelectContainer || !timeSelectContainer || !ghostSelectContainer || !stageLoadingContainer || !hudContainer || !lobbyContainer || !modeSelectContainer || !appEl) {
+  if (!container || !titleContainer || !carSelectContainer || !mapSelectContainer || !stageLoadingContainer || !hudContainer || !lobbyContainer || !modeSelectContainer || !appEl) {
     console.error('Required screen containers not found');
     return;
   }
@@ -224,19 +239,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   let lastWarnSec = -1;   // the last whole second for which the low-time beep sounded
 
-  /** コース選択のあとに取得した、そのコースのランキング(上位3件)。ゴーストの選択肢になる。 */
-  let ghostChoices: LeaderboardEntry[] = [];
-  /** スタート前に選んだゴースト(ランキングのエントリ)。null ならペースボットが走る。オンライン対戦では使わない。 */
+  /** 一緒に走るゴースト(そのコースのランキング1位で、ゴーストが保存されているもの)。null ならペースボットが走る。オンライン対戦では使わない。 */
   let ghostPick: { id: string; rank: number } | null = null;
 
-  /** 選んだコースのランキングを取得し、ゴーストの既定の選択(いちばん上位)を決める。取得に失敗したら空(=ペースボット)。 */
+  /** 選んだコースのランキングを取得し、いちばん上位のゴーストを走らせる相手にする。取得に失敗したらペースボット。 */
   const loadGhostChoices = async () => {
-    ghostChoices = await loadRawScores('midnight-skyway', currentMapId);
-    const first = ghostChoices.find((e) => e.hasGhost && e.id);
+    const scores = await loadRawScores('midnight-skyway', currentMapId);
+    const first = scores.find((e) => e.hasGhost && e.id);
     ghostPick = first ? { id: first.id!, rank: first.rank } : null;
   };
-
-  const hasGhostChoices = () => GhostSelectScreen.hasChoices(ghostChoices);
 
   const restartRace = (changeBgm = false) => {
     driveHUD.hideResultModal();
@@ -253,6 +264,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     driveScene.combatSystem.raceStarted = false;
     timeAttack.initCourse(currentMapId, currentCar.specs.name);
+    driveHUD.resetSectors();
     raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
     reportDeepAnalytics('progression_update', {
       vehicle: currentCar.specs.name,
@@ -274,6 +286,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     online.race.begin();
     const goTime = goAt + GO_COUNTDOWN_MS;
     online.goTime = goTime;
+    // BGM: 部屋の乱数の種で全員が同じ曲を選び、カウントダウンの開始(goAt)を曲の頭にそろえる
+    bgm.playSynced(online.seed, performance.now() + (goAt - net.serverNow()));
     const traffic = currentMapInstance.traffic;
     if (traffic) traffic.sharedClock = () => (net.serverNow() - goTime) / 1000;
     timeAttack.startCountdownSynced(goTime - net.serverNow(), () => goTime - net.serverNow());
@@ -297,10 +311,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   timeAttack.callbacks.onTimeUpdate = (_ms, formatted) => {
     driveHUD.updateTimer(formatted);
+    driveHUD.updateSectorLive(timeAttack.currentSectorElapsedMs);
   };
 
   timeAttack.callbacks.onSectorPassed = (sector) => {
-    driveHUD.showSectorBanner(sector);
+    driveHUD.setSector(sector);
     sfx.sector();
   };
 
@@ -319,6 +334,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   timeAttack.callbacks.onGoal = (result) => {
     driveScene.combatSystem.raceStarted = false;
+    driveHUD.finishSectors(result.sectors);
     reportDeepAnalytics('progression_update', {
       result: result.timedOut ? 'gameover' : 'clear',
       ...(result.timedOut ? { deathReason: 'タイムアップ' } : {}),
@@ -338,6 +354,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     driveHUD.showResultModal(result);
+    if (!result.timedOut) driveScene.setResultView(true);   // 走り続ける車を前から映し、リザルトは左に出す
     bgm.duck(0.3);
     if (result.timedOut) sfx.timeUp();
     else sfx.goal();
@@ -447,15 +464,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     driveHUD.updateTelemetry(speed, rpm, gear);
     sfx.updateEngine(rpm, speed, !!isDrifting);
   };
-  driveScene.callbacks.onCameraModeChange = (mode) => {
-    driveHUD.updateCamBtnState(mode);
-  };
   driveScene.callbacks.onPositionUpdate = (pos, rotY, fwdTraffic) => {
     driveHUD.updateCarPosition(pos, rotY, fwdTraffic);
   };
-  driveScene.callbacks.onCombatUpdate = (hp, maxHp, lockOn) => {
-    driveHUD.updateCombatStatus(hp, maxHp, lockOn);
-  };
+  driveScene.callbacks.onFxUpdate = (speed, boost, slipstream) => driveHUD.setFx(speed, boost, slipstream);
   driveScene.callbacks.onProgressUpdate = (fraction, speedKmH, dt) => {
     timeAttack.update(dt, fraction, speedKmH);
     raceDirector.update(fraction);
@@ -466,12 +478,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   };
   const isPreviewMode = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+  // 撮影用(?preview / ?noHud): HUD とボタンガイドを出さず、車はコースのルートを自動で走る(ハブのサムネイル・プレビュー動画用)
+  let previewPilot: AutoPilot | null = null;
+  if (isPreviewMode) {
+    const hide = document.createElement('style');
+    hide.textContent = '#agc-guide { display: none !important; }';
+    document.head.append(hide);
+  }
   driveScene.callbacks.onBeforeConstrain = (car) => {
     online?.race?.collide(car);
     if (isPreviewMode && car) {
       car.canDrive = true;
-      car.autopilot = { steer: 0, throttle: true, brake: false };
-      if (car.speed < 18) car.speed = 28;
+      if (!previewPilot) {
+        const route = currentMapInstance?.getRoutePoints();
+        if (route && route.length > 0) previewPilot = new AutoPilot(route, car, 30, 17);
+      }
+      if (previewPilot) previewPilot.update();
+      else car.autopilot = { steer: 0, throttle: true, brake: false };
+      if (car.speed < 18) car.speed = 24;
     }
   };
 
@@ -558,6 +582,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         currentMapId = mapId;
       }
     },
+    onChangeTime: (t) => {
+      sfx.uiMove();
+      currentTimeOfDay = t;
+      saveTimeOfDay(t);
+    },
     onStartRace: () => {
       sfx.uiConfirm();
       if (loadingGhosts) return;
@@ -565,16 +594,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       void loadGhostChoices().finally(() => {
         loadingGhosts = false;
         if (flow.currentScreen !== 'MAP_SELECT') return;
-        // 選べるゴーストがあるコースだけ、ゴースト選択を挟む(なければペースボットと走る)
-        if (hasGhostChoices()) flow.goToGhostSelect();
-        else flow.goToTimeSelect();
+        flow.startRace();
       });
     },
     onStartOnline: () => {                                   // コース希望まで終わったら、待機画面へ
       sfx.uiConfirm();
       flow.goToOnlineWait();
     },
-    onClearPick: () => {                                     // コース希望の取り消し(選択済みのカードを押し直す/Delete)
+    onClearPick: () => {                                     // コース希望の取り消し(選択済みのカードを押し直す/Backspace)
       net.send({ t: 'pref', course: null });
       sfx.uiMove();
     },
@@ -585,39 +612,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
   });
 
-  const timeSelectScreen = new TimeSelectScreen(timeSelectContainer, {
-    onSelect: (t) => {
-      if (t !== currentTimeOfDay) sfx.uiMove();
-      currentTimeOfDay = t;
-      saveTimeOfDay(t);
-    },
-    onStartRace: () => {
-      sfx.uiConfirm();
-      flow.startRace();
-    },
-    onBack: () => {
-      sfx.uiBack();
-      if (hasGhostChoices()) flow.goToGhostSelect();
-      else flow.goToMapSelect();
-    },
-  });
-
-  const ghostSelectScreen = new GhostSelectScreen(ghostSelectContainer, {
-    onSelect: (pick) => {
-      sfx.uiMove();
-      ghostPick = pick;
-    },
-    onStart: () => {
-      sfx.uiConfirm();
-      flow.goToTimeSelect();
-    },
-    onBack: () => {
-      sfx.uiBack();
-      flow.goToMapSelect();
-    },
-  });
-
   const stageLoadingScreen = new StageLoadingScreen(stageLoadingContainer);
+  stageLoadingScreen.onLevel = (v) => {
+    garage.setLoadLevel(v);                                       // メーターが上がるほど、背景の街が速く流れて揺れる
+    // 同じく、エンジン音もメーターに合わせて、回転が上がり、大きくなる(アイドリング → ほぼ全開)
+    if (stageLoadingScreen.isOpen()) {
+      sfx.updateEngine(850 + v * v * 5000, v * 60, false);
+      sfx.setWind(v * 0.5, 0);
+    }
+  };
+  stageLoadingScreen.onHide = () => sfx.stopEngine();
 
   const modeSelectScreen = new ModeSelectScreen(modeSelectContainer, {
     onSelect: (mode) => {
@@ -805,8 +809,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       modeSelectScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.setCameraView('orbit');
@@ -824,8 +826,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       modeSelectScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
@@ -839,8 +839,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       titleScreen.hide();
       modeSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
@@ -857,46 +855,15 @@ window.addEventListener('DOMContentLoaded', async () => {
       titleScreen.hide();
       modeSelectScreen.hide();
       carSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
       const records = Object.fromEntries(STAGES.map((st) => [st.id, timeAttack.getBestRecord(st.id)]));
       mapSelectScreen.setOnlineMode(false);
       mapSelectScreen.setSelectedMap(currentMapId);
+      mapSelectScreen.setTimeOfDay(currentTimeOfDay);
       guideMapSelect();
       mapSelectScreen.show(records);
-    },
-    onEnterGhostSelect: () => {
-      stopTitleCarCycle();
-      bgm.play('menu');
-      lobby.hide();
-      titleScreen.hide();
-      modeSelectScreen.hide();
-      carSelectScreen.hide();
-      mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      stageLoadingScreen.hide();
-      driveHUD.hide();
-      garage.start();
-      guideGhostSelect();
-      ghostSelectScreen.show(ghostChoices, ghostPick?.id ?? null);
-    },
-    onEnterTimeSelect: () => {
-      stopTitleCarCycle();
-      bgm.play('menu');
-      lobby.hide();
-      titleScreen.hide();
-      modeSelectScreen.hide();
-      carSelectScreen.hide();
-      mapSelectScreen.hide();
-      ghostSelectScreen.hide();
-      stageLoadingScreen.hide();
-      driveHUD.hide();
-      garage.start();
-      guideTimeSelect();
-      timeSelectScreen.show(currentTimeOfDay);
     },
     onEnterOnlineLobby: () => {
       stopTitleCarCycle();
@@ -904,8 +871,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       titleScreen.hide();
       modeSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
@@ -924,8 +889,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       titleScreen.hide();
       modeSelectScreen.hide();
       carSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
@@ -943,8 +906,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       modeSelectScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       stageLoadingScreen.hide();
       driveHUD.hide();
       garage.start();
@@ -954,14 +915,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onStartRace: async () => {
       stopTitleCarCycle();
-      bgm.play('race', true);
+      if (online) bgm.stop();                 // 対戦は、全員の出走に合わせて、同じ曲を同じ位置から流す(tryStartOnlineCountdown)
+      else bgm.play('race', true);
       lobby.hide();
       titleScreen.hide();
       modeSelectScreen.hide();
       carSelectScreen.hide();
       mapSelectScreen.hide();
-      timeSelectScreen.hide();
-      ghostSelectScreen.hide();
       driveHUD.hide();
 
       // Instantiate map
@@ -975,10 +935,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         const traffic = currentMapInstance.traffic;
         if (traffic) traffic.sharedClock = () => -1;         // go が来るまで動かさない
         raceDirector.online = true;
+        driveScene.combatSystem.weaponsEnabled = false;        // オンライン対戦では、武器は使えない
         driveHUD.setOnlineMode(true);
         driveScene.gridOffset = { lateral: (online.slot % 2 === 0 ? -1 : 1) * 1.8, back: Math.floor(online.slot / 2) * 6 };
       } else {
         raceDirector.online = false;
+        driveScene.combatSystem.weaponsEnabled = true;
         driveHUD.setOnlineMode(false);
         driveScene.gridOffset = null;
       }
@@ -989,18 +951,15 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       // Show stage loading screen with course attribution
       const stage = STAGES.find((st) => st.id === currentMapId);
-      const stageNum = `STAGE ${stageNumber(currentMapId)}:`;
       const courseName = stage?.title ?? currentMapInstance.metadata.name;
-      stageLoadingScreen.show(stageNum, courseName, currentMapInstance.metadata.attribution);
+      stageLoadingScreen.show(courseName, currentMapInstance.metadata.attribution);
+      sfx.startEngine();                               // ロード中のエンジン音(メーターに合わせて大きくなる。onLevel で更新)
+      raceLoading = true;
+      fadeGuide(document.getElementById('agc-guide'), 0, 350);       // ロード中はボタンガイドを消す(フェードアウト)
 
-      // Pause garage & move car to drive scene
-      garage.stop();
-      garage.turntableGroup.remove(currentCar.group);
-      driveScene.setCar(currentCar);
-
-      // Setup map in drive scene and HUD
+      // ロード中も、背景のガレージ(街の中を走る車)はそのまま動かす。車は台座に置いたまま、コースだけ先に読み込む
       lightsBeforeRace = currentCar.lightsEnabled;
-      driveScene.loadMap(currentMapInstance);
+      driveScene.loadMap(currentMapInstance, false);   // 車はまだ台座にあるので、スタート地点には置かない
       driveScene.setTimeOfDay(currentTimeOfDay);       // sky, lights, street lamps and the car's headlights
       driveHUD.setMap(currentMapInstance);
 
@@ -1021,8 +980,16 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.warn('Map open data load error:', err);
       }
 
-      // Finish loading animation
+      // ロードが終わったら、カードをしまい、車が画面に向かって突っ込む → 暗転 → 明転で走行シーンへ
       await stageLoadingScreen.finish();
+      await garage.launch();
+      await stageLoadingScreen.blackout();             // 車が画面を覆うところで暗転し、真っ暗の間に走行シーンへ入れ替える
+      garage.stop();
+      garage.turntableGroup.remove(currentCar.group);
+      garage.endLaunch();
+      driveScene.setCar(currentCar);
+      driveScene.setTimeOfDay(currentTimeOfDay);       // 車のライトを、走行シーンの時間帯に合わせる
+      stageLoadingScreen.hide();
 
       // 選んだゴースト(取得できなければペースボット)
       raceDirector.selectedGhost = null;
@@ -1033,10 +1000,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       // Stage is 100% ready! Now start scene and countdown!
       driveHUD.show();
-      guideRace();
+      if (isPreviewMode) { hudContainer.style.display = 'none'; previewPilot = null; }
+      const raceGuide = guideRace(true);                 // 明転に合わせてフェードインさせる(それまでは見えない)
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
       restartRace();
+      stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
+      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; }));   // ガイドも同じタイミングでフェードイン
       if (online) {
         online.race = new OnlineRace(net, driveScene, online.players, online.you, currentTimeOfDay === 'night', {
           onStandings: (rows) => onlineHUD.setStandings(rows),
@@ -1066,6 +1036,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     // The frame a menu closes, its confirming press must not also act as a race button
     const ignore = menuOpen || menuWasOpen;
     menuWasOpen = menuOpen;
+    if (flow.currentScreen === 'RACE') {
+      const want = driveHUD.isResultModalOpen() ? 'result' : menuOpen ? 'pause' : 'race';
+      if (!raceLoading && want !== raceGuideState) { if (want === 'race') guideRace(); else guideRaceMenu(want); }
+    }
     if (ignore || flow.currentScreen !== 'RACE' || !driveScene.active) {
       driveScene.setFrontViewPad(false);
       return;

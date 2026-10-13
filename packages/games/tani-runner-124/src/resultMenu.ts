@@ -1,6 +1,6 @@
 // 留年・卒業画面のメニュー: 「再挑戦」「タイトルに戻る」「ゲームを終了」をアケコン/キーボードで選んで決定する。
 // アケコン: 移動はスティック、確定はAボタン。
-// キーボード: 移動はWASD/矢印キー、確定はEnter/Space。
+// キーボード: 移動はWASD、確定はEnter。
 
 import { PadEdge, startPadLoop } from '../../../shared/arcadePad.ts';
 import { MenuNav } from '../../../shared/arcadeMenuNav.ts';
@@ -69,7 +69,7 @@ export class ResultMenu {
       else if (p.any(1)) this.handleCancel();
     });
 
-    // キーボード操作: 移動はWASD/矢印、確定はEnter/Space、戻るはBackspace
+    // キーボード操作: 移動はWASD、確定はEnter、戻るはBackspace
     // 移動は受付待ちの間も効かせる。確定・戻るだけ誤爆防止で待たせ、押し直しが必要。
     this.navUsed.clear();
     this.keyHandler = (e: KeyboardEvent) => {
@@ -84,7 +84,7 @@ export class ResultMenu {
         return;
       }
       if (e.repeat || !armed) return;
-      if (e.code === 'Enter' || e.code === 'Space') {
+      if (e.code === 'Enter') {
         e.preventDefault();
         this.buttons[this.focus]?.click();
       } else if (e.code === 'Backspace') {

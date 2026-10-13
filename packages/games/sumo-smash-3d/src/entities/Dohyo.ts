@@ -228,8 +228,6 @@ export class Dohyo {
     const ringGroup = new THREE.Group();
     for (let i = 0; i < numTawaras; i++) {
       const angle = (i / numTawaras) * Math.PI * 2;
-      const x = Math.cos(angle) * tawaraRadius;
-      const z = Math.sin(angle) * tawaraRadius;
 
       // 4か所の徳俵（少し外側に飛び出している俵）
       const isTokudawara = i % 12 === 0;

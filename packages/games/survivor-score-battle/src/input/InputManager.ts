@@ -159,8 +159,6 @@ export class InputManager {
     }
 
     if (
-      this.keysDown.has('ShiftLeft') ||
-      this.keysDown.has('ShiftRight') ||
       this.keysDown.has('KeyK') ||
       this.keysDown.has('KeyJ') ||
       this.keysDown.has('KeyC') ||
@@ -231,8 +229,6 @@ export class InputManager {
     }
     if (action === 'special') {
       return (
-        this.prevKeysDown.has('ShiftLeft') ||
-        this.prevKeysDown.has('ShiftRight') ||
         this.prevKeysDown.has('KeyK') ||
         this.prevKeysDown.has('KeyJ') ||
         this.prevKeysDown.has('KeyC') ||

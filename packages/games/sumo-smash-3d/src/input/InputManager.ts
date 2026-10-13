@@ -26,17 +26,8 @@ const P1_KEYS: KeyBinding = {
   right: 'KeyD',
   up: 'KeyW',
   down: 'KeyS',
-  strike: ['KeyJ', 'Space'],
-  grab: ['KeyK', 'KeyE', 'KeyU'],
-};
-
-const P2_KEYS: KeyBinding = {
-  left: 'ArrowLeft',
-  right: 'ArrowRight',
-  up: 'ArrowUp',
-  down: 'ArrowDown',
-  strike: ['Numpad1', 'KeyB', 'Comma'],
-  grab: ['Numpad2', 'KeyN', 'Period'],
+  strike: ['Space'],
+  grab: ['KeyK'],
 };
 
 // ゲームパッド: 打撃は A / X、つかみは B / Y
@@ -133,14 +124,6 @@ export class InputManager {
   }
 
   /**
-   * プレイヤー2の入力取得（キーボード矢印キー、または2台目のゲームパッド）
-   */
-  public getPlayer2Input(): PlayerInputState {
-    const pads = this.activePads();
-    return this.readPlayer(P2_KEYS, pads.length >= 2 ? pads[1] : null, 1);
-  }
-
-  /**
    * ゲームパッドが接続されているか確認
    */
   public isGamepadConnected(): boolean {
@@ -148,49 +131,9 @@ export class InputManager {
     return !!gamepads[0];
   }
 
-  /**
-   * スタートボタン（タイトル画面での決定・開始）
-   */
-  public isStartTriggered(): boolean {
-    if (
-      this.keysPressed.has('Enter') ||
-      this.keysPressed.has('Space') ||
-      this.keysPressed.has('KeyJ') ||
-      this.keysPressed.has('KeyZ')
-    ) {
-      return true;
-    }
-
-    const gamepads = readGamepads();
-    const pad = gamepads[0];
-    if (pad) {
-      // START(9), A(0), または XBOX START
-      if (pad.buttons[9]?.pressed || pad.buttons[0]?.pressed) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /** このフレームに押されたキーか(押した瞬間だけ true) */
   public isKeyTriggered(...codes: string[]): boolean {
     return codes.some((c) => this.keysPressed.has(c));
   }
 
-  /**
-   * バックボタン（Backspace / SELECT）
-   */
-  public isBackTriggered(): boolean {
-    if (this.keysPressed.has('Backspace')) return true;
-
-    const gamepads = readGamepads();
-    const pad = gamepads[0];
-    if (pad) {
-      // SELECT(8)
-      if (pad.buttons[8]?.pressed) {
-        return true;
-      }
-    }
-    return false;
-  }
 }

@@ -678,26 +678,6 @@ export class PrizeEntity {
     }
   }
 
-  /**
-   * オンライン: 他の人の台の景品(レプリカ)に、持ち主から届いた状態を反映する。物理は動かさない(音も鳴らさない)。
-   * a/b は、落下中なら回転 x/z、そうでなければ pitch/roll。flags は online/snapshot.ts のFLAG_*。
-   */
-  public applyRemote(x: number, y: number, z: number, a: number, b: number, flags: number) {
-    const FALLING = 1, SPAWNING = 2, GROUNDED = 4, REST = 8;
-    if (flags & REST) {
-      this.reset();                                           // 棚の上で止まった: 元の位置・姿勢に戻す
-      return;
-    }
-    this.currentPos.set(x, y, z);
-    this.isFalling = !!(flags & FALLING);
-    this.isSpawning = !!(flags & SPAWNING);
-    this.isGrounded = !!(flags & GROUNDED);
-    this.mesh.visible = true;
-    this.mesh.position.set(x, y, z);
-    if (this.isFalling) this.mesh.rotation.set(a, 0, b);
-    else this.mesh.rotation.set(-a, 0, b);
-  }
-
   public getBoundingBox(): THREE.Box3 {
     const box = new THREE.Box3();
     box.setFromObject(this.mesh);

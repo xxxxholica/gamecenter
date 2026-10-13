@@ -25,12 +25,12 @@ const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
     { indices: [0], label: 'ジャンプ', keyLabel: 'Space' },
-    { indices: [1, 2], label: 'スピン攻撃', keyLabel: 'Shift / X' },
+    { indices: [1, 2], label: 'スピン攻撃', keyLabel: 'X / K' },
   ],
   showHomeHint: true,
   backLabel: 'ポーズ',
 });
-const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 mountTitleGuide();
 
 /** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
@@ -68,7 +68,9 @@ class StreetBBoyGame {
   /** ポーズ(Backspace / SELECT): プレイ中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ffe600',
-    isPlaying: () => this.state === 'playing' && !this.countingDown && !!this.player && !this.player.isDead,
+    isPlaying: () => this.state === 'playing' && !!this.player && !this.player.isDead,
+    onOpen: () => this.countdownHandle?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    onClose: () => this.countdownHandle?.resume(),
     onRestart: () => this.retryFromResult(),
   });
 
@@ -292,8 +294,8 @@ class StreetBBoyGame {
         slug: 'street-b-boy',
         accentColor: '#ffea00',
         tagline: 'ブレイクダンス横スクロールアクション',
-        startButtonLabel: '開始',
-        promptLabel: 'PRESS START / SPACE / 画面クリック',
+        startButtonLabel: 'スタート',
+        promptLabel: 'PRESS START / ENTER / 画面クリック',
         onStart: () => {
           this.sound.init();
           this.startGame();

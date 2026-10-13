@@ -3,7 +3,6 @@ import { Boss } from '../entities/Boss';
 import { BossType, EnemyType } from '../types';
 import { SoundManager } from '../audio/SoundManager';
 import { ScreenEffects } from '../effects/ScreenEffects';
-import { DamageNumbers } from '../effects/DamageNumbers';
 
 export interface WaveEvent {
   timeSeconds: number;
@@ -78,8 +77,7 @@ export class WaveDirector {
     enemies: Enemy[],
     contenders: { x: number; y: number; alive: boolean }[],
     soundManager: SoundManager,
-    screenEffects: ScreenEffects,
-    damageNumbers: DamageNumbers
+    screenEffects: ScreenEffects
   ): { spawnBoss: Boss | null; isGameOver: boolean } {
     this.gameTime += dt;
     if (this.warningBannerTimer > 0) {

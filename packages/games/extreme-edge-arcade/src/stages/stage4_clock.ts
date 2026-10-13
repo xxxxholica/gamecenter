@@ -9,11 +9,9 @@ export class Stage4Clock implements Stage {
   numberText = 'STAGE 3';
   title = '目覚まし時計';
   mission = '07:00ジャスト鳴動直前に止めろ！';
-  instruction = 'レバー上で時計を止める';
+  instruction = 'Enter / A で時計を止める';
   briefing: StageBriefing = {
-    headline: '目覚まし時計を止める',
-    ok: '07:00:00の直前で止める',
-    ng: '鳴ってしまう・早すぎ',
+    headline: '鳴る前に止めろ',
   };
   limitLabel = '07:00接近度';
 
@@ -334,8 +332,8 @@ export class Stage4Clock implements Stage {
 
       this.updateHands();
 
-      // Check Lever Up (or Button 0 / Enter for compatibility) to stop!
-      if (input.wasLeverUpPressed() || input.isLeverUp() || input.wasButton0Pressed()) {
+      // Enter / A to stop!
+      if (input.wasButton0Pressed()) {
         this.stopped = true;
         sound.playClick(1500);
 

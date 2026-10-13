@@ -32,7 +32,6 @@ export class Bgm {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private scene: BgmScene = 'menu';
-  private timer: number | null = null;
   private nextTime = 0;
   private step = 0;
   private muted = false;
@@ -54,7 +53,7 @@ export class Bgm {
     this.master.gain.value = this.muted ? 0 : MASTER;
     this.master.connect(ctx.destination);
     this.nextTime = ctx.currentTime + 0.1;
-    this.timer = window.setInterval(() => this.tick(), 25);
+    window.setInterval(() => this.tick(), 25);
   }
 
   setScene(scene: BgmScene): void {

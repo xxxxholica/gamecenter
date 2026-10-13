@@ -1,10 +1,11 @@
 // 全ゲーム共通: プレイ中に Backspace(アケコンは SELECT)で開くポーズ画面(再開 / やり直す / ゲームを終了)。
 // 開いている間は、ゲーム側が isOpen を見て進行を止める。結果画面のメニューと同じ見た目・操作。
-//   ↑↓ / W S / レバー: 選ぶ    Enter / Space / Z / A: 決定    Backspace / B: 再開
+//   W S / レバー: 選ぶ    Enter / A: 決定    Backspace / B: 再開
 
 import { PadEdge, startPadLoop } from './arcadePad';
 import { applyResultMenuFocus, setupResultMenu, type ResultMenuItem } from './arcadeResultMenu';
 import { returnToHub } from './homeReturn';
+import { getArcadeGuideOptions, mountArcadeGuide, type ArcadeGuideOptions } from './arcadeGuide';
 
 export interface ArcadePauseOptions {
   /** 見出しの下線と、「再開」の選択色 */
@@ -30,7 +31,7 @@ function injectStyle(): void {
   styleInjected = true;
   const st = document.createElement('style');
   st.textContent = `
-    .ap-root { position: fixed; inset: 0; z-index: 99990; display: none; align-items: center; justify-content: center; flex-direction: column; gap: clamp(14px, 3vh, 26px);
+    .ap-root { position: fixed; inset: 0; z-index: 2147482500; display: none; align-items: center; justify-content: center; flex-direction: column; gap: clamp(14px, 3vh, 26px);
       background: rgba(5, 7, 18, 0.78); color: #fff; font-family: Arial, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', system-ui, sans-serif; user-select: none; }
     .ap-root.ap-open { display: flex; }
     .ap-root .rm-col > .rm-btn.ap-disabled, .ap-root .rm-col > .rm-btn.ap-disabled:hover { opacity: 0.35 !important; cursor: not-allowed; background: #2b2f38 !important; color: #c3c9d6 !important; border-color: #6b7385 !important; box-shadow: none !important; }
@@ -49,6 +50,8 @@ export class ArcadePause {
   private focus = 0;
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
+  // ポーズを開く前のボタンガイド。閉じる時に戻す
+  private prevGuide: ArcadeGuideOptions | null = null;
 
   constructor(private readonly opts: ArcadePauseOptions) {
     injectStyle();
@@ -91,9 +94,9 @@ export class ArcadePause {
       e.preventDefault();
       if (e.repeat) return;
       if (e.code === 'Backspace') this.close();
-      else if (e.code === 'ArrowUp' || e.code === 'KeyW') this.move(-1);
-      else if (e.code === 'ArrowDown' || e.code === 'KeyS') this.move(1);
-      else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyZ') this.actions[this.focus]();
+      else if (e.code === 'KeyW') this.move(-1);
+      else if (e.code === 'KeyS') this.move(1);
+      else if (e.code === 'Enter') this.actions[this.focus]();
       return;
     }
     if (e.code === 'Backspace' && !e.repeat && this.opts.isPlaying() && !isTyping(e)) {
@@ -119,6 +122,15 @@ export class ArcadePause {
     this.focus = 0;
     applyResultMenuFocus(this.items, 0);
     this.root.classList.add('ap-open');
+    // ボタンガイドをポーズ用(選ぶ / 決定 / 再開)に切り替える。位置は元のガイドに合わせる
+    this.prevGuide = getArcadeGuideOptions();
+    mountArcadeGuide({
+      moveLabel: '選択',
+      buttons: [{ indices: [0], label: '決定' }],
+      showHomeHint: true,
+      backLabel: '再開',
+      position: this.prevGuide?.position,
+    });
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (p.up) this.move(-1);
       else if (p.down) this.move(1);
@@ -135,6 +147,8 @@ export class ArcadePause {
     this.root.classList.remove('ap-open');
     this.stopPad?.();
     this.stopPad = null;
+    if (this.prevGuide) mountArcadeGuide(this.prevGuide);
+    this.prevGuide = null;
     this.opts.onClose?.();
   }
 }

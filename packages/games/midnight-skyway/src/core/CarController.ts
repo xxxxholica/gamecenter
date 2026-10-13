@@ -187,27 +187,17 @@ export class CarController {
     window.addEventListener('keyup', this.keyupHandler);
   }
 
-  public unbindInputs(): void {
-    window.removeEventListener('keydown', this.keydownHandler);
-    window.removeEventListener('keyup', this.keyupHandler);
-  }
-
+  // キーボード: W = 加速、A / D = ハンドル、Space = ハンドブレーキ(ドリフト)。矢印キーは使わない(減速のキーも無い)
   private onKeyDown(e: KeyboardEvent): void {
     switch (e.code) {
       case 'KeyW':
-      case 'ArrowUp':
         this.inputs.forward = true;
-        break;
-      case 'KeyS':
-      case 'ArrowDown':
-        this.inputs.backward = true;
+        e.preventDefault();
         break;
       case 'KeyA':
-      case 'ArrowLeft':
         this.inputs.left = true;
         break;
       case 'KeyD':
-      case 'ArrowRight':
         this.inputs.right = true;
         break;
       case 'Space':
@@ -220,19 +210,12 @@ export class CarController {
   private onKeyUp(e: KeyboardEvent): void {
     switch (e.code) {
       case 'KeyW':
-      case 'ArrowUp':
         this.inputs.forward = false;
         break;
-      case 'KeyS':
-      case 'ArrowDown':
-        this.inputs.backward = false;
-        break;
       case 'KeyA':
-      case 'ArrowLeft':
         this.inputs.left = false;
         break;
       case 'KeyD':
-      case 'ArrowRight':
         this.inputs.right = false;
         break;
       case 'Space':
@@ -247,14 +230,14 @@ export class CarController {
   public update(delta: number): void {
     const dt = Math.min(delta, 0.05); // Clamp max timestep
 
-    // Keyboard + arcade pad (lever = drive, A = handbrake). The pad is ignored while a pause/result menu is using it.
+    // Keyboard + arcade pad (lever left/right = steer, A = accelerate, B = handbrake). The pad is ignored while a pause/result menu is using it.
     const pad = this.padBlocked() ? null : readPad();
     const inp: DriveInputState = {
-      forward: this.inputs.forward || !!pad?.up,
-      backward: this.inputs.backward || !!pad?.down,
+      forward: this.inputs.forward || !!pad?.buttons[0],
+      backward: this.inputs.backward,                      // 減速の操作は無い(オートパイロットだけが使う)
       left: this.inputs.left || !!pad?.left,
       right: this.inputs.right || !!pad?.right,
-      handbrake: this.inputs.handbrake || !!pad?.buttons[0],
+      handbrake: this.inputs.handbrake || !!pad?.buttons[1],
     };
 
     if (this.autopilot) {
@@ -313,6 +296,12 @@ export class CarController {
       this.boostTimer = Math.max(0, this.boostTimer - dt);
       if (this.speed > 0 && this.speed < vMax && this.canDrive) this.speed = Math.min(vMax, this.speed + 11.0 * dt);   // extra push, with or without the throttle
     }
+    // 変速: 加速中にギアが上がると、一瞬だけ駆動が抜けて加速が鈍る(惰性で進む)
+    const gearBefore = this.gearNum;
+    this.syncGear();
+    if (this.gearNum > gearBefore && inp.forward && this.speed > 0) this.shiftTimer = CarController.SHIFT_TIME;
+    const shiftFactor = this.shiftTimer > 0 ? CarController.SHIFT_POWER : 1;
+    this.shiftTimer = Math.max(0, this.shiftTimer - dt);
     if (inp.forward) {
       if (this.speed < -0.1) {
         // Braking in reverse
@@ -322,7 +311,7 @@ export class CarController {
         const powerFactor = Math.max(0.2, 1.0 - (this.speed / vMax) * 0.8);
         // In drift, give full power/boost so the player can power-slide at top speed
         const driftPowerFactor = this.isDrifting ? 1.05 : 1.0;
-        this.speed += this.acceleration * powerFactor * driftPowerFactor * dt;
+        this.speed += this.acceleration * powerFactor * driftPowerFactor * shiftFactor * dt;
         if (this.speed > vMax) this.speed -= (this.speed - vMax) * 0.35 * dt;   // above the top speed (boost ended, downhill) it eases back instead of snapping
       }
     } else if (inp.backward) {
@@ -516,22 +505,42 @@ export class CarController {
     return Math.abs(Math.round(this.speed * 3.6));
   }
 
+  /** 6速。各ギアで出せる最高速(最高速に対する割合)。ブースト中の最高速超えは6速のまま */
+  private static readonly GEAR_TOP = [0.2, 0.36, 0.52, 0.68, 0.84, 1.0];
+  private gearNum = 1;
+  private shiftTimer = 0;
+  /** 変速で駆動が抜ける時間(秒)と、その間に残る加速の割合 */
+  private static readonly SHIFT_TIME = 0.22;
+  private static readonly SHIFT_POWER = 0.1;
+
+  /** 速度からギアを決める: 回転が上がりきる手前で上げ、十分落ちたら下げる(境目はずらして、行き来しない) */
+  private syncGear(): void {
+    const v = Math.abs(this.speed) / this.maxSpeed;
+    const top = CarController.GEAR_TOP;
+    while (this.gearNum < top.length && v > top[this.gearNum - 1] * 0.93) this.gearNum++;
+    while (this.gearNum > 1 && v < top[this.gearNum - 2] * 0.62) this.gearNum--;
+  }
+
   /**
-   * Current gear calculation for HUD
+   * Current gear for HUD: 停止 P / 後退 R / 前進 1〜6
    */
   public get gear(): string {
     if (this.speed < -0.1) return 'R';
     if (Math.abs(this.speed) < 0.1) return 'P';
-    return 'D';
+    this.syncGear();
+    return String(this.gearNum);
   }
 
   /**
-   * Simulated RPM for gauges / engine sound
+   * Simulated RPM for gauges / engine sound: ギアごとに上がり、変速で落ちる
    */
   public get rpm(): number {
     const idle = 850;
     const maxRpm = 6500;
-    const ratio = Math.abs(this.speed) / this.maxSpeed;
-    return Math.round(idle + (maxRpm - idle) * Math.pow(ratio, 0.7));
+    this.syncGear();
+    const gearTop = CarController.GEAR_TOP[this.gearNum - 1] * this.maxSpeed;
+    const ratio = Math.min(1.04, Math.abs(this.speed) / gearTop);
+    const rpm = idle + (maxRpm - idle) * Math.pow(ratio, 0.85);
+    return Math.round(this.shiftTimer > 0 ? rpm * 0.92 : rpm);   // 変速の間は、回転が少し沈む
   }
 }

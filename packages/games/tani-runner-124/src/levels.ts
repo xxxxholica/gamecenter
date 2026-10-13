@@ -43,7 +43,7 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
   elementary: {
     id: 'elementary',
     label: '小学生',
-    description: 'たし算・ひき算・かけ算・わり算',
+    description: '四則演算',
     requirements: [
       { value: 70, weight: 0.3 },
       { value: 90, weight: 0.4 },

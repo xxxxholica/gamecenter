@@ -63,7 +63,7 @@ const hex = (c: number): string => '#' + c.toString(16).padStart(6, '0');
  *  - マシン選択・コース希望の間は何も表示しない(選んでいる間に開始時間が来ても、そのまま始まる)。
  *    接続できない・閉鎖・満員などの時だけ、どの画面でも中央にカードを出す。
  *  - コース希望まで進んだあとの待機画面(setWaitingVisible(true))で、参加者・開始までの残り(あと◯秒 / 待機中)を出す。
- *    待機画面はコントローラーとキーボードで操作できる: レバー/矢印でボタンを選び、A/START/Enter で決定、B/Esc で戻る(参加できない時の案内カードも同じ)。
+ *    待機画面はコントローラーとキーボードで操作できる: レバー/WASDでボタンを選び、A/START/Enter で決定、B/Backspace で戻る(参加できない時の案内カードも同じ)。
  */
 export class LobbyScreen {
   /** 接続・参加・参加できない状態(共通部品)。このクラスは skyway の画面と操作を受け持つ。 */
@@ -153,7 +153,7 @@ export class LobbyScreen {
     this.countEl = null;
   }
 
-  /** B・Esc: 通常はコース希望へ戻る。参加できない案内が出ている時は、退出する。 */
+  /** B・Backspace: 通常はコース希望へ戻る。参加できない案内が出ている時は、退出する。 */
   private back(): void {
     if (this.conn.hasProblem) this.deps.onBack();
     else this.deps.onBackToCourse();

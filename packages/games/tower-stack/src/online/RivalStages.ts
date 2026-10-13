@@ -82,13 +82,6 @@ export class RivalStages {
     return { center: (Math.min(...offsets) + Math.max(...offsets)) / 2, count: offsets.length };
   }
 
-  /** 相手のタワーのいまの高さの最大(カメラの高さ合わせに使う) */
-  public maxHeight(): number {
-    let h = 0;
-    for (const s of this.stages) if (!s.out && !s.gone) h = Math.max(h, s.state.h);
-    return h;
-  }
-
   /** サーバーからの様子を反映する(落とした・脱落したら演出を出す) */
   public update(p: Record<number, TowerState & { out: boolean }>, gone: number[], camBottom: number): void {
     for (const s of this.stages) {

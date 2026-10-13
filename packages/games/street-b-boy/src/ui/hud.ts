@@ -6,11 +6,6 @@ import {
 } from '../../../../shared/arcadeLeaderboard';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../../shared/arcadeNameEntryModal';
 
-export interface RankingRecord {
-  name: string;
-  score: number;
-}
-
 export class HudManager {
   public isNameEntryOpen = false;
   private elScore: HTMLElement;

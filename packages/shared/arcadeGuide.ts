@@ -59,8 +59,8 @@ function keyboardKeyName(indices: number[], customLabel?: string): string {
     return buttonName(i);
   }
   // スタート・決定など複数ボタンが割り当てられている場合の代表キー推測
-  if (indices.length >= 4 && (indices.includes(0) || indices.includes(9))) return 'Enter / Space';
-  if (indices.includes(0) && indices.includes(2)) return 'Enter / Space';
+  if (indices.length >= 4 && (indices.includes(0) || indices.includes(9))) return 'Enter';
+  if (indices.includes(0) && indices.includes(2)) return 'Enter';
   if (indices.includes(1) && indices.includes(3)) return 'Backspace';
   if (indices.includes(9) || indices.includes(0)) return 'Enter';
   if (indices.includes(1) && indices.includes(2)) return 'X / C';
@@ -72,16 +72,25 @@ export interface ArcadeGuideOptions {
   moveLabel?: string;
   // キーボード時の移動案内 (省略時はmoveLabel)
   keyMoveLabel?: string;
+  // キーボード時の移動キーのバッジ。省略時は「WASD」
+  keyMoveKeys?: string;
   buttons?: ArcadeGuideButton[];
   // SELECT(キーボードは Backspace)の案内を出すか(ホーム画面自身では不要)。
   showHomeHint?: boolean;
-  // その案内の文字。画面ごとの Backspace の役割に合わせる(タイトル=「ホームへ」、プレイ中=「ポーズ」、メニュー=「戻る」)。省略時は「戻る」。
+  // その案内の文字。画面ごとの Backspace の役割に合わせる(タイトル=「ホームへ戻る」、プレイ中=「ポーズ」、メニュー=「戻る」)。省略時は「戻る」。
   backLabel?: string;
   // 表示位置。省略すると左下。画面下に別のHUDを置くゲームだけ 'top-left' を指定する。
   position?: 'bottom-left' | 'top-left';
 }
 
 let styleInjected = false;
+// 直近に表示したガイドの内容。ポーズなどで一時的に差し替えたあと、元に戻すために覚えておく。
+let lastGuideOptions: ArcadeGuideOptions | null = null;
+
+/** いま表示しているガイドの内容(まだ出していなければ null) */
+export function getArcadeGuideOptions(): ArcadeGuideOptions | null {
+  return lastGuideOptions;
+}
 
 function injectStyle(): void {
   if (styleInjected) return;
@@ -454,6 +463,7 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
   if (isMobileDevice()) {
     return document.createElement('div');
   }
+  lastGuideOptions = options;
   injectStyle();
   initInputModeTracker();
   document.getElementById('agc-guide')?.remove();
@@ -469,7 +479,7 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
     const keyMoveText = options.keyMoveLabel ?? options.moveLabel;
     row.innerHTML = `
       <span class="agc-icon agc-pad-only">${STICK_SVG}</span>
-      <span class="agc-icon agc-kbd-only">${renderKeyboardKeysHtml('WASD / 矢印', false)}</span>
+      <span class="agc-icon agc-kbd-only">${renderKeyboardKeysHtml(options.keyMoveKeys ?? 'WASD', false)}</span>
       <span class="agc-label agc-pad-only">${options.moveLabel}</span>
       <span class="agc-label agc-kbd-only">${keyMoveText}</span>
     `;

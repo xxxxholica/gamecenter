@@ -9,11 +9,9 @@ export class Stage1Drink implements Stage {
   numberText = 'STAGE 1';
   title = 'ドリンクバー';
   mission = 'こぼれる寸前の極限で注ぎを止めろ！';
-  instruction = 'ドリンクが勝手に注がれる・レバー上かボタンで止める';
+  instruction = 'ドリンクが勝手に注がれる・Enter / A で止める';
   briefing: StageBriefing = {
-    headline: 'ドリンクを止める',
-    ok: 'ゆっくり注がれるドリンクを、フチ極限で止める',
-    ng: 'こぼれる・止めるのが早すぎる',
+    headline: '溢れる前に止めろ',
   };
   limitLabel = '液面限界';
 
@@ -34,7 +32,6 @@ export class Stage1Drink implements Stage {
   private active = false;
   // 開始直後は、直前の説明を閉じた操作が「止める」と誤認されないように少し待つ
   private stopGrace = 0.3;
-  private prevLeverUp = false;
   // 毎回わずかに違う(±10%程度)。同じタイミングの暗記だけでは通らないようにする
   private readonly pourSpeed = 0.55 * (0.9 + Math.random() * 0.2);
 
@@ -321,10 +318,8 @@ export class Stage1Drink implements Stage {
     }
     posAttr.needsUpdate = true;
 
-    // 止める操作: ボタン0の押した瞬間、またはレバー上に入れた瞬間(押しっぱなしでは反応しない)
-    const leverUp = input.isLeverUp();
-    const stopPressed = input.wasButton0Pressed() || (leverUp && !this.prevLeverUp);
-    this.prevLeverUp = leverUp;
+    // 止める操作: Enter / A ボタンを押した瞬間(押しっぱなしでは反応しない)
+    const stopPressed = input.wasButton0Pressed();
 
     // 液面は一定の速さで勝手に上がる
     this.liquidHeight += this.pourSpeed * dt;

@@ -29,12 +29,11 @@ watchResultAutoReturn(['btn-result-title']);
 
 const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
-  keyMoveLabel: 'WASD / 矢印',
-  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃(手裏剣/辞書ボム)', keyLabel: 'Space / Enter' }],
+  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃', keyLabel: 'Space / Enter' }],
   showHomeHint: true,
   backLabel: 'ポーズ',
 });
-mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
 
 class Game {
   // Three.js
@@ -83,7 +82,7 @@ class Game {
   /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ffd23f',
-    isPlaying: () => this.state === GameState.PLAYING && !this.isCountingDown && !this.isPreChase,
+    isPlaying: () => this.state === GameState.PLAYING && !this.isPreChase,
     onRestart: () => this.startWithCountdown(),
   });
   private lastDeathCause = ''; // 分析用: 直近の死因(ぶつかった障害物の種類)
@@ -168,8 +167,8 @@ class Game {
       slug: 'school-corridor-runner',
       accentColor: '#ffb100',
       tagline: '放課後エンドレスランナー',
-      startButtonLabel: '学校から脱出する',
-      promptLabel: 'PRESS START / SPACE / 画面クリック',
+      startButtonLabel: 'スタート',
+      promptLabel: 'PRESS START / ENTER / 画面クリック',
       onStart: () => {
         this.startWithCountdown();
       },
@@ -306,7 +305,6 @@ class Game {
     this.state = GameState.TITLE;
     this.uiManager.setGameState(GameState.TITLE);
     this.arcadeTitleScreen?.show();
-    this.inputManager.resetIdleTimer();
     this.fpArms.group.visible = false;
     // 長く遊んだあとは廊下の区画が遠くまで動いていて、そのままだとタイトルの背景が崩れるので、
     // プレイヤー・廊下・障害物・飛び道具・クリア演出の校庭をすべて初期状態に作り直す
@@ -320,7 +318,7 @@ class Game {
     this.camera.updateProjectionMatrix();
     this.titleScrollZ = this.TITLE_START_Z;
     this.corridor.update(this.titleScrollZ, 0);
-    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ' });
+    mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
   }
 
   private updateResultFocus(): void {
@@ -412,7 +410,6 @@ class Game {
 
     // 5. HUDと入力のリセット
     this.uiManager.setGameState(GameState.PLAYING);
-    this.inputManager.resetIdleTimer();
     this.soundSystem.stopBgm();
 
     // 6. カウントダウンより先に「追われる」導入演出を再生
@@ -640,7 +637,6 @@ class Game {
     this.fpArms.update(0, 0, 0, false, false, 3);
 
     this.uiManager.setGameState(this.state);
-    this.inputManager.resetIdleTimer();
 
     if (!isDemo) {
       this.soundSystem.startBgm();

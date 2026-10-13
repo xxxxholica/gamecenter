@@ -25,6 +25,9 @@ export interface ExplosionEffect {
 }
 
 export class CorkSystem {
+  /** 当たり判定で毎フレーム作り直さないための使い回し(弾ごと・的ごとに new しない) */
+  private readonly segmentRay = new THREE.Ray();
+  private readonly hitScratch = new THREE.Vector3();
   private scene: THREE.Scene;
   public bullets: CorkBullet[] = [];
   private normalCorkGeo: THREE.CylinderGeometry;
@@ -255,7 +258,9 @@ export class CorkSystem {
         continue;
       }
 
-      const segmentRay = new THREE.Ray(b.prevPos, b.pos.clone().sub(b.prevPos).normalize());
+      const segmentRay = this.segmentRay;
+      segmentRay.origin.copy(b.prevPos);
+      segmentRay.direction.copy(b.pos).sub(b.prevPos).normalize();
       const segmentDist = b.pos.distanceTo(b.prevPos);
 
       let closestHitPoint: THREE.Vector3 | null = null;
@@ -267,7 +272,7 @@ export class CorkSystem {
       for (const prize of prizes) {
         if (prize.isDefeated) continue;
         const box = prize.getBoundingBox();
-        const hitTarget = new THREE.Vector3();
+        const hitTarget = this.hitScratch;
         if (segmentRay.intersectBox(box, hitTarget)) {
           const d = b.prevPos.distanceTo(hitTarget);
           if (d < minDist) {
@@ -283,7 +288,7 @@ export class CorkSystem {
       for (const balloon of dynamicTargets.balloons) {
         if (balloon.isPopped) continue;
         const box = balloon.getBoundingBox();
-        const hitTarget = new THREE.Vector3();
+        const hitTarget = this.hitScratch;
         if (segmentRay.intersectBox(box, hitTarget)) {
           const d = b.prevPos.distanceTo(hitTarget);
           if (d < minDist) {
@@ -299,7 +304,7 @@ export class CorkSystem {
       for (const duck of dynamicTargets.ducks) {
         if (duck.isDown) continue;
         const box = duck.getBoundingBox();
-        const hitTarget = new THREE.Vector3();
+        const hitTarget = this.hitScratch;
         if (segmentRay.intersectBox(box, hitTarget)) {
           const d = b.prevPos.distanceTo(hitTarget);
           if (d < minDist) {
@@ -314,7 +319,7 @@ export class CorkSystem {
       // Check Flying UFO
       if (!dynamicTargets.ufo.isHit) {
         const box = dynamicTargets.ufo.getBoundingBox();
-        const hitTarget = new THREE.Vector3();
+        const hitTarget = this.hitScratch;
         if (segmentRay.intersectBox(box, hitTarget)) {
           const d = b.prevPos.distanceTo(hitTarget);
           if (d < minDist) {

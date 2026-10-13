@@ -27,6 +27,12 @@
         width: 100vw;
         height: 100vh;
       }
+
+      /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+      .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+        font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+      }
+      .agc-label, .ats-tagline { font-weight: 800 !important; }
     </style>
   </head>
   <body>

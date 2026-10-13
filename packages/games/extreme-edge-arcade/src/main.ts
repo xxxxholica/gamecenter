@@ -13,7 +13,7 @@ watchResultAutoReturn(['btn-result-title']);
 mountArcadeGuide({
   buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }],
   showHomeHint: true,
-  backLabel: 'ホームへ',
+  backLabel: 'ホームへ戻る',
 });
 
 function initApp() {

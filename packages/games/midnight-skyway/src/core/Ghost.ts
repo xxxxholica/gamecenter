@@ -144,6 +144,12 @@ export class GhostCar {
         g.opacity = 0.42;
         g.depthWrite = false;
         g.side = THREE.FrontSide;           // 半透明の両面素材は2回描かれる。ゴーストの内側は見えなくてよいので片面にする
+        // 光の映り込みはなし: 艶・クリアコート・環境の反射を切って、色のついた半透明の影のように見せる
+        g.roughness = 1;
+        g.metalness = 0;
+        g.envMapIntensity = 0;
+        const phys = g as unknown as THREE.MeshPhysicalMaterial;
+        if ('clearcoat' in phys) { phys.clearcoat = 0; phys.specularIntensity = 0; phys.transmission = 0; phys.sheen = 0; phys.iridescence = 0; }
         if ('emissive' in g) { g.emissive = new THREE.Color(tint); g.emissiveIntensity = 0.6; }
         ghostMats.set(m, g);
         c = g;

@@ -496,6 +496,12 @@
       80% { transform: translate(-48%, -52%) rotate(2deg); }
       100% { transform: translate(-50%, -50%) rotate(0deg); }
     }
+
+    /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+    .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+    }
+    .agc-label, .ats-tagline { font-weight: 800 !important; }
   </style>
 </head>
 <body>
@@ -528,7 +534,7 @@
       </div>
 
       <div style="display: flex; flex-direction: column; align-items: center;">
-        <button id="btn-start" class="title-btn">開始</button>
+        <button id="btn-start" class="title-btn">スタート</button>
       </div>
 
       <!-- 操作案内は全ゲーム共通のボタンガイドカード(main.tsのmountArcadeGuide)に一本化 -->

@@ -2,36 +2,6 @@
 // ステージの足場やギミックはそのままに、背景と空気だけを差し替える。
 import * as THREE from 'three';
 
-/** 画面全体の背景になる空。上は澄んだ青、地平は眩しい白金色で、中央上に太陽の光が差す */
-export function createHeavenSkyTexture(): THREE.CanvasTexture {
-  const W = 512, H = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#5aa6f2');
-  sky.addColorStop(0.35, '#9fcdfa');
-  sky.addColorStop(0.68, '#ffe9c0');
-  sky.addColorStop(1, '#fff6dc');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
-
-  // 太陽の光(中央の少し上から放射する光)
-  const sun = ctx.createRadialGradient(W * 0.5, H * 0.34, 0, W * 0.5, H * 0.34, W * 0.62);
-  sun.addColorStop(0, 'rgba(255,255,255,0.95)');
-  sun.addColorStop(0.18, 'rgba(255,244,200,0.7)');
-  sun.addColorStop(0.5, 'rgba(255,225,160,0.25)');
-  sun.addColorStop(1, 'rgba(255,225,160,0)');
-  ctx.fillStyle = sun;
-  ctx.fillRect(0, 0, W, H);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 /** ふわっとした雲のひとかたまり(白い丸をいくつか重ねて、縁をぼかす) */
 function createCloudTexture(): THREE.CanvasTexture {
   const W = 256, H = 128;

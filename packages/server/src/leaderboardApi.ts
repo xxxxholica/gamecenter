@@ -112,6 +112,7 @@ function decodeSegment(p: string): string | null {
  *   GET  /api/leaderboards
  *   GET  /api/leaderboard/:slug[/:variant]
  *   POST /api/leaderboard/:slug[/:variant]
+ *   POST /api/anon-name/reserve | /release
  *   GET  /api/ghost/:slug/:variant/:id
  * どんな入力でも例外を外に出さない(HTTPサーバーの例外でプロセスが落ち、オンライン対戦まで止まらないように)。
  * POST は ブラウザ(Content-Type: application/json、許可された Origin)からだけ受け付け、他のサイトのページからの勝手な送信を断る。
@@ -186,6 +187,22 @@ function route(
     return send(res, 200, { ticket: tickets.issue(parts[1]) });
   }
 
+  // 匿名名の予約・破棄: 登録ウィンドウを出したときに予約し、使わずに閉じたら破棄する
+  if (method === 'POST' && parts[0] === 'anon-name' && parts.length === 2 && (parts[1] === 'reserve' || parts[1] === 'release')) {
+    if (rejectBadPost(req, res, originAllowed)) return;
+    if (!postRate.hit(rateKey)) return send(res, 429, { error: 'rate' });
+    if (parts[1] === 'reserve') {
+      req.resume();
+      const r = store.reserveAnon();
+      return r ? send(res, 200, r) : send(res, 503, { error: 'busy' });
+    }
+    readJson(req, res).then((body) => {
+      if (!body) return;
+      send(res, 200, { released: store.releaseAnon(body.token) });
+    }).catch(() => { if (!res.headersSent) send(res, 500, { error: 'internal' }); });
+    return;
+  }
+
   if (method === 'POST' && parts[0] === 'leaderboard' && (parts.length === 2 || parts.length === 3)) {
     if (rejectBadPost(req, res, originAllowed)) return;
     if (!postRate.hit(rateKey)) return send(res, 429, { error: 'rate' });
@@ -196,12 +213,14 @@ function route(
         const t = tickets.redeem(body.ticket, parts[1]);
         if (!t.ok) {
           log(`leaderboard ${parts[1]} ticket rejected: ${t.error} ip=${ip}`);
+          store.releaseAnon(body.anonToken);
           return send(res, 403, { error: t.error });
         }
         elapsedMs = t.elapsedMs + ELAPSED_BONUS_MS;
       }
       const r = store.submit(parts[1], parts[2], body, { elapsedMs });
       if (!r.ok) {
+        store.releaseAnon(body.anonToken);                  // 登録されなかったので、予約した匿名名は返す
         if (r.error === 'implausible_score') log(`leaderboard ${parts[1]}${parts[2] ? ':' + parts[2] : ''} implausible score=${String(body.score)} elapsedMs=${elapsedMs} ip=${ip}`);
         return send(res, r.error === 'unknown_board' ? 404 : 400, { error: r.error });
       }

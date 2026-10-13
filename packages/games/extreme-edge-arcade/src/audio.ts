@@ -260,24 +260,6 @@ class SoundManager {
     }
   }
 
-  // Microwave hum
-  playMicrowaveHum(intensity: number) {
-    if (this.muted) return;
-    const ctx = this.getContext();
-    if (!ctx || !this.sfxGain) return;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(120 + intensity * 60, now);
-    gain.gain.setValueAtTime(0.05 * intensity, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
-    osc.start(now);
-    osc.stop(now + 0.11);
-  }
-
   // Mechanical alarm bell ringing - 音量を大幅に低減し(0.18->0.045)、耳障りな超高周波の刺さり感を和らげる
   playBellRing() {
     if (this.muted) return;
@@ -315,28 +297,6 @@ class SoundManager {
     gain.connect(this.sfxGain);
     osc.start(now);
     osc.stop(now + 0.055);
-  }
-
-  // Sizzle (Toaster heating)
-  playSizzle(intensity: number) {
-    if (this.muted) return;
-    const ctx = this.getContext();
-    if (!ctx || !this.sfxGain) return;
-    const now = ctx.currentTime;
-    const buffer = this.createNoiseBuffer(0.1);
-    if (!buffer) return;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.setValueAtTime(3000, now);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.03 * intensity, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.sfxGain);
-    source.start(now);
   }
 
   // ==========================================

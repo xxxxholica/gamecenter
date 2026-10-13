@@ -41,6 +41,9 @@ function getContactShadowMaterial(): THREE.MeshBasicMaterial {
   return contactShadowMaterial;
 }
 
+/** 車の group から車を引く。メニューの背景(GarageScene)が、台座の上の車を見つけるために使う(userData に入れると clone() が壊れる)。 */
+export const carByGroup = new WeakMap<THREE.Object3D, CarBase>();
+
 export abstract class CarBase {
   public group: THREE.Group;
   public abstract readonly specs: CarSpecs;
@@ -87,6 +90,7 @@ export abstract class CarBase {
 
   constructor() {
     this.group = new THREE.Group();
+    carByGroup.set(this.group, this);
     this.initMaterials();
   }
 
@@ -225,6 +229,25 @@ export abstract class CarBase {
     });
   }
 
+  private wetBackup: Map<THREE.MeshStandardMaterial, { roughness: number; envMapIntensity: number }> | null = null;
+
+  /** 雨で濡れた塗装: 粗さを下げ、環境の映り込みを強める(ツヤが出て、水を被った感じになる)。 */
+  public setWet(wet: boolean): void {
+    const mats: THREE.MeshStandardMaterial[] = [this.bodyMaterial, this.roofMaterial, this.glassMaterial].filter(Boolean);
+    if (wet === (this.wetBackup !== null)) return;
+    if (wet) {
+      this.wetBackup = new Map();
+      for (const m of mats) {
+        this.wetBackup.set(m, { roughness: m.roughness, envMapIntensity: m.envMapIntensity });
+        m.roughness = Math.max(0.04, m.roughness * 0.5);
+        m.envMapIntensity = m.envMapIntensity * 1.7;
+      }
+    } else {
+      this.wetBackup?.forEach((v, m) => { m.roughness = v.roughness; m.envMapIntensity = v.envMapIntensity; });
+      this.wetBackup = null;
+    }
+  }
+
   public setBodyColor(hex: number): void {
     this.bodyMaterial.color.setHex(hex);
   }
@@ -284,18 +307,6 @@ export abstract class CarBase {
     mesh.position.set(0, -0.04, centerZ);
     mesh.renderOrder = 2;
     this.group.add(mesh);
-  }
-
-  public setWireframe(enabled: boolean): void {
-    this.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => (m.wireframe = enabled));
-        } else if (child.material) {
-          child.material.wireframe = enabled;
-        }
-      }
-    });
   }
 
   /**

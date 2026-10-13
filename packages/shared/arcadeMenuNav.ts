@@ -1,4 +1,4 @@
-// 全ゲーム共通: メニューの選択移動(WASD / 矢印 / アケコンのスティック)を「押した瞬間」のイベントとして溜める。
+// 全ゲーム共通: メニューの選択移動(WASD / アケコンのスティック)を「押した瞬間」のイベントとして溜める。
 // 毎フレームの押下状態を見る方式だと、フレームの合間に離した短い入力が消えたり、
 // プレイ中から押しっぱなしのキーが効かなかったりするので、keydown と スティックの傾き始めを直接キューに積む。
 // 向きは 上・左 = -1 / 下・右 = +1 (メニューは縦並びでも横並びでも同じ操作で動く)。
@@ -37,9 +37,9 @@ export class MenuNav {
 
   public static keyDir(code: string): number {
     switch (code) {
-      case 'ArrowLeft': case 'KeyA': case 'ArrowUp': case 'KeyW':
+      case 'KeyA': case 'KeyW':
         return -1;
-      case 'ArrowRight': case 'KeyD': case 'ArrowDown': case 'KeyS':
+      case 'KeyD': case 'KeyS':
         return 1;
       default:
         return 0;

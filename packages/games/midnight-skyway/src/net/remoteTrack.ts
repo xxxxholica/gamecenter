@@ -22,6 +22,8 @@ export interface Target {
   x: number; y: number; z: number; yaw: number;
   speed: number; steer: number; roll: number; pitch: number;
   progress: number;
+  /** ドリフト中か(0|1)と、ブーストの強さ(0〜1)。補間せず、新しい方の値を使う */
+  drift: number; boost: number;
 }
 
 /** 角度差を最短(-π..π)に直す。while ループだと巨大な値(1e300 など)で値が変わらず無限ループになり、ブラウザが固まるため剰余で正規化する */
@@ -45,7 +47,7 @@ interface Snapshot {
  */
 export class RemoteTrack {
   /** 現在の表示姿勢 */
-  public readonly pose: Target = { x: 0, y: 0, z: 0, yaw: 0, speed: 0, steer: 0, roll: 0, pitch: 0, progress: 0 };
+  public readonly pose: Target = { x: 0, y: 0, z: 0, yaw: 0, speed: 0, steer: 0, roll: 0, pitch: 0, progress: 0, drift: 0, boost: 0 };
   public valid = false;
 
   private snaps: Snapshot[] = [];
@@ -144,6 +146,8 @@ export class RemoteTrack {
       p.roll += (target.roll - p.roll) * k;
       p.pitch += (target.pitch - p.pitch) * k;
       p.progress = target.progress;
+      p.drift = target.drift;
+      p.boost += (target.boost - p.boost) * k;
     }
     this.valid = true;
     return true;
@@ -166,7 +170,7 @@ export class RemoteTrack {
         z += ((L[2] - P[2]) / span) * extra;
         yaw += (wrapAngle(L[3] - P[3]) / span) * extra;
       }
-      return { x, y, z, yaw, speed: L[4], steer: L[5], roll: L[6], pitch: L[7], progress: L[9] };
+      return { x, y, z, yaw, speed: L[4], steer: L[5], roll: L[6], pitch: L[7], progress: L[9], drift: L[8], boost: L[10] ?? 0 };
     }
     let a = sn[0], b = sn[0];
     for (let i = 0; i < sn.length; i++) {
@@ -180,6 +184,7 @@ export class RemoteTrack {
     return {
       x: lerp(0), y: lerp(1), z: lerp(2), yaw: A[3] + wrapAngle(B[3] - A[3]) * u,
       speed: lerp(4), steer: lerp(5), roll: lerp(6), pitch: lerp(7), progress: B[9],
+      drift: B[8], boost: (A[10] ?? 0) + ((B[10] ?? 0) - (A[10] ?? 0)) * u,
     };
   }
 }

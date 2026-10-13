@@ -1,6 +1,6 @@
 // ============================================================
 // 難易度選択画面: オンライン対応ゲームのモード選択と同じ共通部品(ModeSelect の arcade 版)を使う。
-// ←→/レバーで選び、Enter/A で決定、Esc/B でタイトルへ戻る。
+// A/D/レバーで選び、Enter/A で決定、Backspace/B でタイトルへ戻る。
 // ============================================================
 
 import { LEVELS, LEVEL_ORDER, LevelId } from './levels.ts';
@@ -53,7 +53,7 @@ export class LevelSelectScreen {
   constructor(container: HTMLElement, private readonly events: LevelSelectEvents) {
     container.classList.add('hidden');
     this.select = new ModeSelect(
-      { title: '難易度選択', accent: ACCENT, accentEnd: '#00b0ff', backLabel: 'タイトルへ', arcade: true, onFocus: (id) => this.setSelected(id as LevelId) },
+      { title: '難易度選択', accent: ACCENT, accentEnd: '#00b0ff', arcade: true, buttonGuide: true, onFocus: (id) => this.setSelected(id as LevelId) },
       () => this.events.onConfirm(),
       () => this.events.onBack(),
     );
@@ -73,7 +73,7 @@ export class LevelSelectScreen {
         art: levelArt(info),
         title: lv.label,
         sub: info.tag,
-        desc: `${lv.description}のゲートが出ます。卒業要件は ${Math.min(...reqs) === Math.max(...reqs) ? `${reqs[0]}` : `${Math.min(...reqs)}〜${Math.max(...reqs)}`} 単位です。`,
+        desc: `・${lv.description}\n・卒業は ${Math.min(...reqs) === Math.max(...reqs) ? `${reqs[0]}` : `${Math.min(...reqs)}〜${Math.max(...reqs)}`} 単位`,
       };
     });
     this.select.show(items, current);

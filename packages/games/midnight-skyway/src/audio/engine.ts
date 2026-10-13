@@ -1,6 +1,6 @@
 import { readGamepads } from '../../../../shared/gamepadFrame';
 // Web Audio の土台: AudioContext、BGM/SEのバス、ミュート(Mキー)、自動再生制限の解除、タブ非表示時の停止。
-// 音はすべて合成で、外部の音声ファイルは使わない。
+// 効果音はすべて合成。BGMだけは public/bgm の音源ファイルを使う(music.ts)。
 
 const MUTE_KEY = 'skyway_muted';
 const MASTER_VOLUME = 0.8;
@@ -11,8 +11,6 @@ export class AudioEngine {
   public readonly musicDuck: GainNode;
   public readonly musicBus: GainNode;
   public readonly sfxBus: GainNode;
-  /** BGMの残響。各曲のパッドとリードから送る */
-  public readonly reverbSend: GainNode;
   public muted = false;
 
   private readonly master: GainNode;
@@ -38,21 +36,14 @@ export class AudioEngine {
     this.master.connect(ctx.destination);
 
     this.musicBus = ctx.createGain();
-    this.musicBus.gain.value = 0.5;
+    this.musicBus.gain.value = 0.8;
     this.musicBus.connect(limiter);
     this.musicDuck = ctx.createGain();
     this.musicDuck.connect(this.musicBus);
 
     this.sfxBus = ctx.createGain();
-    this.sfxBus.gain.value = 0.9;
+    this.sfxBus.gain.value = 0.65;
     this.sfxBus.connect(limiter);
-
-    const convolver = ctx.createConvolver();
-    convolver.buffer = this.makeImpulse(1.8);
-    this.reverbSend = ctx.createGain();
-    this.reverbSend.gain.value = 1;
-    this.reverbSend.connect(convolver);
-    convolver.connect(this.musicDuck);
 
     this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
@@ -99,17 +90,6 @@ export class AudioEngine {
 
   public noiseOffset(): number {
     return Math.random() * 1.0;
-  }
-
-  private makeImpulse(seconds: number): AudioBuffer {
-    const rate = this.ctx.sampleRate;
-    const len = Math.floor(rate * seconds);
-    const buf = this.ctx.createBuffer(2, len, rate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
-    }
-    return buf;
   }
 
   // ブラウザは最初のキー/ポインタ操作があるまで音を出させない。操作のたびにresumeを試みる。

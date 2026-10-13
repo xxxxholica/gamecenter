@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { anonNameFromIndex } from '../../shared/anonName.ts';
 import {
   GAME_LEADERBOARD_DEFS,
   LEADERBOARD_MAX_ENTRIES,
@@ -71,6 +72,8 @@ export type SubmitInput = {
   extra?: unknown;
   cleared?: unknown;
   ghost?: unknown;
+  /** 登録ウィンドウを開いたときに予約した匿名名の札(reserveAnon の token) */
+  anonToken?: unknown;
 };
 
 export type SubmitResult =
@@ -157,8 +160,18 @@ function scorePlausible(def: GameLeaderboardDef, score: number, elapsedMs: numbe
   return true;
 }
 
+/** 予約した匿名名を使わずに放置されたとき、自動で破棄するまでの時間 */
+const ANON_RESERVE_TTL_MS = 10 * 60_000;
+/** 同時に予約できる数の上限(予約の連打で番号を食い潰されないように) */
+const ANON_MAX_RESERVED = 300;
+const GUEST_NAME = sanitizeLeaderboardName('');
+
 export class LeaderboardStore {
   private boards = new Map<string, Board>();
+  /** 匿名の連番: next=次に新しく使う番号、free=予約が破棄されて空いた番号(小さい順に再利用する) */
+  private anon: { next: number; free: number[] } = { next: 0, free: [] };
+  /** 予約中の匿名名(メモリだけ。再起動で消えた分は欠番になる) */
+  private reserved = new Map<string, { index: number; expires: number }>();
   private file: string | null;
 
   constructor(file: string | null) {
@@ -167,6 +180,11 @@ export class LeaderboardStore {
     try {
       const content = fs.readFileSync(file, 'utf8');
       const data = JSON.parse(content);
+      const a = data?.anon;
+      if (a && Number.isInteger(a.next) && a.next >= 0) {
+        const free = Array.isArray(a.free) ? a.free.filter((n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < a.next) : [];
+        this.anon = { next: a.next, free: [...new Set<number>(free)].sort((x, y) => x - y) };
+      }
       for (const [key, b] of Object.entries<Board>(data?.boards ?? {})) {
         const [slug, variant] = parseBoardKey(key);
         if (!this.def(slug, variant) || !b || !Array.isArray(b.entries)) continue;     // 知らない枠・壊れた枠は捨てる
@@ -183,6 +201,52 @@ export class LeaderboardStore {
         } catch { /* 退避失敗時も続行 */ }
       }
     }
+  }
+
+  // ---------- 匿名名 ----------
+
+  private takeAnonIndex(): number {
+    const index = this.anon.free.length > 0 ? this.anon.free.shift()! : this.anon.next++;
+    this.save();
+    return index;
+  }
+
+  private freeAnonIndex(index: number): void {
+    if (this.anon.free.includes(index)) return;
+    this.anon.free.push(index);
+    this.anon.free.sort((x, y) => x - y);
+    this.save();
+  }
+
+  /** 期限切れの予約を破棄する */
+  private sweepAnon(): void {
+    const now = Date.now();
+    for (const [token, r] of this.reserved) {
+      if (r.expires <= now) {
+        this.reserved.delete(token);
+        this.freeAnonIndex(r.index);
+      }
+    }
+  }
+
+  /** 登録ウィンドウを出したときに、匿名名を1つ予約する。上限に達していたら null */
+  reserveAnon(): { token: string; name: string } | null {
+    this.sweepAnon();
+    if (this.reserved.size >= ANON_MAX_RESERVED) return null;
+    const index = this.takeAnonIndex();
+    const token = crypto.randomUUID();
+    this.reserved.set(token, { index, expires: Date.now() + ANON_RESERVE_TTL_MS });
+    return { token, name: anonNameFromIndex(index) };
+  }
+
+  /** 使われなかった予約を破棄して、その番号を空きに戻す */
+  releaseAnon(token: unknown): boolean {
+    if (typeof token !== 'string') return false;
+    const r = this.reserved.get(token);
+    if (!r) return false;
+    this.reserved.delete(token);
+    this.freeAnonIndex(r.index);
+    return true;
   }
 
   /** その枠の、いまのコースの版(バリアントに revision がなければ 0) */
@@ -237,6 +301,24 @@ export class LeaderboardStore {
     return this.boards.get(boardKey(slug, variant))?.entries.find((e) => e.id === id)?.ghost ?? null;
   }
 
+  /**
+   * 登録する名前を決める。入力した名前が使えるならそれ。空・使えない名前なら、予約しておいた匿名名(なければ新しく採番)。
+   * 予約があって別の名前を入力したときは、予約を破棄する。
+   */
+  private resolveName(input: SubmitInput): string {
+    const typed = sanitizeLeaderboardName(input.name);
+    const token = typeof input.anonToken === 'string' ? input.anonToken : '';
+    const r = this.reserved.get(token);
+    const usable = typed !== GUEST_NAME;
+    if (r) {
+      this.reserved.delete(token);
+      if (!usable || typed === anonNameFromIndex(r.index)) return anonNameFromIndex(r.index);
+      this.freeAnonIndex(r.index);
+      return typed;
+    }
+    return usable ? typed : anonNameFromIndex(this.takeAnonIndex());
+  }
+
   submit(slug: string, variant: string | undefined, input: SubmitInput, ctx: SubmitContext = {}): SubmitResult {
     const def = this.def(slug, variant);
     if (!def) return { ok: false, error: 'unknown_board' };
@@ -247,20 +329,23 @@ export class LeaderboardStore {
     const key = boardKey(slug, variant);
     const board = this.boards.get(key) ?? { rev: this.revisionOf(slug, variant), entries: [] };
     const rank = rankForScore(def, board.entries, score);
-    if (rank < 0) return { ok: true, rank: -1, entries: this.list(slug, variant) ?? [] };   // 圏外は保存しない
+    if (rank < 0) {
+      this.releaseAnon(input.anonToken);                                                   // 圏外なら予約は使わない
+      return { ok: true, rank: -1, entries: this.list(slug, variant) ?? [] };              // 圏外は保存しない
+    }
 
     let ghost: GhostTrace | undefined;
     if (input.ghost !== undefined && input.ghost !== null) {
       if (!GHOST_GAMES.has(slug)) return { ok: false, error: 'bad_ghost' };
       const g = validateGhost(input.ghost, score);
-      if (!g) return { ok: false, error: 'bad_ghost' };
+      if (!g) { this.releaseAnon(input.anonToken); return { ok: false, error: 'bad_ghost' }; }
       ghost = g;
     }
 
     const entry: StoredEntry = {
       id: crypto.randomUUID(),
       rank: 0,
-      name: sanitizeLeaderboardName(input.name),
+      name: this.resolveName(input),
       score,
       formattedScore: def.formatScore(score),
       date: today(),
@@ -407,7 +492,7 @@ export class LeaderboardStore {
       const file = this.file;
       await fsp.mkdir(path.dirname(file), { recursive: true });
       const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-      await fsp.writeFile(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
+      await fsp.writeFile(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards), anon: this.anon }));
       await fsp.rename(tmp, file);
     } catch (e) {
       console.warn('[leaderboard] 保存に失敗しました:', (e as Error).message);
@@ -426,7 +511,7 @@ export class LeaderboardStore {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.${process.pid}.${crypto.randomUUID()}.sync.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards) }));
+      fs.writeFileSync(tmp, JSON.stringify({ boards: Object.fromEntries(this.boards), anon: this.anon }));
       fs.renameSync(tmp, this.file);
     } catch (e) {
       console.warn('[leaderboard] 保存に失敗しました:', (e as Error).message);

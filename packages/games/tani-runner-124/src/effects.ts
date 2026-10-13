@@ -38,8 +38,6 @@ export class EffectsManager {
 
   // Projectiles (Students launched at boss wall)
   public projectiles: RocketProjectile[] = [];
-  private projectileGeometry: THREE.BoxGeometry;
-  private projectileMaterial: THREE.MeshLambertMaterial;
 
   // Debris Particles
   public particles: DebrisParticle[] = [];
@@ -52,9 +50,6 @@ export class EffectsManager {
     this.scene = scene;
     this.camera = camera;
 
-    this.projectileGeometry = new THREE.BoxGeometry(0.35, 0.45, 0.7);
-    this.projectileMaterial = new THREE.MeshLambertMaterial({ color: 0x00ffff });
-
     this.particleGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
     this.redParticleMat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
     this.yellowParticleMat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
@@ -66,36 +61,6 @@ export class EffectsManager {
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
     this.shakeDuration = duration;
     this.shakeTimer = duration;
-  }
-
-  // Launch a student missile towards the boss wall
-  public launchStudentRocket(startX: number, startY: number, startZ: number, targetZ: number): void {
-    const group = new THREE.Group();
-
-    // Student body rocket
-    const body = new THREE.Mesh(this.projectileGeometry, this.projectileMaterial);
-    group.add(body);
-
-    // Jet engine glow (small yellow cone/cylinder)
-    const jetGeo = new THREE.ConeGeometry(0.18, 0.4, 6);
-    jetGeo.rotateX(Math.PI / 2);
-    const jetMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-    const jet = new THREE.Mesh(jetGeo, jetMat);
-    jet.position.set(0, 0, 0.4);
-    group.add(jet);
-
-    group.position.set(startX, startY + 0.5, startZ);
-    this.scene.add(group);
-
-    // High velocity forward
-    this.projectiles.push({
-      mesh: group,
-      vx: (Math.random() - 0.5) * 4,
-      vy: Math.random() * 2 + 1,
-      vz: -65.0, // High speed flight towards wall
-      targetZ,
-      alive: true
-    });
   }
 
   // Spawn scatter debris when students are lost or damaged

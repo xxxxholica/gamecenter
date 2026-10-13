@@ -10,11 +10,9 @@ export class Stage5Balloon implements Stage {
   numberText = 'STAGE 4';
   title = '風船ふくらまし';
   mission = '割れる寸前の極限で空気を止めろ！';
-  instruction = '風船が勝手にふくらむ・レバー上かボタンで止める';
+  instruction = '風船が勝手にふくらむ・Enter / A で止める';
   briefing: StageBriefing = {
-    headline: '風船を止める',
-    ok: 'ふくらむ風船を、割れる寸前で止める',
-    ng: '割れる・止めるのが早すぎる',
+    headline: '割れる前に止めろ',
   };
   limitLabel = '風船の限界';
 
@@ -38,7 +36,6 @@ export class Stage5Balloon implements Stage {
   private active = false;
   // 開始直後は、直前の説明を閉じた操作が「止める」と誤認されないように少し待つ
   private stopGrace = 0.3;
-  private prevLeverUp = false;
   private wobbleTime = 0;
   // ふくらむ速さは毎回 ±10%程度変わる。同じタイミングの暗記だけでは通らないようにする(割れる大きさは一定)
   private readonly growSpeed = 0.28 * (0.9 + Math.random() * 0.2);
@@ -153,10 +150,8 @@ export class Stage5Balloon implements Stage {
     this.timeLeft -= dt;
     this.stopGrace = Math.max(0, this.stopGrace - dt);
 
-    // 止める操作: ボタン0の押した瞬間、またはレバー上に入れた瞬間(押しっぱなしでは反応しない)
-    const leverUp = input.isLeverUp();
-    const stopPressed = input.wasButton0Pressed() || (leverUp && !this.prevLeverUp);
-    this.prevLeverUp = leverUp;
+    // 止める操作: Enter / A ボタンを押した瞬間(押しっぱなしでは反応しない)
+    const stopPressed = input.wasButton0Pressed();
 
     // 風船は一定の速さで勝手にふくらむ
     this.radius += this.growSpeed * dt;

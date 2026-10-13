@@ -1,6 +1,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { NightCity } from './NightCity';
+import { RainSystem } from './RainSystem';
+import { Lightning } from './Lightning';
+import { PostFX } from './PostFX';
+import { TireSmokeSystem } from './TireSmokeSystem';
+import { carByGroup } from '../models/CarBase';
 
+/** 背景が後ろへ流れる速さ(m/s)。約110km/h */
+const CRUISE_SPEED = 30;
+/** タイヤの回る速さ(rad/s)。実際の速さ(約90rad/s)だと、コマ送りで逆回りに見えるので、見映えのよい速さにする */
+const WHEEL_SPIN = 26;
+
+/**
+ * タイトル〜出走前のメニューの背景。車は原点に止まり、夜の雨の東京の高架(NightCity)が後ろへ流れて、
+ * 走っているように見せる。路面の反射・ブルーム・雨・稲光はレース中と同じ後処理(PostFX)を通す。
+ * 「回転」のON/OFFは、車の台座ではなくカメラが車の周りをゆっくり回るかどうかになる。
+ */
 export class GarageScene {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
@@ -8,13 +24,37 @@ export class GarageScene {
   public controls: OrbitControls;
   public turntableGroup: THREE.Group;
   public isRotating: boolean = true;
-  private rotationSpeed: number = 0.005;
+  private static readonly ORIGIN = new THREE.Vector3();
+  private static readonly CRUISE_VEL = new THREE.Vector3(0, 0, CRUISE_SPEED);
+  private readonly ground = new THREE.Vector3(0, 0, -CRUISE_SPEED * 0.55);   // 跳ねた水が、路面と一緒に後ろへ流れていく速さ
+  private readonly center = new THREE.Vector3();
+  private readonly wheelPos = new THREE.Vector3();
+  private readonly sideDir = new THREE.Vector3();
+  private readonly city = new NightCity();
+  private readonly rain = new RainSystem();
+  private readonly postFx: PostFX;
+  private readonly spray = new TireSmokeSystem();
+  private wheelAngle = 0;
+  private lastTime = 0;
+  /** ロード中のメーターの値(0〜1)。大きいほど街が速く流れ、画面が揺れる */
+  private loadLevel = 0;
+  public setLoadLevel(v: number): void { this.loadLevel = v; }
+  /** 発進演出(ロード完了 → 車が画面へ突っ込む)。-1 = 演出なし、それ以外は経過秒 */
+  private launchT = -1;
+  private launchResolve: (() => void) | null = null;
+  private readonly launchFromPos = new THREE.Vector3();
+  private readonly launchFromTarget = new THREE.Vector3();
+  private static readonly LAUNCH_POS = new THREE.Vector3(0, 1.0, 4.6);
+  private static readonly LAUNCH_TARGET = new THREE.Vector3(0, 0.85, 0);
+  /** 車の先端がカメラに触れるまでの秒数(この時に resolve する) */
+  private static readonly LAUNCH_HIT = 0.82;
+  private readonly lightning = new Lightning(6, 9, 23, 8);
 
   constructor(container: HTMLElement) {
     // 1. Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0c0f17);
-    this.scene.fog = new THREE.FogExp2(0x0c0f17, 0.035);
+    this.scene.background = new THREE.Color(0x0b1226);
+    this.scene.fog = new THREE.FogExp2(0x101a33, 0.012);
 
     // 2. Camera setup
     const aspect = container.clientWidth / container.clientHeight;
@@ -27,7 +67,7 @@ export class GarageScene {
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     container.appendChild(this.renderer.domElement);
@@ -40,6 +80,8 @@ export class GarageScene {
     this.controls.minDistance = 1.2;
     this.controls.maxDistance = 14.0;
     this.controls.target.set(0, 0.9, 0);
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.9;
 
     // 5. Turntable Group (Car sits on this)
     this.turntableGroup = new THREE.Group();
@@ -48,133 +90,95 @@ export class GarageScene {
     // 6. Garage environment
     this.setupLighting();
     this.setupEnvironment();
+    this.scene.add(this.city.group);
+    this.rain.surround = true;
+    this.rain.intensity = 1;
+    this.scene.add(this.rain.mesh);
+    this.scene.add(this.spray.group);
+    this.postFx = new PostFX(this.renderer, this.scene, this.camera);
+    this.postFx.setTimeOfDay('night');
+    this.postFx.setRain(1, 1);
+    this.spray.wet = true;
 
     // 7. Event listeners
     window.addEventListener('resize', this.onWindowResize.bind(this, container));
   }
 
   private setupLighting(): void {
-    // Ambient light with soft blue/neutral tint
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    this.scene.add(ambientLight);
+    // 夜: 青い空の明かりと、月明かり
+    this.scene.add(new THREE.HemisphereLight(0x7d92d6, 0x2c3550, 0.9));
+    this.scene.add(new THREE.AmbientLight(0x8fa2ff, 0.25));
 
-    // Main key light (angled high directional light with crisp soft shadow)
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    keyLight.position.set(5, 8, 4);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 25;
-    keyLight.shadow.camera.left = -4;
-    keyLight.shadow.camera.right = 4;
-    keyLight.shadow.camera.top = 4;
-    keyLight.shadow.camera.bottom = -4;
-    keyLight.shadow.bias = -0.0003;
-    this.scene.add(keyLight);
+    const moon = new THREE.DirectionalLight(0xb4c6ff, 1.2);
+    moon.position.set(5, 8, 4);
+    moon.castShadow = true;
+    moon.shadow.mapSize.width = 2048;
+    moon.shadow.mapSize.height = 2048;
+    moon.shadow.camera.near = 0.5;
+    moon.shadow.camera.far = 25;
+    moon.shadow.camera.left = -4;
+    moon.shadow.camera.right = 4;
+    moon.shadow.camera.top = 4;
+    moon.shadow.camera.bottom = -4;
+    moon.shadow.bias = -0.0003;
+    this.scene.add(moon);
 
-    // Fill light from opposite side (cool blue fill)
-    const fillLight = new THREE.DirectionalLight(0x70a1ff, 1.2);
-    fillLight.position.set(-6, 4, -4);
-    this.scene.add(fillLight);
+    // 後ろから、街灯の暖色の縁取り
+    const rim = new THREE.DirectionalLight(0xffa860, 1.6);
+    rim.position.set(-2, 3, -6);
+    this.scene.add(rim);
 
-    // Overhead showroom spotlight (creates beautiful roof/hood highlight)
-    const topSpot = new THREE.SpotLight(0xfff3e0, 3.5, 12, Math.PI / 4, 0.3, 1);
-    topSpot.position.set(0, 5, 0);
-    topSpot.target.position.set(0, 0.8, 0);
-    this.scene.add(topSpot);
-    this.scene.add(topSpot.target);
+    // ネオンの寒色・桃色の反射光
+    const neonL = new THREE.PointLight(0x35e0ff, 14, 14, 2);
+    neonL.position.set(-4.5, 1.6, 2.5);
+    this.scene.add(neonL);
+    const neonR = new THREE.PointLight(0xff3da8, 10, 14, 2);
+    neonR.position.set(4.5, 1.2, -2.5);
+    this.scene.add(neonR);
 
-    // Rim light from behind (creates edge specular highlights)
-    const rimLight = new THREE.DirectionalLight(0xffbe76, 1.4);
-    rimLight.position.set(0, 2, -6);
-    this.scene.add(rimLight);
+    // ヘッドライト: 濡れた路面を前方へ照らす
+    const head = new THREE.SpotLight(0xfff0d0, 220, 60, 0.45, 0.8, 2);
+    head.position.set(0, 0.85, 1.6);
+    head.target.position.set(0, -1.5, 30);
+    this.scene.add(head, head.target);
   }
 
   private setupEnvironment(): void {
-    // Wet showroom dark floor with soft reflection
-    const floorGeo = new THREE.PlaneGeometry(60, 60);
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x10131d,
-      roughness: 0.25,
-      metalness: 0.6,
-    });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
-
-    // Subtle showroom grid helper
-    const grid = new THREE.GridHelper(30, 30, 0x3d485e, 0x1f2430);
-    grid.position.y = 0.002;
-    this.scene.add(grid);
-
-    // Turntable circular podium
-    const podiumGeo = new THREE.CylinderGeometry(2.4, 2.45, 0.06, 64);
-    const podiumMat = new THREE.MeshStandardMaterial({
-      color: 0x161a24,
-      roughness: 0.35,
-      metalness: 0.5,
-    });
-    const podium = new THREE.Mesh(podiumGeo, podiumMat);
-    podium.position.y = 0.03;
-    podium.receiveShadow = true;
-    this.turntableGroup.add(podium);
-
-    // LED ring around the turntable podium edge
-    const ringGeo = new THREE.TorusGeometry(2.41, 0.015, 16, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xf7b731 });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.055;
-    this.turntableGroup.add(ring);
-
-    // Overhead illuminated softbox frame (visual only)
-    const softboxGeo = new THREE.PlaneGeometry(3.5, 2.2);
-    const softboxMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-    const softbox = new THREE.Mesh(softboxGeo, softboxMat);
-    softbox.rotation.x = Math.PI / 2;
-    softbox.position.set(0, 4.8, 0);
-    this.scene.add(softbox);
-
-    // High-contrast studio lighting environment map for car paint, clearcoat, and chrome gloss
+    // 車の塗装・クリアコート・クロームに映り込む、夜の街の環境マップ(暗い空に、ネオンと街灯の帯)
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     const envCanvas = document.createElement('canvas');
     envCanvas.width = 512;
     envCanvas.height = 256;
     const ctx = envCanvas.getContext('2d');
     if (ctx) {
-      // Dark showroom background
-      ctx.fillStyle = '#0a0d14';
-      ctx.fillRect(0, 0, 512, 256);
-
-      // Floor dark horizon bounce
-      const floorGrad = ctx.createLinearGradient(0, 128, 0, 256);
-      floorGrad.addColorStop(0, '#1a1f2c');
-      floorGrad.addColorStop(1, '#06080d');
-      ctx.fillStyle = floorGrad;
+      const sky = ctx.createLinearGradient(0, 0, 0, 128);
+      sky.addColorStop(0, '#0a1230');
+      sky.addColorStop(1, '#1d2a52');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, 512, 128);
+      const ground = ctx.createLinearGradient(0, 128, 0, 256);
+      ground.addColorStop(0, '#1a2038');
+      ground.addColorStop(1, '#05070d');
+      ctx.fillStyle = ground;
       ctx.fillRect(0, 128, 512, 128);
-
-      // Overhead large softbox highlight
-      const topGrad = ctx.createRadialGradient(256, 40, 5, 256, 40, 120);
-      topGrad.addColorStop(0, '#ffffff');
-      topGrad.addColorStop(0.3, '#edf2f7');
-      topGrad.addColorStop(1, 'rgba(237, 242, 247, 0)');
-      ctx.fillStyle = topGrad;
-      ctx.fillRect(100, 0, 312, 100);
-
-      // Flank light strips for body curve reflections
-      const sideL = ctx.createLinearGradient(0, 0, 90, 0);
-      sideL.addColorStop(0, '#718096');
-      sideL.addColorStop(1, 'rgba(113, 128, 150, 0)');
-      ctx.fillStyle = sideL;
-      ctx.fillRect(0, 60, 90, 80);
-
-      const sideR = ctx.createLinearGradient(512, 0, 422, 0);
-      sideR.addColorStop(0, '#718096');
-      sideR.addColorStop(1, 'rgba(113, 128, 150, 0)');
-      ctx.fillStyle = sideR;
-      ctx.fillRect(422, 60, 90, 80);
+      // 地平線ぞいの街の明かり
+      const lights = ['#35e0ff', '#ff3da8', '#ffb347', '#fff2d6', '#7a5cff'];
+      for (let i = 0; i < 46; i++) {
+        const x = (i * 97 + (i * i) % 53) % 512;
+        const w = 4 + (i * 13) % 22;
+        const y = 92 + (i * 29) % 34;
+        ctx.fillStyle = lights[i % lights.length];
+        ctx.globalAlpha = 0.5 + ((i * 7) % 5) * 0.1;
+        ctx.fillRect(x, y, w, 3 + (i % 3) * 2);
+      }
+      ctx.globalAlpha = 1;
+      // 月
+      const moon = ctx.createRadialGradient(380, 36, 2, 380, 36, 60);
+      moon.addColorStop(0, '#e8efff');
+      moon.addColorStop(0.3, 'rgba(160,185,255,0.6)');
+      moon.addColorStop(1, 'rgba(160,185,255,0)');
+      ctx.fillStyle = moon;
+      ctx.fillRect(300, 0, 160, 110);
     }
     const envTex = new THREE.CanvasTexture(envCanvas);
     envTex.mapping = THREE.EquirectangularReflectionMapping;
@@ -215,6 +219,45 @@ export class GarageScene {
     }
   }
 
+  /**
+   * 発進演出: カメラを正面に寄せ、車を画面へ向かって加速させる(街と雨は速く流れ、速度線が強まる)。
+   * 車の先端がカメラに触れる瞬間に resolve する。呼んだ側が画面を切り替えたら endLaunch() で戻す。描画していない時は何もせず resolve。
+   */
+  public launch(): Promise<void> {
+    if (!this.active) return Promise.resolve();
+    this.isRotating = false;
+    this.controls.enabled = false;
+    this.launchFromPos.copy(this.camera.position);
+    this.launchFromTarget.copy(this.controls.target);
+    this.launchT = 0;
+    return new Promise((resolve) => { this.launchResolve = resolve; });
+  }
+
+  /** 発進演出を終え、台座の位置・カメラの操作を元に戻す。 */
+  public endLaunch(): void {
+    this.launchT = -1;
+    this.launchResolve = null;
+    this.turntableGroup.position.set(0, 0, 0);
+    this.controls.enabled = true;
+  }
+
+  private updateLaunch(dt: number): number {
+    const t = (this.launchT += dt);
+    const k = Math.min(1, t / 0.5);
+    const e = 1 - (1 - k) * (1 - k);                                  // 速度が落ち着くように寄る
+    this.camera.position.lerpVectors(this.launchFromPos, GarageScene.LAUNCH_POS, e);
+    this.controls.target.lerpVectors(this.launchFromTarget, GarageScene.LAUNCH_TARGET, e);
+    this.camera.lookAt(this.controls.target);
+    const run = Math.max(0, t - 0.2);
+    this.turntableGroup.position.z = 8 * run * run;                   // 加速しながらまっすぐ向かってくる
+    if (t >= GarageScene.LAUNCH_HIT && this.launchResolve) {
+      const done = this.launchResolve;
+      this.launchResolve = null;
+      done();
+    }
+    return Math.min(1, t / GarageScene.LAUNCH_HIT);
+  }
+
   public active: boolean = false;
   private animationFrameId: number | null = null;
 
@@ -234,16 +277,64 @@ export class GarageScene {
     }
   }
 
+  private animateCar(car: NonNullable<ReturnType<typeof carByGroup.get>>, dt: number): void {
+    car.setWet(true);
+    this.wheelAngle = (this.wheelAngle + WHEEL_SPIN * dt) % (Math.PI * 2);
+    const ground = this.ground, center = this.center, v = this.wheelPos;
+    car.group.getWorldPosition(center);
+    car.wheels.forEach((w, i) => {
+      // 左側のタイヤは向きが反転して作られている(wheelBaseYaw が π)ので、回転の向きも逆にする
+      const flipped = Math.abs(Math.abs(car.wheelBaseYaw[i] ?? 0) - Math.PI) < 0.1;
+      w.rotation.x = flipped ? -this.wheelAngle : this.wheelAngle;
+      w.getWorldPosition(v);
+      v.y = 0.02;
+      const side = Math.sign(v.x - center.x) || 1;
+      const out = this.sideDir.set(side, 0, 0);
+      const rear = i >= 2;
+      if (Math.random() < (rear ? 0.7 : 0.25)) this.spray.emitSplash(v, ground, out, 0.8);
+      if (rear && Math.random() < 0.12) this.spray.emitSmoke(v, ground, 0.5);
+    });
+  }
+
   public animate(): void {
     if (!this.active) return;
     this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
 
-    // Auto rotate turntable if enabled
-    if (this.isRotating) {
-      this.turntableGroup.rotation.y += this.rotationSpeed;
+    const now = performance.now() / 1000;
+    const dt = Math.min(0.1, this.lastTime ? now - this.lastTime : 0.016);
+    this.lastTime = now;
+
+    const rush = this.launchT >= 0 ? this.updateLaunch(dt) : 0;       // 発進演出の進み(0〜1)
+
+    // 背景を流し、雨を降らせる。車は止まっているので、雨の相対速度は「後ろへ流れる」ぶんを渡す
+    const lv = this.loadLevel;
+    this.city.update(dt, CRUISE_SPEED * (1 + rush * 1.6 + lv * 0.6));
+    this.rain.update(dt, GarageScene.ORIGIN, 0, GarageScene.CRUISE_VEL, true);
+
+    // 稲光
+    this.lightning.update(dt);
+    this.postFx.setLightning(this.lightning.level);
+
+    // 台座の車: タイヤを回し、タイヤから水を跳ね上げる
+    for (const child of this.turntableGroup.children) {
+      const car = carByGroup.get(child);
+      if (car) { this.animateCar(car, dt); break; }
+    }
+    this.spray.update(dt, this.camera);
+
+    // 「回転」: カメラが車の周りをゆっくり回る
+    this.controls.autoRotate = this.isRotating;
+    if (this.launchT < 0) this.controls.update();
+    // ロード中は、速いほどカメラが震える(メーターが赤くなるにつれて強く)
+    const shakeAmp = lv * lv * 0.05 + rush * 0.02;
+    if (shakeAmp > 0.0005) {
+      this.camera.position.x += (Math.random() - 0.5) * shakeAmp;
+      this.camera.position.y += (Math.random() - 0.5) * shakeAmp;
     }
 
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    // レース中と同じ後処理。速く走っているようにブラーと速度線もかける
+    this.postFx.setSpeedState(Math.min(1, 0.62 + rush * 0.38 + lv * 0.25), rush * 0.9 + lv * lv * 0.35, rush * rush * 0.6, rush * 0.3 + lv * lv * 0.8, 1);
+    if (this.postFx.enabled) this.postFx.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }

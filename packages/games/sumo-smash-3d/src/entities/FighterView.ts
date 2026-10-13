@@ -308,10 +308,4 @@ export class FighterView {
     this.overheadMarker.material.map!.needsUpdate = true;
   }
 
-  /**
-   * マーカーの表示・非表示
-   */
-  public setMarkerVisible(visible: boolean) {
-    this.overheadMarker.visible = visible;
-  }
 }
