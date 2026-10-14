@@ -2,8 +2,8 @@
 // オンライン対戦では「他の参加者と body の色が被らない」ことをサーバーがこのパレットで判定する。
 // Nodeの型ストリップで直接実行されるため、ランタイム構文は使わない(enum等)。
 
-export type CarType = 'trail_j' | 'cross_j' | 'combat_sedan' | 'missile_truck_j';
-export const CAR_TYPES: CarType[] = ['trail_j', 'cross_j', 'combat_sedan', 'missile_truck_j'];
+export type CarType = 'dragon_a' | 'dragon_b' | 'dragon_c';
+export const CAR_TYPES: CarType[] = ['dragon_a', 'dragon_b', 'dragon_c'];
 
 export interface ColorPreset {
   name: string;
@@ -13,35 +13,28 @@ export interface ColorPreset {
 }
 
 export const CAR_PALETTES: Record<CarType, ColorPreset[]> = {
-  trail_j: [
-    { name: 'キネティックイエロー', bodyColor: 0xded235, roofColor: 0x1a1c22, bgGradient: '#ded235' },
-    { name: 'ジャングルグリーン', bodyColor: 0x243325, roofColor: 0x1a1c22, bgGradient: '#243325' },
-    { name: 'ブリスクブルー', bodyColor: 0x1976d2, roofColor: 0x1a1c22, bgGradient: '#1976d2' },
-    { name: 'ミディアムグレー', bodyColor: 0x4b5563, roofColor: 0x1a1c22, bgGradient: '#4b5563' },
-    { name: 'シフォンアイボリー', bodyColor: 0xe6cf9e, roofColor: 0x1a1c22, bgGradient: '#e6cf9e' },
-    { name: 'ピュアホワイト', bodyColor: 0xf5f6fa, roofColor: 0x1a1c22, bgGradient: '#f5f6fa' },
-    { name: 'ブルーイッシュブラック', bodyColor: 0x11141a, roofColor: 0x11141a, bgGradient: '#11141a' },
+  // 紅蓮の火竜 (body = Mat_CarPaint, roof = Mat_Armor)
+  dragon_a: [
+    { name: '紅蓮クリムゾン', bodyColor: 0xc42829, roofColor: 0x30303a, bgGradient: '#c42829' },
+    { name: 'ナイトブラック', bodyColor: 0x1b1c20, roofColor: 0xc42829, bgGradient: 'linear-gradient(135deg, #1b1c20 50%, #c42829 50%)' },
+    { name: 'パールホワイト', bodyColor: 0xf0eeea, roofColor: 0x30303a, bgGradient: '#f0eeea' },
+    { name: 'ガンメタル×オレンジ', bodyColor: 0x4a5056, roofColor: 0xe05615, bgGradient: 'linear-gradient(135deg, #4a5056 50%, #e05615 50%)' },
+    { name: 'ロイヤルパープル', bodyColor: 0x5b2a86, roofColor: 0x1a1a22, bgGradient: '#5b2a86' },
   ],
-  cross_j: [
-    { name: 'オレンジ×白', bodyColor: 0xe05615, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #e05615 50%, #ffffff 50%)' },
-    { name: 'デニムブルー×ガンメ', bodyColor: 0x2952a3, roofColor: 0x2d3436, bgGradient: 'linear-gradient(135deg, #2952a3 50%, #2d3436 50%)' },
-    { name: 'フェニックスレッド×黒', bodyColor: 0xd63031, roofColor: 0x1a1c22, bgGradient: 'linear-gradient(135deg, #d63031 50%, #1a1c22 50%)' },
-    { name: 'クールカーキ×白', bodyColor: 0x3d4d3d, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #3d4d3d 50%, #ffffff 50%)' },
-    { name: 'オフブルー×白', bodyColor: 0x54a0ff, roofColor: 0xf5f6fa, bgGradient: 'linear-gradient(135deg, #54a0ff 50%, #ffffff 50%)' },
-    { name: 'ピュアホワイト×黒', bodyColor: 0xf5f6fa, roofColor: 0x1a1c22, bgGradient: 'linear-gradient(135deg, #f5f6fa 50%, #1a1c22 50%)' },
+  // 蒼雷の東洋龍
+  dragon_b: [
+    { name: 'アズールブルー', bodyColor: 0x7fbfe0, roofColor: 0x306175, bgGradient: '#7fbfe0' },
+    { name: 'ジェイドグリーン', bodyColor: 0x2fa58a, roofColor: 0x14383a, bgGradient: '#2fa58a' },
+    { name: 'ミッドナイトネイビー', bodyColor: 0x1a2a52, roofColor: 0x6fb6e0, bgGradient: 'linear-gradient(135deg, #1a2a52 50%, #6fb6e0 50%)' },
+    { name: 'シャンパンホワイト', bodyColor: 0xeee6d0, roofColor: 0x306175, bgGradient: '#eee6d0' },
+    { name: 'サクラピンク', bodyColor: 0xe58fb0, roofColor: 0x3a2a38, bgGradient: '#e58fb0' },
   ],
-  combat_sedan: [
-    { name: 'ミリタリーオリーブ', bodyColor: 0x35422e, roofColor: 0x1f241d, bgGradient: '#35422e' },
-    { name: 'デザートサンド', bodyColor: 0x8a7a5a, roofColor: 0x3d3527, bgGradient: '#8a7a5a' },
-    { name: 'ステルスブラック', bodyColor: 0x1e2022, roofColor: 0x111315, bgGradient: '#1e2022' },
-    { name: 'ブラッドラスト', bodyColor: 0x5a2323, roofColor: 0x241111, bgGradient: '#5a2323' },
-    { name: 'ガンメタルスチール', bodyColor: 0x4a5056, roofColor: 0x232629, bgGradient: '#4a5056' },
-  ],
-  missile_truck_j: [
-    { name: 'ホワイト×オリーブ', bodyColor: 0xf5f6fa, roofColor: 0x283823, bgGradient: 'linear-gradient(135deg, #f5f6fa 50%, #283823 50%)' },
-    { name: 'アーミーグリーン', bodyColor: 0x364835, roofColor: 0x202b20, bgGradient: '#364835' },
-    { name: 'デザートコヨーテ', bodyColor: 0x9c7a52, roofColor: 0x4a3a27, bgGradient: '#9c7a52' },
-    { name: 'タクティカルブラック', bodyColor: 0x1f2326, roofColor: 0x141719, bgGradient: '#1f2326' },
-    { name: 'スノーレスキュー', bodyColor: 0xe8ecf0, roofColor: 0xd63031, bgGradient: 'linear-gradient(135deg, #e8ecf0 50%, #d63031 50%)' },
+  // 黄金の重装竜
+  dragon_c: [
+    { name: 'ゴールドアーマー', bodyColor: 0x5e6166, roofColor: 0xebcf75, bgGradient: 'linear-gradient(135deg, #5e6166 50%, #ebcf75 50%)' },
+    { name: 'ブラック×ゴールド', bodyColor: 0x2a2c33, roofColor: 0xebcf75, bgGradient: 'linear-gradient(135deg, #2a2c33 50%, #ebcf75 50%)' },
+    { name: 'シルバー×ブラック', bodyColor: 0xb9bcc0, roofColor: 0x1b1c1f, bgGradient: 'linear-gradient(135deg, #b9bcc0 50%, #1b1c1f 50%)' },
+    { name: 'ブロンズ', bodyColor: 0x7a5230, roofColor: 0xd9a05b, bgGradient: 'linear-gradient(135deg, #7a5230 50%, #d9a05b 50%)' },
+    { name: 'クリムゾン×ゴールド', bodyColor: 0x8c1f24, roofColor: 0xebcf75, bgGradient: 'linear-gradient(135deg, #8c1f24 50%, #ebcf75 50%)' },
   ],
 };

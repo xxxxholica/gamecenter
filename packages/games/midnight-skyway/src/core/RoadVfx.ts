@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { radialTexture } from './fxTextures';
+import type { BoostTheme } from './BoostTheme';
 
 /**
  * 速度とは別の、路面・車まわりの演出:
@@ -41,8 +42,8 @@ class TaillightTrail {
     this.mesh.renderOrder = 4;
   }
 
-  /** lights: 左右のテールランプの位置 / strength: 光の強さ(0〜1) / boost: ブースト(0〜1) */
-  public update(dt: number, lights: [THREE.Vector3, THREE.Vector3], heading: number, strength: number, boost: number): void {
+  /** lights: 左右のテールランプの位置 / strength: 光の強さ(0〜1) / boost: ブースト(0〜1) / boostColor: ブースト中の光跡の色 */
+  public update(dt: number, lights: [THREE.Vector3, THREE.Vector3], heading: number, strength: number, boost: number, boostColor: THREE.Color): void {
     const n = TaillightTrail.N;
     this.acc += dt;
     while (this.acc >= TaillightTrail.STEP) {
@@ -64,7 +65,7 @@ class TaillightTrail {
         if (!p) { this.pos.fill(0, o, o + 6); this.col.fill(0, o, o + 6); continue; }
         this.pos[o] = p.x - sx * half; this.pos[o + 1] = p.y; this.pos[o + 2] = p.z - sz * half;
         this.pos[o + 3] = p.x + sx * half; this.pos[o + 4] = p.y; this.pos[o + 5] = p.z + sz * half;
-        const cr = 1 - boost * 0.7, cg = 0.08 + boost * 0.6, cb = 0.12 + boost * 0.9;
+        const cr = 1 + (boostColor.r - 1) * boost, cg = 0.08 + (boostColor.g - 0.08) * boost, cb = 0.12 + (boostColor.b - 0.12) * boost;
         for (let k = 0; k < 2; k++) {
           this.col[o + k * 3] = cr * fade; this.col[o + k * 3 + 1] = cg * fade; this.col[o + k * 3 + 2] = cb * fade;
         }
@@ -155,7 +156,7 @@ class SkidMarks {
   }
 }
 
-/** ブースト開始の衝撃波: 地面を広がっていく光の輪 */
+/** ブースト開始の衝撃波: 地面を広がっていく光の輪(色は車の主色。Gold は三重、Azure は二重) */
 class Shockwave {
   private static readonly N = 3;
   private readonly rings: Array<{ mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; age: number; max: number; size: number }> = [];
@@ -164,7 +165,7 @@ class Shockwave {
   public readonly group = new THREE.Group();
 
   constructor() {
-    this.tex = radialTexture(128, [[0, 'rgba(120,200,255,0)'], [0.55, 'rgba(120,200,255,0)'], [0.82, 'rgba(210,240,255,0.95)'], [0.92, 'rgba(90,170,255,0.5)'], [1, 'rgba(60,120,255,0)']]);
+    this.tex = radialTexture(128, [[0, 'rgba(255,255,255,0)'], [0.55, 'rgba(255,255,255,0)'], [0.82, 'rgba(255,255,255,0.95)'], [0.92, 'rgba(255,255,255,0.5)'], [1, 'rgba(255,255,255,0)']]);
     for (let i = 0; i < Shockwave.N; i++) {
       const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({
         map: this.tex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
@@ -176,19 +177,23 @@ class Shockwave {
     }
   }
 
-  public fire(p: THREE.Vector3, size = 18): void {
+  /** delay: 出るまでの待ち(秒)。待っている輪は age が負 */
+  public fire(p: THREE.Vector3, size: number, color: THREE.Color, delay = 0): void {
     const r = this.rings.find((x) => x.age >= x.max) ?? this.rings[0];
-    r.age = 0;
+    r.age = -delay;
     r.max = 0.55;
     r.size = size;
     r.mesh.position.set(p.x, p.y + 0.12, p.z);
-    r.mesh.visible = true;
+    r.mesh.material.color.copy(color);
+    r.mesh.visible = delay <= 0;
   }
 
   public update(dt: number): void {
     for (const r of this.rings) {
       if (r.age >= r.max) { r.mesh.visible = false; continue; }
       r.age += dt;
+      if (r.age < 0) continue;
+      r.mesh.visible = true;
       const t = Math.min(1, r.age / r.max);
       const s = 2 + (r.size - 2) * (1 - Math.pow(1 - t, 3));
       r.mesh.scale.set(s, 1, s);
@@ -207,7 +212,6 @@ class Shockwave {
 
 const GLOW_BASE = new THREE.Color(0.1, 0.55, 1);
 const GLOW_DRIFT = new THREE.Color(1, 0.15, 0.75);
-const GLOW_BOOST = new THREE.Color(0.55, 0.9, 1);
 
 export class RoadVfx {
   public readonly group = new THREE.Group();
@@ -220,6 +224,8 @@ export class RoadVfx {
   private readonly glowTarget = new THREE.Color();
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
+  private readonly waveColor = new THREE.Color();
+  private readonly white = new THREE.Color(1, 1, 1);
 
   constructor() {
     this.glowTex = radialTexture(128, [[0, 'rgba(255,255,255,0.9)'], [0.4, 'rgba(255,255,255,0.45)'], [1, 'rgba(255,255,255,0)']]);
@@ -231,7 +237,15 @@ export class RoadVfx {
     this.group.add(this.trail.mesh, this.skids.mesh, this.shock.group, this.glow);
   }
 
-  public fireShockwave(p: THREE.Vector3, size = 18): void { this.shock.fire(p, size); }
+  public fireShockwave(p: THREE.Vector3, size: number, theme: BoostTheme): void {
+    const c = this.waveColor.copy(theme.primary).lerp(this.white, 0.25);
+    this.shock.fire(p, size, c);
+    if (theme.kind === 'storm') this.shock.fire(p, size * 0.6, c, 0.06);
+    else if (theme.kind === 'radiant') {
+      this.shock.fire(p, size * 0.72, c, 0.1);
+      this.shock.fire(p, size * 0.5, c, 0.2);
+    }
+  }
 
   /**
    * 毎フレームの更新。car は車の位置・向き・進行方向、tires は後輪の接地点。
@@ -239,7 +253,7 @@ export class RoadVfx {
    */
   public update(dt: number, car: { position: THREE.Vector3; rotationY: number; speed: number },
     tires: { rearLeft: THREE.Vector3; rearRight: THREE.Vector3 }, skidding: boolean, skidStrength: number,
-    night: boolean, drift: number, boost: number, scale: number): void {
+    night: boolean, drift: number, boost: number, scale: number, theme: BoostTheme): void {
     const fx = Math.sin(car.rotationY), fz = Math.cos(car.rotationY);
     const speed = Math.abs(car.speed);
 
@@ -252,18 +266,18 @@ export class RoadVfx {
       lights[i].y = car.position.y + 0.62;
     });
     const trailStrength = Math.min(1, speed / 14) * (night ? 1 : 0.45) * (0.6 + 0.4 * scale);
-    this.trail.update(dt, lights, car.rotationY, trailStrength, boost);
+    this.trail.update(dt, lights, car.rotationY, trailStrength, boost, theme.primary);
 
     // タイヤ痕
     this.skids.add(0, tires.rearLeft, skidding, skidStrength);
     this.skids.add(1, tires.rearRight, skidding, skidStrength);
 
     // アンダーグロー: 普段は淡い青、ドリフトで桃色、ブーストで青白く強く
-    const target = this.glowTarget.copy(GLOW_BASE).lerp(GLOW_DRIFT, drift).lerp(GLOW_BOOST, boost);
+    const target = this.glowTarget.copy(GLOW_BASE).lerp(GLOW_DRIFT, drift).lerp(theme.glow, boost);
     this.glowColor.lerp(target, Math.min(1, 8 * dt));
     const base = night ? 0.5 : 0.18;
     this.glow.material.color.copy(this.glowColor);
-    this.glow.material.opacity = Math.min(1, (base + drift * 0.3 + boost * 0.5) * Math.min(1, 0.3 + speed / 12));
+    this.glow.material.opacity = Math.min(1, (base + drift * 0.18 + boost * 0.5) * Math.min(1, 0.3 + speed / 12));
     this.glow.position.set(car.position.x, car.position.y + 0.07, car.position.z);
     this.glow.rotation.y = car.rotationY;
     const len = 6.5 + boost * 3, wid = 4.2 + boost * 1.2;

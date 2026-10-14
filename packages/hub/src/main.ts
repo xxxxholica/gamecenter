@@ -22,6 +22,10 @@ import { fetchAllOnlineStatuses } from '../../shared/online/onlineStatus';
 import type { PublicStatus } from '../../shared/online/core';
 import { initHubMobileBlock, isMobileDevice } from '../../shared/mobileBlock';
 import { initSessionTracking } from '../../shared/arcadeAnalytics';
+import { applyBenchFlagFromUrl } from '../../shared/arcadeBenchCore';
+
+// ハブを ?bench=1 で開いたら、その後に開く全ゲームでベンチマーク計測を有効にする(?bench=0 で解除)
+applyBenchFlagFromUrl();
 
 // モバイル端末（スマホ・タブレット）アクセス制限の適用
 initHubMobileBlock();

@@ -117,14 +117,12 @@ export class Stage1Drink implements Stage {
       1,
       true
     );
-    const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xeef8ff,
       transparent: true,
-      opacity: 0.4,
-      roughness: 0.05,
-      metalness: 0.1,
-      transmission: 0.8,
-      ior: 1.5,
+      opacity: 0.32,
+      roughness: 0.08,
+      metalness: 0.2,
       side: THREE.DoubleSide,
       depthWrite: false,
     });

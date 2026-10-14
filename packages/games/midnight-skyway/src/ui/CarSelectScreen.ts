@@ -3,7 +3,6 @@ import { CarSpecs } from '../models/CarBase';
 import { CAR_PALETTES, type CarType, type ColorPreset } from '../../../../shared/carPalette';
 import { btnHtml, setBtnLabel } from './btnGuide';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
-import { carOutlineSvg } from './carOutline';
 
 export interface CarSelectEvents {
   onSelectCar: (carType: CarType) => void;
@@ -22,7 +21,7 @@ export type { ColorPreset };
 interface GaugeData {
   label: string;
   value: number; // 0..5
-  colorClass: 'cyan' | 'gold' | 'red';
+  colorClass: 'cyan' | 'gold';
 }
 
 interface CarCardData {
@@ -32,78 +31,57 @@ interface CarCardData {
   sub: string;
   gauges: GaugeData[];
   specMain: string;
-  /** 武器を積んでいる車。オンライン対戦では武器が使えないので、特性をグレーにする */
-  armed?: boolean;
 }
 
 const CAR_CARDS: CarCardData[] = [
   {
-    id: 'trail_j',
+    id: 'dragon_a',
     num: 'MACHINE 01',
-    name: 'Trail J',
-    sub: '本格軽4WD ターボ',
+    name: 'Dragon Crimson',
+    sub: '紅蓮の火竜 ハイパーカー',
     gauges: [
-      { label: '最高速', value: 4, colorClass: 'cyan' },
+      { label: '最高速', value: 4, colorClass: 'gold' },
       { label: '旋回力', value: 4, colorClass: 'cyan' },
-      { label: '耐久力', value: 5, colorClass: 'cyan' },
-      { label: '攻撃力', value: 0, colorClass: 'cyan' },
+      { label: '耐久力', value: 3, colorClass: 'cyan' },
     ],
-    specMain: '高剛性・タフネス安定',
+    specMain: '加速とコーナリングのバランス型',
   },
   {
-    id: 'cross_j',
+    id: 'dragon_b',
     num: 'MACHINE 02',
-    name: 'Cross J',
-    sub: '軽クロスオーバー 4WD',
+    name: 'Dragon Azure',
+    sub: '蒼雷の東洋龍 フォーミュラ',
     gauges: [
       { label: '最高速', value: 5, colorClass: 'gold' },
       { label: '旋回力', value: 5, colorClass: 'gold' },
       { label: '耐久力', value: 2, colorClass: 'cyan' },
-      { label: '攻撃力', value: 0, colorClass: 'cyan' },
     ],
-    specMain: '超軽量・最高速特化',
+    specMain: '軽量・最高速特化',
   },
   {
-    id: 'combat_sedan',
+    id: 'dragon_c',
     num: 'MACHINE 03',
-    name: 'Combat Sedan',
-    sub: '重装甲 強化AWD',
-    gauges: [
-      { label: '最高速', value: 4, colorClass: 'gold' },
-      { label: '旋回力', value: 2, colorClass: 'cyan' },
-      { label: '耐久力', value: 4, colorClass: 'gold' },
-      { label: '攻撃力', value: 4, colorClass: 'red' },
-    ],
-    specMain: 'ツイン機関銃・重装甲突撃',
-    armed: true,
-  },
-  {
-    id: 'missile_truck_j',
-    num: 'MACHINE 04',
-    name: 'Truck J MLRS',
-    sub: '8連装MLRS アゲトラ',
+    name: 'Dragon Gold',
+    sub: '黄金の重装竜 GTマッスル',
     gauges: [
       { label: '最高速', value: 3, colorClass: 'cyan' },
       { label: '旋回力', value: 2, colorClass: 'cyan' },
-      { label: '耐久力', value: 3, colorClass: 'cyan' },
-      { label: '攻撃力', value: 5, colorClass: 'red' },
+      { label: '耐久力', value: 5, colorClass: 'gold' },
     ],
-    specMain: '8連装ミサイル・長距離砲撃',
-    armed: true,
+    specMain: '重装甲・高耐久の突破力',
   },
 ];
 
 export class CarSelectScreen {
   private container: HTMLElement;
   private events: CarSelectEvents;
-  private currentCarType: CarType = 'trail_j';
-  private readonly carTypes: CarType[] = ['trail_j', 'cross_j', 'combat_sedan', 'missile_truck_j'];
+  private currentCarType: CarType = 'dragon_a';
+  private readonly carTypes: CarType[] = ['dragon_a', 'dragon_b', 'dragon_c'];
 
   private selectedColorIndex: Record<CarType, number> = {
-    trail_j: 0,
-    cross_j: 0,
-    combat_sedan: 0,
-    missile_truck_j: 0,
+    dragon_a: 0,
+    dragon_b: 0,
+    dragon_c: 0,
   };
 
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -135,8 +113,8 @@ export class CarSelectScreen {
           <!-- Machine cards -->
           <div class="car-card-list-arcade">
             ${CAR_CARDS.map((c) => `
-            <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}${c.armed ? ' armed' : ''}" data-car="${c.id}" tabindex="0">
-              ${carOutlineSvg(c.id)}
+            <div class="car-card-arcade${c.id === this.currentCarType ? ' active' : ''}" data-car="${c.id}" tabindex="0">
+              <img class="car-outline" src="./ui/car_card_${c.id}.webp" alt="" draggable="false">
               <div class="car-card-title-arcade">${c.name}</div>
               <div class="car-card-sub-arcade">${c.sub}</div>
 
@@ -155,7 +133,6 @@ export class CarSelectScreen {
                   <span class="spec-badge">特性</span>
                 </div>
                 <div class="spec-main-digital">${c.specMain}</div>
-                ${c.armed ? '<div class="spec-disabled">武器は利用不可</div>' : ''}
               </div>
             </div>`).join('')}
           </div>
@@ -196,7 +173,6 @@ export class CarSelectScreen {
   /** オンライン対戦の待機中の表示にする(決定ボタンを隠し、戻るは「退出」)。 */
   public setOnlineMode(on: boolean): void {
     this.onlineMode = on;
-    this.container.classList.toggle('car-select-online', on);   // 武器を積んだ車の特性をグレーにして、利用不可と出す
     const back = this.container.querySelector<HTMLElement>('#cs-btn-back');
     setBtnLabel(back, on ? '退出' : '戻る');
     if (!on) this.takenBodies = new Set();
@@ -339,13 +315,11 @@ export class CarSelectScreen {
           e.preventDefault();
           this.events.onBack();
         } else if (e.code === 'Digit1') {
-          this.setCarType('trail_j');
+          this.setCarType('dragon_a');
         } else if (e.code === 'Digit2') {
-          this.setCarType('cross_j');
+          this.setCarType('dragon_b');
         } else if (e.code === 'Digit3') {
-          this.setCarType('combat_sedan');
-        } else if (e.code === 'Digit4') {
-          this.setCarType('missile_truck_j');
+          this.setCarType('dragon_c');
         }
       };
       window.addEventListener('keydown', this.keyHandler);

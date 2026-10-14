@@ -32,8 +32,8 @@ export class SpeedStreaks {
     this.mesh.renderOrder = 5;
   }
 
-  /** level: 筋の強さ(0〜1) / boost: ブーストの強さ(0〜1)。heading は車の進行方向(ラジアン) */
-  public update(dt: number, car: THREE.Vector3, heading: number, speed: number, level: number, boost: number): void {
+  /** level: 筋の強さ(0〜1) / boost: ブーストの強さ(0〜1) / boostColor: ブースト中の筋の色。heading は車の進行方向(ラジアン) */
+  public update(dt: number, car: THREE.Vector3, heading: number, speed: number, level: number, boost: number, boostColor: THREE.Color): void {
     const fx = Math.sin(heading), fz = Math.cos(heading);
     this.dir.set(fx, 0, fz);
 
@@ -72,9 +72,10 @@ export class SpeedStreaks {
       this.pos[o + 5] = this.head[i * 3 + 2] - this.dir.z * L;
       const b = fade * (0.35 + 0.65 * level);
       const warm = this.tint[i] > 0.85 ? 1 : 0;                 // ときどき混ざる暖色
-      const r = (boost > 0.2 ? 0.45 : 0.85) + warm * 0.15;
-      const g = boost > 0.2 ? 0.8 : 0.92;
-      this.col[o] = r * b; this.col[o + 1] = g * b; this.col[o + 2] = b;
+      const boosted = boost > 0.2;
+      const r = boosted ? boostColor.r : 0.85 + warm * 0.15;
+      const g = boosted ? boostColor.g : 0.92;
+      this.col[o] = r * b; this.col[o + 1] = g * b; this.col[o + 2] = (boosted ? boostColor.b : 1) * b;
       this.col[o + 3] = 0; this.col[o + 4] = 0; this.col[o + 5] = 0;   // 尾は透明
     }
     (this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;

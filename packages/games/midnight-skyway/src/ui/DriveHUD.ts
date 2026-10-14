@@ -43,6 +43,9 @@ const SPEED_COLORS: ReadonlyArray<readonly [string, string, string]> = [
 
 export class DriveHUD {
   private container: HTMLElement;
+  private accent = '#8ec9dc';
+  private accentRgb = '142, 201, 220';
+  private numberLevel = 0;
   private events: DriveHUDEvents;
   public isNameEntryOpen = false;
 
@@ -248,8 +251,6 @@ export class DriveHUD {
     // Pause elements
     this.pauseModalEl = document.getElementById('hud-pause-modal')!;
 
-    // Combat elements
-
     // Pause modal buttons
     document.getElementById('pause-btn-resume')?.addEventListener('click', () => this.hidePauseModal());
     document.getElementById('pause-btn-retry')?.addEventListener('click', () => {
@@ -357,9 +358,24 @@ export class DriveHUD {
     this.updateNumberColor(speedKmH >= SPEED_RED ? 2 : speedKmH >= SPEED_WARN ? 1 : 0);
   }
 
+  /**
+   * 走行中の HUD の主色(選んだ車の色)。CSS の --hud-accent / --hud-accent-rgb を書き換え、
+   * 速度の数字(通常時)とミニマップの自車も、この色にする。警戒(黄)・レッド(赤)は意味のある色なので変えない。
+   */
+  public setAccent(hex: string): void {
+    const n = parseInt(hex.slice(1), 16);
+    this.accent = hex;
+    this.accentRgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+    const st = this.container.style;
+    st.setProperty('--hud-accent', this.accent);
+    st.setProperty('--hud-accent-rgb', this.accentRgb);
+    this.updateNumberColor(this.numberLevel);
+  }
+
   /** 数字の色(通常 / 警戒 / レッドゾーン) */
   private updateNumberColor(level: number): void {
-    const [color, glow] = SPEED_COLORS[level];
+    this.numberLevel = level;
+    const [color, glow] = level === 0 ? [this.accent, `rgba(${this.accentRgb}, 0.7)`] : SPEED_COLORS[level];
     this.speedEl.style.color = color;
     this.speedEl.style.textShadow = `0 0 16px ${glow}, 0 2px 8px rgba(0, 0, 0, 0.9)`;
   }
@@ -635,7 +651,7 @@ export class DriveHUD {
     this.padFocus = (index + buttons.length) % buttons.length;
     buttons.forEach((b, i) => b.classList.toggle('pad-focus', i === this.padFocus));
     // 選択中のボタンだけ色とAボタンのガイドを出し、それ以外はグレーにする
-    const colors = modal === this.resultModalEl ? ['#e2b05e', '#8fd3a6', '#8ec9dc'] : ['#8ec9dc'];
+    const colors = modal === this.resultModalEl ? ['#e2b05e', '#8fd3a6', this.accent] : [this.accent];
     const items = buttons.map((button, i) => ({ button, color: modal === this.resultModalEl ? (colors[i] ?? colors[0]) : colors[0] }));
     setupResultMenu(buttons[0]?.parentElement ?? null, items);
     applyResultMenuFocus(items, this.padFocus);
@@ -837,8 +853,8 @@ export class DriveHUD {
     // 6. Player Car (Glowing Cyan Arrow): いつも画面の同じ場所で、上(進行方向)を向く
     ctx.save();
     ctx.translate(w / 2, h * MINIMAP_CAR_Y);
-    ctx.fillStyle = '#8ec9dc';
-    ctx.shadowColor = '#8ec9dc';
+    ctx.fillStyle = this.accent;
+    ctx.shadowColor = this.accent;
     ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.moveTo(0, -10);

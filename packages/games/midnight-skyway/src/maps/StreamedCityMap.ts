@@ -70,6 +70,76 @@ class RequestPacer {
 let sharedPacer: RequestPacer | null = null;
 
 /**
+ * 4096×4096 の JPEG アトラス(ImageBitmap)をメインスレッドでそのまま gl.texSubImage2D に渡すと、
+ * Chromium の遅延デコードと 64MB の転送でメインスレッドが 1枚あたり約115ms(2枚重なると278ms)止まる。
+ * Web Worker 上の GPU バックド OffscreenCanvas に一度描画して transferToImageBitmap() で戻すことで、
+ * デコードと GPU SharedImage への転送を別スレッドで完了させ、メインスレッドの initTexture を約0.1ms(GPU間コピー)にする。
+ */
+let gpuUploadWorker: Worker | null | undefined;
+let gpuUploadSeq = 0;
+const gpuUploadWaiters = new Map<number, (bmp: ImageBitmap) => void>();
+
+function getGpuUploadWorker(): Worker | null {
+  if (gpuUploadWorker !== undefined) return gpuUploadWorker;
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+    gpuUploadWorker = null;
+    return null;
+  }
+  try {
+    const code = `
+      const canvases = new Map();
+      self.onmessage = (e) => {
+        const { id, bmp } = e.data;
+        try {
+          const key = bmp.width + 'x' + bmp.height;
+          let entry = canvases.get(key);
+          if (!entry) {
+            const osc = new OffscreenCanvas(bmp.width, bmp.height);
+            const ctx = osc.getContext('2d');
+            entry = { osc, ctx };
+            canvases.set(key, entry);
+          }
+          entry.ctx.drawImage(bmp, 0, 0);
+          bmp.close();
+          const out = entry.osc.transferToImageBitmap();
+          self.postMessage({ id, bmp: out }, [out]);
+        } catch {
+          self.postMessage({ id, bmp }, [bmp]);
+        }
+      };
+    `;
+    const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    const w = new Worker(url);
+    URL.revokeObjectURL(url);
+    w.onmessage = (e: MessageEvent<{ id: number; bmp: ImageBitmap }>) => {
+      const resolve = gpuUploadWaiters.get(e.data.id);
+      if (resolve) {
+        gpuUploadWaiters.delete(e.data.id);
+        resolve(e.data.bmp);
+      } else {
+        e.data.bmp?.close?.();
+      }
+    };
+    gpuUploadWorker = w;
+  } catch {
+    gpuUploadWorker = null;
+  }
+  return gpuUploadWorker;
+}
+
+async function prepareGpuTextureImage(tex: THREE.Texture): Promise<void> {
+  const worker = getGpuUploadWorker();
+  const img = tex.image as ImageBitmap | null;
+  if (!worker || !img || typeof img.close !== 'function' || !(img.width >= 1024)) return;
+  const id = ++gpuUploadSeq;
+  const gpuBmp = await new Promise<ImageBitmap>((resolve) => {
+    gpuUploadWaiters.set(id, resolve);
+    worker.postMessage({ id, bmp: img }, [img]);
+  });
+  tex.image = gpuBmp;
+}
+
+/**
  * Base class for maps made of many GLB chunks that are streamed in around the car and released behind it,
  * with a drivable corridor around a baked road profile (Y follows the profile, the car is pushed back at the edges).
  */
@@ -136,6 +206,7 @@ export abstract class StreamedCityMap extends MapBase {
   protected pending = new Set<string>();
   protected lastStreamMs = 0;
   private renderer: THREE.WebGLRenderer | null = null;
+  private warmupInstalled = false;
   /**
    * 建物テクスチャの異方性フィルタ。近くのチャンクは4(斜めから見る壁の見え方は十分で、16より GPU のサンプリングが軽い)、
    * 遠景(far tier。縮小テクスチャで、遠くを見るだけ)は1。実機の上限を超えない値にする。
@@ -143,8 +214,11 @@ export abstract class StreamedCityMap extends MapBase {
   private chunkAnisotropy = 4;
   /** file → チャンク(updateStreaming が毎回全チャンクを走査しないための索引) */
   private chunkIndex: Map<string, StreamChunk> | null = null;
-  /** Chunks whose textures are still being uploaded to the GPU, a few per frame. */
+  /** Chunks whose geometry/materials or textures are being prepared 1 per frame to avoid main-thread stalls. */
+  private prepJobs: (() => void)[] = [];
+  private prepPumpScheduled = false;
   private uploadJobs: { textures: THREE.Texture[]; resolve: () => void }[] = [];
+  private uploadPumpScheduled = false;
   private farObjects = new Map<string, THREE.Object3D>();
   /** Keys of near chunks that are fully faded in (their far twin is hidden). */
   private nearOpaque = new Set<string>();
@@ -188,40 +262,120 @@ export abstract class StreamedCityMap extends MapBase {
 
   public attachRenderer(renderer: THREE.WebGLRenderer): void {
     this.renderer = renderer;
+    this.ensureShaderWarmupMesh();
+  }
+
+  /**
+   * チャンクのフェード中(alphaHash: true)と通常時(alphaHash: false)の両方のシェーダー(本描画＋影パス)を
+   * 初回ウォームアップ時にコンパイルし、Three.js のプログラムキャッシュに常駐させるための極小ダミーメッシュ。
+   * これにより、17.87秒や31.87秒でフェードが始まる・終わる瞬間のシェーダー再コンパイル(175ms)を防ぎつつ、
+   * フェード完了後のチャンクを alphaHash: false(不透明・Early-Z有効)に保てる。
+   */
+  private ensureShaderWarmupMesh(): void {
+    if (this.warmupInstalled) return;
+    this.warmupInstalled = true;
+
+    const dummyTex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    dummyTex.colorSpace = THREE.SRGBColorSpace;
+    dummyTex.needsUpdate = true;
+
+    const pos = new Float32Array([0, 0, 0, 0.001, 0, 0, 0, 0.001, 0]);
+    const nor = new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]);
+    const uv = new Float32Array([0, 0, 1, 0, 0, 1]);
+
+    const geoTex = new THREE.BufferGeometry();
+    geoTex.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geoTex.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geoTex.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+
+    const geoCol = new THREE.BufferGeometry();
+    geoCol.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geoCol.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+
+    const makeStd = (withMap: boolean) =>
+      new THREE.MeshStandardMaterial(withMap ? { map: dummyTex } : { color: 0x6b6e73 });
+
+    const configs: { geo: THREE.BufferGeometry; withMap: boolean; fade: boolean }[] = [
+      { geo: geoTex, withMap: true, fade: false },
+      { geo: geoTex, withMap: true, fade: true },
+      { geo: geoCol, withMap: false, fade: false },
+      { geo: geoCol, withMap: false, fade: true },
+    ];
+
+    const holder = new THREE.Group();
+    if (this.startPosition) holder.position.copy(this.startPosition);
+    for (const cfg of configs) {
+      const std = makeStd(cfg.withMap);
+      const mat = this.convertMaterial(std);
+      std.dispose();
+      if (cfg.fade) {
+        mat.alphaHash = true;
+        mat.opacity = 0.5;
+      }
+      const m = new THREE.Mesh(cfg.geo, mat);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      holder.add(m);
+    }
+    this.group.add(holder);
+  }
+
+  private schedulePrepareChunk(root: THREE.Object3D, isFar: boolean): Promise<void> {
+    return new Promise((resolve) => {
+      this.prepJobs.push(() => {
+        if (!this.disposed) {
+          const prevAniso = this.chunkAnisotropy;
+          if (isFar) this.chunkAnisotropy = 1;
+          this.prepareChunk(root, isFar);
+          this.chunkAnisotropy = prevAniso;
+        }
+        resolve();
+      });
+      this.pumpPrep();
+    });
+  }
+
+  private pumpPrep(): void {
+    if (this.prepPumpScheduled || this.prepJobs.length === 0) return;
+    this.prepPumpScheduled = true;
+    requestAnimationFrame(() => {
+      this.prepPumpScheduled = false;
+      const job = this.prepJobs.shift();
+      if (job) job();
+      if (this.prepJobs.length > 0) this.pumpPrep();
+    });
   }
 
   /**
    * Uploading a chunk's textures on its first render costs 200-400 ms in one frame (16 x 1024 px + mipmaps).
-   * Instead the textures are initialised a few at a time (about 6 ms per frame) before the chunk becomes visible.
+   * Instead the textures are decoded/uploaded in a Worker OffscreenCanvas first, then bound to WebGL 1 per frame.
    */
-  private stageUpload(root: THREE.Object3D, instant = false): Promise<void> {
+  private async stageUpload(root: THREE.Object3D, _instant = false): Promise<void> {
     const set = new Set<THREE.Texture>();
     root.traverse((o) => {
       if (o instanceof THREE.Mesh) { const t = (o.material as THREE.MeshBasicMaterial).map; if (t) set.add(t); }
     });
-    if (!this.renderer || set.size === 0) return Promise.resolve();
+    if (!this.renderer || set.size === 0) return;
 
-    if (instant) {
-      for (const tex of set) {
-        try {
-          this.renderer.initTexture(tex);
-          releaseUploadedImage(tex);
-        } catch {
-          // ignore texture init errors
-        }
-      }
-      return Promise.resolve();
+    const textures = [...set];
+    await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));
+    if (this.disposed || !this.renderer) {
+      for (const tex of textures) releaseUploadedImage(tex);
+      return;
     }
 
     return new Promise((resolve) => {
-      this.uploadJobs.push({ textures: [...set], resolve });
+      this.uploadJobs.push({ textures, resolve });
       this.pumpUploads();
     });
   }
 
   private pumpUploads(): void {
-    if (this.uploadJobs.length === 0 || !this.renderer) return;
+    if (this.uploadPumpScheduled || this.uploadJobs.length === 0 || !this.renderer) return;
+    this.uploadPumpScheduled = true;
     requestAnimationFrame(() => {
+      this.uploadPumpScheduled = false;
       this.tickUploads();
       if (this.uploadJobs.length > 0) {
         this.pumpUploads();
@@ -232,12 +386,19 @@ export abstract class StreamedCityMap extends MapBase {
   private tickUploads(): void {
     const r = this.renderer;
     if (!r || this.uploadJobs.length === 0) return;
-    const t0 = performance.now();
-    while (this.uploadJobs.length > 0 && performance.now() - t0 < 6) {
-      const job = this.uploadJobs[0];
-      const tex = job.textures.shift();
-      if (tex) { r.initTexture(tex); releaseUploadedImage(tex); }
-      if (job.textures.length === 0) { this.uploadJobs.shift(); job.resolve(); }
+    const job = this.uploadJobs[0];
+    const tex = job.textures.shift();
+    if (tex) {
+      try {
+        r.initTexture(tex);
+        releaseUploadedImage(tex);
+      } catch {
+        // ignore texture init errors
+      }
+    }
+    if (job.textures.length === 0) {
+      this.uploadJobs.shift();
+      job.resolve();
     }
   }
 
@@ -265,18 +426,13 @@ export abstract class StreamedCityMap extends MapBase {
         try {
           await this.pacer?.acquire(1, () => this.disposed);   // after every waiting near chunk
           if (this.disposed) return;
-          const gltf = await this.loader!.loadAsync(this.modelBase + 'far/' + c.file);
-          if (this.disposed) { this.disposeObject(gltf.scene); return; }
-          this.chunkAnisotropy = 1;                           // 遠景のテクスチャは縮小済みで、遠くを見るだけ(prepareChunk は同期)
-          this.prepareChunk(gltf.scene);
-          this.chunkAnisotropy = 4;
-          await this.stageUpload(gltf.scene);
-          if (this.disposed) { this.disposeObject(gltf.scene); return; }
+          const scene = await this.fetchAndPrepare(this.modelBase + 'far/' + c.file, true);
+          if (!scene) return;
           const key = this.keyOf(c.file);
-          gltf.scene.visible = !this.nearOpaque.has(key);
-          this.group.add(gltf.scene);
-          this.farObjects.set(key, gltf.scene);
-          this.startFade(gltf.scene, this.fadeMs * 1.5, () => {});
+          scene.visible = !this.nearOpaque.has(key);
+          this.group.add(scene);
+          this.farObjects.set(key, scene);
+          this.startFade(scene, this.fadeMs * 1.5, () => {});
         } catch (err) {
           console.warn(`[${this.metadata.id}] far chunk failed`, c.file, err);
         }
@@ -286,7 +442,7 @@ export abstract class StreamedCityMap extends MapBase {
   }
 
   /** Lit material so the city shades under the same sun/sky as the car; casts and receives so buildings ground each other. */
-  private prepareChunk(root: THREE.Object3D): void {
+  private prepareChunk(root: THREE.Object3D, isFar = false): void {
     this.roadTube?.carve(root);
     root.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
@@ -296,7 +452,7 @@ export abstract class StreamedCityMap extends MapBase {
       // PLATEAU chunks ship with no normal attribute at all (fine for the old unlit material, but a lit one needs
       // N·L and renders solid black without it).
       if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
-      o.castShadow = true;
+      o.castShadow = !isFar;
       o.receiveShadow = true;
     });
   }
@@ -305,7 +461,13 @@ export abstract class StreamedCityMap extends MapBase {
   private startFade(obj: THREE.Object3D, dur: number, done: () => void): void {
     const mats: THREE.Material[] = [];
     obj.traverse((o) => {
-      if (o instanceof THREE.Mesh) { const m = o.material as THREE.Material; m.alphaHash = true; m.opacity = 0; mats.push(m); }
+      if (o instanceof THREE.Mesh) {
+        const m = o.material as THREE.Material;
+        m.alphaHash = true;
+        m.opacity = 0;
+        m.needsUpdate = true;
+        mats.push(m);
+      }
     });
     this.fades.push({ obj, mats, t0: performance.now(), dur, done });
   }
@@ -417,19 +579,45 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
     mat.customProgramCacheKey = () => 'city-night-windows';
   }
 
+  private stageLock: Promise<void> = Promise.resolve();
+
+  /**
+   * チャンク1つぶんの GLB を取得して、描画できる状態(パース・素材の準備・テクスチャの GPU 転送)まで進める。
+   * ダウンロードは並列のままだが、重い処理は inStage で1チャンクずつにする。複数のチャンクが同時に届いても、
+   * パースと転送が同じフレームに重ならず、読み込み中・開始直後のフレーム落ちが出ない(途中で破棄されたら null)。
+   */
+  private async fetchAndPrepare(url: string, isFar: boolean, instant = false): Promise<THREE.Group | null> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    const buf = await res.arrayBuffer();
+    if (this.disposed) return null;
+    const prev = this.stageLock;
+    let release!: () => void;
+    this.stageLock = new Promise<void>((r) => { release = r; });
+    await prev;
+    try {
+      if (this.disposed) return null;
+      const gltf = await this.loader!.parseAsync(buf, '');
+      gltf.scene.userData.skipWarmup = true;
+      await this.schedulePrepareChunk(gltf.scene, isFar);
+      if (!this.disposed) await this.stageUpload(gltf.scene, instant);
+      if (this.disposed) { this.disposeObject(gltf.scene); return null; }
+      return gltf.scene;
+    } finally {
+      release();
+    }
+  }
+
   private async loadChunk(c: StreamChunk, instant = false): Promise<void> {
     if (!this.loader || this.resident.has(c.file) || this.pending.has(c.file)) return;
     this.pending.add(c.file);
     try {
       await this.pacer?.acquire(0, () => this.disposed);
       if (this.disposed) return;
-      const gltf = await this.loader.loadAsync(this.modelBase + c.file);
-      if (this.disposed) { this.disposeObject(gltf.scene); return; }
-      this.prepareChunk(gltf.scene);
-      await this.stageUpload(gltf.scene, instant);
-      if (this.disposed) { this.disposeObject(gltf.scene); return; }
-      this.group.add(gltf.scene);
-      this.resident.set(c.file, gltf.scene);
+      const scene = await this.fetchAndPrepare(this.modelBase + c.file, false, instant);
+      if (!scene) return;
+      this.group.add(scene);
+      this.resident.set(c.file, scene);
       const key = this.keyOf(c.file);
       const shown = (): void => {
         this.nearOpaque.add(key);
@@ -437,7 +625,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
         if (far) far.visible = false;
       };
       if (instant || !this.hasFarTier && this.fadeMs <= 0) shown();
-      else this.startFade(gltf.scene, this.fadeMs, shown);
+      else this.startFade(scene, this.fadeMs, shown);
     } catch (err) {
       console.warn(`[${this.metadata.id}] failed to load`, c.file, err);
     } finally {

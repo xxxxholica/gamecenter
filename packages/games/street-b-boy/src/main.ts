@@ -134,6 +134,7 @@ class StreetBBoyGame {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     // 影を落とす光源(castShadow)が無いので shadowMap は使わない(有効にしていても影は出ず、処理だけが残る)
     this.renderer.shadowMap.enabled = false;
+    this.renderer.debug.checkShaderErrors = false;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(DEFAULT_BACKGROUND);
@@ -162,6 +163,14 @@ class StreetBBoyGame {
     this.setupTitleScene();
 
     window.addEventListener('resize', this.onResize);
+
+    // タイトル消去後(ゲーム開始時)とタイトル表示中の両方のライト構成のシェーダをループ開始前にコンパイルする
+    if (this.titleGroup) this.titleGroup.visible = false;
+    this.renderer.render(this.scene, this.camera);
+    if (this.titleGroup) this.titleGroup.visible = true;
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.getContext().finish();
+    this.lastTime = performance.now();
 
     // Start rendering loop
     requestAnimationFrame(this.gameLoop);
@@ -335,7 +344,13 @@ class StreetBBoyGame {
   // GAMEPLAY INITIALIZATION
   // -------------------------------------------------------------
   private startGame(isDemo: boolean = false): void {
-    if (this.titleDancer) {
+    const canReuseTitleStage = (this.state === 'title' || this.state === 'attract_ranking')
+      && this.stage !== null
+      && this.stage.stageNumber === 1;
+    const reusedDancer = canReuseTitleStage ? this.titleDancer : null;
+    if (reusedDancer) {
+      this.titleDancer = null;
+    } else if (this.titleDancer) {
       this.scene.remove(this.titleDancer.mesh);
       this.titleDancer = null;
     }
@@ -344,6 +359,10 @@ class StreetBBoyGame {
       this.titleGroup = null;
     }
 
+    const reusedStage = canReuseTitleStage ? this.stage : null;
+    if (reusedStage) {
+      this.stage = null;
+    }
     this.cleanupGameplay();
 
     this.currentStage = 1;
@@ -360,16 +379,22 @@ class StreetBBoyGame {
     this.hud.updateTime(this.timeLeft);
     this.hud.updateLives(this.lives);
 
-    this.stage = new Stage(this.scene, this.currentStage);
+    this.stage = reusedStage ?? new Stage(this.scene, this.currentStage);
     this.setupStageHooks(this.stage);
     this.checkpoint = null;
     this.homecoming = false;
     this.returnBlend = 0;
     this.sound.setBaseTempo(this.stage.config.tempo);
     this.sound.setBgmStyle(this.stage.config.bgm ?? 'street');
-    this.player = new Player();
-    this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
-    this.scene.add(this.player.mesh);
+    if (reusedDancer) {
+      this.player = reusedDancer;
+      this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
+      this.player.mesh.position.z = 0;
+    } else {
+      this.player = new Player();
+      this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
+      this.scene.add(this.player.mesh);
+    }
     this.camera.position.set(STAGE_SPAWN.x, 2.5, 13.0);
 
     this.hud.showTitle(false);

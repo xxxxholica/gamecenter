@@ -28,7 +28,7 @@ export class ModeSelectScreen {
     const sub = !online ? '現在は開催されていません' : online.phase !== 'lobby' ? 'レース中' : full ? '満員' : `参加中 ${online.players}/${online.max}`;
     this.select.show([
       { id: 'offline', art: CAR, title: 'オフライン走行', sub: 'ひとりでタイムアタック', desc: '・好きなコースと時間帯を選ぶ\n・自己ベストを記録できる\n・1位のゴーストと勝負' },
-      { id: 'online', art: VS, title: 'オンライン対戦', sub, desc: '・最大4人で同時にスタート\n・待機中にコースの希望を出せる\n・武器は使えません', disabled: !online || full },
+      { id: 'online', art: VS, title: 'オンライン対戦', sub, desc: '・最大4人で同時にスタート\n・待機中にコースの希望を出せる', disabled: !online || full },
     ]);
   }
 

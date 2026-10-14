@@ -24,10 +24,9 @@ export interface LobbyDeps {
 }
 
 const CAR_NAMES: Record<string, string> = {
-  trail_j: 'TRAIL J',
-  cross_j: 'CROSS J',
-  combat_sedan: 'COMBAT SEDAN',
-  missile_truck_j: 'TRUCK J MLRS',
+  dragon_a: 'DRAGON CRIMSON',
+  dragon_b: 'DRAGON AZURE',
+  dragon_c: 'DRAGON GOLD',
 };
 
 const css = `

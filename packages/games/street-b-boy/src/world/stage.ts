@@ -697,6 +697,29 @@ export class Stage implements DogTerrain {
    * 足場を追加する。厚み0.6以下の板は一方通行(下から通り抜け・上から着地)。
    * 一方通行の板には縁に水色の線を、ネオン面のソリッドな足場には上面にテーマ色の線を入れて、見た目で区別できるようにする。
    */
+  private static readonly sharedBoltGeo = (() => {
+    const g = new THREE.CylinderGeometry(0.024, 0.024, 0.04, 6);
+    g.rotateX(Math.PI / 2);
+    return g;
+  })();
+  private static readonly sharedBoltMat = new THREE.MeshStandardMaterial({
+    color: 0xd4dadf,
+    metalness: 0.95,
+    roughness: 0.2,
+  });
+  private static readonly sharedCurbMat = new THREE.MeshStandardMaterial({ color: 0x8f9598, roughness: 0.85 });
+  private static readonly sharedRibMat = new THREE.MeshStandardMaterial({ color: 0x1f2326, metalness: 0.6, roughness: 0.4 });
+  private static readonly sharedMetalMatStandard = new THREE.MeshStandardMaterial({
+    color: 0x9aa2a8,
+    metalness: 0.85,
+    roughness: 0.25,
+  });
+  private static readonly sharedMetalMatHeaven = new THREE.MeshStandardMaterial({
+    color: 0xffd86b,
+    metalness: 0.85,
+    roughness: 0.25,
+  });
+
   public addPlatform(x: number, y: number, w: number, h: number, isAsphalt: boolean = false, oneWay: boolean = h <= ONE_WAY_MAX_THICKNESS, street: boolean = false): void {
     // 粗いローポリ直方体から、セグメント分割された高品位ジオメトリに強化
     const widthSegs = Math.max(1, Math.min(64, Math.round(w * 1.5)));
@@ -723,16 +746,8 @@ export class Stage implements DogTerrain {
 
     // 段差・足場のクォリティ改善（立体スチールコーピング、六角ボルト、縁石ブロック、垂直サポートリブ）
     if (!oneWay) {
-      const metalMat = new THREE.MeshStandardMaterial({
-        color: this.config.theme === 'heaven' ? 0xffd86b : 0x9aa2a8,
-        metalness: 0.85,
-        roughness: 0.25
-      });
-      const boltMat = new THREE.MeshStandardMaterial({
-        color: 0xd4dadf,
-        metalness: 0.95,
-        roughness: 0.2
-      });
+      const metalMat = this.config.theme === 'heaven' ? Stage.sharedMetalMatHeaven : Stage.sharedMetalMatStandard;
+      const dummy = new THREE.Matrix4();
 
       // 1. 手前上エッジのスチールコーピングパイプ（丸みと光沢のある面取りレール）
       const copingGeo = new THREE.CylinderGeometry(0.045, 0.045, w, 12);
@@ -743,46 +758,49 @@ export class Stage implements DogTerrain {
       mesh.add(coping);
 
       // 2. コーピングに一定間隔で打ち込まれた六角ボルト・リベット
-      const boltGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.04, 6);
       const boltSpacing = 2.0;
       const numBolts = Math.max(2, Math.floor(w / boltSpacing));
+      const bolts = new THREE.InstancedMesh(Stage.sharedBoltGeo, Stage.sharedBoltMat, numBolts + 1);
       for (let i = 0; i <= numBolts; i++) {
         const bx = -w / 2 + 0.3 + ((w - 0.6) * i) / numBolts;
-        const bolt = new THREE.Mesh(boltGeo, boltMat);
-        bolt.rotation.x = Math.PI / 2;
-        bolt.position.set(bx, h / 2 - 0.02, 1.42);
-        mesh.add(bolt);
+        dummy.makeTranslation(bx, h / 2 - 0.02, 1.42);
+        bolts.setMatrixAt(i, dummy);
       }
+      bolts.instanceMatrix.needsUpdate = true;
+      mesh.add(bolts);
 
       // 3. アスファルト道路の段差縁石（Curb）立体ブロック
       if (isAsphalt) {
-        const curbMat = new THREE.MeshStandardMaterial({ color: 0x8f9598, roughness: 0.85 });
         const curbGeo = new THREE.BoxGeometry(w, 0.12, 0.2);
-        const curb = new THREE.Mesh(curbGeo, curbMat);
+        const curb = new THREE.Mesh(curbGeo, Stage.sharedCurbMat);
         curb.position.set(0, h / 2 - 0.06, 1.35);
         mesh.add(curb);
       }
 
       // 4. 高さ1.0以上の段差垂直面にある立体サポートリブ / 目地スリット
       if (h >= 1.0) {
-        const ribMat = new THREE.MeshStandardMaterial({ color: 0x1f2326, metalness: 0.6, roughness: 0.4 });
         const ribGeo = new THREE.BoxGeometry(0.08, h - 0.12, 0.04);
         const numRibs = Math.max(1, Math.floor(w / 3.2));
+        const ribs = new THREE.InstancedMesh(ribGeo, Stage.sharedRibMat, numRibs);
         for (let i = 1; i <= numRibs; i++) {
           const rx = -w / 2 + (w * i) / (numRibs + 1);
-          const rib = new THREE.Mesh(ribGeo, ribMat);
-          rib.position.set(rx, 0, 1.42);
-          mesh.add(rib);
+          dummy.makeTranslation(rx, 0, 1.42);
+          ribs.setMatrixAt(i - 1, dummy);
         }
+        ribs.instanceMatrix.needsUpdate = true;
+        mesh.add(ribs);
       }
 
       // 5. 段差の左右端の補強スチールコーナー金具
-      const bracketGeo = new THREE.BoxGeometry(0.12, Math.min(h, 0.7), 0.1);
-      for (const endX of [-w / 2 + 0.06, w / 2 - 0.06]) {
-        const bracket = new THREE.Mesh(bracketGeo, metalMat);
-        bracket.position.set(endX, h / 2 - Math.min(h, 0.7) / 2, 1.4);
-        mesh.add(bracket);
-      }
+      const bracketH = Math.min(h, 0.7);
+      const bracketGeo = new THREE.BoxGeometry(0.12, bracketH, 0.1);
+      const brackets = new THREE.InstancedMesh(bracketGeo, metalMat, 2);
+      dummy.makeTranslation(-w / 2 + 0.06, h / 2 - bracketH / 2, 1.4);
+      brackets.setMatrixAt(0, dummy);
+      dummy.makeTranslation(w / 2 - 0.06, h / 2 - bracketH / 2, 1.4);
+      brackets.setMatrixAt(1, dummy);
+      brackets.instanceMatrix.needsUpdate = true;
+      mesh.add(brackets);
     }
 
     if (oneWay || this.config.theme === 'neon' || this.config.theme === 'heaven') {

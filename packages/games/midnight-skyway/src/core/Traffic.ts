@@ -2,8 +2,6 @@ import * as THREE from 'three';
 import { CarBase } from '../models/CarBase';
 import { TrailJModel } from '../models/TrailJModel';
 import { CrossJModel } from '../models/CrossJModel';
-import { CombatSedanModel } from '../models/CombatSedanModel';
-import { MissileTruckModel } from '../models/MissileTruckModel';
 import { mergeMeshesByMaterial } from '../models/mergeMeshes';
 import { buildFarVariant } from '../models/npcLod';
 
@@ -29,8 +27,6 @@ interface NpcPrototype {
 /** One prototype per model, flattened into a few draw calls (wheels do not spin, so they are baked into the body meshes). */
 const prototypes = new Map<string, NpcPrototype>();
 function makeModel(kind: string): CarBase {
-  if (kind === 'combat_sedan') return new CombatSedanModel();
-  if (kind === 'missile_truck') return new MissileTruckModel();
   return kind === 'trail' ? new TrailJModel() : new CrossJModel();
 }
 function prototype(kind: string): NpcPrototype {
@@ -79,15 +75,6 @@ export interface NpcCar {
   hitCooldown?: number;
   /** 今、影を落とす設定になっているか(近くの車だけ true) */
   shadowOn?: boolean;
-
-  // Combat status
-  hp?: number;
-  maxHp?: number;
-  isDead?: boolean;
-  flyVelocity?: THREE.Vector3;
-  flyAngularVelocity?: THREE.Vector3;
-  respawnTimer?: number;
-  weaponCooldown?: number;
 }
 
 export interface TrafficCollisionResult {
@@ -156,7 +143,6 @@ export class Traffic {
 
   constructor(roadWidth: number, options: TrafficOptions) {
     this.group.name = 'traffic';
-    // 武装車両(combat_sedan / missile_truck)はNPCに使わない: 重いモデルを軽量化(マージ等)すると描画に失敗するため
     const kinds = ['trail', 'cross'];
 
     // 1. Setup Opposite Route Traffic
@@ -391,7 +377,6 @@ export class Traffic {
   /** 現在の走行距離からNPCの位置・向きを反映する(プレイヤーから遠いものは非表示)。 */
   private place(player: THREE.Vector3): void {
     for (const c of this.cars) {
-      if (c.isDead) continue; // 撃破・爆発中は放物線タンブリングするため路面配置をスキップ
       const total = c.isForward ? this.fwdTotal : this.oppTotal;
       if (total <= 0) continue;
 
@@ -455,7 +440,7 @@ export class Traffic {
     const CAR_HALF_L = 1.75;
 
     for (const c of this.cars) {
-      if (!c.isForward || !c.obj.visible || c.isDead) continue;
+      if (!c.isForward || !c.obj.visible) continue;
 
       const npcPos = c.obj.position;
       const dx = playerPos.x - npcPos.x;

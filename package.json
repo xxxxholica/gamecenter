@@ -15,11 +15,13 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "preview": "npx serve dist",
+    "bench:all": "node scripts/bench-all.mjs",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "deploy:server": "node scripts/deploy-server.mjs"
   },
   "devDependencies": {
     "connect": "^3.7.0",
+    "playwright": "^1.64.0",
     "vite": "^8.3.4"
   }
 }

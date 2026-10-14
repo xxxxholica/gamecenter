@@ -5,14 +5,15 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MapBase } from '../maps/MapBase';
 import { CarBase } from '../models/CarBase';
+import { DragonCarModel } from '../models/DragonCarModel';
 import { CarController, CameraMode } from './CarController';
 import { TireSmokeSystem } from './TireSmokeSystem';
+import { BOOST_THEMES, boostThemeFor, type BoostTheme } from './BoostTheme';
 import { SpeedStreaks } from './SpeedStreaks';
 import { RoadVfx } from './RoadVfx';
 import { RainSystem } from './RainSystem';
 import { Lightning } from './Lightning';
 import { RoadsideRhythm } from './RoadsideRhythm';
-import { CombatSystem } from './CombatSystem';
 import type { TimeOfDay } from './TimeOfDay';
 
 export interface DriveSceneCallbacks {
@@ -43,6 +44,8 @@ export class DriveScene {
 
   public currentMap: MapBase | null = null;
   public currentCar: CarBase | null = null;
+  /** ドラゴン・カーのFKアニメ用の経過秒(ポーズ中は進まない)。 */
+  private dragonTime = 0;
   private skyEnv: SkyEnvironments | null = null;
   private postFx: PostFX;
   public carController: CarController | null = null;
@@ -51,7 +54,6 @@ export class DriveScene {
   private roadVfx: RoadVfx;
   private rainSystem: RainSystem;
   private rhythm: RoadsideRhythm;
-  public combatSystem: CombatSystem;
 
   public active: boolean = false;
   private animationFrameId: number | null = null;
@@ -98,6 +100,10 @@ export class DriveScene {
   private readonly lateral = new THREE.Vector3();         // 車の右向き
   private readonly waterVel = new THREE.Vector3();
   private readonly outward = new THREE.Vector3();
+  private boostTheme: BoostTheme = BOOST_THEMES.default;   // ブーストの色と演出(車ごと。setCar で切り替わる)
+  private boltCarry = 0;                                       // Azure の電撃を出すタイミングの端数
+  private readonly exhaustInnerL = new THREE.Vector3();        // Gold の4連ノズルの内側の2本
+  private readonly exhaustInnerR = new THREE.Vector3();
   private readonly exhaustL = new THREE.Vector3();
   private readonly exhaustR = new THREE.Vector3();
   private readonly scratch = new THREE.Vector3();
@@ -176,10 +182,6 @@ export class DriveScene {
     this.scene.add(this.rainSystem.mesh);
     this.roadVfx = new RoadVfx();
     this.scene.add(this.roadVfx.group);
-
-    // 4c. Combat & Weapons System
-    this.combatSystem = new CombatSystem(this.scene, this.camera);
-    this.combatSystem.onCameraShake = (amt: number) => this.addCameraTrauma(amt);
 
     // 5. Window resize
     window.addEventListener('resize', this.onResize.bind(this));
@@ -449,7 +451,6 @@ export class DriveScene {
 
     // If car exists, respawn it at map start point
     if (this.carController && respawn) {
-      this.combatSystem.setEntities(this.carController, this.currentMap.traffic ?? null, this.currentMap, this.camera);
       this.respawnCar();
     }
   }
@@ -503,7 +504,9 @@ export class DriveScene {
       this.carController.setCar(car);
     }
 
-    this.combatSystem.setEntities(this.carController, this.currentMap?.traffic ?? null, this.currentMap, this.camera);
+    this.boostTheme = boostThemeFor(car);
+    this.tireSmoke.setTheme(this.boostTheme);
+    this.postFx.setBoostColors(this.boostTheme.streak, this.boostTheme.flare);
     this.applyPaintEnvironment();
     this.respawnCar();
   }
@@ -517,9 +520,6 @@ export class DriveScene {
     this.rhythm.reset();
     this.accelSm = 0;
     this.slipstream = 0;
-    this.combatSystem.reset();
-    this.combatSystem.raceStarted = false;
-    this.combatSystem.setEntities(this.carController, this.currentMap.traffic ?? null, this.currentMap, this.camera);
     const startPos = this.currentMap.startPosition.clone();
     // Slightly lift to prevent ground clipping
     startPos.y += 0.05;
@@ -578,11 +578,48 @@ export class DriveScene {
     this.frontPadHeld = held;
   }
 
+  /**
+   * 起動時(最初の requestAnimationFrame の前)や暗転中に、コース・車両・影パス・視錐台外のバリケード等のシェーダーを事前コンパイルする。
+   * userData.skipWarmup が付いたサブツリー(街のチャンク)は視錐台カリングを外さない:
+   * チャンクの素材はダミーメッシュ(StreamedCityMap)と同じシェーダーなので、全チャンクを描くコストをかけない。
+   */
+  public warmup(cars: CarBase[] = []): void {
+    const prevParents = new Map<THREE.Object3D, THREE.Object3D | null>();
+    for (const c of cars) {
+      prevParents.set(c.group, c.group.parent);
+      this.scene.add(c.group);
+    }
+    this.applyPaintEnvironment();
+    const toggled: THREE.Object3D[] = [];
+    const unculled = (o: THREE.Object3D): void => {
+      if (o.userData?.skipWarmup) return;
+      if (o.frustumCulled) {
+        o.frustumCulled = false;
+        toggled.push(o);
+      }
+      for (const child of o.children) unculled(child);
+    };
+    unculled(this.scene);
+    try {
+      this.renderScene();
+      this.renderer.getContext().finish();
+    } finally {
+      for (const o of toggled) o.frustumCulled = true;
+      for (const c of cars) {
+        this.scene.remove(c.group);
+        const p = prevParents.get(c.group);
+        if (p) p.add(c.group);
+      }
+    }
+  }
+
   public start(): void {
     this.active = true;
     if (this.rainy) audio.sfx.startRain();
     this.clock.start();
-    this.animate();
+    if (this.animationFrameId === null) {
+      this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
+    }
   }
 
   public stop(): void {
@@ -701,7 +738,7 @@ export class DriveScene {
       }
     }
 
-    // Weapon recoil & explosion camera shake
+    // Camera shake (collisions, landings, boost end)
     if (this.cameraTrauma > 0) {
       this.cameraTrauma = Math.max(0, this.cameraTrauma - dt * 2.5);
       const shake = this.cameraTrauma * this.cameraTrauma;
@@ -788,12 +825,14 @@ export class DriveScene {
     // ブースト開始・ドリフト確定(ブーストの残りが増えた瞬間)にパンチを入れる
     if (cc.boostTimer > this.prevBoostTimer + 0.05) {
       const fresh = this.prevBoostTimer <= 0;
-      this.fovKick = Math.max(this.fovKick, fresh ? 14 : 9);
-      this.distKick = Math.max(this.distKick, fresh ? 2.4 : 1.5);
-      this.flash = 1;
-      this.roadVfx.fireShockwave(cc.position, fresh ? 22 : 14);
+      const pu = this.boostTheme.punch;
+      this.fovKick = Math.max(this.fovKick, fresh ? pu.fov : pu.fov * 0.65);
+      this.distKick = Math.max(this.distKick, fresh ? pu.dist : pu.dist * 0.62);
+      this.flash = pu.flash;
+      this.roadVfx.fireShockwave(cc.position, fresh ? 22 : 14, this.boostTheme);
       if (fresh) audio.sfx.boostStart();
-      this.addCameraTrauma(fresh ? 0.45 : 0.3);
+      this.addCameraTrauma(fresh ? pu.trauma : pu.trauma * 0.67);
+      this.boostBurst(cc, fresh);
     }
     if (this.prevBoostTimer > 0 && cc.boostTimer <= 0) this.backfire(cc);
     this.prevBoostTimer = cc.boostTimer;
@@ -847,7 +886,7 @@ export class DriveScene {
     // 路面・車まわりの演出(光跡・タイヤ痕・アンダーグロー・衝撃波)
     const slip = Math.abs(cc.slipAngle);
     const skidding = cc.isDrifting || (cc.speed > 8 && slip > 0.1);
-    this.roadVfx.update(dt, cc, this.tires, skidding, Math.min(1, slip * 3), this.timeOfDay === 'night', cc.driftFactor, this.boostLevel, m);
+    this.roadVfx.update(dt, cc, this.tires, skidding, Math.min(1, slip * 3), this.timeOfDay === 'night', cc.driftFactor, this.boostLevel, m, this.boostTheme);
 
     // ニアミス: 走行中の車の脇をかすめた瞬間に、小さなパンチと風切り音
     this.nearMissCooldown = Math.max(0, this.nearMissCooldown - dt);
@@ -897,17 +936,59 @@ export class DriveScene {
     }
 
     // 風切りの筋(車の周りを後ろへ流れる光の線)
-    this.speedStreaks.update(dt, cc.position, cc.velocityHeading, Math.abs(cc.speed), Math.max(Math.max(0, (sf - 0.4) / 0.6), this.slipstream * 0.9) * m, this.boostLevel * m);
+    this.speedStreaks.update(dt, cc.position, cc.velocityHeading, Math.abs(cc.speed), Math.max(Math.max(0, (sf - 0.4) / 0.6), this.slipstream * 0.9) * m, this.boostLevel * m, this.boostTheme.streak);
 
-    // ブースト中は排気口から青白い炎
+    // ブースト中は排気口から、車の主色の炎。車ごとに、さらに固有の演出が加わる
     if (this.boostLevel > 0.15) {
       this.updateExhaust(cc);
-      this.tireSmoke.emitFlame(this.exhaustL, this.carVel, this.boostLevel);
-      this.tireSmoke.emitFlame(this.exhaustR, this.carVel, this.boostLevel);
+      const lv = this.boostLevel;
+      const th = this.boostTheme;
+      this.tireSmoke.emitFlame(this.exhaustL, this.carVel, lv);
+      this.tireSmoke.emitFlame(this.exhaustR, this.carVel, lv);
+      if (th.kind === 'fire') {
+        // 炎息: 火の粉が排気口から舞い上がる
+        for (let i = 0; i < 2; i++) {
+          this.tireSmoke.emitEmber(this.exhaustL, this.carVel, lv);
+          this.tireSmoke.emitEmber(this.exhaustR, this.carVel, lv);
+        }
+      } else if (th.kind === 'storm') {
+        // 雷: 車の横を、電撃が走る
+        this.boltCarry += dt * 16 * lv;
+        const n = Math.floor(this.boltCarry);
+        this.boltCarry -= n;
+        if (n > 0) this.tireSmoke.emitBolts(n, cc.position, cc.rotationY, this.carVel);
+      } else if (th.kind === 'radiant') {
+        // 黄金の咆哮: 4連ノズル(内側の2本を足す)と、金の粉
+        this.exhaustInnerL.lerpVectors(this.exhaustL, this.exhaustR, 0.3);
+        this.exhaustInnerR.lerpVectors(this.exhaustL, this.exhaustR, 0.7);
+        this.tireSmoke.emitFlame(this.exhaustInnerL, this.carVel, lv * 0.85);
+        this.tireSmoke.emitFlame(this.exhaustInnerR, this.carVel, lv * 0.85);
+        if (Math.random() < lv * 0.9) this.tireSmoke.emitMote(cc.position, this.carVel, 1.3);
+      }
     }
   }
 
-  public addCameraTrauma(amount: number): void {
+  /** ブーストに入った瞬間の、車ごとの固有の演出(主色の衝撃波は fireShockwave が出す) */
+  private boostBurst(cc: CarController, fresh: boolean): void {
+    this.updateExhaust(cc);
+    const k = fresh ? 1 : 0.5;
+    switch (this.boostTheme.kind) {
+      case 'fire':      // 火の粉が一気に噴き上がる
+        for (const pos of [this.exhaustL, this.exhaustR]) {
+          for (let i = 0; i < 18 * k; i++) this.tireSmoke.emitEmber(pos, this.carVel, 1.8);
+          for (let i = 0; i < 3; i++) this.tireSmoke.emitFlame(pos, this.carVel, 1.5);
+        }
+        break;
+      case 'storm':     // 電撃が車の周りに一斉に走る
+        this.tireSmoke.emitBolts(Math.round(10 * k), cc.position, cc.rotationY, this.carVel);
+        break;
+      case 'radiant':   // 金の粉が車の周りに舞い上がる
+        for (let i = 0; i < 34 * k; i++) this.tireSmoke.emitMote(cc.position, this.carVel, 1.8);
+        break;
+    }
+  }
+
+  private addCameraTrauma(amount: number): void {
     this.cameraTrauma = Math.min(1.0, this.cameraTrauma + amount);
   }
 
@@ -988,9 +1069,6 @@ export class DriveScene {
         );
       }
 
-      // Update Combat, Homing Weapons, Death Tumble & Road Destruction
-      this.combatSystem.update(dt);
-
       // Tire visual effects: Sparks during drift, Smoke during high-speed redline
       if (this.tireSmoke && this.carController) {
         const tires = this.tires;
@@ -1000,7 +1078,7 @@ export class DriveScene {
 
         // 1. DRIFT SPARKS: Emit glowing friction sparks while drifting
         if (this.carController.isDrifting || (this.carController.speed > 8.0 && slip > 0.10)) {
-          const sparkIntensity = Math.min(1.8, slip * 3.0 + 0.5) * (1 + this.boostLevel * 0.4);
+          const sparkIntensity = Math.min(1.45, slip * 2.4 + 0.4) * (1 + this.boostLevel * 0.4);
           const blue = this.boostLevel > 0.3;
           this.tireSmoke.emitSpark(tires.rearLeft, moveVector, this.carController.driftDirection, sparkIntensity, blue);
           this.tireSmoke.emitSpark(tires.rearRight, moveVector, this.carController.driftDirection, sparkIntensity, blue);
@@ -1032,6 +1110,12 @@ export class DriveScene {
     if (this.carController) {
       const windshield = this.currentCar?.windshield;
       if (windshield) windshield.visible = true;
+      // ドラゴン・カーの角・翼・尻尾(多関節FK)。速いほど翼と尻尾の振れが大きくなる
+      if (this.currentCar instanceof DragonCarModel) {
+        this.dragonTime += dt;
+        const cc = this.carController;
+        this.currentCar.updateDragonParts(this.dragonTime, Math.abs(cc.speed) / Math.max(1, cc.maxSpeed));
+      }
       this.updateSpeedFx(dt);
     }
     this.updateCamera(dt);

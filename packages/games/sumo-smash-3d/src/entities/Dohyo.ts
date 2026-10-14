@@ -225,7 +225,9 @@ export class Dohyo {
       roughness: 0.85,
     });
 
-    const ringGroup = new THREE.Group();
+    const instanced = new THREE.InstancedMesh(tawaraGeo, tawaraMat, numTawaras);
+    instanced.castShadow = true;
+    const dummy = new THREE.Object3D();
     for (let i = 0; i < numTawaras; i++) {
       const angle = (i / numTawaras) * Math.PI * 2;
 
@@ -235,14 +237,13 @@ export class Dohyo {
       const px = Math.cos(angle) * r;
       const pz = Math.sin(angle) * r;
 
-      const mesh = new THREE.Mesh(tawaraGeo, tawaraMat);
-      mesh.position.set(px, 0.05, pz);
-      mesh.rotation.y = -angle + Math.PI / 2;
-      mesh.rotation.z = Math.PI / 2;
-      mesh.castShadow = true;
-      ringGroup.add(mesh);
+      dummy.position.set(px, 0.05, pz);
+      dummy.rotation.set(0, -angle + Math.PI / 2, Math.PI / 2);
+      dummy.updateMatrix();
+      instanced.setMatrixAt(i, dummy.matrix);
     }
-    this.mesh.add(ringGroup);
+    instanced.instanceMatrix.needsUpdate = true;
+    this.mesh.add(instanced);
   }
 
     // 柱や梁は視界を遮るため撤廃（現代の大相撲・吊り屋根同様、視界を完全クリアに）

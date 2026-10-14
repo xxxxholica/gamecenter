@@ -1,20 +1,19 @@
 import * as THREE from 'three';
 import type { CarBase } from '../models/CarBase';
-import { TrailJModel } from '../models/TrailJModel';
-import { CrossJModel } from '../models/CrossJModel';
-import { CombatSedanModel } from '../models/CombatSedanModel';
-import { MissileTruckModel } from '../models/MissileTruckModel';
+import { DragonCarModel } from '../models/DragonCarModel';
 import type { CarSpec, CarState } from '../../../../shared/netProtocol';
 import { RemoteTrack } from './remoteTrack';
 
 /** この時間以上更新が来ない車は「通信途絶」とみなして当たり判定から外す。 */
 export const STALE_MS = 1500;
 
+/** ドラゴン・カーの翼・尻尾の振幅を速度で変えるときの基準速度(m/s)。 */
+const DRAGON_REF_SPEED = 42;
+
 export function createCarModel(type: string): CarBase {
-  if (type === 'cross_j') return new CrossJModel();
-  if (type === 'combat_sedan') return new CombatSedanModel();
-  if (type === 'missile_truck_j' || type === 'truck_j') return new MissileTruckModel();
-  return new TrailJModel();
+  if (type === 'dragon_b') return new DragonCarModel('b');
+  if (type === 'dragon_c') return new DragonCarModel('c');
+  return new DragonCarModel('a');
 }
 
 /** 他のプレイヤーの車。受信した姿勢を補間して表示する(物理は持たない)。 */
@@ -35,10 +34,6 @@ export class RemoteCar {
   public steer = 0;
   public drift = 0;
   public boost = 0;
-  /** マシンの種類(CarSpec.type)。武装車両の射程の判定に使う。 */
-  public readonly carType: string;
-  /** 撃破されて復帰するまでの時刻(performance.now)。この間は非表示・攻撃対象外。 */
-  private deadUntil = 0;
 
   private readonly track = new RemoteTrack();
 
@@ -46,7 +41,6 @@ export class RemoteCar {
     this.id = id;
     this.name = name;
     this.color = spec.body;
-    this.carType = spec.type;
     this.car = createCarModel(spec.type);
     this.car.setBodyColor(spec.body);
     this.car.setRoofColor(spec.roof);
@@ -59,16 +53,6 @@ export class RemoteCar {
 
   public push(s: CarState, now = performance.now(), sentAt?: number): void {
     this.track.push(s, now, sentAt);
-  }
-
-  public get dead(): boolean {
-    return performance.now() < this.deadUntil;
-  }
-
-  /** 相手の撃破を受けた: 復帰するまで車体を隠す(破片と爆発は CombatSystem が出す)。 */
-  public markDead(ms: number): void {
-    this.deadUntil = performance.now() + ms;
-    this.car.group.visible = false;
   }
 
   public get stale(): boolean {
@@ -88,7 +72,6 @@ export class RemoteCar {
     this.valid = true;
 
     const g = this.car.group;
-    g.visible = !this.dead;
     g.position.copy(this.pos);
     g.rotation.set(p.pitch, this.rotY, 0, 'YXZ');      // 路面の勾配
     this.car.bodyPivot?.rotation.set(0, 0, p.roll);     // ボディのロール
@@ -100,6 +83,10 @@ export class RemoteCar {
         w.rotation.x = 0;
         w.rotation.y = (base[i] ?? 0) + (i < 2 ? steer : 0);
       });
+    }
+    // ドラゴン・カーの角・翼・尻尾(FK)
+    if (this.car instanceof DragonCarModel) {
+      this.car.updateDragonParts(now / 1000, Math.abs(p.speed) / DRAGON_REF_SPEED);
     }
   }
 

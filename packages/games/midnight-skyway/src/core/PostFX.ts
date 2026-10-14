@@ -199,7 +199,7 @@ const WetShader = {
 
       // 濡れると地面が暗くなり、その上に反射が乗る
       vec3 base = col * mix(1.0, 0.55, wet);
-      gl_FragColor = vec4(base + refl * fres * wet * 1.4, 1.0);
+      gl_FragColor = vec4(base + refl * fres * wet * 1.15, 1.0);
     }
   `,
 };
@@ -248,6 +248,8 @@ const AnamorphicShader = {
     uStrength: { value: 0 },
     uThreshold: { value: 1.1 },
     uRes: { value: new THREE.Vector2(1, 1) },
+    /** 筋の色味。ブーストでは車の主色に寄る */
+    uTint: { value: new THREE.Color(0.45, 0.72, 1.0) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -260,6 +262,7 @@ const AnamorphicShader = {
     uniform sampler2D tDiffuse;
     uniform float uStrength, uThreshold;
     uniform vec2 uRes;
+    uniform vec3 uTint;
     varying vec2 vUv;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
@@ -272,7 +275,7 @@ const AnamorphicShader = {
           vec3 s = texture2D(tDiffuse, vUv + vec2(float(i) * px, 0.0)).rgb;
           acc += max(s - uThreshold, 0.0) * w;
         }
-        c += acc * vec3(0.45, 0.72, 1.0) * uStrength * 0.045;
+        c += acc * uTint * uStrength * 0.045;
       }
       gl_FragColor = vec4(c, 1.0);
     }
@@ -298,6 +301,8 @@ const GradeShader = {
     uLens: { value: 0 },
     /** x=ゴール前の盛り上がり y=ドリフト */
     uMood: { value: new THREE.Vector2() },
+    /** ブースト中の速度線の色(車の主色) */
+    uBoostCol: { value: new THREE.Color(0.45, 0.8, 1.0) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -309,7 +314,7 @@ const GradeShader = {
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform float uContrast, uSaturation, uVignette, uGrain, uTime;
-    uniform vec3 uShadowTint, uHighlightTint;
+    uniform vec3 uShadowTint, uHighlightTint, uBoostCol;
     uniform float uAspect, uBoost, uLightning, uLens;
     uniform vec2 uMood;
     uniform vec4 uSpeedFx;
@@ -382,7 +387,7 @@ const GradeShader = {
         float streak = smoothstep(0.0, 0.03, f) * (1.0 - smoothstep(0.06, 0.3, f));
         float line = (1.0 - smoothstep(thin * 0.5, thin, lane)) * streak * step(0.35, h2 + h1 * 0.5);
         float mask = smoothstep(0.38, 0.85, rad);
-        vec3 lineCol = mix(vec3(0.85, 0.92, 1.0), vec3(0.45, 0.8, 1.0), uBoost);
+        vec3 lineCol = mix(vec3(0.85, 0.92, 1.0), uBoostCol, uBoost);
         c += lineCol * line * mask * uSpeedFx.z * 0.8;
       }
       // ゴール前: 縁が暖色に脈打つ / ドリフト中: 縁にほのかな寒色
@@ -404,6 +409,8 @@ export class PostFX {
   public enabled = true;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
+  private readonly flareBase = new THREE.Color(0.45, 0.72, 1.0);
+  private readonly boostFlare = new THREE.Color(0.45, 0.72, 1.0);
   private readonly wet: WetReflectionPass;
   private readonly anamorphic: ShaderPass;
   private motion = 0;
@@ -480,6 +487,12 @@ export class PostFX {
    * 速度に連動した演出を設定する(毎フレーム)。
    * speed: 速度(0〜1) / boost: ブーストの強さ(0〜1) / flash: 閃光(0〜1) / shake: 画面の揺れ(0〜1) / scale: 演出の強さ(1が標準)
    */
+  /** ブースト中の画面の色(速度線・フレア)を、車の主色に合わせる */
+  public setBoostColors(line: THREE.Color, flare: THREE.Color): void {
+    this.grade.uniforms.uBoostCol.value.copy(line);
+    this.boostFlare.copy(flare);
+  }
+
   public setSpeedState(speed: number, boost: number, flash: number, shake: number, scale = 1, finale = 0, drift = 0): void {
     const fastLevel = Math.max(0, (speed - 0.35) / 0.65);          // 最高速に近づくほど強い
     const u = this.grade.uniforms;
@@ -494,6 +507,7 @@ export class PostFX {
     this.anamorphic.uniforms.uStrength.value = flare;
     this.anamorphic.enabled = flare > 0.02;
     this.anamorphic.uniforms.uThreshold.value = this.night ? 1.0 : 1.6;
+    this.anamorphic.uniforms.uTint.value.copy(this.flareBase).lerp(this.boostFlare, Math.min(1, boost * 1.5));
     (u.uMood.value as THREE.Vector2).set(finale * scale, drift * scale);
     const p = this.preset;
     this.bloom.strength = p.bloomStrength + boost * 0.45 + flash * 0.4 + finale * 0.12 + this.rain * 0.12;

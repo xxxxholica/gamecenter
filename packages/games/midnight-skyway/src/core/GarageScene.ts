@@ -6,6 +6,7 @@ import { Lightning } from './Lightning';
 import { PostFX } from './PostFX';
 import { TireSmokeSystem } from './TireSmokeSystem';
 import { carByGroup } from '../models/CarBase';
+import { DragonCarModel } from '../models/DragonCarModel';
 
 /** 背景が後ろへ流れる速さ(m/s)。約110km/h */
 const CRUISE_SPEED = 30;
@@ -35,6 +36,8 @@ export class GarageScene {
   private readonly postFx: PostFX;
   private readonly spray = new TireSmokeSystem();
   private wheelAngle = 0;
+  /** ドラゴン・カーのFKアニメ用の経過秒 */
+  private dragonTime = 0;
   private lastTime = 0;
   /** ロード中のメーターの値(0〜1)。大きいほど街が速く流れ、画面が揺れる */
   private loadLevel = 0;
@@ -44,6 +47,7 @@ export class GarageScene {
   private launchResolve: (() => void) | null = null;
   private readonly launchFromPos = new THREE.Vector3();
   private readonly launchFromTarget = new THREE.Vector3();
+  private launchWasRotating = true;
   private static readonly LAUNCH_POS = new THREE.Vector3(0, 1.0, 4.6);
   private static readonly LAUNCH_TARGET = new THREE.Vector3(0, 0.85, 0);
   /** 車の先端がカメラに触れるまでの秒数(この時に resolve する) */
@@ -70,6 +74,7 @@ export class GarageScene {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
+    this.renderer.debug.checkShaderErrors = false;
     container.appendChild(this.renderer.domElement);
 
     // 4. Controls setup
@@ -225,6 +230,7 @@ export class GarageScene {
    */
   public launch(): Promise<void> {
     if (!this.active) return Promise.resolve();
+    this.launchWasRotating = this.isRotating;
     this.isRotating = false;
     this.controls.enabled = false;
     this.launchFromPos.copy(this.camera.position);
@@ -233,8 +239,17 @@ export class GarageScene {
     return new Promise((resolve) => { this.launchResolve = resolve; });
   }
 
-  /** 発進演出を終え、台座の位置・カメラの操作を元に戻す。 */
+  /**
+   * 発進演出を終え、台座の位置・カメラ・自動回転を発進前に戻す。
+   * 戻さないと、走行からタイトル以外のメニュー(コース・マシン選択など)へ戻ったとき、正面を向いたまま回転しない。
+   */
   public endLaunch(): void {
+    if (this.launchT >= 0) {
+      this.camera.position.copy(this.launchFromPos);
+      this.controls.target.copy(this.launchFromTarget);
+      this.camera.lookAt(this.controls.target);
+      this.isRotating = this.launchWasRotating;
+    }
     this.launchT = -1;
     this.launchResolve = null;
     this.turntableGroup.position.set(0, 0, 0);
@@ -261,11 +276,19 @@ export class GarageScene {
   public active: boolean = false;
   private animationFrameId: number | null = null;
 
+  /** 初回起動時(最初の requestAnimationFrame の前)に、ガレージと後処理のシェーダー・テクスチャを事前コンパイルする。 */
+  public warmup(): void {
+    if (this.postFx.enabled) this.postFx.render();
+    else this.renderer.render(this.scene, this.camera);
+    this.renderer.getContext().finish();
+  }
+
   public start(): void {
     if (this.active) return;
     this.active = true;
     this.controls.enabled = true;
-    this.animate();
+    this.lastTime = performance.now() / 1000;
+    this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
   }
 
   public stop(): void {
@@ -277,8 +300,12 @@ export class GarageScene {
     }
   }
 
-  private animateCar(car: NonNullable<ReturnType<typeof carByGroup.get>>, dt: number): void {
+  private animateCar(car: NonNullable<ReturnType<typeof carByGroup.get>>, dt: number, rush: number): void {
     car.setWet(true);
+    if (car instanceof DragonCarModel) {
+      this.dragonTime += dt;
+      car.updateDragonParts(this.dragonTime, Math.min(1, 0.4 + rush * 0.6 + this.loadLevel * 0.4));   // 巡航中の振れを基準に、発進・ロード中ほど大きく振れる
+    }
     this.wheelAngle = (this.wheelAngle + WHEEL_SPIN * dt) % (Math.PI * 2);
     const ground = this.ground, center = this.center, v = this.wheelPos;
     car.group.getWorldPosition(center);
@@ -318,7 +345,7 @@ export class GarageScene {
     // 台座の車: タイヤを回し、タイヤから水を跳ね上げる
     for (const child of this.turntableGroup.children) {
       const car = carByGroup.get(child);
-      if (car) { this.animateCar(car, dt); break; }
+      if (car) { this.animateCar(car, dt, rush); break; }
     }
     this.spray.update(dt, this.camera);
 

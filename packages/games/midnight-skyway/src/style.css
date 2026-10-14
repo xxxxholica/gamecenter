@@ -249,10 +249,6 @@ html, body {
   box-shadow: 0 0 6px #ffcc00;
 }
 
-.g-blocks span.on.red {
-  background: #ff3344;
-  box-shadow: 0 0 7px #ff3344;
-}
 
 .arcade-color-cycle-btn {
   width: 100%;
@@ -415,6 +411,7 @@ html, body {
 
 #drive-hud-container {
   --hud-accent: #8ec9dc;
+  --hud-accent-rgb: 142, 201, 220;   /* 走行中は、選んだ車の色に JS(DriveHUD.setAccent)が上書きする */
   --hud-warn: #e2b05e;
   --hud-danger: #d8605f;
   --hud-mono: ui-monospace, Menlo, Consolas, monospace;
@@ -430,7 +427,7 @@ html, body {
 
 /* Top Left: Minimap — 四隅のかぎ括弧(速いほど明るい)と、淡い背景 */
 .hud-minimap-arcade {
-  --b: rgba(142, 201, 220, calc(0.4 + var(--fx-speed, 0) * 0.55));
+  --b: rgba(var(--hud-accent-rgb, 142, 201, 220), calc(0.4 + var(--fx-speed, 0) * 0.55));
   position: absolute;
   top: 18px;
   left: 20px;
@@ -490,7 +487,7 @@ html, body {
   width: 34px;
   height: 34px;
   color: var(--hud-accent);
-  filter: drop-shadow(0 0 calc(4px + var(--fx-speed, 0) * 8px) rgba(142, 201, 220, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+  filter: drop-shadow(0 0 calc(4px + var(--fx-speed, 0) * 8px) rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
 
 .hud-time-main {
@@ -501,7 +498,7 @@ html, body {
   color: #ffffff;
   letter-spacing: 3px;
   text-align: left;
-  text-shadow: 0 0 calc(10px + var(--fx-speed, 0) * 16px) rgba(142, 201, 220, 0.8), 0 3px 10px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 0 calc(10px + var(--fx-speed, 0) * 16px) rgba(var(--hud-accent-rgb, 142, 201, 220), 0.8), 0 3px 10px rgba(0, 0, 0, 0.85);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -564,7 +561,7 @@ html, body {
   font-family: var(--hud-mono);
   color: var(--hud-accent);
   letter-spacing: -3px;
-  text-shadow: 0 0 16px rgba(142, 201, 220, 0.7), 0 2px 8px rgba(0, 0, 0, 0.9);
+  text-shadow: 0 0 16px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.7), 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 .sg-unit {
   margin-top: 4px;
@@ -577,7 +574,7 @@ html, body {
 .hud-band.redline .sg-seg.lv2.on { animation: hudRedline 0.18s steps(2) infinite; }
 @keyframes hudRedline { 50% { filter: brightness(1.7) saturate(1.3); } }
 /* ブースト中: 数字が白く光る */
-.hud-band.boosting .speedo-num { color: #fff !important; text-shadow: 0 0 22px var(--hud-accent), 0 0 46px rgba(142, 201, 220, 0.85), 0 2px 8px rgba(0, 0, 0, 0.9) !important; }
+.hud-band.boosting .speedo-num { color: #fff !important; text-shadow: 0 0 22px var(--hud-accent), 0 0 46px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85), 0 2px 8px rgba(0, 0, 0, 0.9) !important; }
 
 /* Center Countdown */
 .hud-countdown {
@@ -625,7 +622,7 @@ html, body {
 
 .hud-arcade-modal-box {
   background: #0d121c;
-  border: 2px solid #8ec9dc;
+  border: 2px solid var(--hud-accent, #8ec9dc);
   border-radius: 4px;
   padding: 28px 40px;
   text-align: center;
@@ -634,14 +631,14 @@ html, body {
   overflow-y: auto;
   box-sizing: border-box;
   transform: skewX(-4deg);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(142, 201, 220, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 30px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.35);
 }
 
 .arcade-modal-title {
   font-size: 28px;
   font-weight: 900;
   letter-spacing: 3px;
-  color: #8ec9dc;
+  color: var(--hud-accent, #8ec9dc);
   margin-bottom: 12px;
 }
 
@@ -710,19 +707,19 @@ html, body {
 
 .arcade-modal-buttons button:hover, .hud-arcade-result-buttons button:hover {
   background: #25354f;
-  border-color: #8ec9dc;
+  border-color: var(--hud-accent, #8ec9dc);
 }
 
 .arcade-btn-primary {
-  background: linear-gradient(135deg, #8ec9dc 0%, #0088cc 100%) !important;
+  background: linear-gradient(135deg, var(--hud-accent, #8ec9dc) 0%, #0088cc 100%) !important;
   color: #05070c !important;
   border: none !important;
-  box-shadow: 0 0 15px rgba(142, 201, 220, 0.5);
+  box-shadow: 0 0 15px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.5);
 }
 
 .arcade-btn-primary:hover {
   background: linear-gradient(135deg, #33f5ff 0%, #0099ee 100%) !important;
-  box-shadow: 0 0 25px rgba(142, 201, 220, 0.8);
+  box-shadow: 0 0 25px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.8);
 }
 
 /* =========================================================
@@ -807,7 +804,7 @@ html, body {
 .ld-track, .ld-fill {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, #8ec9dc 0%, #8ec9dc 38%, #e2b05e 58%, #ff6a3d 74%, #d8605f 88%);
+  background: linear-gradient(90deg, var(--hud-accent, #8ec9dc) 0%, var(--hud-accent, #8ec9dc) 38%, #e2b05e 58%, #ff6a3d 74%, #d8605f 88%);
   -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 19px);
   mask-image: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 19px);
 }
@@ -850,8 +847,8 @@ html, body {
 /* アケコンで選択中のメニューボタン(hover と同じ見た目) */
 .arcade-modal-buttons button.pad-focus, .hud-arcade-result-buttons button.pad-focus {
   background: #25354f;
-  border-color: #8ec9dc;
-  box-shadow: 0 0 0 2px #8ec9dc, 0 0 18px rgba(142, 201, 220, 0.7);
+  border-color: var(--hud-accent, #8ec9dc);
+  box-shadow: 0 0 0 2px var(--hud-accent, #8ec9dc), 0 0 18px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.7);
 }
 
 /* ---------- Competitive race widgets (time limit, ghost gap, drift / boost) ---------- */
@@ -872,10 +869,10 @@ html, body {
   gap: 10px;
   padding: 4px 18px;
   background: rgba(8, 12, 20, 0.78);
-  border: 1px solid rgba(142, 201, 220, 0.5);
+  border: 1px solid rgba(var(--hud-accent-rgb, 142, 201, 220), 0.5);
   transform: skewX(-10deg);
 }
-.hud-remaining-num { font-size: 34px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(142, 201, 220, 0.7); }
+.hud-remaining-num { font-size: 34px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.7); }
 .hud-remaining.low { border-color: #ff0044; }
 .hud-remaining.low .hud-remaining-num { color: #ff4466; animation: hudBlink 0.5s steps(2) infinite; }
 @keyframes hudBlink { 50% { opacity: 0.35; } }
@@ -901,7 +898,7 @@ html, body {
 .hud-drift.boosting .sg-boost-fill { stroke: #fff; filter: drop-shadow(0 0 6px var(--hud-accent)); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
 .hud-drift-line { min-height: 24px; font: 900 18px var(--hud-sans); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
 .hud-drift-tag { font: 900 13px var(--hud-sans); letter-spacing: 0.3em; color: var(--hud-danger); text-shadow: 0 0 10px rgba(216, 96, 95, 0.6); }
-.hud-drift-tag.ready { color: var(--hud-accent); text-shadow: 0 0 12px var(--hud-accent), 0 0 24px rgba(142, 201, 220, 0.85); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
+.hud-drift-tag.ready { color: var(--hud-accent); text-shadow: 0 0 12px var(--hud-accent), 0 0 24px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
 .hud-drift-chain { color: var(--hud-warn); font-size: 20px; font-weight: 900; font-style: italic; text-shadow: 0 0 10px rgba(226, 176, 94, 0.7); }
 @keyframes hudBoostPulse { from { filter: brightness(1); } to { filter: brightness(1.7); } }
 
@@ -923,9 +920,9 @@ html, body {
   padding: clamp(10px, 2.5vh, 22px) clamp(14px, 3vw, 30px);
   background: linear-gradient(135deg, rgba(6, 12, 24, 0.66) 0%, rgba(6, 12, 24, 0.36) 100%);
   backdrop-filter: blur(4px);
-  border: 1px solid rgba(142, 201, 220, 0.55);
-  border-left: 5px solid #8ec9dc;
-  box-shadow: 0 0 26px rgba(142, 201, 220, 0.28);
+  border: 1px solid rgba(var(--hud-accent-rgb, 142, 201, 220), 0.55);
+  border-left: 5px solid var(--hud-accent, #8ec9dc);
+  box-shadow: 0 0 26px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.28);
   animation: resultSlideIn 0.5s ease-out;
 }
 @keyframes resultSlideIn {
@@ -1017,12 +1014,12 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* Machine select: vector outline art box */
-/* Machine select: vector outline art box */
+/* Machine select: car illustration (rendered from the GLB by scripts/render_car_cards.mjs) */
 .car-outline {
   display: block;
   width: 100%;
   height: 5.6em;
+  object-fit: contain;
   margin: 0.25em 0 0.45em 0;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1079,10 +1076,6 @@ html, body {
   background: #ffcc00;
   box-shadow: 0 0 6px #ffcc00;
 }
-.car-select-bottom .g-blocks span.on.red {
-  background: #ff3344;
-  box-shadow: 0 0 7px #ff3344;
-}
 
 /* Machine select: Tactical specs & characteristics box */
 .car-spec-arcade {
@@ -1096,17 +1089,14 @@ html, body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
   transition: all 0.2s ease-out;
 }
-.car-card-arcade[data-car="trail_j"] .car-spec-arcade {
-  border-left-color: #00f0ff;
-}
-.car-card-arcade[data-car="cross_j"] .car-spec-arcade {
-  border-left-color: #ffcc00;
-}
-.car-card-arcade[data-car="combat_sedan"] .car-spec-arcade {
+.car-card-arcade[data-car="dragon_a"] .car-spec-arcade {
   border-left-color: #ff3355;
 }
-.car-card-arcade[data-car="missile_truck_j"] .car-spec-arcade {
-  border-left-color: #ff0055;
+.car-card-arcade[data-car="dragon_b"] .car-spec-arcade {
+  border-left-color: #00f0ff;
+}
+.car-card-arcade[data-car="dragon_c"] .car-spec-arcade {
+  border-left-color: #ffcc00;
 }
 
 .spec-header-row {
@@ -1126,14 +1116,13 @@ html, body {
   border-radius: 2px;
   text-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
 }
-.car-card-arcade[data-car="cross_j"] .spec-badge {
+.car-card-arcade[data-car="dragon_c"] .spec-badge {
   color: #ffcc00;
   background: rgba(255, 204, 0, 0.12);
   border-color: rgba(255, 204, 0, 0.35);
   text-shadow: 0 0 6px rgba(255, 204, 0, 0.5);
 }
-.car-card-arcade[data-car="combat_sedan"] .spec-badge,
-.car-card-arcade[data-car="missile_truck_j"] .spec-badge {
+.car-card-arcade[data-car="dragon_a"] .spec-badge {
   color: #ff3355;
   background: rgba(255, 51, 85, 0.14);
   border-color: rgba(255, 51, 85, 0.4);
@@ -1157,43 +1146,6 @@ html, body {
 /* 特性の文は2行まで。1行の車も、2行ぶんの高さにそろえて、カードの下端をそろえる */
 .car-spec-arcade .spec-main-digital { font-size: 1.04em; min-height: 2.6em; }
 
-/* オンライン対戦: 武器を積んだ車の特性はグレーにして、武器は使えないと出す */
-.spec-disabled { display: none; font-size: 1.04em; font-weight: 900; line-height: 1.3; min-height: 2.6em; margin: 2px 0 1px 0; color: #aeb6c4; }
-.car-select-online .car-card-arcade.armed .car-spec-arcade { border-left-color: #6b7280; filter: grayscale(1); }
-.car-select-online .car-card-arcade.armed .spec-badge { color: #9aa3b2; background: rgba(154, 163, 178, 0.12); border-color: rgba(154, 163, 178, 0.35); text-shadow: none; }
-.car-select-online .car-card-arcade.armed .spec-main-digital { display: none; }
-.car-select-online .car-card-arcade.armed .spec-disabled { display: block; }
-.car-select-online .car-card-arcade.armed .gauge-row:last-child { opacity: 0.35; filter: grayscale(1); }
-
-/* Neon SVG vector vehicle styling */
-.car-outline .car-wire { fill: none; stroke: #00f0ff; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
-.car-outline .car-wire-glow { fill: none; stroke: rgba(0, 240, 255, 0.42); stroke-width: 6; stroke-linejoin: round; filter: blur(1.5px); }
-.car-outline .car-wire-sub { fill: none; stroke: #58a6ff; stroke-width: 1.6; stroke-linejoin: round; }
-.car-outline .car-wire-dim { fill: none; stroke: rgba(148, 163, 184, 0.4); stroke-width: 1.2; }
-.car-outline .car-wire-grid { stroke: rgba(255, 255, 255, 0.1); stroke-dasharray: 2 4; stroke-width: 1; }
-.car-outline .car-reticle { fill: none; stroke: rgba(0, 240, 255, 0.6); stroke-width: 1.2; }
-.car-outline .car-wheel-rim { fill: rgba(10, 16, 26, 0.85); stroke: #00f0ff; stroke-width: 1.8; }
-.car-outline .car-wheel-hub { fill: #00f0ff; }
-.car-outline .car-wheel-spoke { stroke: rgba(0, 240, 255, 0.5); stroke-width: 1.2; }
-.car-outline .car-accent-gold { fill: #ffcc00; filter: drop-shadow(0 0 3px #ffcc00); }
-.car-outline .car-accent-headlight { fill: #00f0ff; filter: drop-shadow(0 0 4px #00f0ff); }
-.car-outline .car-accent-taillight { fill: #ff3344; filter: drop-shadow(0 0 4px #ff3344); }
-.car-outline .car-accent-red { fill: #ff3344; filter: drop-shadow(0 0 3px #ff3344); }
-.car-outline .car-accent-red-lamp { fill: #ff3344; filter: drop-shadow(0 0 4px #ff3344); }
-.car-outline .car-laser-line { stroke: #ff3344; stroke-width: 1; stroke-dasharray: 2 2; }
-.car-outline .car-ram-bumper { fill: rgba(255, 50, 70, 0.2); stroke: #ff4466; stroke-width: 1.8; }
-.car-outline .car-weapon-body { fill: rgba(20, 30, 48, 0.9); stroke: #00f0ff; stroke-width: 1.5; }
-.car-outline .car-weapon-barrel { stroke: #00f0ff; stroke-width: 1.8; stroke-linecap: round; }
-.car-outline .car-weapon-muzzle { fill: #00f0ff; }
-.car-outline .car-armor-bolt { fill: #94a3b8; }
-.car-outline .car-pipe-line { stroke: #ff9944; stroke-width: 2.2; stroke-linecap: round; }
-.car-outline .car-pipe-rim { fill: #ff5500; stroke: #ffaa00; stroke-width: 1; }
-.car-outline .car-flame-outer { fill: #ff4400; filter: drop-shadow(0 0 4px rgba(255, 68, 0, 0.8)); opacity: 0.9; }
-.car-outline .car-flame-inner { fill: #ffdd44; filter: drop-shadow(0 0 3px #ffee66); }
-.car-outline .car-pod-box { fill: rgba(20, 28, 44, 0.95); stroke: #ff4466; stroke-width: 1.6; }
-.car-outline .car-pod-inner { fill: rgba(10, 16, 26, 0.9); stroke: rgba(255, 68, 102, 0.4); stroke-width: 1; }
-.car-outline .car-rocket-cell { fill: #111a28; stroke: #ff3344; stroke-width: 1; }
-.car-outline .car-warhead-tip { fill: #ffaa00; filter: drop-shadow(0 0 2px #ffaa00); }
 #screen-car-select .arcade-action-bar { max-width: 96vw; width: 100%; gap: 1.2em; margin-bottom: 0; justify-content: center; }
 #screen-car-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
 #screen-car-select .arcade-btn-go { padding: 0.8em 3em; font-size: 1.4em; }
@@ -1335,7 +1287,7 @@ html, body {
 #hud-pause-modal .hud-arcade-modal-box { display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 26px);
   min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; transform: none; overflow: visible; }
 #hud-pause-modal .arcade-modal-title { margin: 0; font: 900 clamp(28px, 7vh, 60px)/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.08em; color: #fff; text-shadow: none; }
-#hud-pause-modal .arcade-modal-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: #00f0ff; transform: skewX(-20deg); }
+#hud-pause-modal .arcade-modal-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: var(--hud-accent, #00f0ff); transform: skewX(-20deg); }
 
 /* ---------- HUD: 速度・ブースト・スリップストリームに合わせた画面の縁の光 ---------- */
 .hud-edge {
@@ -1346,7 +1298,7 @@ html, body {
   mix-blend-mode: screen;
   opacity: 0;
   background:
-    radial-gradient(ellipse at center, transparent 58%, rgba(0, 240, 255, calc(var(--fx-speed, 0) * 0.16 + var(--fx-boost, 0) * 0.42)) 100%),
+    radial-gradient(ellipse at center, transparent 58%, rgba(var(--hud-accent-rgb, 0, 240, 255), calc(var(--fx-speed, 0) * 0.16 + var(--fx-boost, 0) * 0.42)) 100%),
     radial-gradient(ellipse at center, transparent 62%, rgba(255, 255, 255, calc(var(--fx-slip, 0) * 0.22)) 100%);
 }
 .hud-edge.on { opacity: 1; }
@@ -1370,7 +1322,7 @@ html, body {
 .sec-name { font: 900 11px var(--hud-sans); letter-spacing: 0.2em; flex: none; width: 22px; color: #8ba0c0; }
 .sec-time { flex: 1; min-width: 0; line-height: 1; font-size: 20px; font-weight: 900; font-style: italic; font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
 .sec-delta { flex: none; min-width: 62px; line-height: 1; text-align: right; font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
-.sec-row.active { border-left-color: var(--hud-accent); background: rgba(0, 240, 255, 0.12); color: #fff; }
+.sec-row.active { border-left-color: var(--hud-accent); background: rgba(var(--hud-accent-rgb, 0, 240, 255), 0.14); color: #fff; }
 .sec-row.done { color: #fff; border-left-color: #8ba0c0; }
 .sec-row.done.fast { border-left-color: var(--hud-ok, #00ff88); }
 .sec-row.done.fast .sec-delta { color: #00ff88; }
@@ -1416,6 +1368,8 @@ body .msel.msel-arcade .msel-card .art {
   height: calc(150 * var(--u));
   margin: calc(8 * var(--u)) 0 calc(14 * var(--u));
 }
+/* マシンの絵は、翼・尻尾まで入れて横長に描いてあるので、コースの絵より少し高くする */
+body #screen-car-select .car-outline { height: calc(190 * var(--u)); }
 /* タイトル / サブ: 折り返してよい(省略しない) */
 body :is(#screen-car-select, #screen-map-select) :is(.car-card-title-arcade, .map-card-title-arcade),
 body .msel.msel-arcade .msel-card .t {
@@ -1483,7 +1437,6 @@ body #screen-map-select .meta-tag.highlight { display: none; }
 body #screen-car-select .g-lbl { font-size: 0.85em; width: 3.6em; }
 body #screen-car-select .g-blocks span { height: 0.62em; }
 body #screen-car-select .spec-main-digital { font-size: 1.1em; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip; letter-spacing: 0.02em; }
-body #screen-car-select .spec-disabled { font-size: 1em; white-space: normal; }
 body #screen-map-select .rec-label { font-size: 0.85em; }
 body #screen-map-select .rec-time-digital { font-size: 1.9em; line-height: 1.2; }
 body #screen-map-select .meta-tag { font-size: 0.95em; padding: 0.25em 0.7em; white-space: nowrap; }
@@ -1543,3 +1496,7 @@ body #screen-map-select .btn-current .time-chip, body #screen-car-select .btn-cu
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
 }
 .agc-label, .ats-tagline { font-weight: 800 !important; }
+
+/* ---------- HUD: ポーズ・結果の主ボタンも、選んだ車の色にする ---------- */
+#drive-hud-container .arcade-btn-primary { background: linear-gradient(135deg, var(--hud-accent) 0%, color-mix(in srgb, var(--hud-accent) 50%, #0070b0) 100%) !important; }
+#drive-hud-container .arcade-btn-primary:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--hud-accent) 65%, #fff) 0%, var(--hud-accent) 100%) !important; }

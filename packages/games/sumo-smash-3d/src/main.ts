@@ -186,14 +186,15 @@ class SumoGame {
     this.computeCameraVectors();
 
     // 3. WebGL レンダラー（明るく豊かな発色・ACESトーンマッピング）
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 1.5, powerPreference: 'high-performance' });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.35;
+    this.renderer.debug.checkShaderErrors = false;
     document.body.appendChild(this.renderer.domElement);
 
     // 4. 照明（相撲場の吊り屋根照明）
@@ -290,6 +291,11 @@ class SumoGame {
       },
     );
 
+    // 初回フレームのシェーダコンパイル・テクスチャ転送を requestAnimationFrame 開始前に完了させる
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.getContext().finish();
+    this.particleManager.update(0.016);
+
     // 初期状態はタイトル画面
     const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
     if (isPreview) {
@@ -305,13 +311,16 @@ class SumoGame {
   }
 
   private setupLighting() {
-    // 1. 環境光（全体を明るく温かみのある光で底上げ）
-    const ambientLight = new THREE.AmbientLight(0xfff5e6, 0.95);
+    // 1. 環境光＋半球光（全方向からの柔らかなアリーナ照明を1灯の半球光に集約してフラグメント負荷を軽減）
+    const ambientLight = new THREE.AmbientLight(0xfff5e6, 0.75);
     this.scene.add(ambientLight);
+    const hemiLight = new THREE.HemisphereLight(0xfff8ee, 0xd8c3a5, 1.35);
+    hemiLight.position.set(0, 30, 0);
+    this.scene.add(hemiLight);
 
     // 2. 吊り屋根メインスポットライト/トップライト（土俵全体を力強く照らす）
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.8);
-    mainLight.position.set(0, 28, 4);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    mainLight.position.set(0, 28, 6);
     mainLight.castShadow = true;
     mainLight.shadow.mapSize.width = 2048;
     mainLight.shadow.mapSize.height = 2048;
@@ -324,24 +333,8 @@ class SumoGame {
     mainLight.shadow.bias = -0.0008;
     this.scene.add(mainLight);
 
-    // 3. 全方位アリーナフィルライト（立体感とクッキリした筋肉・土俵の陰影）
-    // 正面ライト（手前から力士正面を照らす）
-    const frontFill = new THREE.DirectionalLight(0xfff8ee, 0.65);
-    frontFill.position.set(0, 18, 22);
-    this.scene.add(frontFill);
-
-    // 東側ライト（東方力士・土俵東側を照らす）
-    const eastFill = new THREE.DirectionalLight(0xffeedd, 0.7);
-    eastFill.position.set(20, 15, 0);
-    this.scene.add(eastFill);
-
-    // 西側ライト（西方力士・土俵西側を照らす）
-    const westFill = new THREE.DirectionalLight(0xffeedd, 0.7);
-    westFill.position.set(-20, 15, 0);
-    this.scene.add(westFill);
-
-    // 背後リムライト（奥から輪郭を美しく縁取る）
-    const rimLight = new THREE.DirectionalLight(0xaad4ff, 0.85);
+    // 3. 背後リムライト（奥から輪郭を美しく縁取る）
+    const rimLight = new THREE.DirectionalLight(0xaad4ff, 0.9);
     rimLight.position.set(0, 16, -22);
     this.scene.add(rimLight);
   }

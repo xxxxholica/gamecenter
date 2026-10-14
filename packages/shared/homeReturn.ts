@@ -5,6 +5,7 @@ import { mountFullscreenKey } from './fullscreenKey';
 import { initGameMobileBlock } from './mobileBlock';
 import { startStandaloneTracking } from './arcadeAnalytics';
 import { readGamepads } from './gamepadFrame';
+import { installBench } from './arcadeBench';
 
 const SELECT_BUTTON = 8;
 // games/<slug>/ 配下からルートへは2階層上
@@ -49,6 +50,9 @@ function mapSelectToBackspace(): void {
 }
 
 export function installHomeReturn(): void {
+  // ?bench=1 のときだけ、フレーム時間・WebGL・GC の計測を有効にする(通常は何もしない)
+  installBench();
+
   // モバイル端末での直接アクセス時にゲーム画面をグレーアウトし警告を表示
   initGameMobileBlock();
 

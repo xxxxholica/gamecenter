@@ -5,10 +5,11 @@ import * as THREE from 'three';
  * 1つの爆発に見せる。粒子はスプライトを使い回す(爆発のたびにマテリアルを作らない)。
  */
 
-type Kind = 'flash' | 'fire' | 'smoke' | 'spark' | 'debris';
+type Kind = 'flash' | 'fire' | 'smoke' | 'spark' | 'debris' | 'tint';
+type BatchKey = 'smoke' | 'smokeTop' | 'debris' | 'fire' | 'fireTop' | 'glow' | 'glowTop' | 'tint';
 
 interface Fx {
-  sprite: THREE.Sprite;
+  pos: THREE.Vector3;
   kind: Kind;
   vel: THREE.Vector3;
   drag: number; // 1秒あたりの速度の残り割合(小さいほどすぐ減速)
@@ -17,9 +18,23 @@ interface Fx {
   maxLife: number;
   size0: number;
   size1: number;
+  rot: number;
   spin: number;
   alpha: number; // 不透明度の倍率
+  /** 'tint' の粒子だけが使う、開始と終了の色(寿命に沿って変わる) */
+  c0: THREE.Color;
+  c1: THREE.Color;
+  noDepth: boolean;
   active: boolean;
+}
+
+interface Batch {
+  mesh: THREE.Mesh;
+  geo: THREE.InstancedBufferGeometry;
+  posSize: THREE.InstancedBufferAttribute;
+  colorAlpha: THREE.InstancedBufferAttribute;
+  rot: THREE.InstancedBufferAttribute;
+  count: number;
 }
 
 interface Ring {
@@ -45,6 +60,37 @@ const FIRE_COLORS = [
   new THREE.Color(0.03, 0.012, 0.008), // 煤
 ];
 
+const BILLBOARD_VERT = /* glsl */ `
+  attribute vec4 aPosSize;
+  attribute vec4 aColorAlpha;
+  attribute float aRot;
+  varying vec2 vUv;
+  varying vec4 vColorAlpha;
+  void main() {
+    vUv = uv;
+    vColorAlpha = aColorAlpha;
+    float c = cos(aRot);
+    float s = sin(aRot);
+    vec2 aligned = position.xy * aPosSize.w;
+    vec2 rotated = vec2(c * aligned.x - s * aligned.y, s * aligned.x + c * aligned.y);
+    vec4 mvPosition = modelViewMatrix * vec4(aPosSize.xyz, 1.0);
+    mvPosition.xy += rotated;
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const BILLBOARD_FRAG = /* glsl */ `
+  uniform sampler2D uMap;
+  varying vec2 vUv;
+  varying vec4 vColorAlpha;
+  void main() {
+    vec4 texel = texture2D(uMap, vUv);
+    gl_FragColor = vec4(vColorAlpha.rgb * texel.rgb, texel.a * vColorAlpha.a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
 function makeGlowTexture(inner: string, mid: string, outer: string, size = 128): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -58,6 +104,33 @@ function makeGlowTexture(inner: string, mid: string, outer: string, size = 128):
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** 縁だけを少しぼかした、ほぼ均一な円(火花・土煙など、単色の粒用) */
+function makeDiscTexture(size = 64): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.72, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** 色の指定(16進)を、リニア値の Color に直したものを使い回す(粒子ごとに Color を作らない) */
+const colorCache = new Map<number, THREE.Color>();
+function cachedColor(hex: number): THREE.Color {
+  let c = colorCache.get(hex);
+  if (!c) {
+    c = new THREE.Color(hex);
+    colorCache.set(hex, c);
+  }
+  return c;
 }
 
 /** ふんわりした煙の塊。縁をわずかに不揃いにして、丸い円盤に見えないようにする */
@@ -83,12 +156,14 @@ function makeSmokeTexture(size = 128): THREE.CanvasTexture {
 export class ExplosionFx {
   private scene: THREE.Scene;
   private pool: Fx[] = [];
+  private batches: Record<BatchKey, Batch>;
   private rings: Ring[] = [];
   private burns: Burn[] = [];
 
   private texGlow: THREE.CanvasTexture;
   private texFire: THREE.CanvasTexture;
   private texSmoke: THREE.CanvasTexture;
+  private texDisc: THREE.CanvasTexture;
   private ringGeo = new THREE.RingGeometry(0.82, 1, 48);
 
   // 爆発の一瞬だけ周りを照らす光(動的に増減すると描画の準備が走るので、1つを使い回す)
@@ -104,10 +179,61 @@ export class ExplosionFx {
     this.texGlow = makeGlowTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)');
     this.texFire = makeGlowTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0)');
     this.texSmoke = makeSmokeTexture();
+    this.texDisc = makeDiscTexture();
+
+    this.batches = {
+      smoke: this.createBatch(this.texSmoke, THREE.NormalBlending, true, 0),
+      smokeTop: this.createBatch(this.texSmoke, THREE.NormalBlending, false, 10),
+      debris: this.createBatch(this.texGlow, THREE.NormalBlending, true, 0),
+      fire: this.createBatch(this.texFire, THREE.AdditiveBlending, true, 0),
+      fireTop: this.createBatch(this.texFire, THREE.AdditiveBlending, false, 10),
+      glow: this.createBatch(this.texGlow, THREE.AdditiveBlending, true, 0),
+      glowTop: this.createBatch(this.texGlow, THREE.AdditiveBlending, false, 10),
+      tint: this.createBatch(this.texDisc, THREE.NormalBlending, true, 0),
+    };
 
     this.light = new THREE.PointLight(0xffa040, 0, 18, 1.6);
-    this.light.visible = false;
+    this.light.visible = true;
     scene.add(this.light);
+    this.spawnRing(new THREE.Vector3(0, -100, 0), 0.1, 0.001);
+  }
+
+  private createBatch(tex: THREE.Texture, blending: THREE.Blending, depthTest: boolean, renderOrder: number): Batch {
+    const base = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = base.index;
+    geo.attributes.position = base.attributes.position;
+    geo.attributes.uv = base.attributes.uv;
+
+    const posSize = new THREE.InstancedBufferAttribute(new Float32Array(ExplosionFx.MAX_FX * 4), 4);
+    const colorAlpha = new THREE.InstancedBufferAttribute(new Float32Array(ExplosionFx.MAX_FX * 4), 4);
+    const rot = new THREE.InstancedBufferAttribute(new Float32Array(ExplosionFx.MAX_FX), 1);
+    posSize.setUsage(THREE.DynamicDrawUsage);
+    colorAlpha.setUsage(THREE.DynamicDrawUsage);
+    rot.setUsage(THREE.DynamicDrawUsage);
+
+    geo.setAttribute('aPosSize', posSize);
+    geo.setAttribute('aColorAlpha', colorAlpha);
+    geo.setAttribute('aRot', rot);
+    geo.instanceCount = 1;
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uMap: { value: tex } },
+      vertexShader: BILLBOARD_VERT,
+      fragmentShader: BILLBOARD_FRAG,
+      transparent: true,
+      depthWrite: false,
+      depthTest,
+      blending,
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = renderOrder;
+    mesh.visible = true;
+    this.scene.add(mesh);
+
+    return { mesh, geo, posSize, colorAlpha, rot, count: 0 };
   }
 
   private acquire(kind: Kind): Fx {
@@ -117,12 +243,8 @@ export class ExplosionFx {
         return fx;
       }
     }
-    const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false });
-    const sprite = new THREE.Sprite(mat);
-    sprite.visible = false;
-    this.scene.add(sprite);
     const fx: Fx = {
-      sprite,
+      pos: new THREE.Vector3(),
       kind,
       vel: new THREE.Vector3(),
       drag: 1,
@@ -131,8 +253,12 @@ export class ExplosionFx {
       maxLife: 1,
       size0: 1,
       size1: 1,
+      rot: 0,
       spin: 0,
       alpha: 1,
+      c0: new THREE.Color(),
+      c1: new THREE.Color(),
+      noDepth: false,
       active: false,
     };
     this.pool.push(fx);
@@ -142,20 +268,8 @@ export class ExplosionFx {
 
   private configure(fx: Fx, kind: Kind) {
     fx.kind = kind;
-    const mat = fx.sprite.material as THREE.SpriteMaterial;
-    mat.rotation = Math.random() * Math.PI * 2;
+    fx.rot = Math.random() * Math.PI * 2;
     fx.spin = (Math.random() - 0.5) * 2.0;
-    if (kind === 'smoke') {
-      mat.map = this.texSmoke;
-      mat.blending = THREE.NormalBlending;
-    } else if (kind === 'debris') {
-      mat.map = this.texGlow;
-      mat.blending = THREE.NormalBlending;
-    } else {
-      mat.map = kind === 'fire' ? this.texFire : this.texGlow;
-      mat.blending = THREE.AdditiveBlending;
-    }
-    mat.needsUpdate = true;
   }
 
   private activeCount(): number {
@@ -174,8 +288,8 @@ export class ExplosionFx {
     drag: number,
     gravity: number,
     alpha: number = 1
-  ) {
-    if (this.activeCount() >= ExplosionFx.MAX_FX) return;
+  ): Fx | null {
+    if (this.activeCount() >= ExplosionFx.MAX_FX) return null;
     const fx = this.acquire(kind);
     fx.active = true;
     fx.life = 0;
@@ -187,16 +301,29 @@ export class ExplosionFx {
     fx.alpha = alpha;
     fx.vel.copy(vel);
     // 画面を覆うほど大きい粒子は、観客席や土俵の形と交差して硬い角が出るので、奥行き判定を切る
-    const mat = fx.sprite.material as THREE.SpriteMaterial;
-    const noDepth = Math.max(size0, size1) > 6;
-    if (mat.depthTest === noDepth) {
-      mat.depthTest = !noDepth;
-      mat.needsUpdate = true;
-    }
-    fx.sprite.renderOrder = noDepth ? 10 : 0;
-    fx.sprite.position.copy(pos);
-    fx.sprite.scale.set(size0, size0, 1);
-    fx.sprite.visible = true;
+    fx.noDepth = Math.max(size0, size1) > 6;
+    fx.pos.copy(pos);
+    return fx;
+  }
+
+  /**
+   * 単色の小さな粒(火花・土煙・風切り・チャージの光)を1つ出す。寿命に沿って c0 → c1 へ色が変わり、薄れて消える。
+   * radius0 / radius1 は粒の半径(m)。粒ごとの Mesh や Color を作らず、同じ描画呼び出しにまとめる。
+   */
+  public emitTint(
+    pos: THREE.Vector3,
+    vel: THREE.Vector3,
+    life: number,
+    radius0: number,
+    radius1: number,
+    color0: number,
+    color1: number
+  ) {
+    // 板の1辺が直径に当たる(球の半径の2倍)
+    const fx = this.spawn('tint', pos, vel, life, radius0 * 2, radius1 * 2, 1, 0);
+    if (!fx) return;
+    fx.c0.copy(cachedColor(color0));
+    fx.c1.copy(cachedColor(color1));
   }
 
   private static rand(a: number, b: number): number {
@@ -207,16 +334,18 @@ export class ExplosionFx {
   public explode(pos: THREE.Vector3, scale: number) {
     const R = ExplosionFx.rand;
     const s = scale;
-    // 粒の数は大きな爆発でも増えすぎないよう、3を超えた分は半分の勢いで増やす(大きさは s のまま)
+    // 粒の数は大きな爆発でも増えすぎないよう、3を超えた分は半分の勢いで増やす
     const c = s <= 3 ? s : 3 + (s - 3) * 0.45;
+    // 巨大な爆発で1枚ごとの粒子が画面全体を何十枚も覆ってGPUの塗りつぶし負荷が跳ね上がるのを防ぐ
+    const sz = s <= 2.0 ? s : 2.0 + (s - 2.0) * 0.45;
     const v = new THREE.Vector3();
     const p = new THREE.Vector3();
 
     // 1. 閃光(一瞬だけ画面を白く焼く)
-    this.spawn('flash', pos, v.set(0, 0, 0), 0.11, 1.4 * s, 3.4 * s, 1, 0);
+    this.spawn('flash', pos, v.set(0, 0, 0), 0.11, 1.4 * sz, 3.4 * sz, 1, 0);
 
     // 2. 火球の芯(大きく膨らみ、すぐ赤くなる)
-    this.spawn('fire', pos, v.set(0, 0.8 * s, 0), 0.55, 1.0 * s, 3.0 * s, 0.4, 0);
+    this.spawn('fire', pos, v.set(0, 0.8 * s, 0), 0.55, 1.0 * sz, 3.0 * sz, 0.4, 0);
 
     // 3. 炎の塊(外へ飛び散りながら膨らむ)
     const nFire = Math.round(5 + 11 * c);
@@ -225,7 +354,7 @@ export class ExplosionFx {
       const sp = R(1.5, 5.0) * (0.6 + 0.5 * s);
       v.set(Math.cos(a) * sp, R(0.5, 4.0) * (0.6 + 0.4 * s), Math.sin(a) * sp);
       p.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.4 * s, (Math.random() - 0.3) * 0.4 * s, (Math.random() - 0.5) * 0.4 * s));
-      this.spawn('fire', p, v, R(0.35, 0.75), R(0.45, 0.8) * s, R(1.1, 1.9) * s, 0.12, 0);
+      this.spawn('fire', p, v, R(0.35, 0.75), R(0.45, 0.8) * sz, R(1.1, 1.9) * sz, 0.12, 0);
     }
 
     // 4. 煙(遅れて立ち上り、長く残る)
@@ -242,8 +371,8 @@ export class ExplosionFx {
         p,
         v,
         Math.min(huge ? 1.5 : 2.8, R(1.1, 2.2) * (0.8 + 0.1 * Math.min(s, 3))),
-        R(0.7, 1.1) * s,
-        R(2.2, 3.8) * s,
+        R(0.7, 1.1) * sz,
+        R(2.2, 3.8) * sz,
         0.35,
         -0.6,
         huge ? 0.22 : 1
@@ -317,13 +446,16 @@ export class ExplosionFx {
   }
 
   public update(dt: number) {
+    for (const k of Object.keys(this.batches) as BatchKey[]) {
+      this.batches[k].count = 0;
+    }
+
     const tmp = new THREE.Color();
     for (const fx of this.pool) {
       if (!fx.active) continue;
       fx.life += dt;
       if (fx.life >= fx.maxLife) {
         fx.active = false;
-        fx.sprite.visible = false;
         continue;
       }
       const t = fx.life / fx.maxLife;
@@ -331,11 +463,11 @@ export class ExplosionFx {
       // 移動(空気抵抗と重力)
       fx.vel.multiplyScalar(Math.pow(fx.drag, dt));
       fx.vel.y -= fx.gravity * dt;
-      fx.sprite.position.addScaledVector(fx.vel, dt);
+      fx.pos.addScaledVector(fx.vel, dt);
       // 地面より下には潜らせない
       if (fx.kind === 'debris' || fx.kind === 'spark') {
-        if (fx.sprite.position.y < 0.05) {
-          fx.sprite.position.y = 0.05;
+        if (fx.pos.y < 0.05) {
+          fx.pos.y = 0.05;
           fx.vel.y *= -0.3;
           fx.vel.x *= 0.6;
           fx.vel.z *= 0.6;
@@ -343,33 +475,87 @@ export class ExplosionFx {
       }
 
       const size = fx.size0 + (fx.size1 - fx.size0) * (fx.kind === 'smoke' ? Math.sqrt(t) : t);
-      fx.sprite.scale.set(size, size, 1);
-      const mat = fx.sprite.material as THREE.SpriteMaterial;
-      mat.rotation += fx.spin * dt;
+      fx.rot += fx.spin * dt;
+
+      let r = 1;
+      let g = 1;
+      let b = 1;
+      let opacity = 1;
 
       if (fx.kind === 'fire') {
         // 白 → 橙 → 赤 → 煤 の順に色が変わり、後半で薄れる
         const k = t * 3;
         const i = Math.min(2, Math.floor(k));
         tmp.copy(FIRE_COLORS[i]).lerp(FIRE_COLORS[i + 1], k - i);
-        mat.color.copy(tmp);
-        mat.opacity = Math.min(0.75, (1 - t) * 1.2);
+        r = tmp.r;
+        g = tmp.g;
+        b = tmp.b;
+        opacity = Math.min(0.75, (1 - t) * 1.2);
       } else if (fx.kind === 'flash') {
-        mat.color.setRGB(1.0, 0.55, 0.22);
-        mat.opacity = (1 - t) * 0.7;
+        r = 1.0;
+        g = 0.55;
+        b = 0.22;
+        opacity = (1 - t) * 0.7;
       } else if (fx.kind === 'smoke') {
         // 立ち上がりは焼けた色、すぐ灰色になる
         const warm = Math.max(0, 1 - t * 4);
-        mat.color.setRGB(0.035 + warm * 0.4, 0.032 + warm * 0.12, 0.03 + warm * 0.03);
-        mat.opacity = Math.min(1, t * 8) * (1 - t) * 0.5;
+        r = 0.035 + warm * 0.4;
+        g = 0.032 + warm * 0.12;
+        b = 0.03 + warm * 0.03;
+        opacity = Math.min(1, t * 8) * (1 - t) * 0.5;
+      } else if (fx.kind === 'tint') {
+        tmp.copy(fx.c0).lerp(fx.c1, t);
+        r = tmp.r;
+        g = tmp.g;
+        b = tmp.b;
+        opacity = (1 - t) * 0.9;
       } else if (fx.kind === 'spark') {
-        mat.color.setRGB(1, 0.5 - t * 0.3, 0.1);
-        mat.opacity = 1 - t;
+        r = 1;
+        g = 0.5 - t * 0.3;
+        b = 0.1;
+        opacity = 1 - t;
       } else {
-        mat.color.setRGB(0.08, 0.055, 0.035);
-        mat.opacity = (1 - t) * 0.95;
+        r = 0.08;
+        g = 0.055;
+        b = 0.035;
+        opacity = (1 - t) * 0.95;
       }
-      mat.opacity *= fx.alpha;
+      opacity *= fx.alpha;
+
+      let key: BatchKey;
+      if (fx.kind === 'smoke') key = fx.noDepth ? 'smokeTop' : 'smoke';
+      else if (fx.kind === 'debris') key = 'debris';
+      else if (fx.kind === 'tint') key = 'tint';
+      else if (fx.kind === 'fire') key = fx.noDepth ? 'fireTop' : 'fire';
+      else key = fx.noDepth ? 'glowTop' : 'glow';
+
+      const batch = this.batches[key];
+      const idx = batch.count++;
+      const i4 = idx * 4;
+      const ps = batch.posSize.array as Float32Array;
+      ps[i4] = fx.pos.x;
+      ps[i4 + 1] = fx.pos.y;
+      ps[i4 + 2] = fx.pos.z;
+      ps[i4 + 3] = size;
+
+      const ca = batch.colorAlpha.array as Float32Array;
+      ca[i4] = r;
+      ca[i4 + 1] = g;
+      ca[i4 + 2] = b;
+      ca[i4 + 3] = opacity;
+
+      (batch.rot.array as Float32Array)[idx] = fx.rot;
+    }
+
+    for (const k of Object.keys(this.batches) as BatchKey[]) {
+      const batch = this.batches[k];
+      batch.geo.instanceCount = batch.count;
+      batch.mesh.visible = batch.count > 0;
+      if (batch.count > 0) {
+        batch.posSize.needsUpdate = true;
+        batch.colorAlpha.needsUpdate = true;
+        batch.rot.needsUpdate = true;
+      }
     }
 
     for (const ring of this.rings) {
@@ -392,7 +578,6 @@ export class ExplosionFx {
       const k = this.lightLife / this.lightMax;
       this.light.intensity = this.lightPeak * k * k;
       if (this.lightLife === 0) {
-        this.light.visible = false;
         this.light.intensity = 0;
         this.lightPeak = 0;
       }

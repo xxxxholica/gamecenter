@@ -5,6 +5,7 @@ import type { SkywayNet } from './skywayNet';
 import { RemoteCar } from './RemoteCar';
 import { carOverlap } from './carCollision';
 import { audio } from '../audio';
+import { boostThemeFor } from '../core/BoostTheme';
 import type { CarState, FinishEntry, RacerInfo } from '../../../../shared/netProtocol';
 import { STATE_HZ } from '../../../../shared/netProtocol';
 
@@ -60,24 +61,8 @@ export class OnlineRace {
       this.remotes.set(p.id, rc);
       drive.scene.add(rc.car.group);
     }
-    const combat = drive.combatSystem;
-    combat.remoteSource = () => this.remotes.values();
-    combat.onlineYou = you;
-    combat.onLocalFire = (e) => {
-      if (!this.racing) return;
-      const r2 = (v: number) => Math.round(v * 100) / 100;
-      client.send({ t: 'fire', k: e.k, o: [r2(e.origin.x), r2(e.origin.y), r2(e.origin.z)], f: [r2(e.forward.x), r2(e.forward.z)], tg: e.targetRemoteId });
-    };
-    combat.onPlayerKilled = () => { if (this.racing) client.send({ t: 'died' }); };
     this.drive = drive;
     this.offs.push(
-      client.on('fire', (m) => {
-        if (!this.racing || !this.remotes.has(m.from)) return;
-        const f = new THREE.Vector3(m.f[0], 0, m.f[1]);
-        if (f.lengthSq() < 1e-6) return;
-        combat.spawnRemoteFire(m.from, { k: m.k, origin: new THREE.Vector3(m.o[0], m.o[1], m.o[2]), forward: f.normalize(), targetRemoteId: m.tg });
-      }),
-      client.on('died', (m) => { if (this.racing) combat.onRemoteDied(m.from); }),
       client.on('states', (m) => {
         const now = performance.now();
         const serverNow = this.client.serverNow();
@@ -164,7 +149,7 @@ export class OnlineRace {
     const fwdX = Math.sin(cc.rotationY), fwdZ = Math.cos(cc.rotationY);
     const rightX = Math.cos(cc.rotationY), rightZ = -Math.sin(cc.rotationY);
     for (const rc of this.remotes.values()) {
-      if (!rc.valid || rc.dead || rc.stale || !this.racing) {
+      if (!rc.valid || rc.stale || !this.racing) {
         audio.sfx.removeRemoteEngine(rc.id);
         continue;
       }
@@ -192,8 +177,9 @@ export class OnlineRace {
       if (rc.drift > 0.5 && speedKmH > 20) {
         const intensity = Math.min(1.8, 0.9 + speedKmH / 150);
         const blue = rc.boost > 0.3;
-        smoke.emitSpark(tires.rearLeft, vel, steerDir, intensity, blue);
-        smoke.emitSpark(tires.rearRight, vel, steerDir, intensity, blue);
+        const theme = boostThemeFor(rc.car);
+        smoke.emitSpark(tires.rearLeft, vel, steerDir, intensity, blue, theme);
+        smoke.emitSpark(tires.rearRight, vel, steerDir, intensity, blue, theme);
         smoke.emitSmoke(tires.rearLeft, vel, Math.min(1.6, 0.6 + speedKmH / 120));
         smoke.emitSmoke(tires.rearRight, vel, Math.min(1.6, 0.6 + speedKmH / 120));
       }
@@ -205,12 +191,13 @@ export class OnlineRace {
         smoke.emitSmoke(tires.rearRight, vel, k);
       }
 
-      // ブースト: 排気口から青白い炎
+      // ブースト: 排気口から、その車の主色の炎
       if (rc.boost > 0.15) {
+        const theme = boostThemeFor(rc.car);
         const back = this.fxPos.set(-Math.sin(rc.rotY) * 0.55, 0.4, -Math.cos(rc.rotY) * 0.55);
         for (const w of [tires.rearLeft, tires.rearRight]) {
           const pos = this.fxOut.copy(w).lerp(rc.pos, 0.35).add(back);
-          smoke.emitFlame(pos, vel, rc.boost);
+          smoke.emitFlame(pos, vel, rc.boost, theme);
         }
       }
 
@@ -301,11 +288,6 @@ export class OnlineRace {
 
   public dispose(): void {
     this.racing = false;
-    const combat = this.drive.combatSystem;
-    combat.remoteSource = null;
-    combat.onLocalFire = undefined;
-    combat.onPlayerKilled = undefined;
-    combat.onlineYou = -1;
     this.offs.forEach((f) => f());
     this.offs = [];
     for (const rc of this.remotes.values()) rc.dispose();

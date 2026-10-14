@@ -95,32 +95,26 @@ export class CarController {
 
   /**
    * Applies car-specific dynamic parameters based on vehicle class and mass.
-   * Cross J (870kg): Speedster & agile handling
-   * Trail J (1,040kg): Balanced 4WD, high stability & knockback resistance
-   * Combat Sedan (2,150kg): Straight-line power, heavier understeer
-   * Truck J MLRS (1,280kg): Heavy lifted chassis, slowest top speed
+   * Dragon Azure (1,150kg): Speedster & agile handling
+   * Dragon Crimson (1,420kg): Balanced hypercar
+   * Dragon Gold (1,980kg): Armored heavy GT, slowest top speed, high knockback resistance
    */
   public applyCarSpecs(): void {
     const name = this.car?.specs?.name?.toUpperCase() || '';
-    if (name.includes('CROSS')) {
+    if (name.includes('AZURE')) {
       this.maxSpeed = 42.0;       // ~151 km/h (最高速 ★★★★★)
       this.acceleration = 16.5;   // m/s^2 (加速力 ★★★★★)
       this.maxSteerAngle = 0.62;  // 旋回力 ★★★★★
       this.braking = 9.5;
-    } else if (name.includes('TRAIL')) {
-      this.maxSpeed = 38.5;       // ~139 km/h (最高速 ★★★★☆)
-      this.acceleration = 14.5;   // m/s^2 (加速力 ★★★★☆)
-      this.maxSteerAngle = 0.55;  // 旋回力 ★★★★☆
-      this.braking = 8.5;
-    } else if (name.includes('COMBAT')) {
-      this.maxSpeed = 39.5;       // ~142 km/h (最高速 ★★★★☆)
-      this.acceleration = 13.0;   // m/s^2 (立ち上がりは重量級)
-      this.maxSteerAngle = 0.46;  // 旋回力 ★★☆☆☆ (急カーブでアンダーステア)
-      this.braking = 7.5;
-    } else if (name.includes('MLRS') || name.includes('TRUCK')) {
+    } else if (name.includes('CRIMSON')) {
+      this.maxSpeed = 40.0;       // ~144 km/h (最高速 ★★★★☆)
+      this.acceleration = 15.0;   // m/s^2
+      this.maxSteerAngle = 0.56;  // 旋回力 ★★★★☆
+      this.braking = 8.8;
+    } else if (name.includes('GOLD')) {
       this.maxSpeed = 36.5;       // ~131 km/h (最高速 ★★★☆☆)
-      this.acceleration = 12.0;   // m/s^2
-      this.maxSteerAngle = 0.44;  // 旋回力 ★★☆☆☆
+      this.acceleration = 12.5;   // m/s^2 (重量級の立ち上がり)
+      this.maxSteerAngle = 0.46;  // 旋回力 ★★☆☆☆
       this.braking = 7.5;
     } else {
       this.maxSpeed = 38.0;
@@ -164,9 +158,9 @@ export class CarController {
     this.position.z += pushZ;
     if (!fresh) return;
 
-    // Trail Jは強固なラダーフレームにより接触衝撃・吹き飛びを60%軽減
-    const isTrail = this.car?.specs?.name?.toUpperCase().includes('TRAIL');
-    const knockResistance = isTrail ? 0.4 : 1.0;
+    // Dragon Goldは重装甲により接触衝撃・吹き飛びを50%軽減
+    const isArmored = this.car?.specs?.name?.toUpperCase().includes('GOLD');
+    const knockResistance = isArmored ? 0.5 : 1.0;
 
     // 弾かれる速度(横・後ろへ滑り、すぐ減衰する)
     this.knockVelX += knockX * knockResistance;
@@ -415,14 +409,6 @@ export class CarController {
     // 7. Update Car Meshes and Wheels
     this.updateCarTransforms();
     this.animateWheels(dt);
-  }
-
-  /**
-   * Applies weapon recoil kick impulse to suspension pitch and roll
-   */
-  public applyRecoilKick(pitchKick: number, rollKick: number = 0): void {
-    this.bodyPitch += pitchKick;
-    this.bodyRoll += rollKick;
   }
 
   /** Scores the drift in progress; when it ends cleanly and long enough it is banked and pays out a boost. */

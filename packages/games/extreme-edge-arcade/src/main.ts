@@ -40,12 +40,14 @@ function initApp() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
+  renderer.debug.checkShaderErrors = false;
   container.appendChild(renderer.domElement);
 
   // Systems
   const input = new InputManager();
   const effects = new EffectsManager(camera, scene);
   const game = new GameManager(scene, camera, effects, input);
+  renderer.compile(scene, camera);
 
   // Resize
   window.addEventListener('resize', () => {

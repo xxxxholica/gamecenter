@@ -15,7 +15,9 @@ interface Particle {
 export class ParticleManager {
   public scene: THREE.Scene;
   private particles: Particle[] = [];
-  private sphereGeo: THREE.SphereGeometry;
+  /** 粒子を出す時の作業用(毎回 new しない) */
+  private readonly tmpPos = new THREE.Vector3();
+  private readonly tmpVel = new THREE.Vector3();
   private ringGeo: THREE.RingGeometry;
 
   // 爆発(閃光・火球・煙・火花・衝撃波)
@@ -57,7 +59,6 @@ export class ParticleManager {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.sphereGeo = new THREE.SphereGeometry(1, 8, 8);
     this.ringGeo = new THREE.RingGeometry(0.1, 1, 32);
     this.fx = new ExplosionFx(scene);
   }
@@ -159,36 +160,16 @@ export class ParticleManager {
    * すり足の土煙
    */
   public spawnDust(pos: THREE.Vector3, dir: THREE.Vector3) {
+    const p = this.tmpPos;
+    const vel = this.tmpVel;
     for (let i = 0; i < 4; i++) {
-      const mat = this.acquireMaterial({
-        color: 0xd4b886,
-        transparent: true,
-        opacity: 0.6,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(this.sphereGeo, mat);
-      mesh.position.copy(pos);
-      mesh.position.y += 0.15;
-      mesh.position.x += (Math.random() - 0.5) * 0.4;
-      mesh.position.z += (Math.random() - 0.5) * 0.4;
-
-      const vel = new THREE.Vector3(
+      p.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.15, pos.z + (Math.random() - 0.5) * 0.4);
+      vel.set(
         -dir.x * 2.0 + (Math.random() - 0.5) * 1.5,
         Math.random() * 1.2 + 0.3,
         -dir.z * 2.0 + (Math.random() - 0.5) * 1.5
       );
-
-      this.scene.add(mesh);
-      this.particles.push({
-        mesh,
-        velocity: vel,
-        life: 0,
-        maxLife: 0.35 + Math.random() * 0.2,
-        sizeStart: 0.15,
-        sizeEnd: 0.6,
-        colorStart: new THREE.Color(0xecd5ab),
-        colorEnd: new THREE.Color(0xbfa17c),
-      });
+      this.fx.emitTint(p, vel, 0.35 + Math.random() * 0.2, 0.15, 0.6, 0xecd5ab, 0xbfa17c);
     }
   }
 
@@ -199,35 +180,12 @@ export class ParticleManager {
     // 小さな爆発(閃光・火花・煙)を重ねる
     this.fx.explode(pos, 0.5);
     this.onScorch?.(pos, 0.45, 0.4);
+    const vel = this.tmpVel;
     for (let i = 0; i < 12; i++) {
-      const mat = this.acquireMaterial({
-        color: 0xffea00,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(this.sphereGeo, mat);
-      mesh.position.copy(pos);
-
       const angle = Math.random() * Math.PI * 2;
       const speed = 4 + Math.random() * 6;
-      const vel = new THREE.Vector3(
-        Math.cos(angle) * speed,
-        Math.sin(angle) * speed * 0.6 + 1.5,
-        (Math.random() - 0.5) * 4
-      );
-
-      this.scene.add(mesh);
-      this.particles.push({
-        mesh,
-        velocity: vel,
-        life: 0,
-        maxLife: 0.2 + Math.random() * 0.15,
-        sizeStart: 0.18,
-        sizeEnd: 0.02,
-        colorStart: new THREE.Color(0xffffff),
-        colorEnd: new THREE.Color(0xff5500),
-      });
+      vel.set(Math.cos(angle) * speed, Math.sin(angle) * speed * 0.6 + 1.5, (Math.random() - 0.5) * 4);
+      this.fx.emitTint(pos, vel, 0.2 + Math.random() * 0.15, 0.18, 0.02, 0xffffff, 0xff5500);
     }
   }
 
@@ -263,34 +221,15 @@ export class ParticleManager {
     });
 
     // 突きの風切り粒子
+    const p = this.tmpPos;
+    const vel = this.tmpVel;
     for (let i = 0; i < 3; i++) {
-      const mat = this.acquireMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.85,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(this.sphereGeo, mat);
-      mesh.position.copy(pos);
-      mesh.position.y += 0.8 + (Math.random() - 0.5) * 0.2;
-      mesh.position.addScaledVector(dir, 0.6);
-
-      const vel = dir.clone().multiplyScalar(6.0 + Math.random() * 2.0);
+      p.set(pos.x, pos.y + 0.8 + (Math.random() - 0.5) * 0.2, pos.z).addScaledVector(dir, 0.6);
+      vel.copy(dir).multiplyScalar(6.0 + Math.random() * 2.0);
       vel.x += (Math.random() - 0.5) * 0.8;
       vel.y += (Math.random() - 0.5) * 0.4;
       vel.z += (Math.random() - 0.5) * 0.8;
-
-      this.scene.add(mesh);
-      this.particles.push({
-        mesh,
-        velocity: vel,
-        life: 0,
-        maxLife: 0.12,
-        sizeStart: 0.14,
-        sizeEnd: 0.02,
-        colorStart: new THREE.Color(0xffffff),
-        colorEnd: new THREE.Color(0xffcc80),
-      });
+      this.fx.emitTint(p, vel, 0.12, 0.14, 0.02, 0xffffff, 0xffcc80);
     }
   }
 
@@ -323,36 +262,13 @@ export class ParticleManager {
     });
 
     // 散る火花
+    const p = this.tmpPos.set(pos.x, pos.y + 0.8, pos.z);
+    const vel = this.tmpVel;
     for (let i = 0; i < 8; i++) {
-      const mat = this.acquireMaterial({
-        color: 0x88ddff,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(this.sphereGeo, mat);
-      mesh.position.copy(pos);
-      mesh.position.y += 0.8;
-
       const angle = Math.random() * Math.PI * 2;
       const speed = 3 + Math.random() * 4;
-      const vel = new THREE.Vector3(
-        Math.cos(angle) * speed,
-        (Math.random() - 0.2) * 3,
-        Math.sin(angle) * speed
-      );
-
-      this.scene.add(mesh);
-      this.particles.push({
-        mesh,
-        velocity: vel,
-        life: 0,
-        maxLife: 0.2,
-        sizeStart: 0.12,
-        sizeEnd: 0.01,
-        colorStart: new THREE.Color(0xffffff),
-        colorEnd: new THREE.Color(0x0088ff),
-      });
+      vel.set(Math.cos(angle) * speed, (Math.random() - 0.2) * 3, Math.sin(angle) * speed);
+      this.fx.emitTint(p, vel, 0.2, 0.12, 0.01, 0xffffff, 0x0088ff);
     }
   }
 
@@ -394,36 +310,17 @@ export class ParticleManager {
 
     // 放射状の爆発粒子
     const count = Math.floor(25 * power);
+    const vel = this.tmpVel;
     for (let i = 0; i < count; i++) {
-      const mat = this.acquireMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(this.sphereGeo, mat);
-      mesh.position.copy(pos);
-
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
       const speed = (6 + Math.random() * 9) * power;
-      const vel = new THREE.Vector3(
+      vel.set(
         Math.sin(phi) * Math.cos(theta) * speed,
         Math.cos(phi) * speed + 2.0,
         Math.sin(phi) * Math.sin(theta) * speed
       );
-
-      this.scene.add(mesh);
-      this.particles.push({
-        mesh,
-        velocity: vel,
-        life: 0,
-        maxLife: 0.35 + Math.random() * 0.25,
-        sizeStart: 0.3,
-        sizeEnd: 0.05,
-        colorStart: new THREE.Color(0xffff88),
-        colorEnd: new THREE.Color(0xdd1100),
-      });
+      this.fx.emitTint(pos, vel, 0.35 + Math.random() * 0.25, 0.3, 0.05, 0xffff88, 0xdd1100);
     }
   }
 
@@ -431,37 +328,16 @@ export class ParticleManager {
    * チャージ中のオーラ粒子
    */
   public spawnChargeParticle(centerPos: THREE.Vector3, progress: number) {
-    const mat = this.acquireMaterial({
-      color: 0xffd700,
-      transparent: true,
-      opacity: 0.8,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(this.sphereGeo, mat);
-
     // 外側から中心に向かって集まる粒子
     const radius = 1.6 - progress * 0.6;
     const angle = Math.random() * Math.PI * 2;
     const spawnY = Math.random() * 1.5;
-    mesh.position.set(
+    const p = this.tmpPos.set(
       centerPos.x + Math.cos(angle) * radius,
       centerPos.y + spawnY,
       centerPos.z + Math.sin(angle) * radius
     );
-
-    const targetPos = new THREE.Vector3(centerPos.x, centerPos.y + 0.8, centerPos.z);
-    const vel = targetPos.sub(mesh.position).normalize().multiplyScalar(4.0);
-
-    this.scene.add(mesh);
-    this.particles.push({
-      mesh,
-      velocity: vel,
-      life: 0,
-      maxLife: 0.25,
-      sizeStart: 0.12,
-      sizeEnd: 0.02,
-      colorStart: new THREE.Color(0xffea00),
-      colorEnd: new THREE.Color(0xff4400),
-    });
+    const vel = this.tmpVel.set(centerPos.x, centerPos.y + 0.8, centerPos.z).sub(p).normalize().multiplyScalar(4.0);
+    this.fx.emitTint(p, vel, 0.25, 0.12, 0.02, 0xffea00, 0xff4400);
   }
 }

@@ -4,7 +4,6 @@
 // 対戦中のクライアントどうしで同じ版を使うこと(packages/shared/towerProtocol.ts の PIECE_COUNT と数を合わせる)。
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { CAR_PALETTES } from '../../../shared/carPalette';
 
 export type Cell = [number, number];
 
@@ -74,17 +73,41 @@ function poly(id: string, color: number, grid: Cell[]): PieceDef {
 
 const std = (color: number, roughness = 0.5, metalness = 0.05) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
-// ── 車 (ミッドナイト・スカイウェイ) ── 車体は共通の車体色パレットから選ぶ
-const CAR_COLORS = Object.values(CAR_PALETTES).flat();
+// ── 車 (ミッドナイト・スカイウェイ) ── 車体色 [body, roof]。ミッドナイト・スカイウェイのマシン色とは独立に持つ(あちらの車種入れ替えの影響を受けないため)
+const CAR_COLORS: [number, number][] = [
+  [0xded235, 0x1a1c22],
+  [0x243325, 0x1a1c22],
+  [0x1976d2, 0x1a1c22],
+  [0x4b5563, 0x1a1c22],
+  [0xe6cf9e, 0x1a1c22],
+  [0xf5f6fa, 0x1a1c22],
+  [0x11141a, 0x11141a],
+  [0xe05615, 0xf5f6fa],
+  [0x2952a3, 0x2d3436],
+  [0xd63031, 0x1a1c22],
+  [0x3d4d3d, 0xf5f6fa],
+  [0x54a0ff, 0xf5f6fa],
+  [0xf5f6fa, 0x1a1c22],
+  [0x35422e, 0x1f241d],
+  [0x8a7a5a, 0x3d3527],
+  [0x1e2022, 0x111315],
+  [0x5a2323, 0x241111],
+  [0x4a5056, 0x232629],
+  [0xf5f6fa, 0x283823],
+  [0x364835, 0x202b20],
+  [0x9c7a52, 0x4a3a27],
+  [0x1f2326, 0x141719],
+  [0xe8ecf0, 0xd63031],
+];
 function buildCar(mat: THREE.MeshStandardMaterial): THREE.Group {
-  const preset = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
-  mat.color.setHex(preset.bodyColor);
+  const [bodyColor, roofColor] = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+  mat.color.setHex(bodyColor);
   mat.roughness = 0.3;
   mat.metalness = 0.35;
   const g = new THREE.Group();
   const body = new THREE.Mesh(new RoundedBoxGeometry(2.6, 0.62, 1.15, 3, 0.16), mat);
   body.position.set(0, -0.12, 0);
-  const roof = new THREE.Mesh(new RoundedBoxGeometry(1.4, 0.55, 1.0, 3, 0.14), std(preset.roofColor, 0.35, 0.3));
+  const roof = new THREE.Mesh(new RoundedBoxGeometry(1.4, 0.55, 1.0, 3, 0.14), std(roofColor, 0.35, 0.3));
   roof.position.set(-0.12, 0.45, 0);
   const glass = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.36, 1.03), std(0x1b2a3a, 0.1, 0.6));
   glass.position.set(-0.12, 0.45, 0);

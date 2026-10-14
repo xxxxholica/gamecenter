@@ -658,6 +658,10 @@ function relayFramedTelemetry(): void {
 /** ゲーム側から親ハブへディープアナリティクスイベントを通知。直接開かれている(親がない)場合は自分で記録する */
 export function reportDeepAnalytics(type: string, data?: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
+  // ベンチマーク有効時は、ゲームの進行(ステージ・ウェーブなど)を計測のマークにして、カクつきがどの場面で起きたか分かるようにする
+  (window as unknown as { __gcBenchMark?: (label: string) => void }).__gcBenchMark?.(
+    [type, ...['maxStage', 'maxWave', 'mode', 'result'].filter((k) => data?.[k] !== undefined).map((k) => `${k}=${String(data?.[k])}`)].join(' '),
+  );
   if (window.parent && window.parent !== window) {
     try {
       window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType: type, data }, window.location.origin);

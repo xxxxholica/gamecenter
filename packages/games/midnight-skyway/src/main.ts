@@ -1,13 +1,11 @@
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { AutoPilot } from './core/AutoPilot';
 import { GarageScene } from './core/GarageScene';
-import { TrailJModel } from './models/TrailJModel';
-import { CrossJModel } from './models/CrossJModel';
-import { CombatSedanModel } from './models/CombatSedanModel';
-import { MissileTruckModel } from './models/MissileTruckModel';
+import { DragonCarModel } from './models/DragonCarModel';
 import { preloadGlbCars } from './models/CarModelLoader';
 import { CarBase } from './models/CarBase';
 
+import { boostThemeFor } from './core/BoostTheme';
 import { DriveScene } from './core/DriveScene';
 import { DriveHUD } from './ui/DriveHUD';
 import { MapBase } from './maps/MapBase';
@@ -41,7 +39,7 @@ import { ModeSelectScreen } from './ui/ModeSelectScreen';
 import { OnlineHUD } from './ui/OnlineHUD';
 import { fetchSkywayStatus } from './net/skywayNet';
 import type { CarSpec, PublicStatus, RacerInfo, ServerMsg } from '../../../shared/netProtocol';
-import type { CarType } from '../../../shared/carPalette';
+import { CAR_TYPES, type CarType } from '../../../shared/carPalette';
 
 const { bgm, sfx } = audio;
 
@@ -174,13 +172,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   const garage = new GarageScene(container);
 
-  // Car Models (2 Original K-Cars + 2 Combat Vehicles)
-  const trailJ = new TrailJModel();
-  const crossJ = new CrossJModel();
-  const combatSedan = new CombatSedanModel();
-  const missileTruck = new MissileTruckModel();
+  // Car Models (3 Dragon Cars)
+  const carModels: Record<CarType, CarBase> = {
+    dragon_a: new DragonCarModel('a'),
+    dragon_b: new DragonCarModel('b'),
+    dragon_c: new DragonCarModel('c'),
+  };
 
-  let currentCar: CarBase = trailJ;
+  let currentCar: CarBase = carModels.dragon_a;
   garage.turntableGroup.add(currentCar.group);
 
   // ==========================================
@@ -199,7 +198,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   let lightsBeforeRace = true;   // the garage's own headlight setting, restored when the car goes back
   let currentMapId = 'tokyo_skyway';
   let currentMapInstance: MapBase = mapFactories[currentMapId]();
-  driveScene.loadMap(currentMapInstance);
+  let bootMapUnused = true;
+  driveScene.loadMap(currentMapInstance, false);
+  driveScene.setTimeOfDay(currentTimeOfDay);
+  driveScene.warmup(Object.values(carModels));
+  for (const car of Object.values(carModels)) driveScene.clearPaintEnvironment(car);   // ガレージ側の環境マップに戻す
+  garage.warmup();
 
   // ==========================================
   // 3. Initialize Time Attack Manager
@@ -262,7 +266,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (driveScene.carController) {
       driveScene.carController.canDrive = false;
     }
-    driveScene.combatSystem.raceStarted = false;
     timeAttack.initCourse(currentMapId, currentCar.specs.name);
     driveHUD.resetSectors();
     raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
@@ -300,12 +303,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (driveScene.carController) {
         driveScene.carController.canDrive = true;
       }
-      driveScene.combatSystem.raceStarted = true;
     } else {
       if (driveScene.carController) {
         driveScene.carController.canDrive = false;
       }
-      driveScene.combatSystem.raceStarted = false;
     }
   };
 
@@ -333,7 +334,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
 
   timeAttack.callbacks.onGoal = (result) => {
-    driveScene.combatSystem.raceStarted = false;
     driveHUD.finishSectors(result.sectors);
     reportDeepAnalytics('progression_update', {
       result: result.timedOut ? 'gameover' : 'clear',
@@ -403,7 +403,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       driveScene.stop();
     }
     driveScene.paused = false;
-    driveScene.combatSystem.raceStarted = false;
     currentCar.setLights(lightsBeforeRace);
     raceDirector.dispose();
     teardownOnlineRace();
@@ -515,15 +514,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     onSelectCar: (carType) => {
       sfx.uiMove();
       garage.turntableGroup.remove(currentCar.group);
-      if (carType === 'trail_j') {
-        currentCar = trailJ;
-      } else if (carType === 'cross_j') {
-        currentCar = crossJ;
-      } else if (carType === 'combat_sedan') {
-        currentCar = combatSedan;
-      } else if (carType === 'missile_truck_j') {
-        currentCar = missileTruck;
-      }
+      currentCar = carModels[carType];
       garage.turntableGroup.add(currentCar.group);
       carSelectScreen.updateSpecs(currentCar.specs);
     },
@@ -764,12 +755,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
 
   // Title screen 2-second car rotation cycle
-  const titleCarEntries: { type: CarType; model: CarBase }[] = [
-    { type: 'trail_j', model: trailJ },
-    { type: 'cross_j', model: crossJ },
-    { type: 'combat_sedan', model: combatSedan },
-    { type: 'missile_truck_j', model: missileTruck },
-  ];
+  const titleCarEntries = CAR_TYPES.map((type) => ({ type, model: carModels[type] }));
   let titleCarIndex = 0;
   let titleCarTimer: number | null = null;
 
@@ -924,23 +910,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       mapSelectScreen.hide();
       driveHUD.hide();
 
-      // Instantiate map
-      if (online) setTrafficRng(mulberry32(online.seed));    // 全員同じ交通NPC
-      try {
-        currentMapInstance = mapFactories[currentMapId]();
-      } finally {
-        setTrafficRng(null);
+      // Instantiate map (reuse the pre-built boot instance on the first solo race if still on the default map)
+      const reuseBootMap = bootMapUnused && !online && currentMapId === 'tokyo_skyway';
+      bootMapUnused = false;
+      if (!reuseBootMap) {
+        if (online) setTrafficRng(mulberry32(online.seed));    // 全員同じ交通NPC
+        try {
+          currentMapInstance = mapFactories[currentMapId]();
+        } finally {
+          setTrafficRng(null);
+        }
       }
       if (online) {
         const traffic = currentMapInstance.traffic;
         if (traffic) traffic.sharedClock = () => -1;         // go が来るまで動かさない
         raceDirector.online = true;
-        driveScene.combatSystem.weaponsEnabled = false;        // オンライン対戦では、武器は使えない
         driveHUD.setOnlineMode(true);
         driveScene.gridOffset = { lateral: (online.slot % 2 === 0 ? -1 : 1) * 1.8, back: Math.floor(online.slot / 2) * 6 };
       } else {
         raceDirector.online = false;
-        driveScene.combatSystem.weaponsEnabled = true;
         driveHUD.setOnlineMode(false);
         driveScene.gridOffset = null;
       }
@@ -959,7 +947,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       // ロード中も、背景のガレージ(街の中を走る車)はそのまま動かす。車は台座に置いたまま、コースだけ先に読み込む
       lightsBeforeRace = currentCar.lightsEnabled;
-      driveScene.loadMap(currentMapInstance, false);   // 車はまだ台座にあるので、スタート地点には置かない
+      if (!reuseBootMap) {
+        driveScene.loadMap(currentMapInstance, false); // 車はまだ台座にあるので、スタート地点には置かない
+      }
       driveScene.setTimeOfDay(currentTimeOfDay);       // sky, lights, street lamps and the car's headlights
       driveHUD.setMap(currentMapInstance);
 
@@ -999,12 +989,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
 
       // Stage is 100% ready! Now start scene and countdown!
+      driveHUD.setAccent(boostThemeFor(currentCar).hud);   // HUD の主色は、選んだ車の色
       driveHUD.show();
       if (isPreviewMode) { hudContainer.style.display = 'none'; previewPilot = null; }
       const raceGuide = guideRace(true);                 // 明転に合わせてフェードインさせる(それまでは見えない)
+      restartRace();
+      driveScene.warmup();                             // 暗転中に、時間帯・マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
-      restartRace();
       stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
       requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; }));   // ガイドも同じタイミングでフェードイン
       if (online) {

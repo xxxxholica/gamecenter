@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export interface AudienceConfig {
   dohyoRadius: number; // 土俵の半径 (約9.2m)
@@ -104,6 +105,8 @@ export class Audience {
     });
 
     const stepWidth = (outerR - innerR) / numRows;
+    const riserGeos: THREE.BufferGeometry[] = [];
+    const railGeos: THREE.BufferGeometry[] = [];
 
     for (let r = 0; r < numRows; r++) {
       const rInner = innerR + r * stepWidth;
@@ -138,20 +141,29 @@ export class Audience {
           1,
           true // openEnded = true (上面下面フタなし、筒壁のみ)
         );
-        const riserMesh = new THREE.Mesh(riserGeo, riserMatWood);
-        riserMesh.position.y = heightY - riserHeight * 0.5;
-        riserMesh.receiveShadow = true;
-        floorGroup.add(riserMesh);
+        riserGeo.translate(0, heightY - riserHeight * 0.5, 0);
+        riserGeos.push(riserGeo);
       }
 
       // 3. マス席の木枠仕切りリング
       if (r > 0 && r % 2 === 0) {
         const railGeo = new THREE.RingGeometry(rInner + stepWidth * 0.48, rInner + stepWidth * 0.52, 64);
-        const railMesh = new THREE.Mesh(railGeo, railMat);
-        railMesh.rotation.x = -Math.PI / 2;
-        railMesh.position.y = heightY + 0.005;
-        floorGroup.add(railMesh);
+        railGeo.rotateX(-Math.PI / 2);
+        railGeo.translate(0, heightY + 0.005, 0);
+        railGeos.push(railGeo);
       }
+    }
+
+    if (riserGeos.length > 0) {
+      const mergedRiser = new THREE.Mesh(mergeGeometries(riserGeos), riserMatWood);
+      mergedRiser.receiveShadow = true;
+      floorGroup.add(mergedRiser);
+      riserGeos.forEach((g) => g.dispose());
+    }
+    if (railGeos.length > 0) {
+      const mergedRail = new THREE.Mesh(mergeGeometries(railGeos), railMat);
+      floorGroup.add(mergedRail);
+      railGeos.forEach((g) => g.dispose());
     }
 
     // タイルをまとめて1つのインスタンスメッシュにする
@@ -200,28 +212,29 @@ export class Audience {
     roofMesh.castShadow = true;
     yaneGroup.add(roofMesh);
 
+    const woodGeos: THREE.BufferGeometry[] = [];
     // 千木（ちぎ・屋根両端の交差木）
     for (const zSide of [-roofLength * 0.46, roofLength * 0.46]) {
-      const chigiGeo = new THREE.BoxGeometry(0.35, 3.2, 0.35);
-      const chigi1 = new THREE.Mesh(chigiGeo, woodMat);
-      chigi1.position.set(-0.6, roofHeight + 0.6, zSide);
-      chigi1.rotation.z = 0.55;
-      yaneGroup.add(chigi1);
+      const chigi1 = new THREE.BoxGeometry(0.35, 3.2, 0.35);
+      chigi1.rotateZ(0.55);
+      chigi1.translate(-0.6, roofHeight + 0.6, zSide);
+      woodGeos.push(chigi1);
 
-      const chigi2 = new THREE.Mesh(chigiGeo, woodMat);
-      chigi2.position.set(0.6, roofHeight + 0.6, zSide);
-      chigi2.rotation.z = -0.55;
-      yaneGroup.add(chigi2);
+      const chigi2 = new THREE.BoxGeometry(0.35, 3.2, 0.35);
+      chigi2.rotateZ(-0.55);
+      chigi2.translate(0.6, roofHeight + 0.6, zSide);
+      woodGeos.push(chigi2);
     }
 
     // 鰹木（かつおぎ・棟木上の丸太 5本）
-    const katsuogiGeo = new THREE.CylinderGeometry(0.38, 0.38, 3.2, 12);
     for (let k = -2; k <= 2; k++) {
-      const katsuogi = new THREE.Mesh(katsuogiGeo, woodMat);
-      katsuogi.rotation.z = Math.PI / 2;
-      katsuogi.position.set(0, roofHeight + 0.8, k * 2.8);
-      yaneGroup.add(katsuogi);
+      const katsuogi = new THREE.CylinderGeometry(0.38, 0.38, 3.2, 12);
+      katsuogi.rotateZ(Math.PI / 2);
+      katsuogi.translate(0, roofHeight + 0.8, k * 2.8);
+      woodGeos.push(katsuogi);
     }
+    yaneGroup.add(new THREE.Mesh(mergeGeometries(woodGeos), woodMat));
+    woodGeos.forEach((g) => g.dispose());
 
     // 2. 水引幕（屋根の下周りをぐるりと囲む濃紫色の幕・桜紋入り）
     const makuTexture = this.createMakuTexture();

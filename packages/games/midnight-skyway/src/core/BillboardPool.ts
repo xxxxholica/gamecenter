@@ -20,6 +20,10 @@ export interface Particle {
   r: number;
   g: number;
   b: number;
+  /** 粒の基本色。色が寿命で変わる粒(炎)は、毎フレームこれから r,g,b を計算する */
+  r0: number;
+  g0: number;
+  b0: number;
 }
 
 /**
@@ -68,7 +72,7 @@ export class BillboardPool {
     this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aAlpha', this.alphaAttr);
     for (let i = 0; i < size; i++) {
-      this.particles.push({ active: false, age: 0, maxAge: 1, pos: new THREE.Vector3(), vel: new THREE.Vector3(), sx: 1, sy: 1, angle: 0, alpha: 0, s0: 1, s1: 1, o0: 1, r: 1, g: 1, b: 1 });
+      this.particles.push({ active: false, age: 0, maxAge: 1, pos: new THREE.Vector3(), vel: new THREE.Vector3(), sx: 1, sy: 1, angle: 0, alpha: 0, s0: 1, s1: 1, o0: 1, r: 1, g: 1, b: 1, r0: 1, g0: 1, b0: 1 });
     }
   }
 
