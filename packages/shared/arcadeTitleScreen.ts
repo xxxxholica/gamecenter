@@ -4,6 +4,7 @@ import { returnToHub } from './homeReturn';
 
 import cyberFighterLogo from './logos/cyber-2d-fighter-3d.webp';
 import ennichiLogo from './logos/ennichi-shateki.webp';
+import falldownLogo from './logos/falldown.webp';
 import extremeEdgeLogo from './logos/extreme-edge-arcade.webp';
 import midnightSkywayLogo from './logos/midnight-skyway.webp';
 import schoolRunnerLogo from './logos/school-corridor-runner.webp';
@@ -16,6 +17,7 @@ import { readGamepads } from './gamepadFrame';
 export const GAME_LOGOS: Record<string, string> = {
   'cyber-2d-fighter-3d': cyberFighterLogo,
   'ennichi-shateki': ennichiLogo,
+  falldown: falldownLogo,
   'extreme-edge-arcade': extremeEdgeLogo,
   'midnight-skyway': midnightSkywayLogo,
   'school-corridor-runner': schoolRunnerLogo,

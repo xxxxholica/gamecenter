@@ -193,6 +193,18 @@ const allGames: GameEntry[] = [
     online: true,
     developer: THOUSANDL000,
   },
+  {
+    slug: 'falldown',
+    title: '無限降下ドリル',
+    englishTitle: 'FALL DOWN',
+    description:
+      'ブロックを掘り進めて地下500mの黄金郷を目指せ！同じ色はまとめて壊れるけど、支えを失ったブロックは落ちてくる。酸素カプセルを拾いながら、潰されずにどこまで潜れるか。',
+    thumbnail: 'thumbnails/falldown.webp',
+    logo: 'logos/falldown.webp',
+    accent: '#ff8a3d',
+    group: 'score',
+    developer: THOUSANDL000,
+  },
 ];
 
 export const games: GameEntry[] = allGames.filter((game) => !game.hidden);

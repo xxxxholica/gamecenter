@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <link rel="icon" href="data:," />
+    <title>無限降下ドリル - FALL DOWN</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div id="lives" class="lives"></div>
+      </div>
+      <div class="hud-center">
+        <svg class="air-icon" viewBox="0 0 24 32" aria-label="酸素">
+          <rect x="8" y="1" width="8" height="5" rx="1.5" />
+          <rect x="3" y="5" width="18" height="26" rx="8" />
+          <path class="shine" d="M7.5 12v10" />
+        </svg>
+        <div class="air-bar"><div id="airFill"></div><div class="air-ticks"></div></div>
+      </div>
+      <div class="hud-right">
+        <div class="label">エリア</div>
+        <div id="areaNow" class="value">表土層</div>
+        <div class="label">エリアの残り</div>
+        <div class="value"><span id="areaRemain">100</span>m</div>
+        <div class="label">スコア</div>
+        <div id="score" class="value">0</div>
+      </div>
+    </div>
+
+    <div id="depthTag" class="depth-tag hidden"><b id="depth">0</b><small>m</small></div>
+
+    <div id="popups"></div>
+    <div id="banner" class="banner"></div>
+    <div id="vignette"></div>
+    <div id="flash"></div>
+
+    <div id="result-modal" class="modal">
+      <div class="modal-content">
+        <h2 class="result-badge" id="result-badge"></h2>
+        <div id="result-score">0</div>
+        <div id="result-stats"></div>
+        <div id="result-record"></div>
+        <div id="result-ranking"></div>
+        <div id="result-menu">
+          <button id="result-btn-retry">再挑戦</button>
+          <button id="result-btn-title">タイトルに戻る</button>
+          <button id="result-btn-exit">ゲームを終了</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

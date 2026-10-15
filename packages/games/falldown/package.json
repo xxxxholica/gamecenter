@@ -1,0 +1,23 @@
+{
+  "name": "falldown",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "無限降下型サバイバル掘削アクションパズル（3D / Three.js）",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@fontsource/m-plus-rounded-1c": "^5.3.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
+  }
+}

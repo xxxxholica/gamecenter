@@ -252,6 +252,13 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     // スコアは高さ(m)×100 の整数で持つ
     formatScore: (score) => `${(Math.floor(score) / 100).toFixed(1)} m`,
   },
+  'falldown': {
+    slug: 'falldown',
+    hasScore: true,
+    scoreOrder: 'desc',
+    unit: 'pts',
+    formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
+  },
 };
 
 export const GAME_LEADERBOARD_DEFS: Readonly<Record<string, GameLeaderboardDef>> = DEFS;

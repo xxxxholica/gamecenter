@@ -16,6 +16,7 @@ gamecenter/
       ennichi-shateki/         # えんにち射的 (Three.js)
       street-b-boy/            # ストリートビーボーイ (Three.js)
       midnight-skyway/         # ミッドナイト・スカイウェイ (Three.js, 3Dレース / PLATEAU・ヘルシンキの3D都市モデル)
+      falldown/                # 無限降下ドリル FALL DOWN (Three.js, 3D掘削アクションパズル)
     shared/homeReturn.ts      # 全ゲーム共通: 戻る操作(Backspace / アケコンのSELECT)の統一、Escapeの無効化、ハブへ戻る処理
     shared/arcadePause.ts     # 全ゲーム共通: プレイ中のポーズ画面(再開 / やり直す / ゲームを終了)
   scripts/assemble.mjs        # 各パッケージのbuildをdist/に集約
@@ -71,6 +72,7 @@ dist/
     ennichi-shateki/
     street-b-boy/
     midnight-skyway/
+    falldown/
 ```
 
 ## デプロイ

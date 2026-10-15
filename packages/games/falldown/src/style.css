@@ -1,0 +1,602 @@
+:root {
+  --ink: #fff7e6;
+  --gold: #ffd34d;
+  --air: #39d8ff;
+  --accent: #ff8a3d;
+  --font: system-ui, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  --num: 'Impact', 'Arial Black', system-ui, sans-serif;
+  /* HUD用: 太めの丸ゴシック(@fontsource/m-plus-rounded-1c を同梱。CSPで外部フォントは読めない) */
+  /* HUDの大きさはここだけで決める(スマホ幅は下の @media で切り替え) */
+  /* 他のゲームのHUD(本文32〜54px・見出し14〜22px)に合わせ、画面幅に応じて大きくする */
+  --hud-label: clamp(14px, 1.3vw, 20px); /* 見出し(エリア・スコアなど) */
+  --hud-value: clamp(30px, 3vw, 44px); /* 本文(エリア名・数字)・深さの表示 */
+  --hud-icon: clamp(30px, 3vw, 44px); /* ハート・酸素ボンベ */
+  --hud-bar: clamp(24px, 2.2vw, 32px); /* 酸素バーの太さ */
+  --hud-font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1020;
+  color: var(--ink);
+  font-family: var(--font);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app canvas {
+  display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.label {
+  font-size: var(--hud-label);
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+/* 検証モード(?debug)の目印 */
+.debug-badge {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(230, 57, 70, 0.85);
+  color: #fff;
+  font: 800 11px/1.4 var(--hud-font);
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+
+/* ---------------- HUD ---------------- */
+#hud {
+  font-family: var(--hud-font);
+  position: fixed;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 22px;
+  pointer-events: none;
+  gap: 16px;
+}
+
+.hud-left,
+.hud-right,
+.hud-center {
+  /* 枠は付けず、背景の上に文字を直接置く（読みやすさは影で確保） */
+  padding: 4px 6px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.85), 0 0 12px rgba(0, 0, 0, 0.7);
+}
+
+.hud-left {
+  min-width: 170px;
+}
+
+.lives {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.lives span {
+  /* ハートはふくらみが出るよう、横に広げる */
+  display: inline-block;
+  transform: scaleX(1.3);
+  transform-origin: left center;
+  margin-right: 0.3em;
+  font-size: var(--hud-icon);
+  line-height: 1;
+  color: #ff4a6a;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.85), 0 0 10px rgba(255, 74, 106, 0.55);
+}
+
+.lives span::before {
+  content: '♥';
+}
+
+.lives span.lost {
+  color: #5a5a66;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.85);
+  opacity: 0.6;
+}
+
+.depth-tag {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  min-width: 78px; /* 実際の幅は main.ts が巻き尺の幅に合わせて広げる */
+  justify-content: center;
+  border-radius: 3px;
+  background: rgba(16, 16, 22, 0.88);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: var(--hud-font);
+  font-weight: 800;
+  text-shadow: none;
+  pointer-events: none;
+}
+
+.depth-tag b {
+  font-size: var(--hud-value);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.depth-tag small {
+  font-size: calc(var(--hud-value) * 0.65);
+  font-weight: 700;
+}
+
+.hud-right .label + .value {
+  margin-bottom: 8px;
+}
+
+/* 右側の本文(スコア・エリア・次)は、すべて同じ大きさ */
+.value {
+  font-family: var(--hud-font);
+  font-weight: 800;
+  font-size: var(--hud-value);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.hud-center {
+  flex: 0 1 460px;
+  min-width: 220px;
+}
+
+/* 酸素: 文字は出さず、ボンベのアイコンとバーだけ(減ったときの知らせは画面のバナー) */
+.hud-center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.air-icon {
+  flex: none;
+  width: calc(var(--hud-icon) * 0.75);
+  height: var(--hud-icon);
+  fill: var(--air);
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.85));
+}
+
+.air-icon .shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.air-bar {
+  position: relative;
+  flex: 1;
+  height: var(--hud-bar);
+  border-radius: calc(var(--hud-bar) / 2);
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+#airFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: linear-gradient(90deg, #1aa9ff, #49f0ff);
+  box-shadow: 0 0 16px #39d8ff;
+  transition: background 0.3s;
+}
+
+#airFill.low {
+  background: linear-gradient(90deg, #ff2e48, #ff8a3d);
+  box-shadow: 0 0 16px #ff4a5f;
+  animation: airblink 0.5s steps(2) infinite;
+}
+
+.air-ticks {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(0, 0, 0, 0.35) calc(10% - 2px) 10%);
+}
+
+@keyframes airblink {
+  50% {
+    filter: brightness(1.6);
+  }
+}
+
+.hud-right {
+  text-align: right;
+  min-width: 170px;
+}
+
+/* まだ掘っていない部分を暗く、掘った部分を明るく */
+/* ---------------- 演出 ---------------- */
+#popups {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.popup {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--num);
+  font-size: 22px;
+  color: #fff;
+  text-shadow: 0 2px 0 #000, 0 0 10px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  animation: rise 0.9s ease-out forwards;
+}
+
+.popup.big {
+  font-size: 34px;
+  color: var(--gold);
+  text-shadow: 0 3px 0 #8a2b00, 0 0 18px rgba(255, 180, 0, 0.8);
+}
+
+.popup.life {
+  color: #ff7aa2;
+  font-size: 30px;
+  text-shadow: 0 2px 0 #5a0020, 0 0 14px rgba(255, 60, 110, 0.9);
+}
+
+.popup.air {
+  color: var(--air);
+  text-shadow: 0 2px 0 #003a4a, 0 0 14px rgba(57, 216, 255, 0.9);
+}
+
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -190%) scale(1);
+  }
+}
+
+.banner {
+  position: fixed;
+  left: 50%;
+  top: 22%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  padding: 10px 40px 12px;
+  white-space: nowrap;
+  background: rgba(8, 8, 14, 0.88);
+  border-top: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+}
+
+.banner.show {
+  animation: banner 2.4s ease-out forwards;
+}
+
+.banner.warn {
+  border-color: var(--gold);
+}
+
+.banner.bad {
+  border-color: #e63946;
+}
+
+.banner .big {
+  font-family: var(--hud-font);
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.banner-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex: none;
+}
+
+.banner.warn .big {
+  color: var(--gold);
+}
+
+.banner.bad .big {
+  color: #ff8a93;
+}
+
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.8);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -70%) scale(1);
+  }
+}
+
+#vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 160px 40px rgba(255, 30, 50, 0.65);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#vignette.on {
+  animation: vig 0.9s ease-in-out infinite;
+}
+
+@keyframes vig {
+  50% {
+    opacity: 1;
+  }
+}
+
+#flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+}
+
+#flash.go {
+  animation: flash 0.35s ease-out;
+}
+
+#flash.red {
+  background: #ff2e48;
+}
+
+#flash.fire {
+  background: #ffb347;
+}
+
+#flash.big.go {
+  animation: flashBig 0.7s ease-out;
+}
+
+@keyframes flashBig {
+  0% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes flash {
+  0% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------------- ポーズ・リザルト(他のゲームと共通のモーダル) ---------------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 18, 0.72);
+  z-index: 100;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-content {
+  width: min(92vw, 460px);
+  max-height: 96vh;
+  overflow: hidden;
+  padding: clamp(14px, 3vh, 28px) 24px;
+  text-align: center;
+  background: rgba(8, 8, 14, 0.94);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 34px rgba(255, 138, 61, 0.35);
+  animation: resultPop 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+/* 結果画面は、縦に並ぶ要素の間隔をすべてそろえる */
+#result-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 1.6vh, 14px);
+}
+
+@keyframes resultPop {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 結果の見出し(理由1つ) */
+.result-badge {
+  margin: 0;
+  font-family: var(--hud-font);
+  font-weight: 800;
+  font-size: clamp(22px, 4.4vh, 34px);
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+
+#result-score {
+  font-family: var(--hud-font);
+  font-weight: 800;
+  font-size: clamp(44px, 10vh, 76px);
+  line-height: 1.05;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 詳細(タイム・到達)とボーナス: 名前と値の2列。値の書き出しをそろえる */
+#result-stats {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  column-gap: 1.2em;
+  row-gap: 2px;
+  text-align: left;
+  font-family: var(--hud-font);
+  font-size: 16px;
+  font-weight: 800;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+#result-stats b {
+  font-weight: 800;
+}
+
+#result-record {
+  /* 更新したときだけ文字が入る。空のときは場所を取らない */
+  font-family: var(--hud-font);
+  font-size: 15px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+#result-record:empty {
+  display: none;
+}
+
+#result-record.new {
+  color: #7ddc6a;
+  opacity: 1;
+}
+
+#result-ranking {
+  margin: 0 auto;
+  width: min(100%, 340px);
+  font-size: 14px;
+}
+
+.rank-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-row .rank-no {
+  width: 2.6em;
+  text-align: left;
+}
+
+.rank-row.r1 .rank-no {
+  color: #ffd700;
+}
+
+.rank-row.r2 .rank-no {
+  color: #d0e0f0;
+}
+
+.rank-row.r3 .rank-no {
+  color: #cd7f32;
+}
+
+.rank-row .rank-name {
+  flex: 1;
+  text-align: left;
+}
+
+.rank-row.empty {
+  opacity: 0.45;
+  justify-content: center;
+}
+
+.rank-row.me {
+  background: rgba(255, 138, 61, 0.22);
+  outline: 1px solid var(--accent);
+}
+
+@media (max-width: 760px) {
+  :root {
+    --hud-label: 12px;
+    --hud-value: 20px;
+    --hud-icon: 24px;
+    --hud-bar: 18px;
+  }
+  #hud {
+    padding: 8px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .hud-left,
+  .hud-right {
+    min-width: 0;
+    padding: 6px 10px;
+  }
+  .hud-center {
+    order: 3;
+    flex: 1 1 100%;
+    padding: 6px 10px;
+  }
+}
+
+@media (max-height: 640px) {
+  .modal-content {
+    padding: 10px 20px;
+  }
+}
