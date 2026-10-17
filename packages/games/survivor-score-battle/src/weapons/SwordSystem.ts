@@ -1,3 +1,5 @@
+import { getBladeSprite } from './bladeSprite';
+
 export interface BladeHitbox {
   x: number;
   y: number;
@@ -158,65 +160,23 @@ export class SwordSystem {
 
     ctx.save();
 
+    // 剣の絵は一度だけ描いておき、毎フレームは貼るだけにする(bladeSprite.ts)
+    const m = ctx.getTransform();
+    const sprite = getBladeSprite(
+      { glow: isStorm ? '#ffd700' : themeColor, storm: isStorm, size, blur: this.isPlayer && isStorm },
+      Math.hypot(m.a, m.b),
+    );
+    const sw = sprite.canvas.width / sprite.pxPerUnit, sh = sprite.canvas.height / sprite.pxPerUnit;
+    const ox = sprite.originX / sprite.pxPerUnit, oy = sprite.originY / sprite.pxPerUnit;
     for (let i = 0; i < hitboxes.length; i++) {
       const hb = hitboxes[i];
-      ctx.save();
-      ctx.translate(hb.x, hb.y);
-
       // Tangential or outward sword orientation (cutting angle)
-      const bladeOrientation = hb.angle + Math.PI * 0.5;
-      ctx.rotate(bladeOrientation);
-
-      // Outer Glow
-      const bladeGlow = isStorm ? '#ffd700' : themeColor;
-      if (this.isPlayer && isStorm) {
-        ctx.shadowColor = bladeGlow;
-        ctx.shadowBlur = 12;
-      }
-
-      const bladeLen = 38 * size;
-      const bladeW = 8 * size;
-
-      // 1. Blade Body (Sharp Cyber Broadsword)
-      ctx.fillStyle = isStorm ? '#fffae0' : '#ffffff';
-      ctx.beginPath();
-      // Tip
-      ctx.moveTo(0, -bladeLen);
-      // Right edge
-      ctx.lineTo(bladeW * 0.5, -bladeLen * 0.65);
-      ctx.lineTo(bladeW * 0.4, 0);
-      // Hilt guard
-      ctx.lineTo(bladeW * 0.9, 0);
-      ctx.lineTo(bladeW * 0.9, 4 * size);
-      ctx.lineTo(bladeW * 0.2, 4 * size);
-      // Handle
-      ctx.lineTo(bladeW * 0.2, 12 * size);
-      ctx.lineTo(-bladeW * 0.2, 12 * size);
-      ctx.lineTo(-bladeW * 0.2, 4 * size);
-      // Left hilt guard
-      ctx.lineTo(-bladeW * 0.9, 4 * size);
-      ctx.lineTo(-bladeW * 0.9, 0);
-      ctx.lineTo(-bladeW * 0.4, 0);
-      // Left edge
-      ctx.lineTo(-bladeW * 0.5, -bladeLen * 0.65);
-      ctx.closePath();
-      ctx.fill();
-
-      // 2. Neon Edge Outline
-      ctx.strokeStyle = bladeGlow;
-      ctx.lineWidth = isStorm ? 3.5 : 2;
-      ctx.stroke();
-
-      // 3. Center Energy Channel
-      ctx.strokeStyle = isStorm ? '#ff2255' : bladeGlow;
-      ctx.lineWidth = 1.5 * size;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(0, -bladeLen * 0.85);
-      ctx.stroke();
-
-      ctx.restore();
+      const a = hb.angle + Math.PI * 0.5;
+      const cos = Math.cos(a), sin = Math.sin(a);
+      ctx.setTransform(m.a * cos + m.c * sin, m.b * cos + m.d * sin, -m.a * sin + m.c * cos, -m.b * sin + m.d * cos, m.a * hb.x + m.c * hb.y + m.e, m.b * hb.x + m.d * hb.y + m.f);
+      ctx.drawImage(sprite.canvas, -ox, -oy, sw, sh);
     }
+    ctx.setTransform(m);
 
     // Motion Orbit Arc Trail
     if (hitboxes.length > 0) {

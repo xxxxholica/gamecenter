@@ -2,6 +2,7 @@ import { Player } from '../entities/Player';
 import { Boss } from '../entities/Boss';
 import { PickupItem } from '../items/ExpGem';
 import { getInputMode } from '../../../../shared/arcadeGuide';
+import { currentScale, drawChevron, drawShadowedLabel, LOCATOR_FONT } from './locatorSprites';
 
 /** SPECIAL を発動するボタン名(コントローラー / キーボード) */
 const SPECIAL_BUTTONS_PAD = ['Y', 'LB', 'RB', 'RT'];
@@ -456,6 +457,8 @@ export class HudRenderer {
     if (swordItems.length === 0) return;
 
     ctx.save();
+    ctx.font = LOCATOR_FONT;
+    const scale = currentScale(ctx);
     const margin = 55;
     for (const item of swordItems) {
       const sx = item.x - cameraX + width / 2;
@@ -488,34 +491,11 @@ export class HudRenderer {
       const screenX = width / 2 + px;
       const screenY = height / 2 + py;
 
+      // 金色に光る矢印と、距離の文字(影つき)。ぼかしは描いておいた絵を貼る(locatorSprites.ts)
       ctx.save();
       ctx.translate(screenX, screenY);
-
-      // Draw glowing golden locator beacon pointer
-      ctx.rotate(angle);
-      ctx.fillStyle = '#ffd700';
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 12;
-
-      // Pointer chevron
-      ctx.beginPath();
-      ctx.moveTo(14, 0);
-      ctx.lineTo(-8, -9);
-      ctx.lineTo(-2, 0);
-      ctx.lineTo(-8, 9);
-      ctx.closePath();
-      ctx.fill();
-
-      // Mini sword icon & distance label
-      ctx.rotate(-angle);
-      ctx.font = '900 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#000000';
-      ctx.shadowBlur = 4;
-      ctx.fillText(`${Math.round(dist)}m`, 0, -18);
-
+      drawChevron(ctx, angle, scale);
+      drawShadowedLabel(ctx, `${Math.round(dist)}m`, 0, -18, scale);
       ctx.restore();
     }
     ctx.restore();

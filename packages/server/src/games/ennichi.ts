@@ -6,6 +6,7 @@ import { COUNTDOWN_MS, DURATION_MS as DEFAULT_DURATION_MS, MAX_PLAYERS, MODES, u
 import type { ConfigField, GameModule, Member, Msg, Room } from '../engine.ts';
 import { decide, RANDOM, tally } from '../vote.ts';
 import { log } from '../log.ts';
+import { isNum } from '../../../shared/online/validate.ts';
 
 /** 制限時間(テスト用に環境変数で短縮できる。クライアントには start で伝える) */
 const DURATION_MS = Number(process.env.ONLINE_ENNICHI_DURATION_MS) || DEFAULT_DURATION_MS;
@@ -35,7 +36,6 @@ interface EnnichiMember {
   finalized: boolean;
 }
 
-const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const isVec = (v: unknown, n: number, lim: number): v is number[] => Array.isArray(v) && v.length === n && v.every((x) => isNum(x, -lim, lim));
 
 function cleanDefeated(d: unknown): Defeated | null {

@@ -57,6 +57,35 @@ export function buildFarVariant(car: CarBase): THREE.Group {
   for (const o of remove) o.parent?.remove(o);
 
   // 3. 素材ごとに1メッシュへ結合(ホイールも車体と一緒に焼き込む)
-  mergeMeshesByMaterial(root);
+  mergeMeshesByMaterial(root, { pruneEmpty: true });
+  return root;
+}
+
+let ultraDark: THREE.MeshStandardMaterial | null = null;
+function getUltraDark(): THREE.MeshStandardMaterial {
+  ultraDark ??= new THREE.MeshStandardMaterial({ color: 0x0c1018, roughness: 0.5, metalness: 0.3 });
+  return ultraDark;
+}
+
+/**
+ * NPC車の「とても遠い」用の簡易モデルを作る(THREE.LOD の一番遠い側)。
+ * buildFarVariant でも、1台あたり 22 回の描画(素材ごとに1メッシュ)が残る。見えている交通NPCは十数台〜三十台で、
+ * そのほとんどが 150m 以上先(霧の薄いコースでは 500m 以上)にあり、画面では数ピクセルの塗装色の点と光だけなので、
+ * 車体・屋根の塗装、ライト(発光する素材)、それ以外のすべて(1つの暗い素材)の数個のメッシュに減らす。
+ * 渡す car は、このために新しく作った別のインスタンスであること(中身を書き換える)。
+ */
+export function buildUltraFarVariant(car: CarBase): THREE.Group {
+  const root = buildFarVariant(car);
+  const keep = new Set<THREE.Material>([car.bodyMaterial, car.roofMaterial, car.headlightEmissive, car.taillightEmissive, car.amberEmissive]);
+  const dark = getUltraDark();
+  const remove: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (o.name === 'contact_shadow') { remove.push(o); return; }
+    if (!keep.has(mesh.material as THREE.Material)) mesh.material = dark;
+  });
+  for (const o of remove) o.parent?.remove(o);
+  mergeMeshesByMaterial(root, { pruneEmpty: true });
   return root;
 }

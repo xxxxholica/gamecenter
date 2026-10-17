@@ -50,6 +50,8 @@ const BOARD_H = ROW_H + 0.5;
 const CORNER = 0.22;     // board corner radius (m)
 const CLEAR_REAL = 4.7;  // free height (m) under any board that hangs over the lanes
 
+// 看板などのテクスチャ用のキャンバスは、CPU 側で描く(willReadFrequently: true)。Firefox は、GPU 側のキャンバスをテクスチャへ上げるときに読み戻しが入り、
+// 256x104 の看板 1 枚で約 7ms かかっていた(東京スカイウェイ 60 秒で 215 回)。CPU 側なら、読み戻しがなく 1ms 未満。
 interface Board { front: THREE.CanvasTexture; back: THREE.CanvasTexture; w: number; h: number }
 
 const measureCtx = document.createElement('canvas').getContext('2d')!;
@@ -86,7 +88,7 @@ function makeBoard(row: SignRow, style: SignStyle, badge?: string): Board {
   const W = Math.round(w * PX_PER_M), H = Math.round(h * PX_PER_M);
 
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   roundRect(g, 0, 0, W, H, CORNER * PX_PER_M); g.fillStyle = style.background; g.fill();
   roundRect(g, 0.1 * PX_PER_M, 0.1 * PX_PER_M, W - 0.2 * PX_PER_M, H - 0.2 * PX_PER_M, 0.14 * PX_PER_M);
   g.strokeStyle = style.border; g.lineWidth = 0.055 * PX_PER_M; g.stroke();
@@ -111,7 +113,7 @@ function makeBoard(row: SignRow, style: SignStyle, badge?: string): Board {
   const front = new THREE.CanvasTexture(c); front.colorSpace = THREE.SRGBColorSpace; front.anisotropy = 8;
 
   const bc = document.createElement('canvas'); bc.width = W; bc.height = H;
-  const b = bc.getContext('2d')!;
+  const b = bc.getContext('2d', { willReadFrequently: true })!;
   roundRect(b, 0, 0, W, H, CORNER * PX_PER_M); b.fillStyle = '#7b8189'; b.fill();
   b.strokeStyle = '#a4aab1'; b.lineWidth = 0.05 * PX_PER_M;                       // rim + horizontal / vertical ribs
   roundRect(b, 0.08 * PX_PER_M, 0.08 * PX_PER_M, W - 0.16 * PX_PER_M, H - 0.16 * PX_PER_M, 0.15 * PX_PER_M); b.stroke();
@@ -124,7 +126,7 @@ function makeBoard(row: SignRow, style: SignStyle, badge?: string): Board {
 function makeKmBoard(text: string, style: SignStyle): Board {
   const S = 256;
   const c = document.createElement('canvas'); c.width = S; c.height = S;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   roundRect(g, 0, 0, S, S, 30); g.fillStyle = style.background; g.fill();
   roundRect(g, 12, 12, S - 24, S - 24, 20); g.strokeStyle = '#fff'; g.lineWidth = 8; g.stroke();
   g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -132,7 +134,7 @@ function makeKmBoard(text: string, style: SignStyle): Board {
   g.font = `bold 56px ${style.subFontFamily}`; g.fillText('km', S / 2, S * 0.75);
   const front = new THREE.CanvasTexture(c); front.colorSpace = THREE.SRGBColorSpace;
   const bc = document.createElement('canvas'); bc.width = S; bc.height = S;
-  const b = bc.getContext('2d')!; roundRect(b, 0, 0, S, S, 30); b.fillStyle = '#7b8189'; b.fill();
+  const b = bc.getContext('2d', { willReadFrequently: true })!; roundRect(b, 0, 0, S, S, 30); b.fillStyle = '#7b8189'; b.fill();
   const back = new THREE.CanvasTexture(bc); back.colorSpace = THREE.SRGBColorSpace;
   return { front, back, w: 0.9, h: 0.9 };
 }
@@ -332,7 +334,7 @@ export function buildRoadSigns(
 function makeChevronTexture(left: boolean): THREE.CanvasTexture {
   const W = 320, H = 240, c = document.createElement('canvas');
   c.width = W; c.height = H;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   roundRect(g, 0, 0, W, H, 22); g.fillStyle = '#ffd200'; g.fill();
   roundRect(g, 10, 10, W - 20, H - 20, 14); g.strokeStyle = '#111'; g.lineWidth = 10; g.stroke();
   g.strokeStyle = '#111'; g.lineWidth = 34; g.lineCap = 'butt'; g.lineJoin = 'miter';
@@ -381,7 +383,7 @@ export function buildCurveSigns(road: THREE.Vector3[], roadWidth: number, opts: 
   if (cur) runs.push(cur);
 
   const tex = { left: makeChevronTexture(true), right: makeChevronTexture(false) };
-  const back = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const g = c.getContext('2d')!; g.fillStyle = '#7b8189'; g.fillRect(0, 0, 64, 48); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const back = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const g = c.getContext('2d', { willReadFrequently: true })!; g.fillStyle = '#7b8189'; g.fillRect(0, 0, 64, 48); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
   const BW = 1.5, BH = 1.12, POLE_H = 1.95, SPACING = opts.spacing ?? 10, COUNT = opts.count ?? 4;
   const poles: THREE.BufferGeometry[] = [];
   const cyl = new THREE.CylinderGeometry(0.045, 0.05, POLE_H, 10);

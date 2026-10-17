@@ -17,6 +17,22 @@ export class Dohyo {
 
     // Three.js メッシュ作成
     this.createDohyoMesh();
+    this.keepScorchProgram();
+  }
+
+  /**
+   * 焦げ跡の材質のシェーダを、いつも作ってある状態にしておく。
+   * 焦げ跡は最初の爆発で初めて描かれ、試合が変わるたびに材質を破棄するので、そのつどシェーダの作り直しで画面が止まる。
+   * そこで、同じ設定の見本を、色も奥行きも書かない(画面に何も出ない)状態で毎フレーム描いておく。
+   */
+  private keepScorchProgram() {
+    for (let i = 0; i < 4; i++) this.scorchTextures.push(this.makeScorchTexture());
+    const sample = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.001, 0.001),
+      new THREE.MeshBasicMaterial({ map: this.scorchTextures[0], transparent: true, colorWrite: false, depthWrite: false })
+    );
+    sample.frustumCulled = false;
+    this.mesh.add(sample);
   }
 
   /** 焦げ跡の模様。中心が濃く、縁は不揃いにかすれる */
@@ -50,10 +66,6 @@ export class Dohyo {
    */
   public addScorch(pos: THREE.Vector3, radius: number, strength: number = 1) {
     if (Math.hypot(pos.x, pos.z) > this.radius - 0.1) return;
-
-    if (this.scorchTextures.length === 0) {
-      for (let i = 0; i < 4; i++) this.scorchTextures.push(this.makeScorchTexture());
-    }
 
     let mesh: THREE.Mesh;
     if (this.scorches.length >= Dohyo.MAX_SCORCHES) {

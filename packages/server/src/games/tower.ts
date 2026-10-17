@@ -7,6 +7,7 @@ import {
 import type { BlockSnap, ResultEntry, TowerState } from '../../../shared/towerProtocol.ts';
 import type { ConfigField, GameModule, Member, Msg, Room } from '../engine.ts';
 import { log } from '../log.ts';
+import { isNum } from '../../../shared/online/validate.ts';
 
 /** 高さの上限(m)。これを超える値は不正として捨てる */
 const MAX_HEIGHT = 400;
@@ -16,7 +17,6 @@ const MAX_BEST_STEP = 12;
 /** 参加者に付ける名前(使われていないものからランダム) */
 export const TOWER_NAMES = ['大工のゲン', 'つみき名人', 'クレーン王', '鳶のタツ', 'ブロック侍', 'バランス姫', 'ビル建てっ子', '高所の鬼'];
 
-const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** 整数の短い一覧の検証。範囲外や多すぎるものは捨てる(不正なら空) */

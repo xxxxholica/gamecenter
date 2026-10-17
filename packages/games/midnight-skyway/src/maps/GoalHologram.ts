@@ -5,7 +5,7 @@ function chequer(cols: number, rows: number): THREE.CanvasTexture {
   const cell = 32, c = document.createElement('canvas');
   c.width = cols * cell;
   c.height = rows * cell;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
     g.fillStyle = (x + y) % 2 === 0 ? '#ffffff' : '#0a0a0a';
     g.fillRect(x * cell, y * cell, cell, cell);
@@ -22,7 +22,7 @@ function noEntry(aspect: number): THREE.CanvasTexture {
   const w = 1024, h = Math.round(w / aspect), c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   g.fillStyle = '#121212';
   g.fillRect(0, 0, w, h);
   const band = h * 0.24;

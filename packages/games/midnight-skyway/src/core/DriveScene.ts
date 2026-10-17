@@ -1,3 +1,4 @@
+import { forceSinglePassForTransparent } from './singlePass';
 import { PostFX } from './PostFX';
 import { audio } from '../audio';
 import { createSkyEnvironments, type SkyEnvironments } from './SkyEnvironment';
@@ -615,6 +616,8 @@ export class DriveScene {
 
   public start(): void {
     this.active = true;
+    forceSinglePassForTransparent(this.scene);   // 透明で両面の素材が、毎フレーム2回描かれ、そのたびにシェーダを照合し直すのを防ぐ
+
     if (this.rainy) audio.sfx.startRain();
     this.clock.start();
     if (this.animationFrameId === null) {

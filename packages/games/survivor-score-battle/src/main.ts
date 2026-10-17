@@ -1,5 +1,6 @@
 import { GameEngine } from './game/GameEngine';
 import { installHomeReturn } from '../../../shared/homeReturn';
+import { benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 installHomeReturn();
 
@@ -42,6 +43,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Game Engine
   const engine = new GameEngine();
+
+  // ベンチマーク(?bench=1): タイトル(CPU のデモが動く) / 試合(ランダム入力。レベルアップ・結果の画面もそのまま通る) / 5分間を最後まで(自動操作)
+  declareBenchTargets([
+    { id: 'title', label: 'タイトル(CPUデモ)', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 30 },
+    { id: 'play', label: '試合(ランダム入力)', kind: 'play', params: { scene: 'play' }, input: 'random', seconds: 120 },
+    { id: 'full', label: '5分間を最後まで(自動操作・大群とボス3体)', kind: 'play', params: { scene: 'full' }, input: 'self', seconds: 340 },
+  ]);
+  const benchScene = benchParam('scene');
+  if (benchScene === 'play' || benchScene === 'full') engine.startBenchMatch();
+  else if (benchScene === 'title') benchReady('title');
 
   // AudioContext unlock on first interaction
   const unlockAudio = () => {

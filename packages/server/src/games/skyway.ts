@@ -6,6 +6,7 @@ import { CAR_PALETTES, CAR_TYPES, type CarType } from '../../../shared/carPalett
 import type { ConfigField, GameModule, Member, Msg, Room } from '../engine.ts';
 import { decide, RANDOM, tally } from '../vote.ts';
 import { log } from '../log.ts';
+import { isNum } from '../../../shared/online/validate.ts';
 import { rankRacers, updateTrack, type ProgressTrack } from '../../../shared/skywayStandings.ts';
 
 /** go 受信からカウントダウン開始までの猶予。全員にメッセージが届いてから始まるようにする。 */
@@ -41,7 +42,7 @@ interface SkywayMember {
 /** [x, y, z, rotY, speed, steer, roll, pitch, drift, progress, boost] の許容範囲(boost は無くてもよい)。範囲外は不正として捨てる(他の人のブラウザに巨大な値を渡さない)。 */
 const STATE_LIMITS: [number, number][] = [[-1e5, 1e5], [-1e4, 1e4], [-1e5, 1e5], [-100, 100], [-200, 200], [-4, 4], [-4, 4], [-4, 4], [0, 1], [-1, 2], [0, 1]];
 const isState = (s: unknown): s is CarState =>
-  Array.isArray(s) && (s.length === 10 || s.length === 11) && s.every((v, i) => typeof v === 'number' && Number.isFinite(v) && v >= STATE_LIMITS[i][0] && v <= STATE_LIMITS[i][1]);
+  Array.isArray(s) && (s.length === 10 || s.length === 11) && s.every((v, i) => isNum(v, STATE_LIMITS[i][0], STATE_LIMITS[i][1]));
 
 const isCar = (c: unknown): c is CarSpec =>
   !!c && typeof (c as CarSpec).type === 'string' && (c as CarSpec).type.length <= 24 && Number.isInteger((c as CarSpec).body) && Number.isInteger((c as CarSpec).roof);

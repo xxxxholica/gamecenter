@@ -1,4 +1,6 @@
 import { readGamepads } from '../../../../shared/gamepadFrame';
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+
 // Web Audio の土台: AudioContext、BGM/SEのバス、ミュート(Mキー)、自動再生制限の解除、タブ非表示時の停止。
 // 効果音はすべて合成。BGMだけは public/bgm の音源ファイルを使う(music.ts)。
 
@@ -45,9 +47,7 @@ export class AudioEngine {
     this.sfxBus.gain.value = 0.65;
     this.sfxBus.connect(limiter);
 
-    this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = this.noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = createWhiteNoiseBuffer(ctx, 2);
 
     try {
       this.muted = localStorage.getItem(MUTE_KEY) === '1';

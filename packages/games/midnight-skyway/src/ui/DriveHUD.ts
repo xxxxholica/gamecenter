@@ -1,3 +1,4 @@
+import { MINIMAP_SIZE, tracePolylineNear } from './minimapTrace';
 import { speedGaugeSvg, boostArcSvg, angleOf, SPEED_MAX, SPEED_RED, SPEED_WARN, SEG_COUNT } from './dials';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
@@ -20,11 +21,10 @@ export interface DriveHUDEvents {
   onPauseChange?: (paused: boolean) => void;
 }
 
-const MAP_SIZE = 270;
+const MAP_SIZE = MINIMAP_SIZE;
 /** ミニマップの拡大率(1m あたりのピクセル数)と、自車を置く縦の位置(0 = 上端、1 = 下端)。進行方向が上、前方が広く見える */
 const MINIMAP_ZOOM = 1.1;
 const MINIMAP_CAR_Y = 0.7;
-
 /**
  * Drive HUD (Ultra-Clean Arcade Style):
  * - Streamlined to 2 essential non-intrusive zones:
@@ -768,10 +768,7 @@ export class DriveHUD {
     ctx.shadowBlur = 5;
     for (const r of this.extraRoutes) {
       ctx.beginPath();
-      r.points.forEach((p, i) => {
-        const [cx, cy] = toCanvas(p.x, p.y);
-        if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
-      });
+      tracePolylineNear(ctx, r.points, false, toCanvas);
       ctx.strokeStyle = r.drivable ? '#88ccff' : '#444455';
       ctx.lineWidth = r.drivable ? 2.8 : 1.8;
       ctx.stroke();
@@ -783,11 +780,7 @@ export class DriveHUD {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
     ctx.shadowBlur = 5;
     ctx.beginPath();
-    this.minimapPoints.forEach((p, i) => {
-      const [cx, cy] = toCanvas(p.x, p.y);
-      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
-    });
-    ctx.closePath();
+    tracePolylineNear(ctx, this.minimapPoints, true, toCanvas);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3.6;
     ctx.stroke();

@@ -11,6 +11,9 @@ import {
   createSunPatchTexture,
 } from '../graphics/Textures';
 
+/** クリップ面を、何も切らない位置に置くときの値(z >= -NO_CLIP を描く) */
+const NO_CLIP = 1e6;
+
 interface CorridorSegment {
   group: THREE.Group;
   baseZ: number;
@@ -59,6 +62,12 @@ export class Corridor {
   // ドアの窓越しに見える教室の中(右壁の外側): 机・椅子・黒板
   private classroomMaterials: Record<'wall' | 'deskTop' | 'deskLeg' | 'chair' | 'blackboard' | 'blackboardFrame', THREE.MeshBasicMaterial>;
   private classroomCounter = 0;
+
+  /**
+   * クリア演出で廊下を出口で切り落とすクリップ面(z < exitZ を描かない)。ふだんは何も切らない位置に置いておく。
+   * 演出の始まりで面を付けると、廊下の全素材のシェーダが作り直しになり、画面が 50〜80ms 止まるため、最初から付けておいて位置だけ動かす。
+   */
+  private readonly exitPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), NO_CLIP);
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -179,6 +188,18 @@ export class Corridor {
       const group = this.createSegmentGroup(baseZ);
       this.scene.add(group);
       this.segments.push({ group, baseZ });
+    }
+    const touched = new Set<THREE.Material>();
+    for (const seg of this.segments) {
+      seg.group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (touched.has(m)) continue;
+          touched.add(m);
+          m.clippingPlanes = [this.exitPlane];
+        }
+      });
     }
   }
 
@@ -562,26 +583,17 @@ export class Corridor {
    * nullで解除。廊下の区画は使い回されるので、位置ではなくワールド空間のクリップ面で切る。
    */
   public setExitClip(exitZ: number | null): void {
-    const planes = exitZ === null ? null : [new THREE.Plane(new THREE.Vector3(0, 0, 1), -exitZ)];
-    const touched = new Set<THREE.Material>();
-    for (const seg of this.segments) {
-      seg.group.traverse((obj) => {
-        const mesh = obj as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const m of mats) {
-          if (touched.has(m)) continue;
-          touched.add(m);
-          m.clippingPlanes = planes;
-          m.needsUpdate = true;
-        }
-      });
-    }
+    this.exitPlane.constant = exitZ === null ? NO_CLIP : -exitZ;
   }
 
   /** 右のドアガラスの反射を描く。本番の描画の直前に毎フレーム呼ぶ */
   public renderGlassReflection(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
     this.glassReflection.render(renderer, scene, camera);
+  }
+
+  /** 右のドアガラスの反射に映る物のシェーダを先に作っておく(起動時の warmupShaders から) */
+  public compileGlassReflection(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+    this.glassReflection.compile(renderer, scene, camera);
   }
 
   public reset(): void {

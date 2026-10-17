@@ -45,6 +45,29 @@ export class EffectsManager {
 
     this.particleGroup = new THREE.Group();
     this.scene.add(this.particleGroup);
+    this.keepParticlePrograms();
+  }
+
+  /**
+   * 粒の材質(破片・火花・しぶきと煙の3通り)のシェーダを、いつも作ってある状態にしておく。
+   * 粒の材質は消えるたびに破棄するので、粒がひとつも無い間にシェーダまで破棄され、次の演出(判定の瞬間など)で作り直しになって
+   * 画面が止まる。そこで、同じ設定の見本を、色も奥行きも書かない(画面に何も出ない)状態で毎フレーム描いておく。
+   * 見本は毎フレーム描かれるので、ステージが変わって光の数が変わっても、ステージの読み込みと一緒にシェーダが作られる。
+   */
+  private keepParticlePrograms(): void {
+    const geom = new THREE.BoxGeometry(0.001, 0.001, 0.001);
+    const samples = [
+      new THREE.MeshStandardMaterial({ roughness: 0.8 }),                 // spawnExplosionChunks
+      new THREE.MeshBasicMaterial(),                                       // spawnSparks
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 }),    // spawnLiquidSplash・spawnSmoke
+    ];
+    for (const mat of samples) {
+      mat.colorWrite = false;
+      mat.depthWrite = false;
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.frustumCulled = false;
+      this.particleGroup.add(mesh);
+    }
   }
 
   private shape(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {

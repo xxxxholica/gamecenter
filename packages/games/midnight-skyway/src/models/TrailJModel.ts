@@ -613,33 +613,8 @@ export class TrailJModel extends CarBase {
       carRoot.add(handle);
     });
 
-    // --- 9. 4 EXPOSED ALLOY ROAD WHEELS (CORRECT OUTWARD ORIENTATION!) ---
-    // The spare wheel was praised because its wheel face (+X) faced the viewer.
-    // Here, for the 4 road wheels:
-    // Right wheels (x > 0): rotation.y = 0  -> face (+X) points RIGHT OUTWARD!
-    // Left wheels (x < 0):  rotation.y = PI -> face (+X) points LEFT OUTWARD!
-    const wheelPositions = [
-      { x: -trackWidth / 2, z: frontWheelZ, isLeft: true },
-      { x: trackWidth / 2, z: frontWheelZ, isLeft: false },
-      { x: -trackWidth / 2, z: rearWheelZ, isLeft: true },
-      { x: trackWidth / 2, z: rearWheelZ, isLeft: false },
-    ];
-
-    this.wheels = [];
-    wheelPositions.forEach((pos) => {
-      // Exactly identical wheel specification to the admired spare tire!
-      const wheel = this.createDetailedWheel(wheelRadius, wheelWidth, wheelRadius * 0.58, 8, true);
-      wheel.position.set(pos.x, wheelRadius + 0.01, pos.z);
-
-      if (pos.isLeft) {
-        wheel.rotation.y = Math.PI; // Face points LEFT!
-      } else {
-        wheel.rotation.y = 0;       // Face points RIGHT!
-      }
-
-      this.wheels.push(wheel);
-      carRoot.add(wheel);
-    });
+    // --- 9. 4 EXPOSED ALLOY ROAD WHEELS (same spec as the spare tire) ---
+    this.addRoadWheels(carRoot, trackWidth, frontWheelZ, rearWheelZ, wheelRadius, wheelWidth);
 
     // Exhaust Pipe
     const exhaustGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.20, 16);

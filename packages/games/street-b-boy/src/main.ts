@@ -16,6 +16,7 @@ import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -44,6 +45,22 @@ const DRONE_SPIN_REACH = 0.6;
 const TITLE_DANCER_Z = 1.1;
 
 type GameState = 'title' | 'attract_demo' | 'attract_ranking' | 'playing' | 'game_over' | 'clear';
+
+/** ベンチマーク(?bench=1&scene=play&stage=n)の自動操作。右へ走り、一定間隔でジャンプとスピンを出す。 */
+function benchBotInput(base: InputState, t: number, jumpNow: boolean, jumpHeld: boolean): InputState {
+  return {
+    ...base,
+    left: false,
+    right: true,
+    down: false,
+    jump: jumpHeld,
+    jumpPressed: jumpNow,
+    jumpReleased: false,
+    spinPressed: t % 1.6 < 0.016,
+    startPressed: false,
+    confirmPressed: false,
+  };
+}
 
 class StreetBBoyGame {
   private canvas: HTMLCanvasElement;
@@ -121,6 +138,14 @@ class StreetBBoyGame {
 
   private lastTime: number = performance.now();
 
+  // ベンチマーク(?bench=1): 指定のステージを、ボットの操作で走る
+  private readonly benchScene = benchParam('scene');
+  private benchClock = 0;
+  private benchBestX = 0;
+  private benchStallSec = 0;
+  private benchLastJump = -10;
+  private benchJumpReadyAt = 0;
+
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     // 高解像度(Retina等)では描画解像度自体が高くギザギザが目立たないため、MSAA(antialias)は等倍の画面だけで使う。
@@ -163,6 +188,7 @@ class StreetBBoyGame {
     this.setupTitleScene();
 
     window.addEventListener('resize', this.onResize);
+    this.keepLatePrograms();
 
     // タイトル消去後(ゲーム開始時)とタイトル表示中の両方のライト構成のシェーダをループ開始前にコンパイルする
     if (this.titleGroup) this.titleGroup.visible = false;
@@ -174,6 +200,48 @@ class StreetBBoyGame {
 
     // Start rendering loop
     requestAnimationFrame(this.gameLoop);
+
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      ...Object.keys(STAGE_CONFIGS).map((n) => ({
+        id: `stage${n}`,
+        label: `STAGE ${n} ${STAGE_CONFIGS[Number(n)].title}`,
+        kind: 'play',
+        params: { scene: 'play', stage: n },
+        input: 'self' as const,
+        seconds: STAGE_CONFIGS[Number(n)].timeLimit * 3,   // ボットが詰まっても、制限時間の3倍で打ち切る
+      })),
+    ]);
+    if (this.benchScene === 'play') this.startGame();
+    else if (this.benchScene === 'title') benchReady('title');
+  }
+
+  /**
+   * 遊んでいる途中で初めて描かれる材質(ゴールの大きなラジカセの窓・煙などの粒・ゴールの旗・
+   * 5面の終わりに1面の街へ戻るとき半透明でフェードインする建物)のシェーダを、いつも作ってある状態にしておく。
+   * three.js は視界に入った物から順にシェーダを作るので、そのままだとゴール前や街へ戻る瞬間に作り直しで画面が止まる。
+   * そこで、同じ設定の見本を、色も奥行きも書かない(画面に何も出ない)状態で毎フレーム描いておく。
+   */
+  private keepLatePrograms(): void {
+    const geom = new THREE.BoxGeometry(0.001, 0.001, 0.001);
+    const map = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.needsUpdate = true;
+    const samples: THREE.Mesh[] = [
+      new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ transparent: true })),
+      new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ transparent: true, map })),
+      new THREE.InstancedMesh(geom, new THREE.MeshBasicMaterial({ transparent: true }), 1),
+      new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ transparent: true })),
+      new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ transparent: true, side: THREE.BackSide })),
+      new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })),
+    ];
+    for (const mesh of samples) {
+      const mat = mesh.material as THREE.Material;
+      mat.colorWrite = false;
+      mat.depthWrite = false;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+    }
   }
 
   private setupEventListeners(): void {
@@ -346,7 +414,8 @@ class StreetBBoyGame {
   private startGame(isDemo: boolean = false): void {
     const canReuseTitleStage = (this.state === 'title' || this.state === 'attract_ranking')
       && this.stage !== null
-      && this.stage.stageNumber === 1;
+      && this.stage.stageNumber === 1
+      && this.benchStartStage() === 1;
     const reusedDancer = canReuseTitleStage ? this.titleDancer : null;
     if (reusedDancer) {
       this.titleDancer = null;
@@ -365,7 +434,7 @@ class StreetBBoyGame {
     }
     this.cleanupGameplay();
 
-    this.currentStage = 1;
+    this.currentStage = this.benchStartStage();
     this.score = 0;
     this.timeLeft = this.getStageInitialTime(this.currentStage);
     this.lives = INITIAL_LIVES;
@@ -424,6 +493,44 @@ class StreetBBoyGame {
 
     this.stateTimer = 0;
     this.input.resetIdleTimer();
+  }
+
+  /** ベンチマークで指定されたステージ(通常は常に1)。 */
+  private benchStartStage(): number {
+    if (this.benchScene !== 'play') return 1;
+    const n = Number(benchParam('stage'));
+    return n in STAGE_CONFIGS ? n : 1;
+  }
+
+  /** ボットの操作を入力に差し込む。右へ進めない状態が3秒続いたら、少し先の上空へ移して落とす。 */
+  private applyBenchBot(input: InputState, dt: number): InputState {
+    if (this.state !== 'playing' || !this.player || this.countingDown) return input;
+    this.benchClock += dt;
+    const x = this.player.x;
+    if (x > this.benchBestX + 0.5) {
+      if (Math.floor(x / 40) > Math.floor(this.benchBestX / 40)) benchMark(`x=${Math.floor(x / 40) * 40} y=${this.player.y.toFixed(1)} dead=${this.player.isDead ? 1 : 0}`);   // 進み具合(スパイクに「どのあたりか」が付く)
+      this.benchBestX = x;
+      this.benchStallSec = 0;
+    } else this.benchStallSec += dt;
+    // ゴールを越えて走り抜けたら(縦穴を落ちた先など、クリア判定を通らずに先へ進んだ場合)、そこで終わりにする
+    if (this.stage && this.benchBestX > this.stage.config.goalX + 30) benchDone('past-goal');
+    if (this.benchStallSec > 3 && !this.player.isDead) {
+      this.player.reset(this.benchBestX + 4, this.player.y + 4);
+      this.benchBestX += 4;
+      this.benchStallSec = 0;
+    }
+    this.lives = Math.max(this.lives, 2);   // ミスしても終わらない(チェックポイントから続ける)
+
+    // ジャンプ: 先に足場が無い(穴)か、先に高い足場(段差)があるときに跳ぶ。それ以外も一定間隔で跳んで障害物を越える
+    let jumpNow = false;
+    if (this.player.isGrounded && this.stage && this.benchClock >= this.benchJumpReadyAt) {
+      const px = this.player.x, py = this.player.y;
+      const under = (ax: number) => this.stage!.platforms.some((p) => ax >= p.x && ax <= p.x + p.w && p.y >= py - 1.0 && p.y <= py + 0.3);
+      const step = this.stage.platforms.some((p) => p.x > px && p.x < px + 2.5 && p.y > py + 0.3);
+      if (!under(px + 2.0) || step || this.benchClock - this.benchLastJump > 1.2) jumpNow = true;
+    }
+    if (jumpNow) { this.benchLastJump = this.benchClock; this.benchJumpReadyAt = this.benchClock + 0.35; }
+    return benchBotInput(input, this.benchClock, jumpNow, this.benchClock - this.benchLastJump < 0.45);
   }
 
   private cleanupGameplay(): void {
@@ -502,6 +609,7 @@ class StreetBBoyGame {
       onGo: () => {
         this.countingDown = false;
         if (this.state === 'playing') this.hud.hideCenterBanner();
+        if (this.benchScene === 'play') benchReady('stage-start');
       },
     });
   }
@@ -519,7 +627,8 @@ class StreetBBoyGame {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05); // Cap delta time for stable physics
     this.lastTime = timestamp;
 
-    const inputState = this.input.update();
+    let inputState = this.input.update();
+    if (this.benchScene === 'play') inputState = this.applyBenchBot(inputState, dt);
 
     // ポーズ中は進めない(描画だけ続ける)
     if (this.pause.isOpen) {
@@ -1203,6 +1312,7 @@ class StreetBBoyGame {
 
     this.state = 'clear';
     this.stateTimer = 0;
+    if (this.benchScene === 'play') benchDone('clear');
     this.hud.setHordeWarning(0);
     this.sound.stopBgm();
     this.sound.playClear();

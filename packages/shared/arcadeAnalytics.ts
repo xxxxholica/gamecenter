@@ -63,14 +63,6 @@ export interface ProgressionMetrics {
   extraStats?: Record<string, unknown>;
 }
 
-export interface ErrorReport {
-  message: string;
-  stack?: string;
-  filename?: string;
-  lineno?: number;
-  colno?: number;
-}
-
 const PERF_SAMPLE_INTERVAL_MS = 5000;
 const API_ENDPOINT = '/api/analytics/event';
 const SESSION_STORAGE_KEY = 'gamecenter_session_id';

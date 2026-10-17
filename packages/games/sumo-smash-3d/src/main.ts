@@ -6,6 +6,7 @@ import { FighterView } from './entities/FighterView';
 import { InputManager, PlayerInputState } from './input/InputManager';
 import { SoundManager } from './audio/SoundManager';
 import { ParticleManager } from './effects/ParticleManager';
+import { HalfResFx } from './effects/HalfResFx';
 import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
@@ -22,6 +23,7 @@ import type { PublicStatus } from '../../../shared/online/core';
 import type { FighterSnap, FxEvent, ServerMsg } from '../../../shared/sumoProtocol';
 import { ROUND_NAMES, WINS_TO_MATCH } from '../../../shared/sumoProtocol';
 import { FIGHTERS, MATCH_OVER_DELAY_SEC, SimWorld, startPose } from '../../../shared/sumoSim/SimWorld';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import type { FighterInput } from '../../../shared/sumoSim/SimWorld';
 import type { FighterActions, FighterMoveInput } from '../../../shared/sumoSim/SimFighter';
 import { createNet, fetchSumoStatus } from './online/net';
@@ -93,6 +95,8 @@ class SumoGame {
   private inputManager: InputManager;
   private soundManager: SoundManager;
   private particleManager: ParticleManager;
+  /** 爆発の炎・煙を半分の解像度で描いて重ねる(場外の大爆発で GPU の塗りつぶしが間に合わなくなるため) */
+  private halfResFx: HalfResFx;
   private uiManager: UIManager;
   /** 演出イベントの再生先 */
   private fxSink!: FxSink;
@@ -138,7 +142,10 @@ class SumoGame {
   private inputArmTime: number = 0;
 
   // CPU対戦(ブラウザ内のシミュレーション)
-  private cpu: { sim: SimWorld; ai: SumoAI } | null = null;
+  private cpu: { sim: SimWorld; ai: SumoAI; benchAis?: SumoAI[] } | null = null;
+  // ベンチマーク(?bench=1&scene=bout&n=2〜4): 全員を CPU が操作して、1試合(二本先取)を最後まで見せる
+  private readonly benchScene = benchParam('scene');
+  private benchReadySent = false;
 
   // オンライン対戦(サーバーが持つシミュレーションの表示)
   private readonly net = createNet();
@@ -203,6 +210,7 @@ class SumoGame {
     // 5. 各種マネージャー
     this.soundManager = new SoundManager();
     this.particleManager = new ParticleManager(this.scene);
+    this.halfResFx = new HalfResFx(this.particleManager.fx);
     this.fxSink = {
       sound: this.soundManager,
       particle: this.particleManager,
@@ -292,17 +300,33 @@ class SumoGame {
     );
 
     // 初回フレームのシェーダコンパイル・テクスチャ転送を requestAnimationFrame 開始前に完了させる
-    this.renderer.render(this.scene, this.camera);
+    this.halfResFx.render(this.renderer, this.scene, this.camera, true);
     this.renderer.getContext().finish();
     this.particleManager.update(0.016);
+
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      ...[2, 3, 4].map((n) => ({
+        id: `bout-${n}`,
+        label: `${n}人の取り組み(全員CPU)`,
+        kind: 'bout',
+        params: { scene: 'bout', n: String(n) },
+        input: 'self' as const,
+        seconds: 240,
+      })),
+    ]);
 
     // 初期状態はタイトル画面
     const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
     if (isPreview) {
       this.titleScreen.hide();
       this.startCpuBattle();
+    } else if (this.benchScene === 'bout') {
+      this.titleScreen.hide();
+      this.startBenchBout(Math.min(4, Math.max(2, Number(benchParam('n')) || 2)));
     } else {
       this.showTitle();
+      if (this.benchScene === 'title') benchReady('title');
     }
 
     // アニメーションループ開始
@@ -423,6 +447,21 @@ class SumoGame {
     sim.start();                                              // 「見合って」から。柝・バナーは演出イベントとして最初のフレームで再生される
   }
 
+  /** ベンチマーク用: n 人(2〜4)の力士を全員 CPU が操作する。HUD は2人用のまま(3人目以降は描画だけ)。 */
+  private startBenchBout(n: number) {
+    this.match = null;
+    this.showViews(n, new Array<string | null>(n).fill(null));
+    this.uiManager.setMultiLayout(null);
+    this.uiManager.setRematchEnabled(true);
+    this.uiManager.setMode('pve');
+    this.prepareBattleScreen();
+
+    const sim = new SimWorld(CANNON, { count: n, winsToMatch: WINS_TO_MATCH });
+    this.cpu = { sim, ai: new SumoAI(sim.fighters[1]), benchAis: sim.fighters.map((f) => new SumoAI(f)) };
+    this.roundState = 'standby';
+    sim.start();
+  }
+
   /**
    * タイトル画面へ復帰
    */
@@ -510,7 +549,7 @@ class SumoGame {
     this.inputManager.update();
 
     // レンダリング
-    this.renderer.render(this.scene, this.camera);
+    this.halfResFx.render(this.renderer, this.scene, this.camera);
   }
 
   /**
@@ -720,10 +759,25 @@ class SumoGame {
 
     if (this.cpu) {
       // 1P は自分の操作、2P は CPU
-      const { sim, ai } = this.cpu;
+      const { sim, ai, benchAis } = this.cpu;
       const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
       let mine: FighterInput;
-      if (isPreview) {
+      if (benchAis) {
+        // 全員 CPU: それぞれ、いちばん近い相手を狙う
+        const inputs = sim.fighters.map((f, i) => {
+          let nearest = sim.fighters[(i + 1) % sim.fighters.length];
+          let best = Infinity;
+          for (const o of sim.fighters) {
+            if (o === f) continue;
+            const d = (o.body.position.x - f.body.position.x) ** 2 + (o.body.position.z - f.body.position.z) ** 2;
+            if (d < best) { best = d; nearest = o; }
+          }
+          const plan = benchAis[i].update(dt, nearest);
+          return { move: plan.move, actions: plan.actions };
+        });
+        sim.step(dt, inputs);
+        mine = inputs[0];
+      } else if (isPreview) {
         // プレビュー時は 1P も相手方向へ押し込み、押し合いの格闘状態を維持する
         const p1X = sim.fighters[0].body.position.x;
         const p2X = sim.fighters[1].body.position.x;
@@ -745,15 +799,19 @@ class SumoGame {
         const raw = this.inputManager.getPlayer1Input();
         mine = { move: this.toWorldMoveInput(raw), actions: this.toActions(raw) };
       }
-      const plan = ai.update(dt, sim.fighters[0]);
-      sim.step(dt, [mine, { move: plan.move, actions: plan.actions }]);
+      if (!benchAis) {
+        const plan = ai.update(dt, sim.fighters[0]);
+        sim.step(dt, [mine, { move: plan.move, actions: plan.actions }]);
+      }
       snaps = sim.fighterSnaps();
       wins = sim.wins;
       rc = sim.resetCount;
       phase = sim.phase as RoundState;
       events = sim.fx.take();
+      if (benchAis && !this.benchReadySent && phase === 'active') { this.benchReadySent = true; benchReady('bout-start'); }
       if (phase === 'match_over' && sim.phaseTime >= MATCH_OVER_DELAY_SEC && !this.modalShown) {
         this.modalShown = true;
+        if (benchAis) benchDone('match-over');
         this.showVictory(sim.winner ?? 0);
       }
     } else if (this.match) {
@@ -874,6 +932,7 @@ class SumoGame {
    * audienceRadius > 0 なら、その範囲の観客も吹き飛ばす。
    */
   private triggerMegaBlast(center: THREE.Vector3, audienceRadius: number) {
+    benchMark(audienceRadius > 0 ? 'mega-blast audience' : 'mega-blast');
     if (audienceRadius > 0) this.audience.explodeAt(center, audienceRadius);
     this.particleManager.spawnMegaBlast(center, 14);
     this.particleManager.spawnBurn(center, 7, 2.6);

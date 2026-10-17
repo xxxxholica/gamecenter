@@ -196,14 +196,6 @@ export function mountMobileWarningBanner(options?: { isGame?: boolean }): HTMLEl
   return banner;
 }
 
-/** 互換用（アニメーション廃止のため何もしない） */
-export function highlightMobileWarningBanner(): void {}
-
-/** 旧名との互換性エイリアス */
-export function showRetroMobileWarning(options?: { isGame?: boolean }): void {
-  mountMobileWarningBanner(options);
-}
-
 /**
  * ハブ（トップページ）用: モバイルアクセス制限を初期化
  * - 画面上部に固定警告バナーを表示

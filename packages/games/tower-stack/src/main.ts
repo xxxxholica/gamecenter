@@ -16,6 +16,7 @@ import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { setText, setDisplay } from '../../../shared/hudDom';
 import { loadLeaderboardAndCheck, loadRawScores, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
+import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { PIECES, partExtents, randomPieceIndex, resetPieceBag, type Cell, type Part, type PieceDef } from './pieces';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
@@ -28,6 +29,8 @@ import { createNet, fetchTowerStatus, PLAYER_COLORS_LIGHT } from './online/net';
 import { WaitScreen } from './online/WaitScreen';
 import { RivalStages, STAGE_SPACING, BETWEEN_TAG_X } from './online/RivalStages';
 import { readGamepads } from '../../../shared/gamepadFrame';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 
 installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
@@ -46,10 +49,8 @@ if (isPreview) {
 }
 
 // 画面左下の共通ボタンガイド (場面ごとに差し替える)
-/** ボタンガイドを出す(オンライン対戦で左右に分けた右側の分も片付ける) */
-const mountGuide = (opts: Parameters<typeof mountArcadeGuide>[0]) => mountArcadeGuide(opts);
-const guideTitle = () => mountGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
-const mountGuidePlay = () => mountGuide({
+const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
+const guidePlay = () => mountArcadeGuide({
   moveLabel: '移動',
   keyMoveKeys: 'A / D',
   buttons: [
@@ -59,10 +60,7 @@ const mountGuidePlay = () => mountGuide({
   ],
   showHomeHint: true, backLabel: 'ポーズ',
 });
-const guidePlay = () => {
-  mountGuidePlay();
-};
-const guideMenu = () => mountGuide({
+const guideMenu = () => mountArcadeGuide({
   moveLabel: '選択',
   buttons: [
     { indices: [0], label: '決定' },
@@ -70,7 +68,7 @@ const guideMenu = () => mountGuide({
   ],
   showHomeHint: true,
 });
-const guideResult = () => mountGuide({
+const guideResult = () => mountArcadeGuide({
   moveLabel: '選択',
   buttons: [
     { indices: [0], label: '決定' },
@@ -123,7 +121,9 @@ const EVENT_KINDS: EventKind[] = ['wind', 'meteor', 'speed'];
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// PCFSoftShadowMap は three.js で廃止済みで、最初の影の描画で PCFShadowMap に読み替えられる(警告つき)。
+// その読み替えでシェーダのキーが変わり、起動時の先読みコンパイルが、実際に使うシェーダと一致しなくなっていた。最初から PCFShadowMap にしておく
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 document.body.prepend(renderer.domElement);
@@ -798,9 +798,7 @@ function boom(dur = 0.35): void {
     audio ??= new AudioContext();
     if (audio.state === 'suspended') void audio.resume();
     const t = audio.currentTime;
-    const buf = audio.createBuffer(1, Math.floor(audio.sampleRate * dur), audio.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+    const buf = createWhiteNoiseBuffer(audio, dur, (_t, p) => Math.pow(1 - p, 2));
     const src = audio.createBufferSource();
     src.buffer = buf;
     const lp = audio.createBiquadFilter();
@@ -1072,6 +1070,7 @@ function useItem(): void {
   if (kind === 'glue' && glueArmed) return; // すでに準備中
   items.shift();
   itemsUsedByKind[kind] = (itemsUsedByKind[kind] ?? 0) + 1;
+  benchMark(`item ${kind}`);
   beep(740, 0.18, 'sine', 0.1, 400);
   if (kind === 'glue') {
     glueArmed = true;
@@ -1183,6 +1182,26 @@ function spawnMeteor(): void {
   scene.add(group);
   blocks.push({ body, group, mat, parts: [{ x: 0, y: 0, hw: 0.45, hh: 0.45, round: true }], piece: -1, cemented: false, isMeteor: true, life: 0 });
   beep(300, 0.4, 'sawtooth', 0.06, -220);
+}
+
+/**
+ * 爆発の粒子・隕石などの素材は、使うたびに作って、終わったら dispose している。three.js は、あるシェーダを使う素材が1つもなくなると
+ * そのシェーダを解放するので、粒子が全部消えるたびに、次の爆発・隕石で、同じシェーダをまた作ることになる
+ * (計測: 90秒のプレイで、同じシェーダを3回ずつ作り直し。Firefox では 1回 14〜30ms 止まる)。
+ * そこで、各種類の素材を1つずつ、画面のはるか下に置きっぱなしにして、シェーダを手放さないようにする(描画はされない)。起動時に、先にコンパイルもする。
+ */
+function keepProgramsAlive(): void {
+  const keep: THREE.Object3D[] = [];
+  const hide = (o: THREE.Object3D): void => { o.position.set(0, -1000, 0); scene.add(o); keep.push(o); };
+  // 衝撃波のリング / 破片 / 隕石(explode・spawnMeteor と同じ素材の設定)
+  hide(new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffe2b0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false })));
+  hide(new THREE.Mesh(debrisGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })));
+  hide(new THREE.Mesh(new THREE.IcosahedronGeometry(0.47, 1), new THREE.MeshStandardMaterial({ color: 0x3a2d2d, emissive: 0xff5a1f, emissiveIntensity: 0.9, roughness: 1, flatShading: true })));
+  hide(new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex, color: 0xff7a2a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })));
+  // 火の玉・火花(加算)と、煙(通常の合成)のスプライト
+  hide(addSprite('fire', 0, -1000, 0, softTex, 0xffffff, true).obj);
+  hide(addSprite('smoke', 0, -1000, 0, puffTex, 0x222222, false).obj);
+  renderer.compile(scene, camera);
 }
 
 function updateEvents(dt: number): void {
@@ -1472,7 +1491,7 @@ function demoInput(dt: number): Input {
   if (!current || currentReleased) return inp;
   if (demoPiece !== current) {
     demoPiece = current;
-    demoTarget = (Math.random() - 0.5) * 7;
+    demoTarget = (Math.random() - 0.5) * (benchScene === 'tall' ? 1.6 : 7);
     demoRot = Math.floor(Math.random() * 4);
     demoRotTimer = 0.15;
   }
@@ -1488,6 +1507,11 @@ function demoInput(dt: number): Input {
     demoRotTimer = 0.25;
   }
   inp.down = demoRot === 0 && Math.abs(diff) < MOVE_STEP; // 位置が決まったら早く落とす
+  if (benchSolo && items[0]) {
+    // ベンチ: 手に入れたアイテムは少し置いてから使う(ツタ・セメント・回復の演出も測る)
+    benchItemWait += dt;
+    if (benchItemWait > 2) { benchItemWait = 0; inp.item = true; }
+  }
   return inp;
 }
 
@@ -1552,35 +1576,7 @@ let resultSeq = 0;
 let resultArmUntil = 0;
 
 function renderRanking(list: LeaderboardEntry[] | null, highlightRank?: number): void {
-  elResultRanking.innerHTML = '';
-  const head = document.createElement('div');
-  head.className = 'rank-head';
-  head.textContent = 'ランキング';
-  elResultRanking.append(head);
-  if (!list) {
-    const row = document.createElement('div');
-    row.className = 'rank-row empty';
-    row.textContent = '読み込み中…';
-    elResultRanking.append(row);
-    return;
-  }
-  for (const e of list) {
-    const row = document.createElement('div');
-    row.className = `rank-row r${e.rank}`;
-    if (e.score <= 0) row.classList.add('empty');
-    if (e.rank === highlightRank) row.classList.add('me');
-    const rank = document.createElement('span');
-    rank.className = 'rank-no';
-    rank.textContent = `${e.rank}位`;
-    const name = document.createElement('span');
-    name.className = 'rank-name';
-    name.textContent = e.name;
-    const sc = document.createElement('span');
-    sc.className = 'rank-score';
-    sc.textContent = e.formattedScore;
-    row.append(rank, name, sc);
-    elResultRanking.append(row);
-  }
+  renderRankingList(elResultRanking, list, highlightRank);
 }
 
 function showRanking(): void {
@@ -2117,6 +2113,7 @@ function startGame(): void {
 let resultIsNew = false;
 
 function gameOver(): void {
+  if (benchSolo) benchDone('game-over');
   state = 'gameover';
   stateTime = 0;
   endEvent();
@@ -2150,6 +2147,16 @@ function gameOver(): void {
   });
 }
 
+// ベンチマーク(?bench=1&scene=solo&event=wind|quake|meteor|speed): デモの操作役でひとり用を遊ぶ。event があれば、積み始めて少ししたら起こす
+// scene=tall: 落としても終わらずに積み続け、高いタワー(ブロックが多い物理・高所の空と星)を測る
+const benchScene = benchParam('scene');
+const benchSolo = benchScene === 'solo' || benchScene === 'tall';
+const benchEvent = benchParam('event') as EventKind | null;
+let benchReadySent = false;
+let benchEventAt = -1;
+let benchItemWait = 0;
+let benchHeightMark = 0;
+
 function updatePlaying(dt: number, inp: Input): void {
   if (mode === 'solo' && !demoActive && soloCountdown > 0) {
     // スタートの合図を待つ。その間は動かさない
@@ -2164,6 +2171,12 @@ function updatePlaying(dt: number, inp: Input): void {
     beep(880, 0.25, 'square', 0.08);
   }
   if (soloGo > 0) soloGo -= dt;
+  if (benchSolo) {
+    if (!benchReadySent) { benchReadySent = true; benchReady('solo-start'); benchEventAt = stateTime + 10; }
+    if (benchEvent && benchEventAt > 0 && stateTime >= benchEventAt) { benchEventAt = -1; startEvent(benchEvent); }
+    const mark = Math.floor(bestHeight / 10) * 10;   // 10m ごとの区切り(スパイクに「どの高さか」が付く)
+    if (mark > benchHeightMark) { benchHeightMark = mark; benchMark(`height ${mark}m`); }
+  }
   if (mode === 'online' && match) {
     const now = net.serverNow();
     if (!match.started) {
@@ -2270,8 +2283,8 @@ function updatePlaying(dt: number, inp: Input): void {
         shake = 0.35;
         boom();
         if (drops >= MAX_DROPS) {
-          if (demoActive) {
-            drops = 0; // タイトルの背景: 3個落ちても結果は出さず、数え直してそのまま続ける
+          if (demoActive || benchScene === 'tall') {
+            drops = 0; // タイトルの背景・高層のベンチ: 3個落ちても結果は出さず、数え直してそのまま続ける
             continue;
           }
           renderHud();
@@ -2325,7 +2338,7 @@ function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   stateTime += dt;
-  const inp = readInput();
+  const inp = benchSolo && state === 'playing' ? demoInput(dt) : readInput();
   if (inp.left || inp.right || inp.up || inp.down || inp.rotate || inp.item || inp.confirm || inp.cancel) bgm.unlock(); // アケコンの操作も、最初の操作として扱う
   bgm.setScene(state === 'playing' && !demoActive ? 'play' : 'menu');
 
@@ -2413,10 +2426,29 @@ function frame(now: number): void {
   renderer.render(scene, camera);
 }
 
+keepProgramsAlive();
+declareBenchTargets([
+  { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+  { id: 'solo-calm', label: 'ひとり用(おじゃまなし)', kind: 'solo', params: { scene: 'solo' }, input: 'self', seconds: 60 },
+  ...(Object.keys(EVENT_INFO) as EventKind[]).map((kind) => ({
+    id: `solo-${kind}`,
+    label: `ひとり用(${EVENT_INFO[kind].name})`,
+    kind: 'solo',
+    params: { scene: 'solo', event: kind },
+    input: 'self' as const,
+    seconds: 50,
+  })),
+  { id: 'tall', label: '高いタワー(落としても続けて積む)', kind: 'solo', params: { scene: 'tall' }, input: 'self', seconds: 300 },   // 星が出る高さ(35m〜)まで積む
+]);
 if (isPreview) {
   startGame();
+} else if (benchSolo) {
+  mode = 'solo';
+  startGame();
+  eventTimer = Infinity;   // おじゃまは、指定した場面でだけ起こす
 } else {
   showTitle();
+  if (benchScene === 'title') benchReady('title');
 }
 renderItems();
 requestAnimationFrame(frame);
@@ -2428,6 +2460,8 @@ if (import.meta.env.DEV) {
     give: (k: ItemKind) => { items.push(k); renderItems(); },
     event: (k: EventKind) => startEvent(k),
     next: (i: number) => { nextIndex = i; renderNext(); },
+    get renderer() { return renderer; },
+    get scene() { return scene; },
     get vines() { return vines.length; },
     speedup: () => showLevelUp(),
   };

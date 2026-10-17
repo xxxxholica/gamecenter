@@ -3,8 +3,10 @@
 // ===========================================================
 import * as THREE from 'three';
 import '@fontsource/m-plus-rounded-1c/800.css'; // 分割配信なので、使う文字を含む分だけ読み込まれる
-import { Game, MAX_AIR, START_LIVES, type ClearBonus } from './game/game.ts';
-import { View, BLOCK_COLORS, strataProgress } from './render/view.ts';
+import { Game, GOAL_DEPTH, MAX_AIR, START_LIVES, type ClearBonus } from './game/game.ts';
+import { View, BLOCK_COLORS, STRATA, strataProgress } from './render/view.ts';
+import { difficulty, W } from './game/world.ts';
+import { BENCH_SEED, createBenchBot, fallDownBenchTargets } from './bench.ts';
 import { Input, type FrameInput } from './input.ts';
 import { Sound } from './audio.ts';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
@@ -16,7 +18,9 @@ import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { loadLeaderboardAndCheck, saveLeaderboardScore, type LeaderboardEntry } from '../../../shared/arcadeLeaderboard';
+import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 installHomeReturn();
 watchResultAutoReturn(['result-btn-title']);
@@ -24,6 +28,10 @@ watchResultAutoReturn(['result-btn-title']);
 /** 検証用: 無敵・全ブロック破壊・掘りの高速化・記録を残さない。URLに ?debug を付けたときだけ有効(開発サーバーでも同じ)。?d=250 でその深さから始める */
 const PREVIEW = new URLSearchParams(location.search).has('preview');
 const DEBUG = new URLSearchParams(location.search).has('debug') || PREVIEW;
+/** ベンチマーク(?bench=1&scene=…)。無敵・酸素なしで自動で掘り進む。掘る速さ・壊れ方は本番のまま。記録は残さない */
+const BENCH_SCENE = benchParam('scene');
+const BENCH = BENCH_SCENE !== null;
+const benchBot = createBenchBot(W);
 
 // 検証モード中は、効いていることを忘れないよう、画面の隅に小さく表示する(撮影用の ?preview では出さない)
 if (DEBUG && !PREVIEW) {
@@ -97,7 +105,7 @@ let best = loadBest();
 
 /** ゲーム終了時（ゲームオーバー / クリア）に記録を更新。自己ベスト更新なら true */
 function recordResult(cleared: boolean) {
-  if (DEBUG) return false;
+  if (DEBUG || BENCH) return false;
   const isNew = game.score > best.score;
   best = {
     score: Math.max(best.score, game.score),
@@ -158,8 +166,16 @@ function startGame() {
   hitstop = 0;
   slowmo = 0;
   titleScreen.hide();
-  game.start();
-  if (DEBUG) {
+  game.start(BENCH ? BENCH_SEED : undefined);
+  if (BENCH) {
+    game.debug = true;
+    const d = Number(benchParam('depth')) || 0;
+    if (d > 0) {
+      game.player.reset(4, 1 - d);
+      game.maxDepth = d;
+      game.layer = difficulty(d).layer;
+    }
+  } else if (DEBUG) {
     game.debug = true;
     game.world.breakAll = true;
     game.player.fastDig = true;
@@ -290,6 +306,7 @@ function handleEvents() {
         // 爆弾：火の玉・衝撃波・火の粉・煙と、大きな画面の揺れ。連鎖すると爆発が時間差で続く
         // プレイヤーが力尽きたとき(big)は、さらに特大で、そのあと小さな爆発が続けて起きる
         const big = e.big;
+        benchMark(big ? 'explode-big' : 'explode');
         const near = big || Math.abs(e.centers[0].y - p.y) < 14;
         if (near) {
           if (big) sound.bigExplosion();
@@ -395,6 +412,7 @@ function handleEvents() {
         break;
       }
       case 'layer':
+        benchMark('layer');
         sound.layer();
         sound.tempo = Math.min(112 + e.layer * 8, 170);
         showBanner(`${strataProgress(e.layer * 100).name}へ突入`, 'normal', 'layer');
@@ -440,6 +458,8 @@ function handleEvents() {
           view.particles.sparkle(view.wx(x), y, i % 2 ? new THREE.Color(0xffe28a) : new THREE.Color(BLOCK_COLORS[i % 4]), 18, 2);
         }
         setTimeout(() => openResult(true, isNew, bonus), 4200);
+        benchMark('clear');
+        if (BENCH) setTimeout(() => benchDone('clear'), 6000); // 演出(スローモーションと連続爆発)が終わるまで測る
         break;
       }
     }
@@ -615,40 +635,12 @@ function closeResult() {
 }
 
 function renderRanking(list: LeaderboardEntry[] | null, highlightRank?: number) {
-  const box = ui.resultRanking;
-  box.innerHTML = '';
-  const head = document.createElement('div');
-  head.className = 'rank-head';
-  head.textContent = 'ランキング';
-  box.append(head);
-  if (!list) {
-    const row = document.createElement('div');
-    row.className = 'rank-row empty';
-    row.textContent = '読み込み中…';
-    box.append(row);
-    return;
-  }
-  for (const e of list) {
-    const row = document.createElement('div');
-    row.className = `rank-row r${e.rank}`;
-    if (e.score <= 0) row.classList.add('empty');
-    if (e.rank === highlightRank) row.classList.add('me');
-    const rank = document.createElement('span');
-    rank.className = 'rank-no';
-    rank.textContent = `${e.rank}位`;
-    const name = document.createElement('span');
-    name.className = 'rank-name';
-    name.textContent = e.name;
-    const sc = document.createElement('span');
-    sc.className = 'rank-score';
-    sc.textContent = e.formattedScore;
-    row.append(rank, name, sc);
-    box.append(row);
-  }
+  renderRankingList(ui.resultRanking, list, highlightRank);
 }
 
 /** 共通ランキング(上位3位)を出す。上位に入ったら名前を登録する */
 function showRanking(cleared: boolean) {
+  if (BENCH) return; // ベンチでは、サーバーに問い合わせない
   if (DEBUG) {
     // 検証中は、順位の表示だけ(読み取りのみ)。名前の入力と記録の保存はしない
     const seq = ++resultSeq;
@@ -704,7 +696,11 @@ let last = performance.now();
 function frame(now: number) {
   const rawDt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  const inp = PREVIEW ? previewInput(now) : input.poll();
+  const inp: FrameInput = PREVIEW
+    ? previewInput(now)
+    : BENCH && game.phase !== 'title'
+      ? { ...benchBot(game, now), start: false, mute: false, anyPressed: false, padDx: 0, padDy: 0 }
+      : input.poll();
   // スローモーション中は、ゲームも演出も、遅い時間で進める(入力と音は実時間のまま)
   const dt = rawDt * timeScale();
   slowmo = Math.max(0, slowmo - rawDt);
@@ -734,10 +730,21 @@ function frame(now: number) {
   sound.tick();
   requestAnimationFrame(frame);
 }
+declareBenchTargets(fallDownBenchTargets(STRATA, GOAL_DEPTH));
 showTitle();
 if (PREVIEW) startGame();
+if (BENCH_SCENE === 'title') benchReady('title');
+else if (BENCH) {
+  startGame();
+  benchReady('play');
+}
 requestAnimationFrame(frame);
 
 // デバッグ用（ブラウザのコンソールから参照可能）
 (window as unknown as { __game: Game; __view: View }).__game = game;
 (window as unknown as { __game: Game; __view: View }).__view = view;
+
+// 動作確認用 (開発時のみ。本番のビルドには入らない)
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__fd = { game, view, renderer: view.renderer, scene: view.scene };
+}

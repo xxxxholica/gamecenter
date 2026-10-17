@@ -5,6 +5,8 @@
  *  - battle: 速い太鼓と低音、三味線風のリフ。calm にすると太鼓と低音だけ(仕切りや決着の間)
  */
 
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+
 export type BgmTrack = 'menu' | 'battle';
 
 // 都節の音階(周波数 Hz)。D3 を基準にして、各オクターブに展開する
@@ -35,10 +37,7 @@ export class SumoBgm {
     this.out = out;
 
     // ノイズ(太鼓の打面・笛の息づかい用)を1回だけ作っておく
-    const len = ctx.sampleRate * 1.0;
-    this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = this.noiseBuffer.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    this.noiseBuffer = createWhiteNoiseBuffer(ctx, 1.0);
   }
 
   public start(track: BgmTrack) {

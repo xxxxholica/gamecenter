@@ -310,6 +310,23 @@ export abstract class CarBase {
   }
 
   /**
+   * 4本のロードホイール(createDetailedWheel のオフロード仕様)を前後・左右に置き、this.wheels に入れる。
+   * ホイールの面(+X)が外を向くよう、右(x > 0)は rotation.y = 0、左(x < 0)は rotation.y = PI。
+   */
+  protected addRoadWheels(carRoot: THREE.Object3D, trackWidth: number, frontZ: number, rearZ: number, radius: number, width: number): void {
+    this.wheels = [];
+    for (const z of [frontZ, rearZ]) {
+      for (const isLeft of [true, false]) {
+        const wheel = this.createDetailedWheel(radius, width, radius * 0.58, 8, true);
+        wheel.position.set(isLeft ? -trackWidth / 2 : trackWidth / 2, radius + 0.01, z);
+        wheel.rotation.y = isLeft ? Math.PI : 0;
+        this.wheels.push(wheel);
+        carRoot.add(wheel);
+      }
+    }
+  }
+
+  /**
    * Builds an authentic, wide, highly visible ALLOY WHEEL & TIRE assembly.
    * Ensures the wheel rim, spokes, hub and brake disc are fully exposed on the outside!
    */

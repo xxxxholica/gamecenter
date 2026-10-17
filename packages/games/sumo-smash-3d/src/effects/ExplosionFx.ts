@@ -79,17 +79,35 @@ const BILLBOARD_VERT = /* glsl */ `
   }
 `;
 
+// 粒は半分の解像度の描画先に描いてから画面に重ねる(HalfResFx)。描画先へは three.js のトーンマッピングと sRGB への変換が
+// かからないので、画面に直接描いていた時と同じ色になるよう、ここで同じ計算(ACES Filmic と sRGB)をする
 const BILLBOARD_FRAG = /* glsl */ `
   uniform sampler2D uMap;
+  uniform float uExposure;
   varying vec2 vUv;
   varying vec4 vColorAlpha;
+  vec3 rrtAndOdtFit(vec3 v) {
+    vec3 a = v * (v + 0.0245786) - 0.000090537;
+    vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    return a / b;
+  }
+  vec3 acesFilmic(vec3 color) {
+    const mat3 inputMat = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+    const mat3 outputMat = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+    color *= uExposure / 0.6;
+    return clamp(outputMat * rrtAndOdtFit(inputMat * color), 0.0, 1.0);
+  }
+  vec3 linearToSrgb(vec3 c) {
+    return mix(pow(c, vec3(0.41666)) * 1.055 - vec3(0.055), c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));
+  }
   void main() {
     vec4 texel = texture2D(uMap, vUv);
-    gl_FragColor = vec4(vColorAlpha.rgb * texel.rgb, texel.a * vColorAlpha.a);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+    gl_FragColor = vec4(linearToSrgb(acesFilmic(vColorAlpha.rgb * texel.rgb)), texel.a * vColorAlpha.a);
   }
 `;
+
+/** 爆発の粒だけを載せるレイヤー(本番の描画からは外し、HalfResFx が半分の解像度で描く) */
+export const FX_LAYER = 1;
 
 function makeGlowTexture(inner: string, mid: string, outer: string, size = 128): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -156,6 +174,10 @@ function makeSmokeTexture(size = 128): THREE.CanvasTexture {
 export class ExplosionFx {
   private scene: THREE.Scene;
   private pool: Fx[] = [];
+  /** 使っていない粒(pool の中)。粒を出すたびに pool を端から調べると、爆発で数百個出すときに O(n²) になる(Chrome で約5ms、Firefox で約15ms) */
+  private freeList: Fx[] = [];
+  /** 動いている粒の数 */
+  private activeN = 0;
   private batches: Record<BatchKey, Batch>;
   private rings: Ring[] = [];
   private burns: Burn[] = [];
@@ -173,6 +195,9 @@ export class ExplosionFx {
   private lightPeak = 0;
 
   private static readonly MAX_FX = 1800;
+
+  /** 粒の色のトーンマッピングの露出(renderer.toneMappingExposure と同じ値にする。HalfResFx が毎フレーム合わせる) */
+  public readonly exposure = { value: 1 };
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -218,7 +243,7 @@ export class ExplosionFx {
     geo.instanceCount = 1;
 
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uMap: { value: tex } },
+      uniforms: { uMap: { value: tex }, uExposure: this.exposure },
       vertexShader: BILLBOARD_VERT,
       fragmentShader: BILLBOARD_FRAG,
       transparent: true,
@@ -226,8 +251,17 @@ export class ExplosionFx {
       depthTest,
       blending,
     });
+    if (blending === THREE.AdditiveBlending) {
+      // 加算の粒は、描画先の不透明度(=後ろの画面を隠す割合)を増やさない。重ねる時に後ろが暗くならないように
+      mat.blending = THREE.CustomBlending;
+      mat.blendSrc = THREE.SrcAlphaFactor;
+      mat.blendDst = THREE.OneFactor;
+      mat.blendSrcAlpha = THREE.ZeroFactor;
+      mat.blendDstAlpha = THREE.OneFactor;
+    }
 
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.layers.set(FX_LAYER);
     mesh.frustumCulled = false;
     mesh.renderOrder = renderOrder;
     mesh.visible = true;
@@ -236,12 +270,24 @@ export class ExplosionFx {
     return { mesh, geo, posSize, colorAlpha, rot, count: 0 };
   }
 
+  /** 描く粒があるか(なければ HalfResFx は半分の解像度の描画を省く) */
+  public hasVisibleBatch(): boolean {
+    for (const k of Object.keys(this.batches) as BatchKey[]) if (this.batches[k].mesh.visible) return true;
+    return false;
+  }
+
+  /** 粒の描画呼び出しを全部出させる(起動時にシェーダを作っておくため)。戻り値で元に戻す */
+  public forceVisible(): () => void {
+    const prev = (Object.keys(this.batches) as BatchKey[]).map((k) => [this.batches[k].mesh, this.batches[k].mesh.visible] as const);
+    for (const [mesh] of prev) mesh.visible = true;
+    return () => { for (const [mesh, v] of prev) mesh.visible = v; };
+  }
+
   private acquire(kind: Kind): Fx {
-    for (const fx of this.pool) {
-      if (!fx.active) {
-        this.configure(fx, kind);
-        return fx;
-      }
+    const free = this.freeList.pop();
+    if (free) {
+      this.configure(free, kind);
+      return free;
     }
     const fx: Fx = {
       pos: new THREE.Vector3(),
@@ -273,9 +319,7 @@ export class ExplosionFx {
   }
 
   private activeCount(): number {
-    let n = 0;
-    for (const fx of this.pool) if (fx.active) n++;
-    return n;
+    return this.activeN;
   }
 
   private spawn(
@@ -292,6 +336,7 @@ export class ExplosionFx {
     if (this.activeCount() >= ExplosionFx.MAX_FX) return null;
     const fx = this.acquire(kind);
     fx.active = true;
+    this.activeN++;
     fx.life = 0;
     fx.maxLife = life;
     fx.size0 = size0;
@@ -456,6 +501,8 @@ export class ExplosionFx {
       fx.life += dt;
       if (fx.life >= fx.maxLife) {
         fx.active = false;
+        this.activeN--;
+        this.freeList.push(fx);
         continue;
       }
       const t = fx.life / fx.maxLife;

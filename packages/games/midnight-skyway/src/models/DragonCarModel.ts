@@ -9,6 +9,8 @@ import { getDragonCarScene, type DragonVariant } from './CarModelLoader';
 
 /** 翼の羽ばたきの速さと大きさの倍率(FK の基準値に掛ける) */
 const WING_TEMPO = 1.35;
+/** 角・翼・尻尾の更新の最短間隔(秒)。60Hz の画面で毎フレーム更新になるよう、1/60 より少し短く。 */
+const RIG_STEP_SEC = 1 / 62;
 const WING_AMP = 1.75;
 
 export type DragonPartType = 'horn' | 'wing' | 'tail';
@@ -441,6 +443,7 @@ export class DragonCarModel extends CarBase {
   public hornRig: ArticulatedChainRig | null = null;
   public wingRig: ArticulatedChainRig | null = null;
   public tailRig: ArticulatedChainRig | null = null;
+  private lastRigT = -1;
 
   private paintMaterials: THREE.MeshStandardMaterial[] = [];
   private armorMaterials: THREE.MeshStandardMaterial[] = [];
@@ -555,10 +558,14 @@ export class DragonCarModel extends CarBase {
   public updateDragonParts(t: number, speedRatio: number): void {
     const s = Math.min(1, Math.max(0, speedRatio));
     const phase = this.variant === 'a' ? 0 : this.variant === 'b' ? 0.8 : 1.6;
+    if (this.partGlow) this.partGlow.uTime.value = t + phase;
+    // 角・翼・尻尾の頂点(約2.5万)の計算と転送は、60Hz 程度で十分に滑らか。100〜165Hz の画面で毎フレーム回すと、
+    // 1フレームのJSの約1割を占める(Firefox ではフレームの予算を超えやすい)。時間が戻ったとき(別の画面から戻った)は、すぐ更新する。
+    if (t >= this.lastRigT && t - this.lastRigT < RIG_STEP_SEC) return;
+    this.lastRigT = t;
     this.tailRig?.update(t + phase, this.variant, 1.15 * (1 + s * 0.4));
     this.hornRig?.update(t + phase, this.variant, 1.0);
     this.wingRig?.update(t + phase, this.variant, 1.1 * (1 + s * 0.35));
-    if (this.partGlow) this.partGlow.uTime.value = t + phase;
   }
 
   public override setBodyColor(hex: number): void {

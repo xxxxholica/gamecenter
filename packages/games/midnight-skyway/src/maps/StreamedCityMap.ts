@@ -1,3 +1,5 @@
+import { IS_FIREFOX, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips } from './textureStrips';
+import { benchMark } from '../../../../shared/arcadeBenchTargets';
 import { audio } from '../audio';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -77,6 +79,15 @@ let sharedPacer: RequestPacer | null = null;
  */
 let gpuUploadWorker: Worker | null | undefined;
 let gpuUploadSeq = 0;
+/** チャンクの準備に1フレームで使ってよい時間(ms)。走行中は、描画の余裕に収まる程度。開始前のロード中は、止まっても見えないので大きく。 */
+const PREP_BUDGET_RACING_MS = 3;
+const PREP_BUDGET_LOADING_MS = 12;
+/** step() は、チャンクの準備が終われば true、予算を使い切って続きがあれば false を返す。 */
+interface PrepJob {
+  budgetMs: number;
+  step: () => boolean;
+}
+
 const gpuUploadWaiters = new Map<number, (bmp: ImageBitmap) => void>();
 
 function getGpuUploadWorker(): Worker | null {
@@ -215,9 +226,9 @@ export abstract class StreamedCityMap extends MapBase {
   /** file → チャンク(updateStreaming が毎回全チャンクを走査しないための索引) */
   private chunkIndex: Map<string, StreamChunk> | null = null;
   /** Chunks whose geometry/materials or textures are being prepared 1 per frame to avoid main-thread stalls. */
-  private prepJobs: (() => void)[] = [];
+  private prepJobs: PrepJob[] = [];
   private prepPumpScheduled = false;
-  private uploadJobs: { textures: THREE.Texture[]; resolve: () => void }[] = [];
+  private uploadJobs: { textures: THREE.Texture[]; resolve: () => void; gen?: Generator<void, void, void>; fast?: boolean }[] = [];
   private uploadPumpScheduled = false;
   private farObjects = new Map<string, THREE.Object3D>();
   /** Keys of near chunks that are fully faded in (their far twin is hidden). */
@@ -250,6 +261,7 @@ export abstract class StreamedCityMap extends MapBase {
     this.manifest = (await (await fetch(this.modelBase + 'manifest.json')).json()) as StreamManifest;
     this.loader = new GLTFLoader();
     this.loader.setMeshoptDecoder(MeshoptDecoder);
+    if (IS_FIREFOX) decodeWithImageElement(this.loader);   // Firefox は createImageBitmap(オプション付き)のデコードで rAF が止まる(textureStrips.ts)
     if (!import.meta.env.DEV) this.pacer = sharedPacer ??= new RequestPacer(this.requestBurst, this.requestIntervalMs);
 
     const initial = this.wanted(this.startPosition.x, this.startPosition.z, this.loadRadius);
@@ -257,7 +269,21 @@ export abstract class StreamedCityMap extends MapBase {
     this.onProgress?.(0, initial.length);
     await Promise.all(initial.map((c) => this.loadChunk(c, true).then(() => this.onProgress?.(++loaded, initial.length))));
     this.onProgress?.(initial.length, initial.length);
+    if (IS_FIREFOX && this.renderer) await this.runPerFrame(prewarmStripPool(this.renderer));   // 走行中に確保すると約 20ms 止まるので、読み込み中に済ませる
     if (this.hasFarTier) void this.loadFarTier();
+  }
+
+  /** ジェネレーターを、1フレームに1ステップずつ最後まで進める(読み込み中の、見えない作業用)。 */
+  private runPerFrame(gen: Generator<void, void, void>): Promise<void> {
+    return new Promise((resolve) => {
+      const step = (): void => {
+        if (this.disposed) { resolve(); return; }
+        let done = true;
+        try { done = gen.next().done === true; } catch (e) { console.warn('prewarm failed', e); }
+        if (done) resolve(); else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   public attachRenderer(renderer: THREE.WebGLRenderer): void {
@@ -321,28 +347,53 @@ export abstract class StreamedCityMap extends MapBase {
     this.group.add(holder);
   }
 
-  private schedulePrepareChunk(root: THREE.Object3D, isFar: boolean): Promise<void> {
+  /**
+   * チャンクの準備(道路トンネルの削り + 素材の差し替え)を、1フレームにつき budgetMs だけ進める。
+   * 削りは1チャンクで 40〜70ms かかることがあり、走行中に1フレームで済ませると、そのフレームが丸ごと止まる。
+   * instant(開始前のロード中)は止まっても見えないので、大きな予算で一気に進める。
+   */
+  private schedulePrepareChunk(root: THREE.Object3D, isFar: boolean, instant = false): Promise<void> {
     return new Promise((resolve) => {
-      this.prepJobs.push(() => {
-        if (!this.disposed) {
+      const carve = this.roadTube ? this.roadTube.carveSteps(root, () => this.prepShouldYield()) : null;
+      let carved = carve === null;
+      const prep = this.prepareChunkSteps(root, isFar, () => this.prepShouldYield());
+      this.prepJobs.push({
+        budgetMs: instant ? PREP_BUDGET_LOADING_MS : PREP_BUDGET_RACING_MS,
+        step: () => {
+          if (this.disposed) { resolve(); return true; }
+          if (!carved) {
+            if (!carve!.next().done) return false;                 // 予算を使い切った: 続きは次のフレーム
+            carved = true;
+          }
           const prevAniso = this.chunkAnisotropy;
           if (isFar) this.chunkAnisotropy = 1;
-          this.prepareChunk(root, isFar);
-          this.chunkAnisotropy = prevAniso;
-        }
-        resolve();
+          let done = true;
+          try { done = prep.next().done === true; } finally { this.chunkAnisotropy = prevAniso; }
+          if (!done) return false;
+          resolve();
+          return true;
+        },
       });
       this.pumpPrep();
     });
   }
 
+  private prepDeadline = 0;
+  private prepShouldYield(): boolean {
+    return performance.now() >= this.prepDeadline;
+  }
+
+  /** 1フレームに進めるのは1つのチャンクだけ(終わったら次のフレーム)。 */
   private pumpPrep(): void {
     if (this.prepPumpScheduled || this.prepJobs.length === 0) return;
     this.prepPumpScheduled = true;
     requestAnimationFrame(() => {
       this.prepPumpScheduled = false;
-      const job = this.prepJobs.shift();
-      if (job) job();
+      const job = this.prepJobs[0];
+      if (job) {
+        this.prepDeadline = performance.now() + job.budgetMs;
+        if (job.step()) this.prepJobs.shift();
+      }
       if (this.prepJobs.length > 0) this.pumpPrep();
     });
   }
@@ -351,14 +402,36 @@ export abstract class StreamedCityMap extends MapBase {
    * Uploading a chunk's textures on its first render costs 200-400 ms in one frame (16 x 1024 px + mipmaps).
    * Instead the textures are decoded/uploaded in a Worker OffscreenCanvas first, then bound to WebGL 1 per frame.
    */
-  private async stageUpload(root: THREE.Object3D, _instant = false): Promise<void> {
+  private async stageUpload(root: THREE.Object3D, instant = false): Promise<void> {
     const set = new Set<THREE.Texture>();
+    const users = new Map<THREE.Texture, THREE.MeshStandardMaterial[]>();
     root.traverse((o) => {
-      if (o instanceof THREE.Mesh) { const t = (o.material as THREE.MeshBasicMaterial).map; if (t) set.add(t); }
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = o.material as THREE.MeshStandardMaterial;
+      if (!m.map) return;
+      set.add(m.map);
+      const list = users.get(m.map) ?? [];
+      if (!list.includes(m)) list.push(m);
+      users.set(m.map, list);
     });
     if (!this.renderer || set.size === 0) return;
 
     const textures = [...set];
+    if (IS_FIREFOX) for (const tex of textures) rememberStripTemplate(tex);   // 読み込み中に、大きなテクスチャの設定を覚えておく(あとでプールを先に確保する)
+    if (IS_FIREFOX) {
+      // Firefox: 4096² のテクスチャを一度に転送すると rAF が約 40ms 止まるので、帯に分けて1フレームに1つずつ送る(textureStrips.ts)
+      const r = this.renderer;
+      await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));   // 小さい画像(ImageBitmap)は、これまでどおり Worker で GPU 側に載せてから転送する(HTMLImageElement は対象外)
+      if (this.disposed || !this.renderer) {
+        for (const tex of textures) releaseUploadedImage(tex);
+        return;
+      }
+      return new Promise((resolve) => {
+        const gen = (function* (): Generator<void, void, void> { for (const tex of textures) yield* uploadInStrips(r, tex, users.get(tex) ?? []); })();
+        this.uploadJobs.push({ textures: [], resolve, gen, fast: instant });
+        this.pumpUploads();
+      });
+    }
     await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));
     if (this.disposed || !this.renderer) {
       for (const tex of textures) releaseUploadedImage(tex);
@@ -387,6 +460,16 @@ export abstract class StreamedCityMap extends MapBase {
     const r = this.renderer;
     if (!r || this.uploadJobs.length === 0) return;
     const job = this.uploadJobs[0];
+    if (job.gen) {
+      let done = true;
+      try {
+        // 開始前の読み込み中(fast)は、止まっても見えないので、1フレームに 12ms ぶんまとめて進める。走行中は1ステップ
+        const until = performance.now() + (job.fast ? 12 : 0);
+        do { done = job.gen.next().done === true; } while (!done && performance.now() < until);
+      } catch (e) { console.warn('texture strip upload failed', e); }
+      if (done) { this.uploadJobs.shift(); job.resolve(); }
+      return;
+    }
     const tex = job.textures.shift();
     if (tex) {
       try {
@@ -432,6 +515,7 @@ export abstract class StreamedCityMap extends MapBase {
           scene.visible = !this.nearOpaque.has(key);
           this.group.add(scene);
           this.farObjects.set(key, scene);
+          benchMark('far-added');
           this.startFade(scene, this.fadeMs * 1.5, () => {});
         } catch (err) {
           console.warn(`[${this.metadata.id}] far chunk failed`, c.file, err);
@@ -442,10 +526,14 @@ export abstract class StreamedCityMap extends MapBase {
   }
 
   /** Lit material so the city shades under the same sun/sky as the car; casts and receives so buildings ground each other. */
-  private prepareChunk(root: THREE.Object3D, isFar = false): void {
-    this.roadTube?.carve(root);
-    root.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
+  /**
+   * 素材の差し替えと法線の補いを、メッシュ1つずつ、shouldYield() が true になったら中断しながら進める。
+   * 1チャンクで数十〜百以上のメッシュがあり、まとめて行うと、Firefox では 1 フレームに約 27ms かかる。
+   */
+  private *prepareChunkSteps(root: THREE.Object3D, isFar: boolean, shouldYield: () => boolean): Generator<void, void, void> {
+    const meshes: THREE.Mesh[] = [];
+    root.traverse((o) => { if (o instanceof THREE.Mesh) meshes.push(o); });
+    for (const o of meshes) {
       const old = o.material as THREE.MeshStandardMaterial;
       o.material = this.convertMaterial(old);
       old.dispose();
@@ -454,7 +542,8 @@ export abstract class StreamedCityMap extends MapBase {
       if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
       o.castShadow = !isFar;
       o.receiveShadow = true;
-    });
+      if (shouldYield()) yield;
+    }
   }
 
   /** Dither the chunk in (alpha hashing: opaque-pass, no sorting, no see-through overlaps). */
@@ -597,10 +686,14 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
     await prev;
     try {
       if (this.disposed) return null;
+      benchMark('parse-start');
       const gltf = await this.loader!.parseAsync(buf, '');
+      benchMark('parse-end');
       gltf.scene.userData.skipWarmup = true;
-      await this.schedulePrepareChunk(gltf.scene, isFar);
+      await this.schedulePrepareChunk(gltf.scene, isFar, instant);
+      benchMark('prep-end');
       if (!this.disposed) await this.stageUpload(gltf.scene, instant);
+      benchMark('upload-end');
       if (this.disposed) { this.disposeObject(gltf.scene); return null; }
       return gltf.scene;
     } finally {
@@ -618,6 +711,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
       if (!scene) return;
       this.group.add(scene);
       this.resident.set(c.file, scene);
+      benchMark('chunk-added');
       const key = this.keyOf(c.file);
       const shown = (): void => {
         this.nearOpaque.add(key);
@@ -638,7 +732,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
       if (!(o instanceof THREE.Mesh)) return;
       o.geometry.dispose();
       const m = o.material as THREE.MeshBasicMaterial;
-      m.map?.dispose();
+      if (m.map && !(IS_FIREFOX && releaseStripTexture(m.map))) m.map.dispose();   // 帯で転送したテクスチャは、捨てずに次のチャンクへ使い回す
       m.dispose();
     });
   }

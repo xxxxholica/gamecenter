@@ -15,7 +15,6 @@ export const COUNTDOWN_MS = 3000;
 
 export type Mode = 'versus' | 'coop';
 export const MODES: Mode[] = ['versus', 'coop'];
-export const MODE_LABELS: Record<Mode, string> = { versus: '対戦', coop: '協力' };
 
 /** [x, y, z, pitch, roll, flags]: 動いている景品のスナップショット(台のローカル座標)。slotId は先頭に付く。 */
 export type PrizeSnap = [number, number, number, number, number, number, number];

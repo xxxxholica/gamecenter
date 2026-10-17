@@ -20,6 +20,7 @@ const SLUG = 'ennichi-shateki';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -212,8 +213,40 @@ class ArcadeCorkShooter {
     // Dynamic moving ducks, flying balloons, and golden UFO
     this.dynamicTargets = new DynamicTargetsManager();
     this.scene.add(this.dynamicTargets.group);
+    this.keepEffectPrograms();
 
     this.enterTitle();
+
+    // ベンチマーク(?bench=1): タイトル / 30秒の1プレイ(ランダムに狙って撃つ)
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      { id: 'play', label: 'プレイ(ランダム入力)', kind: 'play', params: { scene: 'play' }, input: 'random', seconds: 45 },
+    ]);
+    const benchScene = benchParam('scene');
+    if (benchScene === 'play') this.startGame();
+    else if (benchScene === 'title') benchReady('title');
+  }
+
+  /**
+   * 撃つたびに出す粒の材質(銃口の煙・爆発の衝撃波と火花・的を倒した紙吹雪)のシェーダを、いつも作ってある状態にしておく。
+   * 粒の材質は消えるたびに破棄するので、粒がひとつも無い間にシェーダまで破棄され、次に撃った瞬間に作り直しになって画面が止まる。
+   * そこで、同じ設定の見本を、色も奥行きも書かない(画面に何も出ない)状態で毎フレーム描いておく。
+   */
+  private keepEffectPrograms() {
+    const geom = new THREE.BoxGeometry(0.001, 0.001, 0.001);
+    const samples = [
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.7 }), // CorkRifle.fire の煙
+      new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), // CorkSystem.triggerExplosion の衝撃波
+      new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending }), // CorkSystem.triggerExplosion の火花
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), // DynamicTargetsManager.spawnConfetti
+    ];
+    for (const mat of samples) {
+      mat.colorWrite = false;
+      mat.depthWrite = false;
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+    }
   }
 
   private setupEvents() {
@@ -394,6 +427,7 @@ class ArcadeCorkShooter {
       accentColor: '#ffd54a',
       onGo: () => {
         this.offlineCountdown = false;
+        if (benchParam('scene') === 'play') benchReady('play-start');
       },
     });
   }
@@ -406,6 +440,13 @@ class ArcadeCorkShooter {
   }
 
   private enterResults() {
+    // ベンチ: 倒した景品が台に降って積もる演出(物理)まで測る。全部落ちきって静まるまで、およそ8秒。
+    // その間はランダム入力の Enter で結果画面を進めないよう、操作の受け付けも遅らせる
+    const benchPile = benchParam('scene') === 'play';
+    if (benchPile) {
+      benchMark('results');
+      window.setTimeout(() => benchDone('results-pile'), 8000);
+    }
     sounds.stopBgm();
     this.state = 'results';
     this.stateTimer = 0;
@@ -414,7 +455,7 @@ class ArcadeCorkShooter {
     if (isNewRecord) this.highScore = this.score;
 
     this.resultFocus = 0; // 再挑戦がデフォルト
-    this.resultArmTime = performance.now() + 600;
+    this.resultArmTime = performance.now() + (benchPile ? 8500 : 600);
     mountArcadeGuide({
       moveLabel: '選択',
       buttons: [

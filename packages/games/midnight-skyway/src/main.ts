@@ -13,6 +13,7 @@ import { TokyoMap } from './maps/TokyoMap';
 import { HelsinkiTechnicalMap } from './maps/HelsinkiTechnicalMap';
 import { TokyoClimbMap } from './maps/TokyoClimbMap';
 import { STAGES } from './ui/stages';
+import { benchParam, benchReady, benchDone, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { RaceDirector } from './core/RaceDirector';
 import { TimeAttackManager } from './core/TimeAttackManager';
 
@@ -182,6 +183,28 @@ window.addEventListener('DOMContentLoaded', async () => {
   let currentCar: CarBase = carModels.dragon_a;
   garage.turntableGroup.add(currentCar.group);
 
+  // ベンチマーク(?bench=1)の場面: 全ステージ × 全マシン × 昼夜のレース、全マシンのガレージ、タイトル
+  declareBenchTargets([
+    { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+    ...CAR_TYPES.map((car) => ({ id: `garage-${car}`, label: `マシン選択 ${car}`, kind: 'garage', params: { scene: 'garage', car }, input: 'idle' as const, seconds: 20 })),
+    ...STAGES.flatMap((st) => CAR_TYPES.flatMap((car) => (['day', 'night'] as const).map((tod) => ({
+      id: `race-${st.id}-${car}-${tod}`,
+      label: `${st.title} / ${car} / ${tod === 'day' ? '昼' : '夜'}`,
+      kind: 'race',
+      params: { scene: 'race', stage: st.id, car, tod },
+      input: 'self' as const,
+      seconds: 300,      // 1周走りきると benchDone() で止まる。これは打ち切りの上限
+    })))),
+  ]);
+  const benchScene = benchParam('scene');
+  const benchAutoDrive = benchScene === 'race';   // ベンチ: HUD は出したまま、コースの1周をオートパイロットで走る
+  const benchCar = benchParam('car');
+  if (benchCar && benchCar in carModels) {
+    garage.turntableGroup.remove(currentCar.group);
+    currentCar = carModels[benchCar as CarType];
+    garage.turntableGroup.add(currentCar.group);
+  }
+
   // ==========================================
   // 2. Initialize Drive Scene & Maps
   // ==========================================
@@ -194,15 +217,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     tokyo_climb: () => new TokyoClimbMap(),
   };
 
-  let currentTimeOfDay: TimeOfDay = loadTimeOfDay();
+  const benchTod = benchParam('tod');
+  let currentTimeOfDay: TimeOfDay = benchTod === 'day' || benchTod === 'night' ? benchTod : loadTimeOfDay();   // ベンチでは保存済みの設定に左右されない
   let lightsBeforeRace = true;   // the garage's own headlight setting, restored when the car goes back
-  let currentMapId = 'tokyo_skyway';
+  const benchStage = benchParam('stage');
+  let currentMapId = benchStage && benchStage in mapFactories ? benchStage : 'tokyo_skyway';
+  const bootMapId = currentMapId;   // 起動時に作っておくマップ(通常は東京。ベンチでは指定のステージ)
   let currentMapInstance: MapBase = mapFactories[currentMapId]();
   let bootMapUnused = true;
   driveScene.loadMap(currentMapInstance, false);
   driveScene.setTimeOfDay(currentTimeOfDay);
+  // マップ作り・走行シーンのシェーダ準備・ガレージのシェーダ準備を続けて行うと、合わせて約1.2秒画面が止まる(Firefox)。
+  // 段階の間で1フレーム譲り、1回の止まりを短くする(ページが裏にあって rAF が来なくても、少し待てば進める)
+  const yieldFrame = () => new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); setTimeout(resolve, 100); });
+  await yieldFrame();
   driveScene.warmup(Object.values(carModels));
   for (const car of Object.values(carModels)) driveScene.clearPaintEnvironment(car);   // ガレージ側の環境マップに戻す
+  garage.renderer.clear();   // 準備の描画(全車種を原点に重ねた走行シーン)が、譲ったフレームで画面に出ないように消す
+  await yieldFrame();
   garage.warmup();
 
   // ==========================================
@@ -334,6 +366,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
 
   timeAttack.callbacks.onGoal = (result) => {
+    if (benchAutoDrive) benchDone(result.timedOut ? 'goal-timeout' : 'goal');
     driveHUD.finishSectors(result.sectors);
     reportDeepAnalytics('progression_update', {
       result: result.timedOut ? 'gameover' : 'clear',
@@ -486,7 +519,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   driveScene.callbacks.onBeforeConstrain = (car) => {
     online?.race?.collide(car);
-    if (isPreviewMode && car) {
+    if ((isPreviewMode || benchAutoDrive) && car) {
       car.canDrive = true;
       if (!previewPilot) {
         const route = currentMapInstance?.getRoutePoints();
@@ -911,7 +944,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       driveHUD.hide();
 
       // Instantiate map (reuse the pre-built boot instance on the first solo race if still on the default map)
-      const reuseBootMap = bootMapUnused && !online && currentMapId === 'tokyo_skyway';
+      const reuseBootMap = bootMapUnused && !online && currentMapId === bootMapId;
       bootMapUnused = false;
       if (!reuseBootMap) {
         if (online) setTrafficRng(mulberry32(online.seed));    // 全員同じ交通NPC
@@ -998,7 +1031,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
       stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
-      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; }));   // ガイドも同じタイミングでフェードイン
+      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; if (benchAutoDrive) benchReady('race-start'); }));   // ガイドも同じタイミングでフェードイン
       if (online) {
         online.race = new OnlineRace(net, driveScene, online.players, online.you, currentTimeOfDay === 'night', {
           onStandings: (rows) => onlineHUD.setStandings(rows),
@@ -1056,7 +1089,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (stageLoadingContainer) stageLoadingContainer.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'none';
     flow.startRace();
+  } else if (benchScene === 'race') {
+    flow.startRace();
+  } else if (benchScene === 'garage') {
+    flow.goToCarSelect();
+    benchReady('garage');
   } else {
     flow.goToTitle();
+    if (benchScene === 'title') benchReady('title');
   }
 });

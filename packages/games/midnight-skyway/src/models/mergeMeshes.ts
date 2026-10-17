@@ -6,9 +6,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * few dozen. Positions are baked relative to `root`, so the merged meshes sit at the origin of `root`.
  * Left alone: transparent materials (their draw order matters), instanced / skinned meshes, multi-material meshes and
  * meshes that need vertex colours.
+ * `pruneEmpty`: 結合で空になった Group も取り除く(NPC車のように、中身を名前や位置で参照しないモデル用)。
  * @returns [meshes before, meshes after]
  */
-export function mergeMeshesByMaterial(root: THREE.Object3D): [number, number] {
+export function mergeMeshesByMaterial(root: THREE.Object3D, opts: { pruneEmpty?: boolean } = {}): [number, number] {
   root.updateWorldMatrix(true, true);
   const inverseRoot = root.matrixWorld.clone().invert();
 
@@ -55,9 +56,25 @@ export function mergeMeshesByMaterial(root: THREE.Object3D): [number, number] {
     root.add(mesh);
     merged++;
   }
+  if (opts.pruneEmpty) pruneEmptyGroups(root);   // 部品の位置を目印に使う車(プレイヤーの車)では、空の Group も残す
   let after = 0;
   root.traverse((o) => { if (o !== root && o instanceof THREE.Mesh) after++; });
   return [before, after];
+}
+
+/**
+ * 結合で中身がなくなった、空の Group を取り除く(部品ごとの入れ物が、結合のあとも何十個も残る)。
+ * 動くたびに全ノードの行列を計算し直すので、NPC車1台あたり数十ノードの空の Group が、そのまま毎フレームのコストになる。
+ * root 自身と、メッシュ・ライトなど Group 以外は触らない。
+ */
+export function pruneEmptyGroups(root: THREE.Object3D): number {
+  let removed = 0;
+  const visit = (o: THREE.Object3D): void => {
+    for (const c of [...o.children]) visit(c);
+    if (o !== root && o.type === 'Group' && o.children.length === 0) { o.parent?.remove(o); removed++; }
+  };
+  visit(root);
+  return removed;
 }
 
 /** Swap the 2nd and 3rd vertex of every triangle of a non-indexed geometry. */

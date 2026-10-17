@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
 /**
  * Web Audio API プロシージャルサウンドシステム
  * 外部音声ファイルゼロで迫力あるアーケードSEと動的テンポBGMを生成
@@ -106,12 +107,7 @@ export class SoundSystem {
     const t = this.ctx.currentTime;
 
     // 1. ノイズによる爆風音
-    const bufferSize = this.ctx.sampleRate * 1.2;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.35));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 1.2, (t) => Math.exp(-t / 0.35));
 
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = buffer;
@@ -206,12 +202,7 @@ export class SoundSystem {
     if (!this.ctx || !this.sfxGain) return;
 
     const t = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * 0.35;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.5;
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.35, () => 0.5);
 
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = buffer;
@@ -292,12 +283,7 @@ export class SoundSystem {
     const t = this.ctx.currentTime;
 
     // 1. ノイズ爆発
-    const bufferSize = this.ctx.sampleRate * 0.8;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.15));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.8, (t) => Math.exp(-t / 0.15));
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = buffer;
 
@@ -600,12 +586,7 @@ export class SoundSystem {
     });
 
     // シマーノイズ（きらめき）
-    const bufferSize = this.ctx.sampleRate * 0.4;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.12));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.4, (t) => Math.exp(-t / 0.12));
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = buffer;
     const filter = this.ctx.createBiquadFilter();
@@ -836,11 +817,7 @@ export class SoundSystem {
 
     // 8ステップおきにスネア
     if (this.currentStep % 8 === 4) {
-      const snareBuf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.1, this.ctx.sampleRate);
-      const sData = snareBuf.getChannelData(0);
-      for (let i = 0; i < sData.length; i++) {
-        sData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.03));
-      }
+      const snareBuf = createWhiteNoiseBuffer(this.ctx, 0.1, (t) => Math.exp(-t / 0.03));
       const sSource = this.ctx.createBufferSource();
       sSource.buffer = snareBuf;
       const sGain = this.ctx.createGain();

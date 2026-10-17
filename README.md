@@ -75,6 +75,47 @@ dist/
     falldown/
 ```
 
+## ベンチマーク
+
+全ゲームの「場面」(ステージ × キャラクター × 時間帯 など)を1つずつ自動で開き、フレーム落ちの回数と原因(シェーダのコンパイル・テクスチャ転送・GC・JS・待ち)を測る。実機の GPU で測るため、ヘッドレスではなく画面を出して動かす(ウィンドウを隠さない)。
+
+```bash
+npm run bench:all -- --list                       # 計測する場面の一覧だけ出す
+npm run bench:all                                 # Chrome + Firefox で全ゲームの全場面(時間がかかる)
+npm run bench:all -- --games midnight-skyway --targets 'race-helsinki.*night'   # ゲーム・場面(idの正規表現)で絞る
+npm run bench:all -- --cap 20                     # どの場面も最長20秒で打ち切る(動作確認用)
+npm run bench:all -- --url http://localhost:5173  # npm run dev で配信中のものを測る
+npm run bench:all -- --viewport 1920x1080         # 画面の大きさを変える(既定 1280x720。筐体のフルHDなど)
+npm run bench:all -- --fullscreen                 # 画面いっぱいの大きさで測る(Chrome はキオスク表示、Firefox は画面と同じ大きさのページ)
+npm run bench:all -- --hz 60                      # ゲームに渡すフレームを 60Hz に間引き、60Hz のモニターでの動きを再現する
+npm run bench:all -- --fullscreen --hz 60 --repeat-failed 3   # 合否の判定(不合格・すれすれの場面は3回測って中央値)
+```
+
+結果は `bench-results/<日時>/summary.md`(合否、悪い場面の上位、ゲームごとの表)と、場面ごとの詳細 JSON。1場面は「読み込み」(場面に着くまで)と「プレイ中」に分けて集計する。表の「終了」は、ゲームが知らせた終わり方(clear / game-over など。「上限」は秒数いっぱいまで測った)。想定より早い game-over は、その先(後半・ボス・結果の演出)を測れていない印。「入力」は、入力が届いてから画面に出るまでの時間(数百msおきの模擬の入力。ランダム入力の場面は実際のキー入力も)。アケコン(ゲームパッド)の読み取りやモニター内部の遅れは含まない。
+
+- 場面の一覧は、各ゲームが `declareBenchTargets()`(`packages/shared/arcadeBenchTargets.ts`)で申告する。ステージ表などのゲームのデータから作るので、ステージを足せば計測対象も増える。
+- 場面は URL で指定して直接始める(例: `?bench=1&scene=race&stage=helsinki_technical&car=dragon_b&tod=night`)。操作は、ゲーム自身の自動操縦(`self`)、何もしない(`idle`)、スクリプトのランダム入力(`random`)のどれか。
+- 場面に着いたら `benchReady()`、やりきったら `benchDone()` を呼ぶ。新しいゲームでは、`installHomeReturn()` のあとで場面を申告するだけでよい。
+- 「shader-compile」のスパイクが出た場面は、`node scripts/shader-trace.mjs <chromium|firefox> <ゲーム> <場面のid> [秒数]` で、どのシェーダ(種類と `USE_MAP`・`DOUBLE_SIDED` などの機能)をいつ作ったかを出せる。場面に着いたあとに出たものが、プレイ中に初めて作られたシェーダ(先に `npm run build`)。
+- サイバー２Dファイター３Dはベンチマークの対象外。代わりに検証用に、`?verify&p1=char2&p2=char3&stage=neon_shrine.jpg` でステージ・キャラクターを指定して、CPU 同士の対戦(HUDあり・体力は減らない)を始められる。
+
+### 合否の基準
+
+筐体(60Hz・フルHD)に合わせ、Chrome と Firefox の両方で、画面いっぱい・60Hz の再現で測る。開発機のモニターが 60Hz より速いときは `--hz 60` で再現する(ゲームに渡す rAF を 60Hz の区切りで間引くので、区切りに間に合わなかったフレームは垂直同期と同じく 33.3ms・50ms の間隔になる)。基準は `packages/shared/arcadeBenchCore.ts` の `ACCEPTANCE`。
+
+| 項目 | 基準 |
+|---|---|
+| プレイ中の 1%low | 55fps 以上 |
+| プレイ中の p99 / 最長のフレーム | 20ms 以下 / 50ms 以下 |
+| プレイ中のシェーダのコンパイル・テクスチャ転送によるカクつき | 0回 |
+| 入力の遅延 p95 / 最大 | 50ms 以下 / 100ms 以下 |
+| 読み込み中の停止 | 1回 1秒以下 |
+
+- 基準まで 10% 以内(1%low は 57.5fps 未満)は「すれすれ」。不合格とすれすれの場面は3回測り、項目ごとの中央値で決める。
+- 60Hz の 1%low は、遅れたフレームが 0.1% を超えると 55fps を下回る(1回遅れるごとに 16.7ms 余分にかかるため)。
+- 60Hz の再現は、ゲームの JS の処理時間は正確に数える。GPU の描画の遅れは、モニターのフレームが遅れた分として数えるので、モニターの1フレーム分(165Hz で約6ms)までの遅れは見逃す。
+- ブラウザ・端末の側が原因で、ゲームでは直せないものは、合否から外して理由を残す。
+
 ## デプロイ
 
 https://game.hinata.works/ で公開している。

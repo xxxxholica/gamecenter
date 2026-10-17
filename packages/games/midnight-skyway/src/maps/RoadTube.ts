@@ -12,10 +12,21 @@ export class RoadTube {
   private static readonly GRID = 8;
   private readonly grid = new Map<number, number[]>();
   private readonly reach: number;
+  private readonly radiusSq: number;
   private readonly nearCells = new Set<number>();
   private readonly bbox = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
 
-  constructor(private readonly road: THREE.Vector3[], private readonly radius = 6.5, private readonly below = 2.6, private readonly above = 40) {
+  // (引数プロパティ記法は、Node の型ストリップ実行=テストで使えないので、通常のフィールドにしている)
+  private readonly road: THREE.Vector3[];
+  private readonly radius: number;
+  private readonly below: number;
+  private readonly above: number;
+
+  constructor(road: THREE.Vector3[], radius = 6.5, below = 2.6, above = 40) {
+    this.road = road;
+    this.radius = radius;
+    this.below = below;
+    this.above = above;
     const G = RoadTube.GRID;
     road.forEach((r, i) => {
       const k = Math.floor(r.x / G) * 100000 + Math.floor(r.z / G);
@@ -25,6 +36,7 @@ export class RoadTube {
       this.bbox.minZ = Math.min(this.bbox.minZ, r.z); this.bbox.maxZ = Math.max(this.bbox.maxZ, r.z);
     });
     this.reach = Math.ceil(radius / G);
+    this.radiusSq = radius * radius;
     // cells within the tube's reach of the road (plus one): a triangle covering none of them cannot touch the tube
     road.forEach((r) => {
       const cx = Math.floor(r.x / G), cz = Math.floor(r.z / G);
@@ -40,7 +52,10 @@ export class RoadTube {
         if (!list) continue;
         for (const i of list) {
           const r = this.road[i];
-          if (y > r.y - this.below && y < r.y + this.above && Math.hypot(r.x - x, r.z - z) < this.radius) return true;
+          if (y > r.y - this.below && y < r.y + this.above) {
+            const dx = r.x - x, dz = r.z - z;
+            if (dx * dx + dz * dz < this.radiusSq) return true;     // Math.hypot は遅い(チャンクを読むたびに数十万回呼ぶ)
+          }
         }
       }
     }
@@ -67,19 +82,33 @@ export class RoadTube {
 
   /** Removes the triangles of every mesh under `root` that touch the tube (any vertex or the centroid inside, or the surface of a big one). */
   public carve(root: THREE.Object3D): void {
+    for (const _ of this.carveSteps(root, () => false)) { /* 最後まで一気に */ }
+  }
+
+  /**
+   * carve を、時間で区切りながら進める版。`shouldYield()` が true になったら中断(yield)し、次に next() を呼ぶと続きから進む。
+   * 1チャンクのまとめて削る処理は 40〜70ms かかり、走行中に読み込むと1フレームが丸ごと止まるので、
+   * 呼び出し側が毎フレーム数 ms ぶんだけ進める。メッシュのインデックスは、そのメッシュの判定が全部終わった時点で一度に差し替える
+   * (途中で中断しても、描画される形は変わらない)。
+   */
+  public *carveSteps(root: THREE.Object3D, shouldYield: () => boolean): Generator<void, void, void> {
     root.updateMatrixWorld(true);
     const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    root.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
+    const meshes: THREE.Mesh[] = [];
+    root.traverse((o) => { if (o instanceof THREE.Mesh) meshes.push(o); });
+    for (const o of meshes) {
       const geo = o.geometry as THREE.BufferGeometry, pos = geo.getAttribute('position');
-      if (!pos) return;
+      if (!pos) continue;
       // skip meshes whose bounds are away from the road
       geo.computeBoundingBox();
       const bb = geo.boundingBox!.clone().applyMatrix4(o.matrixWorld), m = this.radius;
-      if (bb.max.x < this.bbox.minX - m || bb.min.x > this.bbox.maxX + m || bb.max.z < this.bbox.minZ - m || bb.min.z > this.bbox.maxZ + m) return;
+      if (bb.max.x < this.bbox.minX - m || bb.min.x > this.bbox.maxX + m || bb.max.z < this.bbox.minZ - m || bb.min.z > this.bbox.maxZ + m) continue;
       const index = geo.getIndex(), count = index ? index.count : pos.count;
       const at = (t: number): number => (index ? index.getX(t) : t);
-      const keep: number[] = [];
+      // 残す三角形の頂点番号。数百万個になるので、普通の配列(push で伸びる)にせず、型付き配列に書く
+      // (JS ヒープに巨大な配列のゴミを残すと、直後の GC で、Firefox ではメインスレッドが 30〜40ms 止まる)
+      const keep = count > 0 && pos.count <= 65535 ? new Uint16Array(count) : new Uint32Array(count);
+      let kept = 0;
       const G = RoadTube.GRID;
       for (let t = 0; t + 2 < count; t += 3) {
         for (let k = 0; k < 3; k++) v[k].fromBufferAttribute(pos, at(t + k)).applyMatrix4(o.matrixWorld);
@@ -90,14 +119,18 @@ export class RoadTube {
         for (let cx = Math.floor(minX / G); cx <= Math.floor(maxX / G) && !close; cx++) {
           for (let cz = Math.floor(minZ / G); cz <= Math.floor(maxZ / G); cz++) if (this.nearCells.has(cx * 100000 + cz)) { close = true; break; }
         }
-        if (!close) { keep.push(at(t), at(t + 1), at(t + 2)); continue; }
-        const hit = this.inside(v[0].x, v[0].y, v[0].z) || this.inside(v[1].x, v[1].y, v[1].z) || this.inside(v[2].x, v[2].y, v[2].z)
-          || this.inside((v[0].x + v[1].x + v[2].x) / 3, (v[0].y + v[1].y + v[2].y) / 3, (v[0].z + v[1].z + v[2].z) / 3)
-          || this.insideSurface(v[0], v[1], v[2]);
-        if (!hit) keep.push(at(t), at(t + 1), at(t + 2));
+        if (!close) {
+          keep[kept++] = at(t); keep[kept++] = at(t + 1); keep[kept++] = at(t + 2);
+        } else {
+          const hit = this.inside(v[0].x, v[0].y, v[0].z) || this.inside(v[1].x, v[1].y, v[1].z) || this.inside(v[2].x, v[2].y, v[2].z)
+            || this.inside((v[0].x + v[1].x + v[2].x) / 3, (v[0].y + v[1].y + v[2].y) / 3, (v[0].z + v[1].z + v[2].z) / 3)
+            || this.insideSurface(v[0], v[1], v[2]);
+          if (!hit) { keep[kept++] = at(t); keep[kept++] = at(t + 1); keep[kept++] = at(t + 2); }
+        }
+        if ((t / 3) % 64 === 63 && shouldYield()) yield;
       }
-      if (keep.length === count) return;
-      geo.setIndex(keep);
-    });
+      if (kept !== count) geo.setIndex(new THREE.BufferAttribute(keep.slice(0, kept), 1));
+      if (shouldYield()) yield;
+    }
   }
 }

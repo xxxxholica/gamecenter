@@ -14,6 +14,7 @@ import { Stage4Clock } from './stages/stage4_clock';
 import { Stage5Balloon } from './stages/stage5_balloon';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { RankingManager } from './ranking';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
@@ -52,6 +53,11 @@ export class GameManager {
   // 3D Background Showcase for Title
   private titleScene: TitleScene | null = null;
   private titleDemoInput = new DemoInputManager();
+
+  // ベンチマーク(?bench=1&scene=stage&stage=0〜3&result=success|fail): 指定の種目だけを、成功する操作か無操作で1回遊ぶ
+  private readonly benchScene = benchParam('scene');
+  private benchInput: DemoInputManager | null = null;
+  private benchSuccess = true;
   private titleLoopTimer = 0.0;
 
 
@@ -127,6 +133,24 @@ export class GameManager {
     this.bindDomElements();
     this.showTitle();
     if (GameManager.PREVIEW) this.setupPreview();
+
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      ...this.stageFactories.flatMap((_, i) => (['success', 'fail'] as const).map((result) => ({
+        id: `stage${i + 1}-${result}`,
+        label: `第${i + 1}種目 ${result === 'success' ? '成功する操作' : '無操作(失敗)'}`,
+        kind: 'play',
+        params: { scene: 'stage', stage: String(i), result },
+        input: 'self' as const,
+        seconds: 60,
+      }))),
+    ]);
+    if (this.benchScene === 'stage') {
+      const i = Number(benchParam('stage'));
+      this.startGame(i >= 0 && i < this.stageFactories.length ? i : 0);
+    } else if (this.benchScene === 'title') {
+      benchReady('title');
+    }
   }
 
   /** ホームのサムネイル・ホバー動画の収録用(?preview または ?noHud)。HUD・ガイド・文字を隠し、1種目目を自動で始める */
@@ -300,7 +324,7 @@ export class GameManager {
     this.effects.clear();
   }
 
-  private startGame() {
+  private startGame(startIndex = 0) {
     this.cleanupTitleScene();
     this.cleanupAttract();
 
@@ -312,7 +336,7 @@ export class GameManager {
     this.runRetries = 0;
     this.attempt = 1;
     this.attemptResults = [];
-    this.currentStageIndex = 0;
+    this.currentStageIndex = startIndex;
 
     this.titleOverlay.style.display = 'none';
     this.resultOverlay.style.display = 'none';
@@ -322,7 +346,7 @@ export class GameManager {
     this.demoPrompt.style.display = 'none';
     this.hudOverlay.style.display = 'block';
 
-    this.loadStage(0);
+    this.loadStage(startIndex);
   }
 
 
@@ -452,6 +476,12 @@ export class GameManager {
           this.state = 'STAGE_PLAY';
           this.centerBanner.style.display = 'none';
           this.currentStage?.start();
+          if (this.benchScene === 'stage') {
+            this.benchInput = new DemoInputManager();
+            this.benchInput.setScenario(this.currentStageIndex + 1);
+            this.benchSuccess = benchParam('result') !== 'fail';
+            benchReady('stage-start');
+          }
           sound.startBgm();
         }
         break;
@@ -460,7 +490,8 @@ export class GameManager {
       case 'STAGE_PLAY': {
         if (!this.currentStage) break;
 
-        const result = this.currentStage.update(dt, this.input);
+        if (this.benchInput && this.benchSuccess) this.benchInput.updateDemo(dt);
+        const result = this.currentStage.update(dt, this.benchInput ?? this.input);
 
         // Update sub-metric (e.g. remaining water, battery percentage)
         const subInfo = this.currentStage.getSubInfo?.();
@@ -518,6 +549,7 @@ export class GameManager {
             break;
           }
           this.state = 'STAGE_FADEOUT';
+          if (this.benchScene === 'stage') benchDone('judgment-end');
           this.stateTimer = 0.3; // 0.3s quick black fade
           this.fadeOverlay.style.opacity = '1';
         }
@@ -616,6 +648,7 @@ export class GameManager {
 
   private enterJudgment() {
     this.state = 'STAGE_JUDGMENT';
+    if (this.benchScene === 'stage') benchMark('judgment');   // 判定のスロー演出が終わるまで測る(終わりは STAGE_FADEOUT へ移るところ)
     sound.stopBgm();
 
     // Immediately clear danger overlays & sub info

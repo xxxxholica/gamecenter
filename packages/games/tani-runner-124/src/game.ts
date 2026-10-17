@@ -10,7 +10,7 @@ import { sound } from './audio.ts';
 import { StudentCrowd } from './studentMesh.ts';
 import { WorldManager, GatePair, RING_HALF_WIDTH } from './world.ts';
 import { pickRequirement } from './courseGenerator.ts';
-import { LEVELS, LevelId, loadLevel, saveLevel } from './levels.ts';
+import { LEVELS, LEVEL_ORDER, LevelId, loadLevel, saveLevel } from './levels.ts';
 import { EffectsManager } from './effects.ts';
 import { GateInfo, MathOpType } from './textures.ts';
 import { gateResult } from './gateGenerator.ts';
@@ -23,6 +23,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
 /** 最後のジャンプのタイミングゲージ: 緑の帯の中心(0〜1)・半幅、カーソルの往復にかかる秒数、受付時間 */
@@ -75,6 +76,9 @@ export class Game {
 
   /** 選んでいるレベル(小学生・中学生・高専生)。前回の選択を覚えている */
   public level: LevelId = loadLevel();
+  private readonly benchScene = benchParam('scene');
+  private benchClock = 0;
+  private benchNextBoost = 0;
   private levelSelect!: LevelSelectScreen;
   private resultMenu = new ResultMenu();
   private flightBoostsLeft: number = 0;
@@ -152,6 +156,26 @@ export class Game {
     } else {
       this.initArcadeTitleScreen();
       this.showTitleGuide();
+    }
+
+    // ベンチマーク(?bench=1): 全レベルを、ボットの操作で走る(ゲート → 壁 → ジャンプ台 → 空中のリング)
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      ...LEVEL_ORDER.map((id) => ({
+        id: `run-${id}`,
+        label: `${LEVELS[id].label} を走る`,
+        kind: 'run',
+        params: { scene: 'run', level: id },
+        input: 'self' as const,
+        seconds: 150,
+      })),
+    ]);
+    if (this.benchScene === 'run') {
+      const lv = benchParam('level');
+      if (lv && (LEVEL_ORDER as string[]).includes(lv)) this.level = lv as LevelId;
+      this.startGame();
+    } else if (this.benchScene === 'title') {
+      benchReady('title');
     }
 
     window.addEventListener('resize', () => {
@@ -324,6 +348,7 @@ export class Game {
         this.state = 'RUNNING';
         this.showRunGuide();
         sound.startRunningBgm();
+        if (this.benchScene === 'run') benchReady('run-start');
       },
     });
     this.playerZ = 0;
@@ -379,6 +404,12 @@ export class Game {
 
     // Immediate fail if credits drop to 0
     if (this.currentCredits <= 0 && this.state === 'RUNNING') {
+      if (this.benchScene === 'run') {
+        // ベンチ: 引き算・割り算のゲートで全滅しても終わらせず、壁・ジャンプ台・空中のリングまで走りきる
+        benchMark('credits-rescued');
+        this.setCredits(6);
+        return;
+      }
       this.triggerGameOver();
     }
   }
@@ -406,7 +437,8 @@ export class Game {
     const dt = Math.min(0.08, (time - this.lastTime) / 1000) || 0.016;
     this.lastTime = time;
 
-    const input = inputManager.poll();
+    let input = inputManager.poll();
+    if (this.benchScene === 'run') input = this.benchBot(input, dt);
 
     // State machine(ポーズ中は進めない)
     switch (this.pause.isOpen ? 'PAUSED' : this.state) {
@@ -431,6 +463,31 @@ export class Game {
     this.effects.update(dt, this.camPos, this.camLookAt);
     this.renderer.render(this.scene, this.camera);
   };
+
+  /** ベンチマーク用のボット: 左右にゆるく振りながら走り、ジャンプ台は緑の帯で押し、空中では一定間隔で加速する。 */
+  private benchBot(input: ReturnType<typeof inputManager.poll>, dt: number): ReturnType<typeof inputManager.poll> {
+    this.benchClock += dt;
+    let actionJustPressed = false;
+    if (this.state === 'WALL_CRASH' && !this.launchPressed) {
+      actionJustPressed = Math.abs(this.launchCursorPos(this.bonusTimer) - LAUNCH_ZONE_CENTER) < 0.05;
+    } else if (this.state === 'BONUS_FLIGHT' && this.benchClock >= this.benchNextBoost) {
+      actionJustPressed = true;
+      this.benchNextBoost = this.benchClock + 1.5;
+    }
+    let moveX = Math.sin(this.benchClock * 1.1) * 0.9;
+    if (this.state === 'RUNNING') {
+      // 次のゲートは、通ったあとの人数が多い側へ寄る
+      const next = this.world.gates.find((g) => !g.leftGate.passed && !g.rightGate.passed && g.z < this.playerZ);
+      if (next) moveX = gateResult(this.currentCredits, next.leftGate.info).survivors >= gateResult(this.currentCredits, next.rightGate.info).survivors ? -0.9 : 0.9;
+      if (this.currentCredits > 0 && this.currentCredits < 6) this.setCredits(6);   // 全滅で終わらないように
+      // 壁の手前で卒業要件に届いていなければ、足す(ジャンプ台・空中のリングまで必ず見せるため)
+      if (this.playerZ <= this.world.bossWallZ + 6 && this.currentCredits < this.graduationRequirement + 40) {
+        this.setCredits(this.graduationRequirement + 40);   // 直前の障害物で減っても届くように、余裕をもたせる
+        benchMark('credits-topped-up');
+      }
+    }
+    return { ...input, moveX, narrowFormation: false, actionPressed: actionJustPressed, actionJustPressed };
+  }
 
   // State: Running forward through gates
   private updateRunning(dt: number, input: ReturnType<typeof inputManager.poll>): void {
@@ -834,6 +891,7 @@ export class Game {
   // Game Over: 「留年」 (Red bold text)
   private triggerGameOver(): void {
     this.state = 'GAME_OVER';
+    if (this.benchScene === 'run') benchDone('game-over');
     reportDeepAnalytics('progression_update', {
       result: 'gameover',
       deathReason: '卒業要件に届かず留年',
@@ -854,6 +912,7 @@ export class Game {
   // Game Clear: 「卒業」 (Yellow bold text) + Final Multiplier
   private triggerGameClear(): void {
     this.state = 'GAME_CLEAR';
+    if (this.benchScene === 'run') benchDone('clear');
     sound.stopBgm();
     sound.playVictoryFanfare();
 

@@ -304,7 +304,6 @@ function injectStyle(): void {
 
 let trackerInitialized = false;
 let currentInputMode: InputMode = 'keyboard';
-const modeListeners = new Set<(mode: InputMode) => void>();
 
 function setMode(mode: InputMode): void {
   const changed = currentInputMode !== mode;
@@ -315,13 +314,6 @@ function setMode(mode: InputMode): void {
     }
   }
   if (changed) {
-    for (const listener of modeListeners) {
-      try {
-        listener(mode);
-      } catch (err) {
-        console.error('Error in input mode listener:', err);
-      }
-    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('gamecenter:inputmode', { detail: { mode } }));
     }
@@ -334,23 +326,6 @@ function setMode(mode: InputMode): void {
 export function getInputMode(): InputMode {
   initInputModeTracker();
   return currentInputMode;
-}
-
-/**
- * 入力モードの切り替えを購読する。
- * 登録解除関数を返す。登録時に即座に現在のモードで1回実行される。
- */
-export function onInputModeChange(listener: (mode: InputMode) => void): () => void {
-  initInputModeTracker();
-  modeListeners.add(listener);
-  try {
-    listener(currentInputMode);
-  } catch (err) {
-    console.error('Error in initial input mode listener call:', err);
-  }
-  return () => {
-    modeListeners.delete(listener);
-  };
 }
 
 /**

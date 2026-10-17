@@ -2,6 +2,8 @@
 //  サウンド（Web Audio API で全て合成）
 // ===========================================================
 
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+
 export class Sound {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -32,10 +34,7 @@ export class Sound {
     this.bgmBus = this.ctx.createGain();
     this.bgmBus.gain.value = 0.32;
     this.bgmBus.connect(this.master);
-    const len = this.ctx.sampleRate * 1;
-    this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const d = this.noiseBuf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = createWhiteNoiseBuffer(this.ctx, 1);
   }
 
   toggleMute() {

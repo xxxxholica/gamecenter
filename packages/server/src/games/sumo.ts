@@ -9,6 +9,7 @@ import type { FighterInput } from '../../../shared/sumoSim/SimWorld.ts';
 import { RemoteInput } from '../../../shared/sumoSim/RemoteInput.ts';
 import type { ConfigField, GameModule, Member, Msg, Room } from '../engine.ts';
 import { log } from '../log.ts';
+import { isNum } from '../../../shared/online/validate.ts';
 
 /** シミュレーションの刻み(秒)。60Hz */
 const STEP = 1 / 60;
@@ -16,8 +17,6 @@ const STEP = 1 / 60;
 const MAX_CATCHUP_STEPS = 6;
 /** この時間、操作が届かなかったら、押しっぱなしを止める(ms) */
 const INPUT_STALE_MS = 1000;
-
-const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 
 /** 操作の検証。不正なら null。 */
 export function cleanInput(v: unknown): InputTuple | null {

@@ -750,6 +750,27 @@ export class ObstacleManager {
   /**
    * ゴールドコインを連続ライン状に配置
    */
+  /**
+   * シェーダの事前コンパイル用: 全種類の障害物を1つずつ作って返す(シーンへの追加・管理はしない)。
+   * 障害物は種類ごとに素材の組み合わせが違い、初めて視界に入った瞬間に、その種類のシェーダのコンパイルで画面が止まる。
+   */
+  public createWarmupObjects(): THREE.Object3D[] {
+    return [
+      this.createDeskChairObstacle(),
+      this.createLockerVaultObstacle(),
+      this.createTeacherObstacle().group,
+      this.createHangingSignObstacle(),
+      this.createJumpGimmickArea(),
+      this.createSlideGimmickArea(),
+      this.createBombGimmickArea(),
+      this.createChargingCartObstacle().group,
+      this.createFallingLockerObstacle().group,
+      this.createBouncingBallObstacle().group,
+      this.createSweepingPolisherObstacle().group,
+      this.createFireObstacle().group,
+    ];
+  }
+
   public spawnCoinLine(lane: LaneIndex, startZ: number, count: number = 4, spacing: number = 2.8, y: number = 1.0): void {
     const x = LANE_COORDINATES[lane];
     for (let i = 0; i < count; i++) {

@@ -21,7 +21,7 @@ export class ParticleManager {
   private ringGeo: THREE.RingGeometry;
 
   // 爆発(閃光・火球・煙・火花・衝撃波)
-  private fx: ExplosionFx;
+  public readonly fx: ExplosionFx;
 
   // 爆発の位置に土俵の焦げ跡を付ける(土俵側が登録する)。radius は焦げの大きさ(m)
   public onScorch: ((pos: THREE.Vector3, radius: number, strength: number) => void) | null = null;

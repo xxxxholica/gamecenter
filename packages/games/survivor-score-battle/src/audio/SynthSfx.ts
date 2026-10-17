@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
 /**
  * Procedural Sound Effects Synthesizer using Web Audio API
  * 100% generated in code - no external audio files needed!
@@ -74,12 +75,7 @@ export class SynthSfx {
   /** Blade swing swoosh */
   playBladeSlash() {
     const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * 0.08;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.4));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.08, (_t, p) => Math.exp(-p / 0.4));
 
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
@@ -146,12 +142,7 @@ export class SynthSfx {
   playExplosion(isLarge: boolean = false) {
     const now = this.ctx.currentTime;
     const duration = isLarge ? 0.45 : 0.22;
-    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, duration, (_t, p) => Math.pow(1 - p, 2));
 
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;

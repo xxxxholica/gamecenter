@@ -707,29 +707,8 @@ export class CrossJModel extends CarBase {
       });
     });
 
-    // --- 9. 4 EXPOSED ALLOY ROAD WHEELS (IDENTICAL TO HIGH-DETAIL SPARE TIRE!) ---
-    // Right wheels (x > 0): rotation.y = 0  -> machined silver face (+X) points RIGHT OUTWARD!
-    // Left wheels (x < 0):  rotation.y = PI -> machined silver face (+X) points LEFT OUTWARD!
-    const wheelPositions = [
-      { x: -trackWidth / 2, z: frontWheelZ, isLeft: true },
-      { x: trackWidth / 2, z: frontWheelZ, isLeft: false },
-      { x: -trackWidth / 2, z: rearWheelZ, isLeft: true },
-      { x: trackWidth / 2, z: rearWheelZ, isLeft: false },
-    ];
-
-    this.wheels = [];
-    wheelPositions.forEach((pos) => {
-      // Full 3D chunky tread blocks, deep machined rim, 8 spokes, lug nuts & red caliper!
-      const wheel = this.createDetailedWheel(wheelRadius, wheelWidth, wheelRadius * 0.58, 8, true);
-      wheel.position.set(pos.x, wheelRadius + 0.01, pos.z);
-      if (pos.isLeft) {
-        wheel.rotation.y = Math.PI; // Face points LEFT OUTWARD!
-      } else {
-        wheel.rotation.y = 0;       // Face points RIGHT OUTWARD!
-      }
-      this.wheels.push(wheel);
-      carRoot.add(wheel);
-    });
+    // --- 9. 4 EXPOSED ALLOY ROAD WHEELS (same spec as the spare tire) ---
+    this.addRoadWheels(carRoot, trackWidth, frontWheelZ, rearWheelZ, wheelRadius, wheelWidth);
 
     // Exhaust Pipe
     const exhaustGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.18, 16);

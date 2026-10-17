@@ -3,7 +3,7 @@ import { CarBase } from '../models/CarBase';
 import { TrailJModel } from '../models/TrailJModel';
 import { CrossJModel } from '../models/CrossJModel';
 import { mergeMeshesByMaterial } from '../models/mergeMeshes';
-import { buildFarVariant } from '../models/npcLod';
+import { buildFarVariant, buildUltraFarVariant } from '../models/npcLod';
 
 /** NPCの配置・塗装に使う乱数。オンライン対戦では全員同じシードの乱数に差し替える(未設定=Math.random)。 */
 let trafficRng: (() => number) | null = null;
@@ -16,12 +16,16 @@ const ROOFS = [null, null, 0x1b1c1f, 0xf4f4f2];   // null = same as the body
 
 /** この距離(m)より遠いNPC車は、ホイールなどを省いた簡易モデルで描く(THREE.LOD)。 */
 const LOD_FAR_DIST = 40;
+/** この距離(m)より遠いNPC車は、さらに数メッシュだけの簡易モデルで描く(npcLod.ts の buildUltraFarVariant)。 */
+const LOD_ULTRA_DIST = 150;
 
 interface NpcPrototype {
   /** 近距離用(従来のモデル)。 */
   near: CarBase;
   /** 遠距離用の簡易モデル(ホイール簡略・小部品なし・ガラスは不透明)。塗装の素材は far 側の別インスタンス。 */
   far: CarBase;
+  /** とても遠い距離用(塗装・ライト・暗い部分の数メッシュだけ)。 */
+  ultra: CarBase;
 }
 
 /** One prototype per model, flattened into a few draw calls (wheels do not spin, so they are baked into the body meshes). */
@@ -34,18 +38,29 @@ function prototype(kind: string): NpcPrototype {
   if (!p) {
     const near = makeModel(kind);
     near.setLights(true);
-    mergeMeshesByMaterial(near.group);
+    mergeMeshesByMaterial(near.group, { pruneEmpty: true });
     const far = makeModel(kind);
     far.setLights(true);
     buildFarVariant(far);
+    const ultra = makeModel(kind);
+    ultra.setLights(true);
+    buildUltraFarVariant(ultra);
     // Each spawned NPC needs its own paint colour, so bodyMaterial/roofMaterial are cloned per car (spawn(), below) and
     // transparent parts (glass) are never merged by mergeMeshesByMaterial — a full traffic field still ends up as
     // ~1,900 individual meshes. Measured: giving them all castShadow cost ~2ms/frame (~35% of frame time) for shadow
     // patches under fast-moving cars that are barely visible, so it's reverted; the player's own car still casts one.
-    for (const m of [near, far]) {
+    for (const m of [near, far, ultra]) {
       m.group.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
     }
-    p = { near, far };
+    // 透明で両面の素材(ガラス)を three.js は、裏面 → 表面の2回に分けて描き、そのたびに素材の更新(needsUpdate)でシェーダの照合をやり直す。
+    // 見えているNPC車のガラスだけで、1フレームに十数回(計測: 5秒で約9,000回)。不透明度 0.1 のガラスは、1回で描いても見分けがつかない。
+    for (const m of [near, far, ultra]) {
+      m.group.traverse((o) => {
+        const mat = o instanceof THREE.Mesh ? (o.material as THREE.Material | THREE.Material[]) : null;
+        for (const x of Array.isArray(mat) ? mat : mat ? [mat] : []) if (x.transparent && x.side === THREE.DoubleSide) x.forceSinglePass = true;
+      });
+    }
+    p = { near, far, ultra };
     prototypes.set(kind, p);
   }
   return p;
@@ -251,7 +266,7 @@ export class Traffic {
 
   /** Clone of a prototype with its own randomly chosen paint. 近距離用と遠距離用の2段階(THREE.LOD)。塗装の素材は両方で共有する。 */
   private spawn(proto: NpcPrototype): THREE.Object3D {
-    const { near, far } = proto;
+    const { near, far, ultra } = proto;
     const body = near.bodyMaterial.clone(), roof = near.roofMaterial.clone();
     const paint = PAINTS[Math.floor(rand() * PAINTS.length)], rf = ROOFS[Math.floor(rand() * ROOFS.length)];
     body.color.setHex(paint);
@@ -268,6 +283,7 @@ export class Traffic {
     const lod = new THREE.LOD();
     lod.addLevel(level(near), 0);
     lod.addLevel(level(far), LOD_FAR_DIST, 0.1);
+    lod.addLevel(level(ultra), LOD_ULTRA_DIST, 0.1);
     return lod;
   }
 

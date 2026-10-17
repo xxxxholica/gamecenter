@@ -27,7 +27,7 @@ const RULER_X = -HALF - 2;
 const RULER_Z = 0.7;
 
 /** 地層ごとの雰囲気 */
-const STRATA = [
+export const STRATA = [
   { depth: 0, name: '表土層', back: 0x6b4a2e, wall: 0x7b5634, fog: 0x2a1a10 },
   { depth: 100, name: '赤土層', back: 0x6e2d1f, wall: 0x8a3b24, fog: 0x2a0c08 },
   { depth: 200, name: '岩盤層', back: 0x3c4552, wall: 0x56616f, fog: 0x0c1118 },
@@ -119,6 +119,11 @@ export class View {
   private blasts: { fire: THREE.Mesh; core: THREE.Mesh; ring: THREE.Mesh; t: number; life: number; scale: number; back: boolean }[] = [];
   private blastGeo = new THREE.IcosahedronGeometry(0.5, 2);
   private ringGeo = new THREE.RingGeometry(0.82, 1, 56);
+  /**
+   * 爆発のマテリアルの置き場。爆発のたびに作って捨てると、使う爆発が途切れた瞬間にシェーダ(プログラム)も解放されて、
+   * 次の爆発でコンパイルし直す(数十ms〜数百ms止まる)。捨てずに使い回し、起動時にコンパイルも済ませておく
+   */
+  private blastMats: THREE.MeshBasicMaterial[] = [];
   private boomLight: THREE.PointLight;
   /** 爆発の瞬間にブルーム（にじむ光）を強める量 */
   private fogColor = new THREE.Color();
@@ -331,11 +336,18 @@ export class View {
     // シェーダは、画面にある光の数でも変わる。黄金郷(金色の光を含む)が見えているときと見えていないときの両方を、先にコンパイルする
     this.renderer.setRenderTarget(this.composer.readBuffer);
     const eldoradoShown = this.eldorado.visible;
+    // 爆発のマテリアルも、ここでシェーダを作っておく(はじめての爆発で止まらないように)
+    const warm = [0xff7a1a, 0xfff2b0, 0xffd9a0].map((c) => new THREE.Mesh(this.blastGeo, this.takeBlastMat(c)));
+    this.scene.add(...warm);
     for (const shown of [false, true]) {
       this.eldorado.visible = shown;
       this.renderer.compile(this.scene, this.camera);
     }
     this.eldorado.visible = eldoradoShown;
+    for (const m of warm) {
+      this.scene.remove(m);
+      this.blastMats.push(m.material as THREE.MeshBasicMaterial);
+    }
     this.renderer.setRenderTarget(null);
   }
 
@@ -565,10 +577,8 @@ export class View {
   /** back: true なら、キャラクターの後ろ(奥)で爆発させる */
   explosion(x: number, y: number, scale = 1, back = false) {
     const mk = (geo: THREE.BufferGeometry, color: number, z: number) => {
-      const m = new THREE.Mesh(
-        geo,
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-      );
+      const mat = this.takeBlastMat(color);
+      const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
       this.scene.add(m);
       return m;
@@ -587,6 +597,13 @@ export class View {
     this.bloomKick = Math.min(this.bloomKick + (back ? 0.25 : 0.9) * scale, 2.5);
   }
 
+  private takeBlastMat(color: number) {
+    const mat = this.blastMats.pop() ?? new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    mat.color.setHex(color);
+    mat.opacity = 1;
+    return mat;
+  }
+
   private updateBlasts(dt: number) {
     let light = 0;
     for (let i = this.blasts.length - 1; i >= 0; i--) {
@@ -596,7 +613,7 @@ export class View {
       if (u >= 1) {
         for (const m of [b.fire, b.core, b.ring]) {
           this.scene.remove(m);
-          (m.material as THREE.Material).dispose();
+          this.blastMats.push(m.material as THREE.MeshBasicMaterial);
         }
         this.blasts.splice(i, 1);
         continue;

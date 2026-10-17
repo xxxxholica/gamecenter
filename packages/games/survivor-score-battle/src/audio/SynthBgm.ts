@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
 /**
  * Procedural EDM BGM Synthesizer using Web Audio API
  * High-energy 160 BPM Electro-Pop / Arcade EDM generator
@@ -164,12 +165,7 @@ export class SynthBgm {
 
   private triggerSnare(time: number, vol: number = 0.6) {
     // Noise snap
-    const bufferSize = this.ctx.sampleRate * 0.1;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.1, (_t, p) => Math.exp(-p / 0.3));
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
@@ -202,12 +198,7 @@ export class SynthBgm {
   }
 
   private triggerHiHat(time: number, vol: number = 0.15) {
-    const bufferSize = this.ctx.sampleRate * 0.04;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.04, (_t, p) => Math.exp(-p / 0.2));
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 

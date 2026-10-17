@@ -23,6 +23,42 @@ export function isBenchEnabled(): boolean {
   }
 }
 
+/**
+ * 計測の対象になる「場面」ひとつ分。各ゲームが declareBenchTargets() で申告し、bench-all.mjs が全部を順に開く。
+ * 例: 「ヘルシンキ × dragon_b × 夜のレース」。
+ */
+export interface BenchTarget {
+  /** 結果のキー(ゲーム内で一意。ファイル名にもなるので英数字と - _ だけ) */
+  id: string;
+  /** 人が読む名前 */
+  label: string;
+  /** 開くときに URL へ足すパラメータ。ゲームはこれを benchParam() で読んで、その場面から始める */
+  params: Record<string, string>;
+  /** 場面の種類(race / garage / title など)。結果を種類ごとにまとめるのに使う */
+  kind?: string;
+  /**
+   * 操作の出し方。
+   *  - 'self': ゲーム自身が自動で動く(オートパイロットなど)。スクリプトはキーを送らない
+   *  - 'random': スクリプトが固定シードのランダム入力を送る(既定)
+   *  - 'idle': 何も押さない(タイトルやメニューなど、見ているだけの場面)
+   */
+  input?: 'self' | 'random' | 'idle';
+  /** 計測する秒数。省略時はスクリプトの --duration */
+  seconds?: number;
+}
+
+/** 結果のキーに使えない文字を - に置き換える。 */
+export function benchSafeId(id: string): string {
+  return id.replace(/[^\w-]+/g, '-');
+}
+
+/** 場面を開く URL。bench=1 を必ず付ける。 */
+export function benchTargetUrl(base: string, slug: string, target: BenchTarget): string {
+  const q = new URLSearchParams({ bench: '1' });
+  for (const [k, v] of Object.entries(target.params)) if (k !== 'bench') q.set(k, v);
+  return `${base.replace(/\/$/, '')}/games/${slug}/?${q.toString()}`;
+}
+
 /** 昇順にソート済みの配列から百分位を取る。 */
 export function percentile(sorted: readonly number[], p: number): number {
   if (sorted.length === 0) return 0;
@@ -71,6 +107,159 @@ export function summarizeFrames(intervals: readonly number[]): FrameSummary {
     maxMs: round(sorted[n - 1]),
     hitchRate: round(hitches / n, 4),
     onePercentLowFps: round(worstAvg > 0 ? 1000 / worstAvg : 0, 1),
+  };
+}
+
+export interface LatencySummary {
+  count: number;
+  p50Ms: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+export function summarizeLatency(samples: readonly number[]): LatencySummary {
+  const sorted = [...samples].sort((a, b) => a - b);
+  return {
+    count: sorted.length,
+    p50Ms: round(percentile(sorted, 50), 1),
+    p95Ms: round(percentile(sorted, 95), 1),
+    maxMs: round(sorted[sorted.length - 1] ?? 0, 1),
+  };
+}
+
+/**
+ * 入力が届いてから、それが画面に出るまでの時間を数える(ゲームは毎フレームの最初に入力の状態を読む前提)。
+ * フレーム A の開始より前に届いた入力は、A の処理で読まれ、A の描画が次のフレームの開始(=次の垂直同期)に画面に出る。
+ * つまり「届いた時刻 → 読んだフレームの次のフレームの開始」。重いフレームやメインスレッドの占有で待たされた分も入る。
+ */
+export class InputLatencyTracker {
+  private waiting: number[] = [];
+  private inFrame: number[] = [];
+
+  /** 入力が届いた(時刻は performance.now() と同じ基準) */
+  arrive(t: number): void {
+    this.waiting.push(t);
+  }
+
+  /** フレームが始まった。前のフレームで読んだ入力の遅延(ms)を返し、ここまでに届いた入力をこのフレームで読んだことにする */
+  onFrame(ts: number): number[] {
+    const done = this.inFrame.map((t) => Math.max(0, ts - t));
+    this.inFrame = this.waiting;
+    this.waiting = [];
+    return done;
+  }
+
+  /** 途中で計測できなくなった(タブが隠れたなど)。待っている入力は数えない */
+  clear(): void {
+    this.waiting = [];
+    this.inFrame = [];
+  }
+}
+
+/**
+ * モニターより遅いリフレッシュレート(60Hz など)の再現。モニターのフレームごとに take() を呼び、
+ * hz の区切りを過ぎた最初のフレームなら、その区切りの時刻を返す(それ以外は null。そのフレームではゲームを動かさない)。
+ * ゲームの処理が終わったら finish() に処理の時間を渡す。垂直同期と同じく、処理が終わったあとの最初の区切りが次のフレームになる
+ * (区切りから処理を始めたとみなす。モニターのフレームの細かさの分だけ、実際に始めるのは区切りより少し遅れるため)。
+ * ゲームの外の処理(タイマーなど)や GPU で次のモニターのフレームが遅れたときも、過ぎてしまった区切りは飛ばす。
+ */
+export class RefreshSlots {
+  private readonly period: number;
+  private readonly toleranceMs: number;
+  private anchor = -1;
+  private last = -Infinity;
+  private earliest = -Infinity;
+
+  /** toleranceMs: 区切りに届いた・間に合ったとみなす誤差(時刻の丸めなど) */
+  constructor(hz: number, toleranceMs = 1) {
+    this.period = 1000 / hz;
+    this.toleranceMs = toleranceMs;
+  }
+
+  take(now: number): number | null {
+    if (this.anchor < 0) this.anchor = now;
+    const slot = Math.floor((now - this.anchor + this.toleranceMs) / this.period);
+    if (slot <= this.last || slot < this.earliest) return null;
+    this.last = slot;
+    return this.anchor + slot * this.period;
+  }
+
+  /** 直前に take() で渡したフレームの処理に workMs かかった */
+  finish(workMs: number): void {
+    this.earliest = this.last + Math.max(1, Math.ceil((workMs - this.toleranceMs) / this.period));
+  }
+}
+
+/** 合否の基準(60Hz で、プレイ中の区間)。README の「ベンチマーク」参照 */
+export const ACCEPTANCE = {
+  onePercentLowFps: 55,
+  p99Ms: 20,
+  maxMs: 50,
+  inputP95Ms: 50,
+  inputMaxMs: 100,
+  /** 読み込み中の、1回の停止の長さ */
+  loadMaxFrameMs: 1000,
+} as const;
+
+/** 合否を決める値。読み込みの区間がない場面は loadMaxFrameMs を null にする */
+export interface AcceptanceMetrics {
+  onePercentLowFps: number;
+  p99Ms: number;
+  maxMs: number;
+  /** プレイ中の、シェーダのコンパイルとテクスチャ・バッファの転送によるスパイクの回数 */
+  compileUploadSpikes: number;
+  inputP95Ms: number;
+  inputMaxMs: number;
+  loadMaxFrameMs: number | null;
+}
+
+export interface AcceptanceResult {
+  pass: boolean;
+  /** 合格だが、どれかの値が基準まで 10% 以内(1%low は 57.5fps 未満)。測り直して確かめる */
+  borderline: boolean;
+  /** 不合格の項目(例: 「p99 24.1ms > 20」) */
+  failures: string[];
+}
+
+export function judgeAcceptance(m: AcceptanceMetrics): AcceptanceResult {
+  const failures: string[] = [];
+  let borderline = false;
+  // 1%low は 60fps より上にならないので、「すれすれ」は 10% ではなく、基準と 60fps の中間まで(57.5fps 未満)
+  const atLeast = (label: string, v: number, min: number, unit: string) => {
+    if (v < min) failures.push(`${label} ${v}${unit} < ${min}`);
+    else if (v < (min + 60) / 2) borderline = true;
+  };
+  const atMost = (label: string, v: number, max: number, unit: string) => {
+    if (v > max) failures.push(`${label} ${v}${unit} > ${max}`);
+    else if (v > max * 0.9) borderline = true;
+  };
+  atLeast('1%low', m.onePercentLowFps, ACCEPTANCE.onePercentLowFps, 'fps');
+  atMost('p99', m.p99Ms, ACCEPTANCE.p99Ms, 'ms');
+  atMost('最長', m.maxMs, ACCEPTANCE.maxMs, 'ms');
+  if (m.compileUploadSpikes > 0) failures.push(`シェーダ・転送のスパイク ${m.compileUploadSpikes}回`);
+  atMost('入力 p95', m.inputP95Ms, ACCEPTANCE.inputP95Ms, 'ms');
+  atMost('入力 最大', m.inputMaxMs, ACCEPTANCE.inputMaxMs, 'ms');
+  if (m.loadMaxFrameMs !== null) atMost('読込の停止', m.loadMaxFrameMs, ACCEPTANCE.loadMaxFrameMs, 'ms');
+  return { pass: failures.length === 0, borderline: failures.length === 0 && borderline, failures };
+}
+
+/** 何回か測った値を、項目ごとの中央値にまとめる(基準すれすれ・不合格の場面は3回測って中央値で判定する) */
+export function medianMetrics(runs: readonly AcceptanceMetrics[]): AcceptanceMetrics {
+  const med = (values: number[]) => {
+    const v = [...values].sort((x, y) => x - y);
+    const mid = Math.floor(v.length / 2);
+    return v.length % 2 ? v[mid] : round((v[mid - 1] + v[mid]) / 2, 2);
+  };
+  const pick = (k: Exclude<keyof AcceptanceMetrics, 'loadMaxFrameMs'>) => med(runs.map((m) => m[k]));
+  const loads = runs.map((m) => m.loadMaxFrameMs).filter((v): v is number => v !== null);
+  return {
+    onePercentLowFps: pick('onePercentLowFps'),
+    p99Ms: pick('p99Ms'),
+    maxMs: pick('maxMs'),
+    compileUploadSpikes: pick('compileUploadSpikes'),
+    inputP95Ms: pick('inputP95Ms'),
+    inputMaxMs: pick('inputMaxMs'),
+    loadMaxFrameMs: loads.length ? med(loads) : null,
   };
 }
 

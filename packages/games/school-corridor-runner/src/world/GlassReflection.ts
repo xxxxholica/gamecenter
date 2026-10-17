@@ -143,4 +143,17 @@ export class GlassReflection {
     renderer.shadowMap.autoUpdate = prevShadow;
     renderer.setRenderTarget(prevTarget);
   }
+
+  /**
+   * 反射用のシェーダを先に作っておく。反射の絵(renderTarget)にはトーンマッピングをかけないので、画面用とは別のシェーダになり、
+   * 物が初めて反射に映った瞬間に作られて画面が止まる。
+   */
+  public compile(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    const prevTarget = renderer.getRenderTarget();
+    for (const m of this.glassMeshes) m.visible = false;
+    renderer.setRenderTarget(this.renderTarget);
+    renderer.compile(scene, camera);
+    for (const m of this.glassMeshes) m.visible = true;
+    renderer.setRenderTarget(prevTarget);
+  }
 }

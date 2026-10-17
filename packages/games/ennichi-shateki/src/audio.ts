@@ -1,3 +1,4 @@
+import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 /**
  * Procedural Web Audio API sound synthesizer for arcade festival cork shooting.
  * 100% self-contained, zero external sound files.
@@ -170,12 +171,7 @@ class SoundSystem {
     }
 
     // High pressure air pop (noise burst)
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.035);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.035, (_t, p) => Math.exp(-p / 0.25));
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
@@ -234,12 +230,7 @@ class SoundSystem {
     sub.stop(t + 0.6);
 
     // Fiery noise blast
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.40);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.40, (_t, p) => Math.exp(-p / 0.3));
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
@@ -572,12 +563,7 @@ class SoundSystem {
     if (this.shouldThrottle('balloon', 30)) return;
 
     const t = this.ctx.currentTime;
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.045);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
-    }
+    const buffer = createWhiteNoiseBuffer(this.ctx, 0.045, (_t, p) => Math.exp(-p / 0.2));
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 

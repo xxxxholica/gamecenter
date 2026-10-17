@@ -25,6 +25,7 @@ import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../sh
 import { returnToHub } from '../../../../shared/homeReturn';
 import { ArcadePause } from '../../../../shared/arcadePause';
 import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
+import { benchDone, benchMark, benchParam, benchReady } from '../../../../shared/arcadeBenchTargets';
 import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
 export class GameEngine {
@@ -142,7 +143,8 @@ export class GameEngine {
   });
 
   public update(dt: number) {
-    const inputState = this.input.update();
+    let inputState = this.input.update();
+    if (this.benchAuto) inputState = this.benchAutoInput(dt, inputState);
     if (this.pauseUi.isOpen) return;
 
     switch (this.state) {
@@ -183,7 +185,7 @@ export class GameEngine {
       }
 
       case 'LEVEL_UP': {
-        const chosenCard = this.levelUpScreen.update(inputState, this.sound);
+        const chosenCard = this.benchAuto ? this.benchPickCard(dt) : this.levelUpScreen.update(inputState, this.sound);
         if (chosenCard) {
           this.applyUpgrade(chosenCard);
           this.state = 'PLAYING';
@@ -963,8 +965,53 @@ export class GameEngine {
       onGo: () => {
         this.countingDown = false;
         this.sound.playTrack('NORMAL');
+        if (benchParam('scene') === 'play' || this.benchAuto) benchReady('play-start');
       },
     });
+  }
+
+  // ベンチマーク(?bench=1&scene=full): 5分間を最後まで通す(大群・ボス3体・残り45秒の総攻撃まで)。
+  // タイトルのデモと同じ動かし方で、体力は減らさず、レベルアップは自動で選び、必殺技は溜まりしだい撃つ。
+  private readonly benchAuto = benchParam('scene') === 'full';
+  private benchClock = 0;
+  private benchLevelUpWait = 0;
+  private benchCardIndex = 0;
+  private benchBanner: string | null = null;
+  private benchShielded: Player | null = null;
+  private benchFinished = false;
+
+  private benchAutoInput(dt: number, real: InputState): InputState {
+    if (this.state !== 'PLAYING' || this.countingDown) return real;
+    this.benchClock += dt;
+    const t = this.benchClock;
+    if (this.benchShielded !== this.player) {
+      // 1フレームに何発も当たっても倒れないよう、体力が1残るところまでしか減らさない(被弾の演出はそのまま出る)
+      const p = this.player;
+      const takeDamage = p.takeDamage.bind(p);
+      p.takeDamage = (amount: number) => takeDamage(Math.min(amount, p.hp - 1));
+      this.benchShielded = p;
+    }
+    this.player.hp = this.player.maxHp;
+    // 大群・ボスの出現などの区切り(スパイクに「どの山場か」が付く)
+    const banner = this.waveDirector.warningBannerText;
+    if (banner && banner !== this.benchBanner) benchMark(banner);
+    this.benchBanner = banner;
+    if (this.waveDirector.gameTime >= 305 && !this.benchFinished) { this.benchFinished = true; benchDone('survival-cleared'); }
+    return { ...real, moveX: Math.cos(t * 0.55), moveY: Math.sin(t * 0.8), special: this.player.isSpecialReady, pause: false };
+  }
+
+  /** レベルアップの画面を少し見せてから、カードを順番に選ぶ(毎回同じ選び方になる) */
+  private benchPickCard(dt: number): UpgradeCard | null {
+    this.benchLevelUpWait += dt;
+    const cards = this.levelUpScreen.cards;
+    if (this.benchLevelUpWait < 0.6 || cards.length === 0) return null;
+    this.benchLevelUpWait = 0;
+    return cards[this.benchCardIndex++ % cards.length];
+  }
+
+  /** ベンチマーク(?bench=1&scene=play / full): タイトルを飛ばして試合を始める。 */
+  public startBenchMatch() {
+    this.startFromTitle();
   }
 
   private startFromTitle() {

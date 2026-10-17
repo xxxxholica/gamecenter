@@ -9,6 +9,7 @@ import { FirstPersonArms } from './graphics/FirstPersonArms';
 import { Corridor } from './world/Corridor';
 import { Obstacle, ObstacleManager } from './world/ObstacleManager';
 import { Player } from './entities/Player';
+import { Coin } from './entities/Coin';
 import { WordCard } from './entities/WordCard';
 import { DictionaryBomb } from './entities/DictionaryBomb';
 import { TeacherProjectile } from './entities/TeacherProjectile';
@@ -22,6 +23,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
+import { benchDone, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -175,7 +177,72 @@ class Game {
     });
     this.uiManager.setGameState(GameState.TITLE);
     this.arcadeTitleScreen.show();
+    this.warmupShaders();
+    if (import.meta.env.DEV) Object.assign(window, { __scene: this.scene, __renderer: this.renderer });   // 動作確認用(光源の数・シェーダの数の確認など)
     this.loop();
+
+    // ベンチマーク(?bench=1): タイトル / デモ走行(障害物を完璧によける自動操縦) / ふつうのプレイ(ランダム入力でやられては再挑戦) / 無敵でクリアまで
+    declareBenchTargets([
+      { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
+      { id: 'demo', label: 'デモ走行(自動操縦)', kind: 'run', params: { scene: 'demo' }, input: 'self', seconds: 60 },
+      { id: 'play', label: 'プレイ(ランダム入力・やられたら再挑戦)', kind: 'run', params: { scene: 'play' }, input: 'random', seconds: 90 },
+      // 無敵(GODモード)で90秒を走りきる: 最高速・パワーアップ・校門を抜けて校庭へ出るクリア演出まで
+      { id: 'clear', label: '90秒を走りきってクリア(無敵・ランダム入力)', kind: 'run', params: { scene: 'clear' }, input: 'random', seconds: 130 },
+    ]);
+    const benchScene = benchParam('scene');
+    if (benchScene === 'demo') {
+      this.arcadeTitleScreen.hide();
+      this.startGame(true);
+      benchReady('demo-start');
+    } else if (benchScene === 'play' || benchScene === 'clear') {
+      if (benchScene === 'clear') this.godMode = true;
+      this.startWithCountdown();
+    } else if (benchScene === 'title') {
+      benchReady('title');
+    }
+  }
+
+  /**
+   * 遊んでいる最中に初めて使われるシェーダ(障害物の全種類・コイン・パワーアップ・手裏剣・辞書ボム・先生の弾・各種の破壊/爆発の演出・クリア演出の校庭と校門)を、
+   * 画面用とドアガラスの反射用の両方で、タイトルが出る前にまとめてコンパイルする。やらないと、それぞれが初めて視界に入った瞬間に、60〜400ms 画面が止まる
+   * (計測: タイトルの障害物の入れ替わり、プレイ中の障害物・演出の初登場)。
+   * 視界の外(はるか下)に全部並べて compile し、終わったら片付ける。
+   */
+  private warmupShaders(): void {
+    const holder = new THREE.Group();
+    holder.position.set(0, -300, 0);
+    this.scene.add(holder);
+    const far = new THREE.Vector3(0, -300, -8);
+    const attempt = (fn: () => void): void => { try { fn(); } catch (e) { console.warn('warmup', e); } };
+    attempt(() => holder.add(...this.obstacleManager.createWarmupObjects()));
+    attempt(() => holder.add(new Coin(0, 0, -5, 1).mesh));
+    attempt(() => holder.add(new PowerUp(0, 0, -6, 1).mesh));
+    attempt(() => holder.add(new WordCard(far, 10).mesh));
+    attempt(() => holder.add(new DictionaryBomb(far, 10).mesh));
+    attempt(() => holder.add(new TeacherProjectile(far).mesh));
+    // 演出は、実際に発生させてシーンに出す(素材は ParticleSystem が先に作っているものと、その場で作るものがある)
+    const ps = this.particleSystem;
+    attempt(() => ps.spawnBombTrail(far));
+    attempt(() => ps.spawnBombExplosion(far, new THREE.Vector3(0, -300, 0)));
+    attempt(() => ps.spawnDeskBreak(far));
+    attempt(() => ps.spawnLockerBreak(far));
+    attempt(() => ps.spawnSlideParticles(far));
+    attempt(() => ps.spawnShurikenTrail(far));
+    attempt(() => ps.spawnCoinBlurEffect(far));
+    attempt(() => ps.spawnPowerUpBurst(far));
+    attempt(() => ps.spawnInvincibleTrail(far));
+    attempt(() => { const g = new THREE.Group(); g.position.copy(far); g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial())); this.scene.add(g); ps.spawnObstacleCrumble(g); ps.spawnObstacleCrumble(g, true); this.scene.remove(g); });
+    attempt(() => ps.spawnPlayerShatter(far));
+    // クリア演出の校庭・校門(演出の始まりに作るので、ここで同じ素材のシェーダを先に作っておく)
+    attempt(() => holder.add(this.createClearExit(), this.createSchoolGate()));
+    attempt(() => {
+      this.balancePointLights();
+      this.renderer.compile(this.scene, this.camera);
+      this.corridor.compileGlassReflection(this.renderer, this.scene, this.camera);
+    });
+    ps.clearAll();
+    // holder の中身は dispose しない: 素材・ジオメトリを実物と共有していることがあり、dispose するとシェーダが解放されて、また初回コンパイルになる
+    this.scene.remove(holder);
   }
 
   private initEngine(): void {
@@ -331,8 +398,56 @@ class Game {
     applyResultMenuFocus(items, this.resultFocus);
   }
 
+  /** シーンの点光源の合計を、常にこの数にそろえる(下の balancePointLights) */
+  private static readonly POINT_LIGHT_TOTAL = 8;
+  private readonly lightPad: THREE.PointLight[] = [];
+  private readonly lightPadSet = new Set<THREE.Object3D>();
+  private readonly realLights: THREE.PointLight[] = [];
+  private readonly camPos = new THREE.Vector3();
+
+  /**
+   * three.js は、シーンの点光源の数が変わるたびに、光を受ける全素材のシェーダを作り直す(数が違えば別のシェーダ)。
+   * この廊下では、火災の障害物・パワーアップ・無敵の光・校門のランプが出入りして数が 1〜8 の間で変わり、
+   * 変わった瞬間に 17 個のシェーダが一度に作られ(60〜400ms 画面が止まる)、元のシェーダは手放される。
+   * そこで、強さ 0 のダミーの光で、合計がいつも同じ数(POINT_LIGHT_TOTAL)になるよう足し引きする。ダミーは見た目に影響しない。
+   * 実際の光がそれを超えるときは、カメラから遠いものを、その間だけ非表示にする(どれも届く距離は 7〜10m なので、遠い光は見えていない)。
+   */
+  private balancePointLights(): void {
+    const total = Game.POINT_LIGHT_TOTAL;
+    // 前のフレームで非表示にした光を戻してから、数え直す
+    for (const l of this.realLights) if (l.userData.cappedOff) { l.visible = true; l.userData.cappedOff = false; }
+    this.realLights.length = 0;
+    // three.js は、見えていない親の下にある光を数えない(projectObject が、そこで戻る)。同じ数え方にする
+    const collect = (o: THREE.Object3D): void => {
+      if (!o.visible) return;
+      if ((o as THREE.PointLight).isPointLight && !this.lightPadSet.has(o)) this.realLights.push(o as THREE.PointLight);
+      for (const c of o.children) collect(c);
+    };
+    collect(this.scene);
+    if (this.realLights.length > total) {
+      this.camera.getWorldPosition(this.camPos);
+      const d = new Map<THREE.PointLight, number>();
+      const wp = new THREE.Vector3();
+      for (const l of this.realLights) d.set(l, l.getWorldPosition(wp).distanceToSquared(this.camPos));
+      this.realLights.sort((a, b) => d.get(a)! - d.get(b)!);
+      for (let i = total; i < this.realLights.length; i++) { this.realLights[i].visible = false; this.realLights[i].userData.cappedOff = true; }
+    }
+    const want = Math.max(0, total - this.realLights.length);
+    while (this.lightPad.length < want) {
+      const l = new THREE.PointLight(0xffffff, 0, 1);
+      l.position.set(0, -1000, 0);
+      this.lightPad.push(l);
+      this.lightPadSet.add(l);
+    }
+    for (let i = 0; i < this.lightPad.length; i++) {
+      const l = this.lightPad[i];
+      if (i < want) { if (l.parent !== this.scene) this.scene.add(l); } else if (l.parent) l.parent.remove(l);
+    }
+  }
+
   /** 右のドアガラスの反射を描いてから、本番の画面を描く */
   private renderFrame(): void {
+    this.balancePointLights();
     this.corridor.renderGlassReflection(this.renderer, this.scene, this.camera);
     this.renderer.render(this.scene, this.camera);
   }
@@ -542,6 +657,7 @@ class Game {
     this.fpArms.update(0, 0, 0, false, false, this.bombStock);
 
     // 描画ループ中の初回コンパイル(フリーズ)を避けるため、現在シーンのシェーダーを事前に非同期コンパイルしておく
+    this.balancePointLights();   // 光の数を、描画のときと同じにそろえてからコンパイルする(そろえないと、別の光の数のシェーダが17個作られ、描画のたびに作り直される)
     this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
 
     // 最初の位置で初期描画を実行（事前ロードされた障害物・コインが視界に描画される）
@@ -583,6 +699,7 @@ class Game {
       this.isCountingDown = false;
       this.uiManager.hideCountdown();
       this.state = GameState.PLAYING;
+      if (benchParam('scene') === 'play' || benchParam('scene') === 'clear') benchReady('play-start');
     }
   }
 
@@ -2149,6 +2266,7 @@ class Game {
    * ゲーム終了（即死 / クリア）
    */
   private finishGame(state: GameState): void {
+    if (benchParam('scene') === 'clear') benchDone(state === GameState.CLEARED ? 'clear' : 'game-over');
     this.state = state;
     this.soundSystem.stopBgm();
     this.fpArms.group.visible = false;

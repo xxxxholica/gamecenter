@@ -172,7 +172,7 @@ export class RoadBlockade {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 160;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
     // Yellow background
     ctx.fillStyle = '#ffcc00';
@@ -221,7 +221,7 @@ export class RoadBlockade {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
     // Vibrant highway safety orange
     ctx.fillStyle = '#ff6600';
@@ -262,7 +262,7 @@ export class RoadBlockade {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 104;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
     const screenTex = new THREE.CanvasTexture(canvas);
     screenTex.colorSpace = THREE.SRGBColorSpace;
@@ -376,7 +376,7 @@ export class RoadBlockade {
     const signCanvas = document.createElement('canvas');
     signCanvas.width = 512;
     signCanvas.height = 128;
-    const sctx = signCanvas.getContext('2d')!;
+    const sctx = signCanvas.getContext('2d', { willReadFrequently: true })!;
 
     // Red background with white border
     sctx.fillStyle = '#c0392b';

@@ -1,3 +1,4 @@
+import { IS_FIREFOX } from './browser';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -437,6 +438,13 @@ export class PostFX {
     this.anamorphic = new ShaderPass(AnamorphicShader);
     this.composer.addPass(this.anamorphic);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 0.9);
+    if (IS_FIREFOX) {
+      // Firefox: ブルームを半分の解像度で(UnrealBloomPass は、元から画面の半分で処理するので、画面の 1/4)。
+      // 計測(Firefox, 東京スカイウェイ, 60秒×2): fps 146→155、p99 18.2→17ms、スパイク 2〜5→0 回。ブルームを切った場合と同じ数値。
+      // 見た目は、街灯・ライトのにじみが、小さく弱くなる(夜に目立つ)。元に戻すには、この分岐を消す。
+      const setSize = this.bloom.setSize.bind(this.bloom);
+      this.bloom.setSize = (w: number, h: number): void => setSize(Math.max(2, Math.round(w / 2)), Math.max(2, Math.round(h / 2)));
+    }
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());                                  // トーンマッピング(ACES)とsRGB変換は、ここで1回だけ
     this.grade = new ShaderPass(GradeShader);

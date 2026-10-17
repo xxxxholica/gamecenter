@@ -1,15 +1,21 @@
 // 全ゲーム共通のベンチマーク計測。URL に ?bench=1 を付けて開くと有効になる(?bench=0 で解除)。
 // ゲーム側のコードには触れず、ブラウザの API(requestAnimationFrame / WebGL / PerformanceObserver)の呼び出しを
 // 横から計測して、カクつき(スパイク)の1回ごとに「JS・WebGL 呼び出し・GC・待ち」のどれで時間を使ったかを記録する。
+// あわせて、入力が届いてから画面に出るまでの時間(実際のキー入力と、数百msおきの模擬の入力)も数える。
+// ?benchHz=60(または window.__gcBenchHz)で、ゲームに渡す rAF を 60Hz に間引き、60Hz のモニターでの見え方を再現する
+// (モニターのほうが速いときだけ使う。間に合わなかったフレームは、垂直同期と同じく 33.3ms・50ms の間隔として数える)。
 //   F8: 結果を JSON で保存 / F9: 計測をリセット / F10: 表示の切り替え
 // 使えない API(Firefox の LoAF・performance.memory など)は黙って飛ばす。
 
 import {
   classifyGpu,
   classifySpike,
+  InputLatencyTracker,
   isBenchEnabled,
+  RefreshSlots,
   spikeThresholdMs,
   summarizeFrames,
+  summarizeLatency,
   type SpikeCause,
 } from './arcadeBenchCore';
 
@@ -112,15 +118,24 @@ interface BenchState {
   marks: { tSec: number; label: string }[];
   loaf: LoafRecord[];
   longTasks: { start: number; durationMs: number }[];
+  /** 4ms タイマーの遅れ(メインスレッドの占有)。LoAF が無いブラウザでも取れる */
+  mainBlocks: { tSec: number; ms: number; mark: string }[];
   timeline: TimelineRow[];
   bucket: { startTs: number; frames: number; maxMs: number; js: number; gl: number; draws: number };
   causeCounts: Record<string, number>;
   prevHeapMb: number | undefined;
   programsLinked: number;
   texUploads: number;
+  /** 入力が画面に出るまで(ms)。key: 実際のキー入力 / probe: 模擬の入力(数百msおきに「届いた」ことにする) */
+  keyLatency: number[];
+  probeLatency: number[];
+  /** 遅かった入力(50ms 以上) */
+  slowInputs: { tSec: number; ms: number; kind: 'key' | 'probe'; mark: string }[];
 }
 
 let installed = false;
+/** rAF を間引いて再現しているリフレッシュレート(null=モニターのまま) */
+let benchHz: number | null = null;
 let state: BenchState;
 let overlay: HTMLElement | null = null;
 let overlayVisible = true;
@@ -128,6 +143,10 @@ let glContext: WebGLRenderingContext | WebGL2RenderingContext | null = null;
 let gpuRenderer: string | undefined;
 let lastMark = '';
 let medianCache = 16.7;
+const keyTracker = new InputLatencyTracker();
+const probeTracker = new InputLatencyTracker();
+const MAX_INPUT_SAMPLES = 50_000;
+const SLOW_INPUT_MS = 50;
 
 const heapMb = (): number | undefined => {
   const m = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
@@ -145,13 +164,27 @@ function freshState(now: number): BenchState {
     marks: [],
     loaf: [],
     longTasks: [],
+    mainBlocks: [],
     timeline: [],
     bucket: { startTs: 0, frames: 0, maxMs: 0, js: 0, gl: 0, draws: 0 },
     causeCounts: {},
     prevHeapMb: undefined,
     programsLinked: 0,
     texUploads: 0,
+    keyLatency: [],
+    probeLatency: [],
+    slowInputs: [],
   };
+}
+
+/** 計測を最初からやり直す(F9 と、bench-all.mjs が「読み込み」と「プレイ中」を分けるときに使う)。 */
+export function resetBench(): void {
+  if (!installed) return;
+  state = freshState(performance.now());
+  lastMark = '';
+  medianCache = 16.7;
+  keyTracker.clear();
+  probeTracker.clear();
 }
 
 /** 場面の区切りを記録する。スパイクには「直前のマーク」が付くので、どの場面で起きたか分かる。 */
@@ -213,16 +246,24 @@ function hookGl(): void {
   } as typeof HTMLCanvasElement.prototype.getContext;
 }
 
+let gpuProbed = false;
+
 function resolveGpuRenderer(): string | undefined {
   if (gpuRenderer) return gpuRenderer;
   try {
-    if (!glContext) {
-      // フック前に作られたコンテキストは、同じ種類を要求すると同じものが返る
-      const c = document.querySelector('canvas');
-      glContext = (c?.getContext('webgl2') ?? c?.getContext('webgl') ?? null) as typeof glContext;
+    // ゲームが WebGL を使っていればそのコンテキストから取る。
+    // 2D のゲームなど、まだ無いときは、捨てのキャンバスで1回だけ調べる(ゲームのキャンバスに getContext('webgl') を呼ぶと、
+    // 2D のゲームが 2D コンテキストを取れなくなるので、触らない)
+    let gl = glContext;
+    let probe: HTMLCanvasElement | null = null;
+    if (!gl && !gpuProbed) {
+      gpuProbed = true;
+      probe = document.createElement('canvas');
+      gl = (probe.getContext('webgl2') ?? probe.getContext('webgl')) as typeof glContext;
     }
-    const ext = glContext?.getExtension('WEBGL_debug_renderer_info');
-    if (glContext && ext) gpuRenderer = String(glContext.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+    const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+    if (gl && ext) gpuRenderer = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+    if (probe) gl?.getExtension('WEBGL_lose_context')?.loseContext();
   } catch { /* 取れなければ不明のまま */ }
   return gpuRenderer;
 }
@@ -258,9 +299,38 @@ function findLoaf(ts: number, intervalMs: number): SpikeRecord['loaf'] {
 }
 
 /** 新しい描画フレームの開始時に呼ぶ。ここまでに積んだ内訳は「ひとつ前のフレーム」の仕事。 */
-function onFrameStart(ts: number): void {
+function recordInputs(ts: number, valid: boolean): void {
+  for (const [tracker, list, kind] of [[keyTracker, state.keyLatency, 'key'], [probeTracker, state.probeLatency, 'probe']] as const) {
+    const done = tracker.onFrame(ts);
+    if (!valid) { tracker.clear(); continue; }
+    for (const ms of done) {
+      if (list.length < MAX_INPUT_SAMPLES) list.push(ms);
+      if (ms >= SLOW_INPUT_MS && state.slowInputs.length < MAX_SPIKES) state.slowInputs.push({ tSec: round((ts - state.t0) / 1000, 2), ms: round(ms, 1), kind, mark: lastMark });
+    }
+  }
+}
+
+/** 模擬の入力: 150〜350ms おきに「入力が届いた」ことにする。ゲームには何も送らない(どのキーでも反応する画面があるため) */
+function scheduleInputProbe(): void {
+  const delay = 150 + Math.random() * 200;
+  const due = performance.now() + delay;
+  window.setTimeout(() => {
+    probeTracker.arrive(due);   // 予定の時刻を「届いた時刻」とする(メインスレッドが塞がって遅れた分も遅延に入る)
+    scheduleInputProbe();
+  }, delay);
+}
+
+/** ts: フレームの時刻(60Hz の再現では、その回の 60Hz の区切り)。nowTs: 実際に描き始めた時刻(入力の遅延はこちらで数える) */
+function onFrameStart(ts: number, nowTs = ts): void {
   const prev = state.lastTs;
   state.lastTs = ts;
+  // ゲームが benchDone() で「やりきった」と知らせたら、そこで計測を終える
+  // (計測スクリプトが気づくまでの間に、次のステージの読み込みや画面の切り替えが入るため)
+  if ((window as { __gcBenchDone?: string | null }).__gcBenchDone) {
+    state.acc = newAcc();
+    return;
+  }
+  recordInputs(nowTs, prev !== 0 && ts - prev > 0 && ts - prev <= 2000 && document.visibilityState === 'visible');
   const acc = state.acc;
   state.acc = newAcc();
   if (prev === 0) {
@@ -315,19 +385,86 @@ function onFrameStart(ts: number): void {
   });
 }
 
-function hookRaf(): void {
+/** ?benchHz=60 などの指定(なければ null)。bench-all.mjs は window.__gcBenchHz で渡す(ゲームが URL を変えても残るように) */
+function readBenchHz(): number | null {
+  const v = Number(new URLSearchParams(window.location.search).get('benchHz') ?? (window as unknown as { __gcBenchHz?: number }).__gcBenchHz);
+  return Number.isFinite(v) && v >= 10 && v <= 500 ? v : null;
+}
+
+function runCallback(cb: FrameRequestCallback, ts: number): void {
+  const s = performance.now();
+  try {
+    cb(ts);
+  } finally {
+    state.acc.jsMs += performance.now() - s;
+  }
+}
+
+function hookRaf(hz: number | null): void {
   const origRaf = window.requestAnimationFrame.bind(window);
-  window.requestAnimationFrame = (cb: FrameRequestCallback): number =>
-    origRaf((ts) => {
-      // 同じフレームの2つ目以降のコールバックは、フレーム開始の処理を繰り返さない
-      if (ts !== state.lastTs) onFrameStart(ts);
-      const s = performance.now();
-      try {
-        cb(ts);
-      } finally {
-        state.acc.jsMs += performance.now() - s;
-      }
-    });
+  if (hz === null) {
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number =>
+      origRaf((ts) => {
+        // 同じフレームの2つ目以降のコールバックは、フレーム開始の処理を繰り返さない
+        if (ts !== state.lastTs) onFrameStart(ts);
+        runCallback(cb, ts);
+      });
+    return;
+  }
+
+  // hz の再現: ゲームの rAF は預かっておき、モニターのフレームのうち hz の区切りを過ぎた最初の1回でまとめて呼ぶ。
+  // 処理が区切りに間に合わなかったときは、その次の区切りまで待つ。60Hz の垂直同期と同じ(RefreshSlots)。
+  // ゲームに渡す時刻は区切りの時刻(1フレームの経過がちょうど 16.67ms になる)。
+  const slots = new RefreshSlots(hz);
+  const origCancel = window.cancelAnimationFrame.bind(window);
+  const queue = new Map<number, FrameRequestCallback>();
+  let nextId = 1_000_000_000;      // ブラウザの rAF の id と重ならないように
+  let pending = false;
+  const pump = (now: number): void => {
+    pending = false;
+    if (queue.size === 0) return;
+    const ts = slots.take(now);
+    if (ts === null) {
+      pending = true;
+      origRaf(pump);
+      return;
+    }
+    const cbs = [...queue.values()];
+    queue.clear();
+    onFrameStart(ts, now);
+    const start = performance.now();
+    for (const cb of cbs) {
+      // ブラウザの rAF と同じく、ひとつが例外を投げても残りは呼ぶ
+      try { runCallback(cb, ts); } catch (e) { reportError(e); }
+    }
+    slots.finish(performance.now() - start);
+  };
+  window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+    const id = nextId++;
+    queue.set(id, cb);
+    if (!pending) {
+      pending = true;
+      origRaf(pump);
+    }
+    return id;
+  };
+  window.cancelAnimationFrame = (id: number): void => {
+    if (!queue.delete(id)) origCancel(id);   // 計測を入れる前に予約された rAF
+  };
+}
+
+/**
+ * メインスレッドが他の処理で塞がれた時間の記録(Firefox には LoAF・longtask が無い)。
+ * 4ms ごとのタイマーが 20ms 以上遅れたら、その長さと、直前のマークを記録する。rAF の外(パース・fetch の後処理など)の重い処理を見つけるため。
+ */
+function hookMainThreadBlocks(): void {
+  let last = performance.now();
+  window.setInterval(() => {
+    const now = performance.now();
+    const gap = now - last - 4;
+    last = now;
+    if (gap >= 20 && state.mainBlocks.length < MAX_LOAF) state.mainBlocks.push({ tSec: round((now - state.t0) / 1000, 2), ms: round(gap, 1), mark: lastMark });
+  }, 4);
 }
 
 function observe(type: string, handle: (e: any) => void): void {
@@ -377,6 +514,7 @@ export async function buildBenchReport(): Promise<Record<string, unknown>> {
       devicePixelRatio: window.devicePixelRatio,
       screen: `${window.screen.width}x${window.screen.height}`,
       viewport: `${window.innerWidth}x${window.innerHeight}`,
+      emulatedHz: benchHz,
       battery: battery ?? null,
       supports: {
         longAnimationFrame: !!PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame'),
@@ -386,6 +524,11 @@ export async function buildBenchReport(): Promise<Record<string, unknown>> {
     },
     summary,
     glTotals: { programsLinked: state.programsLinked, textureUploads: state.texUploads },
+    input: {
+      key: summarizeLatency(state.keyLatency),
+      probe: summarizeLatency(state.probeLatency),
+      slowest: [...state.slowInputs].sort((a, b) => b.ms - a.ms).slice(0, 50),
+    },
     spikeCount: state.spikes.length,
     spikesByCause: state.causeCounts,
     spikesWorstFirst: slowestFirst.slice(0, 100),
@@ -393,6 +536,7 @@ export async function buildBenchReport(): Promise<Record<string, unknown>> {
     slowGlCalls: state.slowCalls,
     longAnimationFrames: state.loaf,
     longTasks: state.longTasks,
+    mainBlocks: state.mainBlocks,
     marks: state.marks,
     timeline: state.timeline,
   };
@@ -432,7 +576,7 @@ function mountOverlay(): void {
     const last = state.spikes[state.spikes.length - 1];
     const causes = Object.entries(state.causeCounts).map(([k, v]) => `${k}:${v}`).join(' ') || '-';
     overlay.textContent = [
-      `BENCH  ${recent.avgFps.toFixed(0)} fps (直近5秒)  全体 ${all.avgFps.toFixed(1)} fps / 1%low ${all.onePercentLowFps.toFixed(0)}`,
+      `BENCH${benchHz ? ` [${benchHz}Hz再現]` : ''}  ${recent.avgFps.toFixed(0)} fps (直近5秒)  全体 ${all.avgFps.toFixed(1)} fps / 1%low ${all.onePercentLowFps.toFixed(0)}`,
       `frame p50 ${all.medianMs} / p95 ${all.p95Ms} / p99 ${all.p99Ms} / max ${all.maxMs} ms`,
       `spike ${state.spikes.length}  [${causes}]`,
       last ? `last: ${last.intervalMs}ms ${last.cause} js${last.jsMs} gl${last.glMs}${last.lastMark ? ' @' + last.lastMark : ''}` : 'last: -',
@@ -449,9 +593,12 @@ export function installBench(): void {
   if (installed || typeof window === 'undefined' || !isBenchEnabled()) return;
   installed = true;
   state = freshState(performance.now());
-  hookRaf();
+  benchHz = readBenchHz();
+  hookRaf(benchHz);
   hookGl();
   hookObservers();
+  hookMainThreadBlocks();
+  scheduleInputProbe();
 
   document.addEventListener('visibilitychange', () => benchMark(`visibility:${document.visibilityState}`));
   document.addEventListener('fullscreenchange', () => benchMark('fullscreen'));
@@ -461,13 +608,15 @@ export function installBench(): void {
     'keydown',
     (e) => {
       if (e.code === 'F8') { e.preventDefault(); void downloadReport(); }
-      else if (e.code === 'F9') { e.preventDefault(); state = freshState(performance.now()); lastMark = ''; }
+      else if (e.code === 'F9') { e.preventDefault(); resetBench(); }
       else if (e.code === 'F10') { e.preventDefault(); overlayVisible = !overlayVisible; }
+      else if (!e.repeat) keyTracker.arrive(e.timeStamp);
     },
     true,
   );
   (window as unknown as Record<string, unknown>).__gcBenchMark = benchMark;
   (window as unknown as Record<string, unknown>).__gcBenchReport = buildBenchReport;
+  (window as unknown as Record<string, unknown>).__gcBenchReset = resetBench;
 
   if (document.body) mountOverlay();
   else window.addEventListener('DOMContentLoaded', mountOverlay, { once: true });

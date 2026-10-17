@@ -7,7 +7,7 @@
 //     → ローカルの他プロセスが 127.0.0.1 のこのポートへ直接アクセスしても何もできない
 //  3. ログイン(ID/パスワード)に成功すると、ランダムなセッショントークンを HttpOnly Cookie で発行する。
 //     ログイン失敗はIPごとに回数制限する(サーバーログの
-//     「admin login failed」行を見て同じ防御を外側からもかける)。
+//     「admin login failed」行を見て同じ防御を外側(ファイアウォール)からもかける)。
 //  4. 状態を変える操作(ログインPOSTを除く)は X-Requested-With ヘッダー必須 + Sec-Fetch-Site が same-origin 以外なら拒否する
 //     (CSRF対策。Cookie はブラウザが自動送信するため、他サイトからのPOSTを防ぐ必要がある)
 //     ログインPOST自体は素のHTMLフォーム(JS無し)からなので X-Requested-With は使えず、Sec-Fetch-Site だけで見る。
