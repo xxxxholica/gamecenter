@@ -15,11 +15,23 @@ import {
 } from './arcadeLeaderboardCore.ts';
 import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCore.ts';
 import { trackScoreSubmit } from './arcadeAnalytics.ts';
+import { getReplayRef } from './arcadeReplay.ts';
+import { isBenchEnabled } from './arcadeBenchCore.ts';
 
 export * from './arcadeLeaderboardCore.ts';
 
 const API = '/api';
 const TIMEOUT_MS = 8000;
+
+/**
+ * 計測・検証の時(?bench=1・?debug・?preview・?noHud)は、ランキングに登録しない。上位に入った扱いにもしない(名前の入力も出ない)。
+ * 自動運転・無敵・ステージ飛ばしの記録が載らないようにする(本番のドメインでは、これらのパラメータは devParams.ts が消す)。
+ */
+function rankingLocked(): boolean {
+  if (typeof window === 'undefined' || typeof window.location?.search !== 'string') return false;
+  const q = new URLSearchParams(window.location.search);
+  return isBenchEnabled() || q.has('debug') || q.has('preview') || q.has('noHud');
+}
 
 function safeTimeoutSignal(ms: number): AbortSignal {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
@@ -160,6 +172,7 @@ export async function loadLeaderboardAndCheck(
   if (!def || !def.hasScore) return { list: padEmptyEntries(def, [], minCount), isRankIn: false, rank: -1 };
   try {
     const raw = await fetchRawScores(def, slug, variantId);
+    if (rankingLocked()) return { list: padEmptyEntries(def, raw, minCount), isRankIn: false, rank: -1 };
     const rank = rankForScore(def, raw, score, maxEntries);
     return { list: padEmptyEntries(def, raw, minCount), isRankIn: rank > 0, rank };
   } catch (e) {
@@ -256,7 +269,7 @@ export async function saveLeaderboardScore(
   options: SaveLeaderboardOptions = {},
 ): Promise<{ rank: number; list: LeaderboardEntry[] }> {
   const def = GAME_LEADERBOARD_DEFS[slug];
-  if (!def || !def.hasScore || score <= 0) return { rank: -1, list: [] };
+  if (!def || !def.hasScore || score <= 0 || rankingLocked()) return { rank: -1, list: [] };
   // 札は1回きり: 使うために取り出し、次のプレイ用の札をすぐ取りに行く(取れなかった場合はここで取る)
   const pending = ticketSlug === slug ? ticketPromise : null;
   ticketPromise = null;
@@ -272,6 +285,7 @@ export async function saveLeaderboardScore(
       ghost: options.ghost,
       ticket: ticket ?? undefined,
       anonToken: token ?? undefined,
+      replay: getReplayRef(),   // ランキングに載ったら、このプレイのリプレイを残す(載らなければサーバーが消す)
     });
     const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
     const rank = typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1;

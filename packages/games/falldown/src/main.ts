@@ -1,6 +1,7 @@
 // ===========================================================
 //  FALL DOWN — 無限降下型サバイバル・掘削アクションパズル
 // ===========================================================
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import * as THREE from 'three';
 import '@fontsource/m-plus-rounded-1c/800.css'; // 分割配信なので、使う文字を含む分だけ読み込まれる
 import { Game, GOAL_DEPTH, MAX_AIR, START_LIVES, type ClearBonus } from './game/game.ts';
@@ -21,6 +22,7 @@ import { loadLeaderboardAndCheck, saveLeaderboardScore, type LeaderboardEntry } 
 import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 
 installHomeReturn();
 watchResultAutoReturn(['result-btn-title']);
@@ -167,6 +169,7 @@ function startGame() {
   slowmo = 0;
   titleScreen.hide();
   game.start(BENCH ? BENCH_SEED : undefined);
+  reportRoundStart();
   if (BENCH) {
     game.debug = true;
     const d = Number(benchParam('depth')) || 0;
@@ -396,6 +399,8 @@ function handleEvents() {
         view.particles.sparkle(view.wx(e.x), e.y, new THREE.Color(0x49f0ff), 22, 1.5);
         break;
       case 'crush':
+        reportDeepAnalytics('life_lost', { cause: '潰された', depthM: game.maxDepth, livesLeft: game.lives, timeSec: Math.round(game.time) });
+        reportDeathPoint('falldown', p.x, game.depth, '潰された');
         sound.crush();
         view.shake(0.8);
         flash('red');
@@ -405,6 +410,8 @@ function handleEvents() {
         sound.suffocate();
         flash('red');
         showBanner('酸素切れ', 'bad', 'air');
+        reportDeepAnalytics('life_lost', { cause: '酸素切れ', depthM: game.maxDepth, livesLeft: game.lives, timeSec: Math.round(game.time) });
+        reportDeathPoint('falldown', p.x, game.depth, '酸素切れ');
         break;
       case 'score': {
         if (e.label) popup(e.x, e.y, e.label, e.label.startsWith('AIR') ? 'air' : e.label.includes('UP') || e.label.includes('LIFE') ? 'life' : 'big');
@@ -412,6 +419,7 @@ function handleEvents() {
         break;
       }
       case 'layer':
+        reportPhase('playing', { layer: e.layer, strata: strataProgress(e.layer * 100).name });
         benchMark('layer');
         sound.layer();
         sound.tempo = Math.min(112 + e.layer * 8, 170);
@@ -426,6 +434,13 @@ function handleEvents() {
       case 'gameover': {
         sound.stopBgm();
         sound.gameOver();
+        reportDeepAnalytics('progression_update', {
+          result: 'gameover',
+          deathReason: game.lastDeath === 'air' ? '酸素切れ' : '潰された',
+          maxStage: `${game.maxDepth}m`,
+          score: game.score,
+          extraStats: { depthM: game.maxDepth, layer: game.layer, timeSec: Math.round(game.time) },
+        });
         const isNew = recordResult(false);
         openResult(false, isNew, null);
         break;
@@ -435,6 +450,12 @@ function handleEvents() {
         sound.clear();
         const isNew = recordResult(true);
         const bonus = e.bonus;
+        reportDeepAnalytics('progression_update', {
+          result: 'clear',
+          maxStage: `${GOAL_DEPTH}m`,
+          score: game.score,
+          extraStats: { timeSec: Math.round(game.time), livesLeft: game.lives, bonus },
+        });
         view.shake(0.6);
         flash('fire');
         // 黄金郷に着いた瞬間、スローモーションで壊れていくブロックの中に、爆発が次々と起きる
@@ -740,11 +761,9 @@ else if (BENCH) {
 }
 requestAnimationFrame(frame);
 
-// デバッグ用（ブラウザのコンソールから参照可能）
-(window as unknown as { __game: Game; __view: View }).__game = game;
-(window as unknown as { __game: Game; __view: View }).__view = view;
-
 // 動作確認用 (開発時のみ。本番のビルドには入らない)
 if (import.meta.env.DEV) {
+  (window as unknown as { __game: Game; __view: View }).__game = game;
+  (window as unknown as { __game: Game; __view: View }).__view = view;
   (window as unknown as Record<string, unknown>).__fd = { game, view, renderer: view.renderer, scene: view.scene };
 }

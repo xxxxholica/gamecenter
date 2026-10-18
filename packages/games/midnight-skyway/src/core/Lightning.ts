@@ -1,3 +1,5 @@
+import { untrackedRandom } from '../../../../shared/arcadeReplay';
+
 /**
  * 稲光: ときどき光り(2回ほど瞬く)、すばやく減衰する。level(0〜1)を画面の明るさに使う。
  * レース中の背景(DriveScene)とメニューの背景(GarageScene)で共用する。
@@ -17,9 +19,9 @@ export class Lightning {
     let struck = false;
     this.timer -= dt;
     if (this.timer <= 0) {
-      this.timer = this.minGap + Math.random() * (this.maxGap - this.minGap);
+      this.timer = this.minGap + untrackedRandom() * (this.maxGap - this.minGap);
       this.level = 1;
-      this.pulses = [0.12 + Math.random() * 0.08, 0.3 + Math.random() * 0.1];
+      this.pulses = [0.12 + untrackedRandom() * 0.08, 0.3 + untrackedRandom() * 0.1];
       struck = true;
     }
     for (let i = this.pulses.length - 1; i >= 0; i--) {

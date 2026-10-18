@@ -15,6 +15,7 @@ import {
 import { checkHighScore, escapeHtml, reserveAnonName, releaseAnonName } from './arcadeLeaderboard';
 import { showInputShield } from './inputShield';
 import { runEntryFlow } from './highScoreEntryFlowCore';
+import { reportDeepAnalytics, reportPhase } from './arcadeAnalytics';
 
 /** リザルトでスコアを見せてから登録画面を出すまでの待ち時間 */
 export const NAME_ENTRY_AFTER_RESULT_MS = 2200;
@@ -826,6 +827,8 @@ function spawnConfetti(overlay: HTMLElement, accent: string): HTMLElement {
 
 function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   injectStyles();
+  reportPhase('name_entry');
+  const openedAt = performance.now();
 
   const overlay = document.createElement('div');
   overlay.className = 'ane-overlay';
@@ -998,6 +1001,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     if (isFinishing) return;
     isFinishing = true;
     submitted = true;
+    reportDeepAnalytics('name_entry_done', { anon: isAnon, sec: Math.round((performance.now() - openedAt) / 100) / 10 });
 
     core.destroy();
 

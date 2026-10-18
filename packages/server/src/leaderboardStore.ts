@@ -47,6 +47,8 @@ interface StoredEntry extends LeaderboardEntry {
   /** 管理者が設定した名前(ロール付与前) */
   customName?: string;
   ghost?: GhostTrace;
+  /** このプレイの操作の記録(リプレイ)と、そのラウンドが始まった所(記録の開始からの秒)。ランキングに載っている間だけ残す */
+  replay?: { id: string; seek: number };
 }
 
 interface Board {
@@ -71,6 +73,7 @@ export type SubmitInput = {
   extra?: unknown;
   cleared?: unknown;
   ghost?: unknown;
+  replay?: unknown;
   /** 登録ウィンドウを開いたときに予約した匿名名の札(reserveAnon の token) */
   anonToken?: unknown;
 };
@@ -164,6 +167,15 @@ const ANON_RESERVE_TTL_MS = 10 * 60_000;
 /** 同時に予約できる数の上限(予約の連打で番号を食い潰されないように) */
 const ANON_MAX_RESERVED = 300;
 const GUEST_NAME = sanitizeLeaderboardName('');
+
+/** 送られてきたリプレイの参照を、決まった形・範囲のものだけ受け取る */
+function parseReplayRef(v: unknown): { id: string; seek: number } | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const { id, seek } = v as { id?: unknown; seek?: unknown };
+  if (typeof id !== 'string' || !/^[\w-]{8,64}$/.test(id)) return undefined;
+  const s = typeof seek === 'number' && Number.isFinite(seek) ? Math.min(24 * 3600, Math.max(0, seek)) : 0;
+  return { id, seek: Math.round(s * 10) / 10 };
+}
 
 export class LeaderboardStore {
   private boards = new Map<string, Board>();
@@ -283,7 +295,7 @@ export class LeaderboardStore {
   list(slug: string, variant?: string): LeaderboardEntry[] | null {
     if (!this.def(slug, variant)) return null;
     const board = this.boards.get(boardKey(slug, variant));
-    return (board?.entries ?? []).map(({ ghost, origName: _origName, ...e }) => ({ ...e, hasGhost: !!ghost }));
+    return (board?.entries ?? []).map(({ ghost, origName: _origName, replay: _replay, ...e }) => ({ ...e, hasGhost: !!ghost }));
   }
 
   all(): Record<string, LeaderboardEntry[]> {
@@ -351,11 +363,19 @@ export class LeaderboardStore {
       extra: sanitizeLeaderboardExtra(input.extra),
       cleared: input.cleared === true ? true : undefined,
       ghost,
+      replay: parseReplayRef(input.replay),
     };
     board.entries = insertScore(def, board.entries, entry);
     this.boards.set(key, board);
     this.save();
     return { ok: true, rank: board.entries.findIndex((e) => e.id === entry.id) + 1, entries: this.list(slug, variant) ?? [] };
+  }
+
+  /** ランキングに載っている記録が指す、リプレイの id(これ以外のリプレイは消してよい) */
+  referencedReplayIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const b of this.boards.values()) for (const e of b.entries) if (e.replay) ids.add(e.replay.id);
+    return ids;
   }
 
   /** 管理画面用: すべての枠(記録が空の枠も)を、表示名つきで返す。 */

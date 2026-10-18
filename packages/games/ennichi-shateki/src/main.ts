@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
@@ -17,10 +18,11 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 
 const SLUG = 'ennichi-shateki';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { compileInParallel, waitFramesSettled } from '../../../shared/shaderCompile';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -134,7 +136,7 @@ class ArcadeCorkShooter {
     this.initGame();
     this.loadHighScores();
     this.setupEvents();
-    this.animate(0);
+    void this.startRendering();
   }
 
   private initThree() {
@@ -222,9 +224,24 @@ class ArcadeCorkShooter {
       { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
       { id: 'play', label: 'プレイ(ランダム入力)', kind: 'play', params: { scene: 'play' }, input: 'random', seconds: 45 },
     ]);
-    const benchScene = benchParam('scene');
-    if (benchScene === 'play') this.startGame();
-    else if (benchScene === 'title') benchReady('title');
+    // タイトルの benchReady は、シェーダを作り終えて描き始め、画面が落ち着いたあと(startRendering)
+    if (benchParam('scene') === 'play') this.startGame();
+  }
+
+  /**
+   * シェーダを並列に作り終えてから描き始める(packages/shared/shaderCompile.ts)。
+   * 計測(Windows, Chrome, ANGLE D3D11): 最初の描画で 13 個のシェーダをその場で作り、リンクの完了待ちでメインスレッドが
+   * 約 1 秒止まっていた(並列にすると約 0.14 秒)。
+   * ベンチの「タイトルに着いた」は、ページの立ち上がりの一度きりの作業(Chrome がページを初めて描くためのシェーダ作り、
+   * 読み込みから約 1 秒後の前の画面の片付け)が済み、画面が落ち着いてから知らせる(waitFramesSettled)。
+   */
+  private async startRendering(): Promise<void> {
+    await compileInParallel(this.renderer, this.scene, this.camera, null);
+    this.animate(0);
+    if (benchParam('scene') === 'title') {
+      await waitFramesSettled();
+      benchReady('title');
+    }
   }
 
   /**
@@ -373,6 +390,7 @@ class ArcadeCorkShooter {
 
   private startGame() {
     if (this.state === 'playing') return;
+    reportRoundStart();
 
     this.arcadeTitleScreen?.hide();
     sounds.init();
@@ -470,6 +488,7 @@ class ArcadeCorkShooter {
     reportDeepAnalytics('progression_update', {
       result: 'clear',
       deathReason: 'タイムアップ',
+      score: finalScore,
       maxCombo: this.maxComboSeen,
       enemiesDefeated: this.totalDefeatedCount,
       extraStats: { shotsNormal: this.shotsNormal, shotsExplosive: this.shotsExplosive, score: finalScore, newRecord: isNewRecord },

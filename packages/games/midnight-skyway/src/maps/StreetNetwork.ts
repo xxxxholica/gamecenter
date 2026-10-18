@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import roadNetwork from './helsinki_roads.json';
 import { glowTexture } from './StreetLights';
+import { mulberry32 } from '../../../../shared/online/seededRandom';
 
 /** The asphalt texture is designed for an 8 m wide road and stretched across other widths. */
 const TEXTURE_ROAD_WIDTH = 8.0;
@@ -43,8 +44,9 @@ function makeAsphaltTexture(markings: boolean): THREE.CanvasTexture {
     g.fillRect(cx - 50, 0, 100, H);
   }
   const img = g.getImageData(0, 0, W, H);
+  const rand = mulberry32(102);
   for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 26;
+    const n = (rand() - 0.5) * 26;
     img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
   }
   g.putImageData(img, 0, 0);

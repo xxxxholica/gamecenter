@@ -23,8 +23,11 @@ import type { PublicStatus } from '../../shared/online/core';
 import { initHubMobileBlock, isMobileDevice } from '../../shared/mobileBlock';
 import { initSessionTracking } from '../../shared/arcadeAnalytics';
 import { applyBenchFlagFromUrl } from '../../shared/arcadeBenchCore';
+import { stripDevParamsOnProduction } from '../../shared/devParams';
+import { mountGpuFooter } from './gpuFooter';
 
-// ハブを ?bench=1 で開いたら、その後に開く全ゲームでベンチマーク計測を有効にする(?bench=0 で解除)
+// ハブを ?bench=1 で開いたら、その後に開く全ゲームでベンチマーク計測を有効にする(?bench=0 で解除)。本番のドメインでは効かない
+stripDevParamsOnProduction();
 applyBenchFlagFromUrl();
 
 // モバイル端末（スマホ・タブレット）アクセス制限の適用
@@ -42,6 +45,7 @@ if (isFramedHub) {
     moveLabel: '選ぶ',
     buttons: [{ indices: [9], label: '決定' }],
   });
+  mountGpuFooter();
 }
 
 

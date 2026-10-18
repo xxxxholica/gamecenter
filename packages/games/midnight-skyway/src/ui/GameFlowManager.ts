@@ -1,3 +1,5 @@
+import { reportPhase } from '../../../../shared/arcadeAnalytics';
+
 export type GameScreen = 'TITLE' | 'MODE_SELECT' | 'CAR_SELECT' | 'MAP_SELECT' | 'ONLINE_LOBBY' | 'ONLINE_COURSE' | 'ONLINE_WAIT' | 'RACE';
 
 export interface GameFlowCallbacks {
@@ -48,26 +50,31 @@ export class GameFlowManager {
 
   public goToCarSelect(): void {
     this.currentScreen = 'CAR_SELECT';
+    reportPhase('menu', { screen: 'マシン選択' });
     this.callbacks.onEnterCarSelect();
   }
 
   public goToMapSelect(): void {
     this.currentScreen = 'MAP_SELECT';
+    reportPhase('menu', { screen: 'コース選択' });
     this.callbacks.onEnterMapSelect();
   }
 
   public goToOnlineLobby(): void {
     this.currentScreen = 'ONLINE_LOBBY';
+    reportPhase('lobby', { screen: 'マシン選択' });
     this.callbacks.onEnterOnlineLobby();
   }
 
   public goToOnlineCourse(): void {
     this.currentScreen = 'ONLINE_COURSE';
+    reportPhase('lobby', { screen: 'コース希望' });
     this.callbacks.onEnterOnlineCourse();
   }
 
   public goToOnlineWait(): void {
     this.currentScreen = 'ONLINE_WAIT';
+    reportPhase('lobby', { screen: '待機' });
     this.callbacks.onEnterOnlineWait();
   }
 

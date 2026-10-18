@@ -24,7 +24,7 @@ import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
 import { returnToHub } from '../../../../shared/homeReturn';
 import { ArcadePause } from '../../../../shared/arcadePause';
-import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
+import { reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady } from '../../../../shared/arcadeBenchTargets';
 import logoUrl from '../../../../shared/logos/survivor-score-battle.webp';
 
@@ -142,10 +142,20 @@ export class GameEngine {
     onRestart: () => this.beginMatch(),
   });
 
+  // アナリティクス: タイトルから開くメニュー画面に入ったら、場面として知らせる
+  private lastReportedState = '';
+  private reportMenuPhase(): void {
+    if (this.state === this.lastReportedState) return;
+    this.lastReportedState = this.state;
+    const screen = this.state === 'HOW_TO_PLAY' ? 'あそびかた' : this.state === 'OPTIONS' ? 'オプション' : this.state === 'CONTROLLER_TEST' ? 'コントローラーテスト' : null;
+    if (screen) reportPhase('menu', { screen });
+  }
+
   public update(dt: number) {
     let inputState = this.input.update();
     if (this.benchAuto) inputState = this.benchAutoInput(dt, inputState);
     if (this.pauseUi.isOpen) return;
+    this.reportMenuPhase();
 
     switch (this.state) {
       case 'TITLE': {
@@ -187,6 +197,7 @@ export class GameEngine {
       case 'LEVEL_UP': {
         const chosenCard = this.benchAuto ? this.benchPickCard(dt) : this.levelUpScreen.update(inputState, this.sound);
         if (chosenCard) {
+          if (!this.benchAuto) reportDeepAnalytics('upgrade_chosen', { card: chosenCard.title, category: chosenCard.category, level: this.player.level, gameSec: Math.floor(this.waveDirector.gameTime) });
           this.applyUpgrade(chosenCard);
           this.state = 'PLAYING';
         }
@@ -896,6 +907,7 @@ export class GameEngine {
       maxStage: Math.floor(this.waveDirector.gameTime) + '秒生存',
       result: this.playerCleared5Min ? 'clear' : 'gameover',
       deathReason: !this.player.alive ? 'モンスター被弾' : '時間切れ生存',
+      score: this.player.score,
       enemiesDefeated: this.player.kills,
       maxCombo: this.player.comboCount,
       extraStats: {
@@ -958,6 +970,7 @@ export class GameEngine {
   private beginMatch() {
     this.initMatch();
     this.state = 'PLAYING';
+    reportRoundStart();
     this.countingDown = true;
     this.countdown?.cancel();
     this.countdown = startArcadeCountdown({

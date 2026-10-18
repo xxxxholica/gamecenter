@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction.ts';
 // ============================================================
 // Entry point: Tani Multiplier Runner

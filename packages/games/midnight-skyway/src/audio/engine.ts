@@ -1,5 +1,6 @@
 import { readGamepads } from '../../../../shared/gamepadFrame';
 import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 // Web Audio の土台: AudioContext、BGM/SEのバス、ミュート(Mキー)、自動再生制限の解除、タブ非表示時の停止。
 // 効果音はすべて合成。BGMだけは public/bgm の音源ファイルを使う(music.ts)。
@@ -89,7 +90,7 @@ export class AudioEngine {
   }
 
   public noiseOffset(): number {
-    return Math.random() * 1.0;
+    return audioRandom() * 1.0;
   }
 
   // ブラウザは最初のキー/ポインタ操作があるまで音を出させない。操作のたびにresumeを試みる。

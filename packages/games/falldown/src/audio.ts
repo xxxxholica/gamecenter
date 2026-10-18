@@ -3,6 +3,7 @@
 // ===========================================================
 
 import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+import { audioRandom } from '../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 export class Sound {
   private ctx: AudioContext | null = null;
@@ -73,7 +74,7 @@ export class Sound {
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f).connect(g).connect(this.sfxBus);
-    s.start(t, Math.random() * 0.5);
+    s.start(t, audioRandom() * 0.5);
     s.stop(t + dur + 0.02);
   }
 
@@ -94,7 +95,7 @@ export class Sound {
     this.tone(120, 1.0, 'sawtooth', 0.34, 28);
     this.tone(58, 1.5, 'sine', 0.65, 18);
     this.noise(0.8, 0.3, 300, 0.7, 0.35, 'lowpass');
-    for (let i = 0; i < 8; i++) this.tone(1400 + Math.random() * 1800, 0.08, 'square', 0.04, 500, 0.3 + Math.random() * 0.9);
+    for (let i = 0; i < 8; i++) this.tone(1400 + audioRandom() * 1800, 0.08, 'square', 0.04, 500, 0.3 + audioRandom() * 0.9);
   }
 
   /** メニューの選択移動 */
@@ -255,7 +256,7 @@ export class Sound {
     g.gain.setValueAtTime(0.12, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
     s.connect(f).connect(g).connect(this.bgmBus);
-    s.start(t, Math.random() * 0.5);
+    s.start(t, audioRandom() * 0.5);
     s.stop(t + 0.05);
   }
 }

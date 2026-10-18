@@ -3,9 +3,11 @@
 
 import { mountFullscreenKey } from './fullscreenKey';
 import { initGameMobileBlock } from './mobileBlock';
-import { startStandaloneTracking } from './arcadeAnalytics';
+import { getGamePhase, reportExit, startStandaloneTracking } from './arcadeAnalytics';
+import { flushReplay, getReplayMode } from './arcadeReplay';
 import { readGamepads } from './gamepadFrame';
 import { installBench } from './arcadeBench';
+import { isBenchEnabled } from './arcadeBenchCore';
 
 const SELECT_BUTTON = 8;
 // games/<slug>/ 配下からルートへは2階層上
@@ -18,6 +20,9 @@ export const CLOSE_GAME_MESSAGE = 'gamecenter:close-game';
  * 直接開かれている場合は通常どおりページ移動する。
  */
 export function returnToHub(): void {
+  reportExit();
+  flushReplay(true, true);   // 操作の記録を送り切る(このあとハブが iframe ごと閉じる)
+  if (getReplayMode() === 'replay') return;   // 再生では、記録の終わり(戻った所)で止まったままにする
   if (window.parent !== window) {
     window.parent.postMessage({ type: CLOSE_GAME_MESSAGE }, window.location.origin);
   } else {
@@ -72,4 +77,38 @@ export function installHomeReturn(): void {
   window.addEventListener('keyup', blockEscape, true);
 
   mapSelectToBackspace();
+
+  watchIdleReturn();
+}
+
+/** 遊んでいない画面(タイトル・メニュー・結果・ポーズ)で、この時間なにも操作がなければハブへ戻る */
+const IDLE_RETURN_MS = 3 * 60 * 1000;
+
+/**
+ * 筐体でゲームが放置されたら、ハブへ戻す(次の人がハブから選び直せるように。操作の記録も、そこで区切られる)。
+ * プレイ中・オンラインの待合・名前登録の間は数えない。
+ * (操作の記録・再生で同じ時に戻るよう、記録している入力(キー・クリック・アケコン)とフレームの時計だけで判定する)
+ */
+function watchIdleReturn(): void {
+  if (isBenchEnabled() || new URLSearchParams(location.search).has('preview')) return;
+  const limitMs = (window as unknown as { __gcIdleReturnMs?: number }).__gcIdleReturnMs ?? IDLE_RETURN_MS;   // (確かめる時だけ短くする)
+  let last = performance.now();
+  const touch = (): void => { last = performance.now(); };
+  for (const type of ['keydown', 'keyup', 'pointerdown', 'pointerup']) window.addEventListener(type, touch, { capture: true, passive: true });
+  let prevPads = '';
+  window.setInterval(() => {
+    let pads = '';
+    for (const p of readGamepads()) {
+      if (!p) continue;
+      for (const b of p.buttons) pads += b.pressed ? '1' : '0';
+      for (const a of p.axes) pads += Math.abs(a) > 0.4 ? (a > 0 ? '+' : '-') : '0';
+    }
+    if (pads !== prevPads) { prevPads = pads; touch(); }
+    const phase = getGamePhase();
+    if (phase === 'playing' || phase === 'lobby' || phase === 'name_entry') { touch(); return; }
+    if (performance.now() - last >= limitMs) {
+      touch();
+      returnToHub();
+    }
+  }, 1000);
 }

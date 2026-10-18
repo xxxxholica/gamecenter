@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { GameEngine } from './game/GameEngine';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';

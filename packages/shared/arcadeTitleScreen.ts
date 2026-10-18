@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { buttonIconHtml } from './arcadeGuide';
 import { returnToHub } from './homeReturn';
+import { reportDeepAnalytics, reportPhase } from './arcadeAnalytics';
 
 import cyberFighterLogo from './logos/cyber-2d-fighter-3d.webp';
 import ennichiLogo from './logos/ennichi-shateki.webp';
@@ -308,6 +309,7 @@ export class ArcadeTitleScreen {
   private triggerStart(): void {
     if (!this.isVisible || this.isStarting) return;
     this.isStarting = true;
+    reportDeepAnalytics('title_start');
 
     // スタート時のホワイトフラッシュ / フェード演出
     this.overlay.classList.add('ats-hidden');
@@ -319,6 +321,7 @@ export class ArcadeTitleScreen {
   }
 
   public show(): void {
+    reportPhase('title');
     this.isVisible = true;
     this.isStarting = false;
     this.overlay.classList.remove('ats-hidden');

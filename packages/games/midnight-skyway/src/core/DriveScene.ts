@@ -1,6 +1,7 @@
 import { forceSinglePassForTransparent } from './singlePass';
-import { PostFX } from './PostFX';
+import { PostFX, compileInParallel } from './PostFX';
 import { audio } from '../audio';
+import { audioRandom, untrackedRandom, untrackedTimeout } from '../../../../shared/arcadeReplay';
 import { createSkyEnvironments, type SkyEnvironments } from './SkyEnvironment';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -585,6 +586,32 @@ export class DriveScene {
    * チャンクの素材はダミーメッシュ(StreamedCityMap)と同じシェーダーなので、全チャンクを描くコストをかけない。
    */
   public warmup(cars: CarBase[] = []): void {
+    const restore = this.prepareWarmup(cars);
+    try {
+      this.renderScene();
+      this.renderer.getContext().finish();
+    } finally {
+      restore();
+    }
+  }
+
+  /**
+   * warmup と同じ。描画の前に、同じ状態のシェーダを並列にコンパイルし終えるまで(メインスレッドを止めずに)待つ。
+   * 起動時用(この間、走行シーンは描かれていないので、車を足したままでも見えない)。
+   */
+  public async warmupAsync(cars: CarBase[] = []): Promise<void> {
+    const restore = this.prepareWarmup(cars);
+    try {
+      await compileInParallel(this.renderer, this.scene, this.camera, this.postFx.sceneTarget);
+      this.renderScene();
+      this.renderer.getContext().finish();
+    } finally {
+      restore();
+    }
+  }
+
+  /** warmup の状態にする(車を足し、視錐台カリングを外す)。戻す関数を返す。 */
+  private prepareWarmup(cars: CarBase[]): () => void {
     const prevParents = new Map<THREE.Object3D, THREE.Object3D | null>();
     for (const c of cars) {
       prevParents.set(c.group, c.group.parent);
@@ -601,17 +628,14 @@ export class DriveScene {
       for (const child of o.children) unculled(child);
     };
     unculled(this.scene);
-    try {
-      this.renderScene();
-      this.renderer.getContext().finish();
-    } finally {
+    return () => {
       for (const o of toggled) o.frustumCulled = true;
       for (const c of cars) {
         this.scene.remove(c.group);
         const p = prevParents.get(c.group);
         if (p) p.add(c.group);
       }
-    }
+    };
   }
 
   public start(): void {
@@ -745,13 +769,13 @@ export class DriveScene {
     if (this.cameraTrauma > 0) {
       this.cameraTrauma = Math.max(0, this.cameraTrauma - dt * 2.5);
       const shake = this.cameraTrauma * this.cameraTrauma;
-      const shakeX = (Math.random() - 0.5) * shake * 0.45;
-      const shakeY = (Math.random() - 0.5) * shake * 0.45;
-      const shakeZ = (Math.random() - 0.5) * shake * 0.3;
+      const shakeX = (untrackedRandom() - 0.5) * shake * 0.45;
+      const shakeY = (untrackedRandom() - 0.5) * shake * 0.45;
+      const shakeZ = (untrackedRandom() - 0.5) * shake * 0.3;
       this.camera.position.x += shakeX;
       this.camera.position.y += shakeY;
       this.camera.position.z += shakeZ;
-      this.camera.rotation.z += (Math.random() - 0.5) * shake * 0.04;
+      this.camera.rotation.z += (untrackedRandom() - 0.5) * shake * 0.04;
     }
   }
 
@@ -807,7 +831,7 @@ export class DriveScene {
   /** 稲光: ときどき空が光り、少し遅れて雷鳴が届く。 */
   private updateLightning(dt: number): void {
     if (this.lightning.update(dt)) {
-      window.setTimeout(() => { if (this.rainy && this.active) audio.sfx.thunder(); }, 500 + Math.random() * 1800);
+      untrackedTimeout(() => { if (this.rainy && this.active) audio.sfx.thunder(); }, 500 + audioRandom() * 1800);
     }
     this.postFx.setLightning(this.lightning.level);
     this.hemiLight.intensity = this.hemiBase + this.lightning.level * 1.2;
@@ -931,7 +955,7 @@ export class DriveScene {
         const water = this.waterVel.copy(this.carVel).multiplyScalar(0.4);
         const n = (cc.speedKmH > 80 ? 0.7 : 0.4) + (cc.isDrifting ? 0.5 : 0);   // 1フレームに出す粒の数の期待値
         for (const w of [tr.rearLeft, tr.rearRight, tr.frontLeft, tr.frontRight]) {
-          if (Math.random() >= n) continue;
+          if (untrackedRandom() >= n) continue;
           const side = Math.sign((w.x - cc.position.x) * lat.x + (w.z - cc.position.z) * lat.z) || 1;
           this.tireSmoke.emitSplash(w, water, this.outward.copy(lat).multiplyScalar(side), spray * (cc.isDrifting ? 1.2 : 1));
         }
@@ -966,7 +990,7 @@ export class DriveScene {
         this.exhaustInnerR.lerpVectors(this.exhaustL, this.exhaustR, 0.7);
         this.tireSmoke.emitFlame(this.exhaustInnerL, this.carVel, lv * 0.85);
         this.tireSmoke.emitFlame(this.exhaustInnerR, this.carVel, lv * 0.85);
-        if (Math.random() < lv * 0.9) this.tireSmoke.emitMote(cc.position, this.carVel, 1.3);
+        if (untrackedRandom() < lv * 0.9) this.tireSmoke.emitMote(cc.position, this.carVel, 1.3);
       }
     }
   }

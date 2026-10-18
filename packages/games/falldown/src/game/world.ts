@@ -55,7 +55,12 @@ interface Unit {
 interface FallGroup {
   blocks: Block[];
   offset: number;
+  /** 落下速度（マス/秒）。0 から加速していく */
+  vel: number;
 }
+
+/** 落下ブロックの加速度（マス/秒²） */
+const FALL_ACCEL = 24;
 
 export type WorldEvent =
   | { type: 'hit'; x: number; y: number; kind: Kind; color: number; hp: number; maxHp: number }
@@ -465,43 +470,54 @@ export class World {
           b.shake = -1;
           b.offset = 0;
         }
-        this.falling.push({ blocks: u.blocks, offset: 0 });
+        this.falling.push({ blocks: u.blocks, offset: 0, vel: 0 });
       }
     }
 
     // 落下
+    // 下のマスが空いていることを確かめてから動かすので、着地のときに
+    // 下のブロックへめり込んで跳ね返る（ワンバウンドする）ことがない。
     const speed = difficulty(this.depthForSpeed).fallSpeed;
+    const groupOf = new Map<Block, FallGroup>();
+    for (const g of this.falling) for (const b of g.blocks) groupOf.set(b, g);
     for (const g of [...this.falling]) {
-      g.offset += speed * dt;
-      while (g.offset >= 1) {
-        const set = new Set(g.blocks);
+      g.vel = Math.min(g.vel + FALL_ACCEL * dt, speed);
+      let move = g.vel * dt;
+      let landed = false;
+      while (move > 0) {
+        // 次に進むマスの状態：空き / 何かある（着地） / 落下中のブロック（追いかける）
         let blocked = false;
-        let wait = false;
+        let cap = 1; // 下の落下ブロックに追いつかない範囲（このマス内の進み具合の上限）
+        const set = new Set(g.blocks);
         for (const b of g.blocks) {
           const by = b.y - 1;
           if (by < this.bottom) { blocked = true; break; }
           const n = this.get(b.x, by);
-          if (n && !set.has(n)) {
-            if (n.falling) wait = true;
-            else { blocked = true; break; }
-          }
+          if (!n || set.has(n)) continue;
+          const ng = n.falling ? groupOf.get(n) : undefined;
+          if (!ng) { blocked = true; break; }
+          cap = Math.min(cap, ng.offset);
+          g.vel = Math.min(g.vel, ng.vel);
         }
         if (blocked) {
           this.land(g);
+          landed = true;
           break;
         }
-        if (wait) {
-          g.offset = 0.999;
-          break;
-        }
-        for (const b of g.blocks) this.set(b.x, b.y, null);
-        for (const b of g.blocks) {
-          b.y -= 1;
-          this.set(b.x, b.y, b);
-        }
-        g.offset -= 1;
+        const step = Math.min(move, cap - g.offset);
+        if (step <= 0) break; // 下のブロックにぴったりくっついて一緒に落ちる
+        g.offset += step;
+        move -= step;
+        if (g.offset >= 1 - 1e-6) {
+          for (const b of g.blocks) this.set(b.x, b.y, null);
+          for (const b of g.blocks) {
+            b.y -= 1;
+            this.set(b.x, b.y, b);
+          }
+          g.offset = 0;
+        } else break;
       }
-      for (const b of g.blocks) b.offset = g.offset;
+      if (!landed) for (const b of g.blocks) b.offset = g.offset;
     }
 
     this.sincePop += dt;

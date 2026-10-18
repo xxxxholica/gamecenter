@@ -50,6 +50,13 @@ export interface ControlHandlers {
   getAnalyticsSummary(): object;
   /** アナリティクスデータの項目別JSONエクスポート */
   exportAnalytics(type: string, gameId?: string): object;
+  /** 操作の記録(リプレイ)の一覧と、1件の中身(無ければ null) */
+  listReplays(game?: string, limit?: number): object;
+  /** 管理画面の死亡地点マップ: ゲームの死亡地点 */
+  getSpatial(game: string): object;
+  getReplay(id: string): object | null;
+  /** リプレイを見る札と、ゲームを開くオリジン(管理画面とは別。未設定なら空)。記録が無ければ null */
+  replayTicket(id: string): { ticket: string; origin: string } | null;
 }
 
 /**
@@ -122,6 +129,18 @@ export function handleAdminRequest(h: ControlHandlers, method: string, url: URL)
     return r === null ? { code: 404, body: { error: 'unknown_board' } } : { code: r ? 200 : 404, body: { removed: r } };
   }
   if (method === 'GET' && url.pathname === '/analytics/summary') return { code: 200, body: h.getAnalyticsSummary() };
+  if (method === 'GET' && url.pathname === '/analytics/spatial') return { code: 200, body: h.getSpatial(url.searchParams.get('game') ?? '') };
+  if (method === 'GET' && url.pathname === '/replays') {
+    return { code: 200, body: h.listReplays(url.searchParams.get('game') || undefined, Number(url.searchParams.get('limit')) || undefined) };
+  }
+  if (method === 'GET' && url.pathname === '/replay-ticket') {
+    const r = h.replayTicket(url.searchParams.get('id') ?? '');
+    return r ? { code: 200, body: r } : { code: 404, body: { error: 'not_found' } };
+  }
+  if (method === 'GET' && url.pathname === '/replay') {
+    const r = h.getReplay(url.searchParams.get('id') ?? '');
+    return r ? { code: 200, body: r } : { code: 404, body: { error: 'not_found' } };
+  }
   if (method === 'GET' && url.pathname === '/analytics/export') {
     const type = url.searchParams.get('type') ?? 'all';
     const game = url.searchParams.get('game') || undefined;

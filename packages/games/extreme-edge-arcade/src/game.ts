@@ -15,7 +15,8 @@ import { Stage5Balloon } from './stages/stage5_balloon';
 import { TitleScene } from './title_scene';
 import { DemoInputManager } from './demo_input';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
+import { returnToHub } from '../../../shared/homeReturn';
 import { RankingManager } from './ranking';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { ArcadePause } from '../../../shared/arcadePause';
@@ -238,7 +239,7 @@ export class GameManager {
           e.preventDefault();
           return;
         }
-        window.location.href = '../../';
+        returnToHub();
       });
       exitBtn.addEventListener('mouseenter', () => {
         this.resultFocus = 2;
@@ -284,7 +285,8 @@ export class GameManager {
         startButtonLabel: 'スタート',
         promptLabel: 'PRESS START / ボタンでスタート',
         onStart: () => {
-          this.startGame();
+          // ゲームループの「何か押したら開始」が先に始めていたら、二重に始めない(始め直すと、1種目目を読み直していた)
+          if (this.state === 'TITLE') this.startGame();
         },
       });
     }
@@ -337,6 +339,7 @@ export class GameManager {
     this.attempt = 1;
     this.attemptResults = [];
     this.currentStageIndex = startIndex;
+    reportRoundStart({ stage: startIndex + 1 });
 
     this.titleOverlay.style.display = 'none';
     this.resultOverlay.style.display = 'none';
@@ -363,6 +366,7 @@ export class GameManager {
     const factory = this.stageFactories[index];
     this.currentStage = factory(this.effects);
     this.currentStage.init(this.scene, this.camera);
+    reportPhase('playing', { stage: index + 1, title: this.currentStage.title, attempt: this.attempt });
 
     this.currentJudgment = null;
     this.hudActionGuide.classList.remove('danger');
@@ -527,6 +531,7 @@ export class GameManager {
         if (result && result.completed) {
           this.currentJudgment = result;
           this.attemptResults.push(result);
+          reportDeepAnalytics('stage_attempt', { stage: this.currentStageIndex + 1, title: this.currentStage?.title, attempt: this.attempt, success: result.success, scorePercent: Math.round(result.scorePercent * 10) / 10 });
 
           this.enterJudgment();
         }
@@ -620,7 +625,7 @@ export class GameManager {
           } else if (this.resultFocus === 1) {
             this.showTitle();
           } else {
-            window.location.href = '../../';
+            returnToHub();
           }
           return;
         } else if (this.input.isCancelJustPressed()) {
@@ -778,6 +783,7 @@ export class GameManager {
       result: 'clear',
       maxStage: this.stageRecords.length,
       retries: this.runRetries,
+      score: Math.round(deviation * 10) / 10,
       extraStats: {
         deviation: Math.round(deviation * 10) / 10,
         rank: rankText,

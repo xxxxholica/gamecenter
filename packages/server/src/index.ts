@@ -14,6 +14,8 @@ import { GameHost } from './host.ts';
 import { LeaderboardStore } from './leaderboardStore.ts';
 import { handleLeaderboardRequest } from './leaderboardApi.ts';
 import { AnalyticsStore } from './analyticsStore.ts';
+import { ReplayStore } from './replayStore.ts';
+import { ReplayTickets } from './replayTickets.ts';
 import { GAME_FACTORIES } from './games/index.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
@@ -35,6 +37,24 @@ if (process.env.ONLINE_START_OPEN === '1') for (const h of hosts.values()) if (!
 
 const leaderboard = new LeaderboardStore(LEADERBOARD_FILE);
 const analytics = new AnalyticsStore(ANALYTICS_FILE);
+// 操作の記録(リプレイ)はファイルが多く大きいので、アナリティクスと同じ data/ の下の専用の場所に置く
+const REPLAY_DIR = process.env.REPLAY_DIR ?? path.join(path.dirname(ANALYTICS_FILE), 'replays');
+const replays = new ReplayStore(REPLAY_DIR, undefined, undefined, () => leaderboard.referencedReplayIds());
+// リプレイは、ランキングに載ったプレイのものだけ残す(遊び終わって30分たっても載っていないものは消す。押し出されたものも)
+const sweepReplays = (): void => {
+  const n = replays.sweepUnreferenced(leaderboard.referencedReplayIds());
+  if (n > 0) log(`[replay] removed ${n} replays not on the leaderboards`);
+};
+setInterval(sweepReplays, 5 * 60 * 1000).unref();
+// リプレイは、ゲームを管理画面とは別のオリジンで動かす(記録の中身は誰でも送れるので、管理画面のログインを持たせない)。
+// 例: REPLAY_ORIGIN=https://replay.game.hinata.works。ローカル開発時のみ未設定なら同じオリジンで開く
+const REPLAY_ORIGIN = (process.env.REPLAY_ORIGIN ?? '').replace(/\/+$/, '');
+if (REPLAY_ORIGIN && !/^https?:\/\/[\w.-]+(:\d+)?$/.test(REPLAY_ORIGIN)) throw new Error(`REPLAY_ORIGIN の形が正しくない: ${REPLAY_ORIGIN}`);
+if (PROXY_SECRET && PROXY_SECRET.length >= 16 && !REPLAY_ORIGIN) {
+  console.warn('[online] REPLAY_ORIGIN が未設定です。本番ドメインでは管理画面のリプレイ再生は別オリジン必須のためブロックされます。');
+}
+const replayTickets = new ReplayTickets();
+setTimeout(sweepReplays, 60 * 1000).unref();
 
 /** リバースプロキシ(ループバック)経由の時だけ X-Forwarded-For を信用する。 */
 function clientIp(req: http.IncomingMessage): string {
@@ -58,7 +78,7 @@ const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllo
 
 // 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
 const server = http.createServer((req, res) => {
-  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed, analytics)) return;
+  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed, analytics, replays, replayTickets)) return;
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
     for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
@@ -72,7 +92,7 @@ server.on('upgrade', (req, socket, head) => connections.handleUpgrade(req, socke
 // アイドル切断・無応答の回収と、レート表の掃除。
 setInterval(() => connections.sweep(), 5000);
 
-const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics);
+const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics, replays, replayTickets, REPLAY_ORIGIN);
 startControl(CONTROL_SOCKET, controlHandlers);
 startAdminWeb(ADMIN_PORT, '127.0.0.1', PROXY_SECRET, ADMIN_USER, ADMIN_PASS, controlHandlers);
 

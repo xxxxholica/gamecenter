@@ -16,6 +16,7 @@
     "test": "npm test --workspaces --if-present",
     "preview": "npx serve dist",
     "bench:all": "node scripts/bench-all.mjs",
+    "deathmap": "node scripts/gen-deathmap.mjs",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "deploy:server": "node scripts/deploy-server.mjs"
   },

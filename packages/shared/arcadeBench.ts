@@ -18,6 +18,8 @@ import {
   summarizeLatency,
   type SpikeCause,
 } from './arcadeBenchCore';
+// 計測はいつも本当の時刻・追わないタイマーで行う(?bench=1&rec=1 で操作の記録と一緒に動かすと、performance.now はフレームの中で止まっているため)
+import { realNow, untrackedInterval, untrackedTimeout } from './arcadeReplay';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -180,7 +182,7 @@ function freshState(now: number): BenchState {
 /** 計測を最初からやり直す(F9 と、bench-all.mjs が「読み込み」と「プレイ中」を分けるときに使う)。 */
 export function resetBench(): void {
   if (!installed) return;
-  state = freshState(performance.now());
+  state = freshState(realNow());
   lastMark = '';
   medianCache = 16.7;
   keyTracker.clear();
@@ -191,7 +193,7 @@ export function resetBench(): void {
 export function benchMark(label: string): void {
   if (!installed) return;
   lastMark = label;
-  state.marks.push({ tSec: round((performance.now() - state.t0) / 1000, 2), label });
+  state.marks.push({ tSec: round((realNow() - state.t0) / 1000, 2), label });
   if (state.marks.length > 1000) state.marks.shift();
 }
 
@@ -215,7 +217,7 @@ function onGlCall(name: string, cat: GlCategory, ms: number): void {
   if (name === 'linkProgram') state.programsLinked++;
   if (name === 'texImage2D' || name === 'texStorage2D') state.texUploads++;
   if (ms >= SLOW_GL_CALL_MS && state.slowCalls.length < MAX_SLOW_CALLS) {
-    state.slowCalls.push({ tSec: round((performance.now() - state.t0) / 1000, 2), name, ms: round(ms) });
+    state.slowCalls.push({ tSec: round((realNow() - state.t0) / 1000, 2), name, ms: round(ms) });
   }
 }
 
@@ -228,11 +230,11 @@ function hookGl(): void {
       const orig = proto[name] as AnyFn | undefined;
       if (typeof orig !== 'function') continue;
       proto[name] = function (this: unknown, ...args: unknown[]) {
-        const s = performance.now();
+        const s = realNow();
         try {
           return orig.apply(this, args);
         } finally {
-          onGlCall(name, cat, performance.now() - s);
+          onGlCall(name, cat, realNow() - s);
         }
       };
     }
@@ -313,8 +315,8 @@ function recordInputs(ts: number, valid: boolean): void {
 /** 模擬の入力: 150〜350ms おきに「入力が届いた」ことにする。ゲームには何も送らない(どのキーでも反応する画面があるため) */
 function scheduleInputProbe(): void {
   const delay = 150 + Math.random() * 200;
-  const due = performance.now() + delay;
-  window.setTimeout(() => {
+  const due = realNow() + delay;
+  untrackedTimeout(() => {
     probeTracker.arrive(due);   // 予定の時刻を「届いた時刻」とする(メインスレッドが塞がって遅れた分も遅延に入る)
     scheduleInputProbe();
   }, delay);
@@ -392,11 +394,11 @@ function readBenchHz(): number | null {
 }
 
 function runCallback(cb: FrameRequestCallback, ts: number): void {
-  const s = performance.now();
+  const s = realNow();
   try {
     cb(ts);
   } finally {
-    state.acc.jsMs += performance.now() - s;
+    state.acc.jsMs += realNow() - s;
   }
 }
 
@@ -432,12 +434,12 @@ function hookRaf(hz: number | null): void {
     const cbs = [...queue.values()];
     queue.clear();
     onFrameStart(ts, now);
-    const start = performance.now();
+    const start = realNow();
     for (const cb of cbs) {
       // ブラウザの rAF と同じく、ひとつが例外を投げても残りは呼ぶ
       try { runCallback(cb, ts); } catch (e) { reportError(e); }
     }
-    slots.finish(performance.now() - start);
+    slots.finish(realNow() - start);
   };
   window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
     const id = nextId++;
@@ -458,9 +460,9 @@ function hookRaf(hz: number | null): void {
  * 4ms ごとのタイマーが 20ms 以上遅れたら、その長さと、直前のマークを記録する。rAF の外(パース・fetch の後処理など)の重い処理を見つけるため。
  */
 function hookMainThreadBlocks(): void {
-  let last = performance.now();
-  window.setInterval(() => {
-    const now = performance.now();
+  let last = realNow();
+  untrackedInterval(() => {
+    const now = realNow();
     const gap = now - last - 4;
     last = now;
     if (gap >= 20 && state.mainBlocks.length < MAX_LOAF) state.mainBlocks.push({ tSec: round((now - state.t0) / 1000, 2), ms: round(gap, 1), mark: lastMark });
@@ -552,7 +554,7 @@ async function downloadReport(): Promise<void> {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  untrackedTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
 // ---- 画面表示 ----
@@ -584,7 +586,7 @@ function mountOverlay(): void {
       'F8:保存  F9:リセット  F10:表示切替',
     ].join('\n');
   };
-  setInterval(render, 500);
+  untrackedInterval(render, 500);
   render();
 }
 
@@ -592,7 +594,7 @@ function mountOverlay(): void {
 export function installBench(): void {
   if (installed || typeof window === 'undefined' || !isBenchEnabled()) return;
   installed = true;
-  state = freshState(performance.now());
+  state = freshState(realNow());
   benchHz = readBenchHz();
   hookRaf(benchHz);
   hookGl();

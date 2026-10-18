@@ -1,3 +1,6 @@
+import { getReplayId, getReplayMode, replayCheckpoint, replayRoundStart, replayWasFramed, untrackedClearTimeout, untrackedInterval, untrackedTimeout } from './arcadeReplay.ts';
+// (アナリティクスのタイマーは、操作の記録・再生で追わない。送信の都合で作られるもので、ゲームの進み方とは関係がないため)
+
 // クライアント側のアナリティクス・プレイデータ収集ヘルパー。
 // 端末ハードウェア詳細、パフォーマンス(FPS/ロード)、操作APM、ゲーム進行・死因を極限までディープに追跡する。
 
@@ -9,21 +12,11 @@ export interface ClientDevice {
   screenHeight?: number;
   devicePixelRatio?: number;
   hasGamepad?: boolean;
-  // 詳細ハードウェア
   gpuRenderer?: string;
   gpuVendor?: string;
   cpuCores?: number;
   deviceMemoryGb?: number;
-  networkType?: string;
-  downlinkMbps?: number;
-  rttMs?: number;
-  audioSampleRate?: number;
-  audioMaxChannels?: number;
-  colorDepth?: number;
-  touchPoints?: number;
   gamepadName?: string;
-  gamepadHasHaptics?: boolean;
-  timezone?: string;
   language?: string;
 }
 
@@ -36,14 +29,10 @@ export interface PerformanceMetrics {
 }
 
 export interface InputMetrics {
-  totalActions?: number;
-  apm?: number;
-  peakApm?: number;
-  keyboardActions?: number;
-  gamepadActions?: number;
-  touchActions?: number;
   pauseCount?: number;
   blurCount?: number;
+  /** 主に使用された入力デバイス */
+  primaryDevice?: 'keyboard' | 'gamepad' | 'touch';
 }
 
 export interface ProgressionMetrics {
@@ -60,8 +49,16 @@ export interface ProgressionMetrics {
   maxCombo?: number;
   enemiesDefeated?: number;
   itemsCollected?: number;
+  /** そのラウンドのスコア(ランキングに登録しなくても残す) */
+  score?: number;
   extraStats?: Record<string, unknown>;
 }
+
+/**
+ * ゲームの今の場面。離脱(閉じる・ブラウザ終了)がどの場面で起きたかを残すのに使う。
+ * title / menu(キャラ・コース・難易度などの選択) / playing / paused / result / name_entry / lobby(オンラインの待合)
+ */
+export type PlayPhase = 'title' | 'menu' | 'playing' | 'paused' | 'result' | 'name_entry' | 'lobby';
 
 const PERF_SAMPLE_INTERVAL_MS = 5000;
 const API_ENDPOINT = '/api/analytics/event';
@@ -128,7 +125,6 @@ export function detectClientDevice(): ClientDevice {
   // ゲームパッド
   let hasGamepad = false;
   let gamepadName: string | undefined = undefined;
-  let gamepadHasHaptics = false;
   try {
     if (typeof navigator.getGamepads === 'function') {
       const pads = navigator.getGamepads();
@@ -137,37 +133,11 @@ export function detectClientDevice(): ClientDevice {
           if (p) {
             hasGamepad = true;
             gamepadName = p.id;
-            if (p.vibrationActuator || (p as any).hapticActuators?.length) gamepadHasHaptics = true;
             break;
           }
         }
       }
     }
-  } catch { /* ignore */ }
-
-  // ネットワーク
-  const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
-  const networkType = conn?.effectiveType ? String(conn.effectiveType) : undefined;
-  const downlinkMbps = typeof conn?.downlink === 'number' ? conn.downlink : undefined;
-  const rttMs = typeof conn?.rtt === 'number' ? conn.rtt : undefined;
-
-  // オーディオ
-  let audioSampleRate: number | undefined = undefined;
-  let audioMaxChannels: number | undefined = undefined;
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioCtx) {
-      const actx = new AudioCtx();
-      audioSampleRate = actx.sampleRate;
-      audioMaxChannels = actx.destination?.maxChannelCount;
-      void actx.close();
-    }
-  } catch { /* ignore */ }
-
-  // タイムゾーン & 言語
-  let timezone: string | undefined = undefined;
-  try {
-    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch { /* ignore */ }
 
   cachedDevice = {
@@ -182,16 +152,7 @@ export function detectClientDevice(): ClientDevice {
     gpuVendor: gpu.vendor,
     cpuCores: navigator.hardwareConcurrency,
     deviceMemoryGb: (navigator as any).deviceMemory,
-    networkType,
-    downlinkMbps,
-    rttMs,
-    audioSampleRate,
-    audioMaxChannels,
-    colorDepth: typeof window.screen !== 'undefined' ? window.screen.colorDepth : undefined,
-    touchPoints: navigator.maxTouchPoints,
     gamepadName,
-    gamepadHasHaptics,
-    timezone,
     language: navigator.language,
   };
 
@@ -325,7 +286,7 @@ function ensureQueueFlusher(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void flushAnalyticsQueue();
   });
-  const timer = setInterval(() => {
+  const timer = untrackedInterval(() => {
     if (readQueue().length > 0) void flushAnalyticsQueue();
   }, FLUSH_INTERVAL_MS);
   (timer as { unref?: () => void }).unref?.();
@@ -347,6 +308,7 @@ export async function sendAnalyticsEvent(
   } = {},
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  if (getReplayMode() === 'replay') return false;   // リプレイの再生では送らない
 
   const ev: WireEvent = {
     eventId: newId('ev'),
@@ -463,22 +425,19 @@ export class FpsTracker {
 }
 
 // ==========================================
-// 🕹️ 操作・入力 (APM / デバイス) トラッカー
+// 🕹️ 操作・入力 (デバイス) トラッカー
 // ==========================================
 export class InputTracker {
   private active = false;
-  private startTime = 0;
   private keyCount = 0;
   private padCount = 0;
   private touchCount = 0;
+  private padTimer?: number;
   private pauseCount = 0;
   private blurCount = 0;
-  private actionTimestamps: number[] = [];
-  private peakCount = 0;
   private onKey?: (e: KeyboardEvent) => void;
   private onTouch?: (e: TouchEvent) => void;
   private onBlur?: () => void;
-  private padTimer?: ReturnType<typeof setInterval>;
   private extraWindows: Window[] = [];
 
   /** ハブのiframe内のゲームなど、親windowに届かない入力元を追加する(start後に呼ぶ) */
@@ -495,24 +454,19 @@ export class InputTracker {
   start(): void {
     if (typeof window === 'undefined' || this.active) return;
     this.active = true;
-    this.startTime = Date.now();
     this.keyCount = 0;
     this.padCount = 0;
     this.touchCount = 0;
     this.pauseCount = 0;
     this.blurCount = 0;
-    this.actionTimestamps = [];
-    this.peakCount = 0;
 
     this.onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       this.keyCount++;
-      this.recordAction();
       if (e.key === 'p' || e.key === 'P' || e.key === 'Backspace') this.pauseCount++;
     };
     this.onTouch = () => {
       this.touchCount++;
-      this.recordAction();
     };
     this.onBlur = () => {
       this.blurCount++;
@@ -522,38 +476,22 @@ export class InputTracker {
     window.addEventListener('touchstart', this.onTouch, { passive: true });
     window.addEventListener('blur', this.onBlur);
 
-    // ゲームパッドポーリング (変化があったときのみ加算)
-    // (毎回配列を作らないよう、前回の押下状態は使い回す。ゲーム中もハブの側で動き続けるため)
-    const lastPadButtons: boolean[] = [];
-    this.padTimer = setInterval(() => {
-      if (!this.active) return;
+    // アケコンのボタンを押した回数(押した瞬間だけ数える)。キーを1回押しただけで「キーボード」にならないよう、回数で比べる
+    const prev: boolean[] = [];
+    this.padTimer = untrackedInterval(() => {
+      if (!this.active || typeof navigator.getGamepads !== 'function') return;
       try {
-        // (50msごと。フレームごとの呼び出しとは重ならないので、共有の読み取りは使わない: Node のテストが拡張子なしの import を解決できない)
-        const pad = typeof navigator.getGamepads === 'function' ? navigator.getGamepads()[0] : null;
-        if (pad) {
-          const buttons = pad.buttons;
-          for (let i = 0; i < buttons.length; i++) {
-            const pressed = buttons[i].pressed;
-            if (pressed && !lastPadButtons[i]) {
-              this.padCount++;
-              this.recordAction();
-            }
-            lastPadButtons[i] = pressed;
+        const pads = navigator.getGamepads();
+        let k = 0;
+        for (const pad of pads) {
+          if (!pad) continue;
+          for (const b of pad.buttons) {
+            if (b.pressed && !prev[k]) this.padCount++;
+            prev[k++] = b.pressed;
           }
         }
-      } catch { /* ignore */ }
-    }, 50);
-  }
-
-  private recordAction(): void {
-    const now = Date.now();
-    this.actionTimestamps.push(now);
-    // 直近1分間のみ保持
-    while (this.actionTimestamps.length > 0 && now - this.actionTimestamps[0] > 60000) {
-      this.actionTimestamps.shift();
-    }
-    // 直近1分間の操作数の最大値 = ピークAPM
-    if (this.actionTimestamps.length > this.peakCount) this.peakCount = this.actionTimestamps.length;
+      } catch { /* 読めない環境 */ }
+    }, 100);
   }
 
   stop(): InputMetrics {
@@ -569,25 +507,21 @@ export class InputTracker {
       } catch { /* ignore */ }
     }
     this.extraWindows = [];
-    if (this.padTimer) clearInterval(this.padTimer);
+    if (this.padTimer !== undefined) untrackedClearTimeout(this.padTimer);
+    this.padTimer = undefined;
     return this.getMetrics();
   }
 
   getMetrics(): InputMetrics {
-    const durMin = Math.max(0.1, (Date.now() - this.startTime) / 60000);
-    const total = this.keyCount + this.padCount + this.touchCount;
-    const apm = Math.round((total / durMin) * 10) / 10;
-    const peakApm = this.peakCount;
+    // いちばん多く使われた入力。同じ回数ならアケコンを優先する(筐体ではアケコンが本来の入力)
+    const k = this.keyCount, p = this.padCount, t = this.touchCount;
+    const primaryDevice: 'keyboard' | 'gamepad' | 'touch' | undefined =
+      k + p + t === 0 ? undefined : p >= k && p >= t ? 'gamepad' : k >= t ? 'keyboard' : 'touch';
 
     return {
-      totalActions: total,
-      apm,
-      peakApm,
-      keyboardActions: this.keyCount,
-      gamepadActions: this.padCount,
-      touchActions: this.touchCount,
       pauseCount: this.pauseCount,
       blurCount: this.blurCount,
+      primaryDevice,
     };
   }
 }
@@ -632,11 +566,13 @@ function relayFramedTelemetry(): void {
     } catch { /* ignore */ }
   };
   hookWindowErrors((data) => post('client_error', data));
+  const replayId = getReplayId();
+  if (replayId) post('replay', { replayId });
 
   const fps = new FpsTracker();
   fps.start();
   const sample = () => post('perf_sample', { performance: fps.getMetrics() });
-  setInterval(() => {
+  untrackedInterval(() => {
     if (document.visibilityState === 'visible') sample();
   }, PERF_SAMPLE_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => {
@@ -648,8 +584,20 @@ function relayFramedTelemetry(): void {
 // 🎮 ゲーム - ハブ間連携メッセージ
 // ==========================================
 /** ゲーム側から親ハブへディープアナリティクスイベントを通知。直接開かれている(親がない)場合は自分で記録する */
+/** ゲームの側で覚えておく、今の場面(放置されたらハブへ戻す判定に使う。homeReturn.ts) */
+let gameSidePhase = 'title';
+export function getGamePhase(): string {
+  return gameSidePhase;
+}
+
 export function reportDeepAnalytics(type: string, data?: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
+  if (type === 'phase' && typeof data?.phase === 'string') gameSidePhase = data.phase;
+  else if (type === 'round_start') gameSidePhase = 'playing';
+  else if (type === 'progression_update' && (data?.result === 'gameover' || data?.result === 'clear')) gameSidePhase = 'result';
+  else if (type === 'pause') gameSidePhase = data?.action === 'open' ? 'paused' : data?.action === 'resume' ? 'playing' : gameSidePhase;
+  // 操作のリプレイ: 記録では照合点として残し、再生では記録と突き合わせる
+  replayCheckpoint(type, data);
   // ベンチマーク有効時は、ゲームの進行(ステージ・ウェーブなど)を計測のマークにして、カクつきがどの場面で起きたか分かるようにする
   (window as unknown as { __gcBenchMark?: (label: string) => void }).__gcBenchMark?.(
     [type, ...['maxStage', 'maxWave', 'mode', 'result'].filter((k) => data?.[k] !== undefined).map((k) => `${k}=${String(data?.[k])}`)].join(' '),
@@ -661,6 +609,32 @@ export function reportDeepAnalytics(type: string, data?: Record<string, unknown>
     return;
   }
   applyDeepAnalytics(type, data, standaloneGameId);
+}
+
+/** 今の場面を知らせる。同じ場面・同じ内容が続けて来ても1回として数える。detail には stage・screen などを入れる */
+export function reportPhase(phase: PlayPhase, detail?: Record<string, unknown>): void {
+  reportDeepAnalytics('phase', { ...detail, phase });
+}
+
+/** 1ラウンド(ゲームオーバー/クリアで終わる1回の挑戦)を始めた。やり直し・再挑戦のたびに呼ぶ。detail には stage・mode などを入れる */
+let gameRoundNo = 0;
+export function reportRoundStart(detail?: Record<string, unknown>): void {
+  // リプレイ: ラウンドごとに乱数を作り直す(タイトルのデモなどのずれを、ラウンドへ持ち込まない)
+  replayRoundStart(++gameRoundNo);
+  reportDeepAnalytics('round_start', detail);
+}
+
+/**
+ * 死亡地点(脱落・失敗した場所)を知らせる。管理画面の死亡地点マップに点として出る。
+ * map: 図の種類(ゲームの中で、同じ座標で描ける単位。ステージ・コースごとに分ける)。x・y: その図の上の位置(ゲームの座標のままでよい)
+ */
+export function reportDeathPoint(map: string, x: number, y: number, cause?: string, extra?: Record<string, unknown>): void {
+  reportDeepAnalytics('death_point', { map, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, ...(cause ? { cause } : {}), ...extra });
+}
+
+/** ゲームが自分からホーム(ハブ)へ戻ろうとしている(ポーズの「ゲームを終了」・タイトルで戻る・結果の「ゲームを終了」など) */
+export function reportExit(via?: string): void {
+  reportDeepAnalytics('exit', via ? { via } : undefined);
 }
 
 /**
@@ -678,11 +652,38 @@ export function applyDeepAnalytics(type: string, data: Record<string, unknown> |
   if (type === 'progression_update') {
     if (!data) return;
     updateGameProgression(data);
-    if (data.result === 'gameover' || data.result === 'clear') sendRoundEnd(data, gameId);
-    else scheduleProgressionFlush(gameId);
+    if (data.result === 'gameover' || data.result === 'clear') {
+      sendRoundEnd(data, gameId);
+      setPhase('result', undefined, gameId);
+    } else scheduleProgressionFlush(gameId);
     return;
   }
-  void sendAnalyticsEvent(type, { gameId, data });
+  if (type === 'phase') {
+    const { phase, ...detail } = data ?? {};
+    if (typeof phase === 'string') setPhase(phase, Object.keys(detail).length > 0 ? detail : undefined, gameId);
+    return;
+  }
+  if (type === 'round_start') {
+    startRound(data, gameId);
+    return;
+  }
+  if (type === 'pause') {
+    // 開いた: 場面を paused に。閉じた(再開): 開く前の場面に戻す。やり直し・終了は、そのあとの round_start・exit で分かる
+    if (data?.action === 'open') {
+      phaseBeforePause = currentPhase;
+      setPhase('paused', currentPhase ? { from: currentPhase.name } : undefined, gameId);
+    } else if (data?.action === 'resume' && phaseBeforePause) {
+      setPhase(phaseBeforePause.name, phaseBeforePause.detail, gameId);
+    }
+    if (data?.action !== 'open') phaseBeforePause = null;
+    if (data?.action === 'restart' || data?.action === 'exit') sendPlayEvent('pause_action', { action: data.action }, gameId);
+    return;
+  }
+  if (type === 'exit') {
+    exitRequest = { via: typeof data?.via === 'string' ? data.via : undefined, phase: currentPhase?.name };
+    return;
+  }
+  sendPlayEvent(type, data, gameId);
 }
 
 // ==========================================
@@ -699,10 +700,64 @@ let activeProgression: ProgressionMetrics = {};
 let activePlay: { gameId: string; playId: string; startedAt: number } | null = null;
 /** iframe内のゲームが測って送ってきたFPS。あればハブ自身の計測より優先する */
 let reportedPerformance: PerformanceMetrics | undefined;
-let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
-let progressionTimer: ReturnType<typeof setTimeout> | undefined;
+let heartbeatTimer: number | undefined;
+let progressionTimer: number | undefined;
 let lifecycleInstalled = false;
 let lastRound: { sig: string; at: number } | null = null;
+let lastRoundEndAt: number | undefined;
+/** 今の場面と、その場面になった時刻 */
+let currentPhase: { name: string; detail?: Record<string, unknown>; at: number } | null = null;
+let phaseBeforePause: { name: string; detail?: Record<string, unknown>; at: number } | null = null;
+/** このプレイで始めたラウンドの数と、今のラウンドを始めた時刻 */
+let roundNo = 0;
+let roundStartedAt: number | null = null;
+/** 起動から、ゲームが最初の場面(たいていタイトル)を知らせるまで(ロード時間) */
+let loadMs: number | undefined;
+/** ゲームが自分から戻ろうとした(閉じる理由を「戻った」にする) */
+let exitRequest: { via?: string; phase?: string } | null = null;
+
+function resetPlayState(): void {
+  currentPhase = null;
+  phaseBeforePause = null;
+  roundNo = 0;
+  roundStartedAt = null;
+  loadMs = undefined;
+  exitRequest = null;
+  lastRoundEndAt = undefined;
+}
+
+/** プレイ開始からの秒(0.1秒単位) */
+function playTime(): number {
+  return activePlay ? Math.round((Date.now() - activePlay.startedAt) / 100) / 10 : 0;
+}
+
+/** このプレイに属するイベントを送る(プレイの何秒目か・何ラウンド目かを付ける) */
+function sendPlayEvent(type: string, data: Record<string, unknown> | undefined, gameId: string | undefined): void {
+  void sendAnalyticsEvent(type, {
+    gameId: gameId ?? activePlay?.gameId,
+    data: activePlay ? { ...data, playId: activePlay.playId, t: playTime(), round: roundNo } : data,
+  });
+}
+
+function setPhase(name: string, detail: Record<string, unknown> | undefined, gameId: string | undefined): void {
+  if (!activePlay) return;
+  if (currentPhase && currentPhase.name === name && JSON.stringify(currentPhase.detail ?? null) === JSON.stringify(detail ?? null)) return;
+  const now = Date.now();
+  const first = loadMs === undefined;
+  if (first) loadMs = now - activePlay.startedAt;
+  currentPhase = { name, detail, at: now };
+  sendPlayEvent('phase_change', { phase: name, ...(detail ? { detail } : {}), ...(first ? { loadMs } : {}) }, gameId);
+}
+
+function startRound(detail: Record<string, unknown> | undefined, gameId: string | undefined): void {
+  if (!activePlay) return;
+  roundNo++;
+  roundStartedAt = Date.now();
+  phaseBeforePause = null;
+  if (loadMs === undefined) loadMs = roundStartedAt - activePlay.startedAt;
+  currentPhase = { name: 'playing', detail, at: roundStartedAt };
+  sendPlayEvent('round_start', detail ? { detail } : undefined, gameId);
+}
 
 function currentPlayId(): string | undefined {
   if (activePlay) return activePlay.playId;
@@ -719,10 +774,20 @@ function elapsedSec(): number {
 
 /** 今この瞬間のプレイ状況(ハートビート・ラウンド終了・終了で共通) */
 function playSnapshot(): Record<string, unknown> {
+  const now = Date.now();
+  const perf = reportedPerformance ?? activeFpsTracker?.getMetrics();
   return {
     playId: activePlay?.playId,
     durationSec: elapsedSec(),
-    performance: reportedPerformance ?? activeFpsTracker?.getMetrics(),
+    t: playTime(),
+    // 今どの場面で、その場面に入って何秒か。何ラウンド目で、そのラウンドを始めて何秒か
+    phase: currentPhase?.name,
+    phaseDetail: currentPhase?.detail,
+    phaseSec: currentPhase ? Math.round((now - currentPhase.at) / 100) / 10 : undefined,
+    round: roundNo,
+    roundSec: roundStartedAt !== null ? Math.round((now - roundStartedAt) / 100) / 10 : undefined,
+    loadMs,
+    performance: perf ? { ...perf, loadDurationMs: loadMs ?? perf.loadDurationMs } : undefined,
     input: activeInputTracker?.getMetrics(),
     progression: { ...activeProgression },
   };
@@ -739,14 +804,16 @@ function installLifecycleListeners(): void {
   lifecycleInstalled = true;
   // タブを隠す・アプリを切り替える時点で送る。モバイルでは pagehide が来ないまま破棄されることがあるため
   document.addEventListener('visibilitychange', () => {
+    if (!activePlay) return;
+    sendPlayEvent('visibility', { state: document.visibilityState }, undefined);
     if (document.visibilityState === 'hidden') sendHeartbeat(true);
   });
 }
 
 function scheduleProgressionFlush(gameId: string | undefined): void {
   if (!activePlay) return;
-  if (progressionTimer) clearTimeout(progressionTimer);
-  progressionTimer = setTimeout(() => {
+  if (progressionTimer) untrackedClearTimeout(progressionTimer);
+  progressionTimer = untrackedTimeout(() => {
     progressionTimer = undefined;
     if (!activePlay) return;
     void sendAnalyticsEvent('progression_update', {
@@ -756,7 +823,7 @@ function scheduleProgressionFlush(gameId: string | undefined): void {
   }, PROGRESSION_FLUSH_DELAY_MS);
 }
 
-const ROUND_FIELDS = ['result', 'deathReason', 'maxStage', 'mode', 'character', 'vehicle', 'difficulty', 'retries', 'maxCombo', 'extraStats'] as const;
+const ROUND_FIELDS = ['result', 'deathReason', 'maxStage', 'mode', 'character', 'vehicle', 'difficulty', 'retries', 'maxCombo', 'enemiesDefeated', 'itemsCollected', 'score', 'extraStats'] as const;
 
 /** ゲームオーバー/クリアをその場で送る(iframeを閉じる前に離脱されても、各ラウンドの結果が残る) */
 function sendRoundEnd(data: Record<string, unknown>, gameId: string | undefined): void {
@@ -767,16 +834,23 @@ function sendRoundEnd(data: Record<string, unknown>, gameId: string | undefined)
   const sig = JSON.stringify(round);
   const now = Date.now();
   if (lastRound && lastRound.sig === sig && now - lastRound.at < ROUND_DEDUPE_MS) return;
+  if (!activePlay) return;
   lastRound = { sig, at: now };
   if (progressionTimer) {
-    clearTimeout(progressionTimer);
+    untrackedClearTimeout(progressionTimer);
     progressionTimer = undefined;
   }
+  // 何ラウンド目か・何秒かかったか(round_start を知らせないゲームでは、プレイ開始・前のラウンドの終わりから数える)
+  round.round = roundNo || 1;
+  const startedAt = roundStartedAt ?? lastRoundEndAt ?? activePlay?.startedAt;
+  if (startedAt !== undefined) round.durationSec = Math.round((now - startedAt) / 100) / 10;
+  lastRoundEndAt = now;
   const cleared = data.result === 'clear';
   void sendAnalyticsEvent(cleared ? 'game_clear' : 'game_over', {
     gameId: gid,
-    data: { ...playSnapshot(), completed: cleared ? true : undefined, round },
+    data: { ...playSnapshot(), ...(typeof data.score === 'number' ? { score: data.score } : {}), completed: cleared ? true : undefined, round },
   });
+  roundStartedAt = null;
 }
 
 /** ゲーム起動を記録 */
@@ -789,6 +863,8 @@ export function trackGameLaunch(
    * 値は iframe 内のゲームが送ってくる(reportedPerformance)ので、親にも毎フレームのループを回すのは無駄(同じスレッドを使うため)。
    */
   measureFps = true,
+  /** 起動の様子(ハブで選ぶまでに何秒見ていたか など) */
+  launchInfo?: Record<string, unknown>,
 ): string {
   const playId = newId('play');
 
@@ -803,6 +879,7 @@ export function trackGameLaunch(
   activeProgression = {};
   reportedPerformance = undefined;
   lastRound = null;
+  resetPlayState();
   activeFpsTracker = null;
   if (measureFps) {
     activeFpsTracker = new FpsTracker();
@@ -820,13 +897,14 @@ export function trackGameLaunch(
       playId,
       variant,
       inputDevice,
+      ...launchInfo,
     },
   });
 
   if (typeof window !== 'undefined') {
     installLifecycleListeners();
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    heartbeatTimer = setInterval(() => {
+    if (heartbeatTimer) untrackedClearTimeout(heartbeatTimer);
+    heartbeatTimer = untrackedInterval(() => {
       if (document.visibilityState === 'visible') sendHeartbeat(false);
     }, HEARTBEAT_INTERVAL_MS);
   }
@@ -849,7 +927,9 @@ let standaloneGameId: string | undefined;
  */
 export function startStandaloneTracking(): void {
   if (typeof window === 'undefined' || standaloneStarted) return;
-  if (window.parent !== window) {
+  // リプレイの再生では、記録した時と同じ作り方にする(管理画面の iframe の中で再生しても、直接開いて遊んだ記録なら直接の作り方)
+  const framed = replayWasFramed() ?? window.parent !== window;
+  if (framed) {
     relayFramedTelemetry();
     return;
   }
@@ -858,8 +938,10 @@ export function startStandaloneTracking(): void {
   standaloneStarted = true;
   const gameId = m[1];
   standaloneGameId = gameId;
-  trackGameLaunch(gameId);
-  window.addEventListener('pagehide', () => trackGameClose(gameId, { unload: true }));
+  trackGameLaunch(gameId, undefined, undefined, true, { standalone: true });
+  const replayId = getReplayId();
+  if (replayId) applyDeepAnalytics('replay', { replayId }, gameId);
+  window.addEventListener('pagehide', () => trackGameClose(gameId, { unload: true, reason: exitRequest ? 'exit' : 'browser_close' }));
 }
 
 /** ゲーム内進行・ファネル状態の更新 */
@@ -877,9 +959,17 @@ export function trackGameClose(
     formattedScore?: string;
     progression?: ProgressionMetrics;
     unload?: boolean;
+    /**
+     * 閉じた理由。exit=ゲームが自分から戻った(ポーズ・タイトル・結果の「ゲームを終了」) / browser_close=ゲーム中にページを離れた
+     * (ブラウザ・タブを閉じた、再読み込みした) / closed=それ以外。省略時は、ゲームが戻ろうとしていたかで決める
+     */
+    reason?: 'exit' | 'browser_close' | 'closed';
   },
 ): void {
   const playId = extra?.playId ?? currentPlayId();
+  const snapshot = activePlay ? playSnapshot() : {};
+  const reason = extra?.reason ?? (exitRequest ? 'exit' : extra?.unload ? 'browser_close' : 'closed');
+  const exitVia = exitRequest?.via;
   let durationSec = elapsedSec();
 
   if (!activePlay && typeof window !== 'undefined' && window.sessionStorage) {
@@ -901,9 +991,9 @@ export function trackGameClose(
   const progression = { ...activeProgression, ...(extra?.progression || {}) };
   const closedGameId = gameId ?? activePlay?.gameId;
 
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (heartbeatTimer) untrackedClearTimeout(heartbeatTimer);
   heartbeatTimer = undefined;
-  if (progressionTimer) clearTimeout(progressionTimer);
+  if (progressionTimer) untrackedClearTimeout(progressionTimer);
   progressionTimer = undefined;
   activePlay = null;
   reportedPerformance = undefined;
@@ -911,17 +1001,21 @@ export function trackGameClose(
   activeFpsTracker = null;
   activeInputTracker = null;
   activeProgression = {};
+  resetPlayState();
 
   void sendAnalyticsEvent('game_close', {
     gameId: closedGameId,
     beacon: extra?.unload === true,
     data: {
+      ...snapshot,
       playId,
       durationSec,
+      reason,
+      exitVia,
       completed: extra?.completed ?? (progression.result === 'clear' ? true : undefined),
       score: extra?.score,
       formattedScore: extra?.formattedScore,
-      performance: perf,
+      performance: perf && snapshot.loadMs !== undefined ? { ...perf, loadDurationMs: snapshot.loadMs as number } : perf,
       input,
       progression,
     },

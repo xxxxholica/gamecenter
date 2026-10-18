@@ -162,6 +162,11 @@ export class InputLatencyTracker {
  * ゲームの処理が終わったら finish() に処理の時間を渡す。垂直同期と同じく、処理が終わったあとの最初の区切りが次のフレームになる
  * (区切りから処理を始めたとみなす。モニターのフレームの細かさの分だけ、実際に始めるのは区切りより少し遅れるため)。
  * ゲームの外の処理(タイマーなど)や GPU で次のモニターのフレームが遅れたときも、過ぎてしまった区切りは飛ばす。
+ *
+ * モニターが hz と同じくらい(60Hz のモニターで 60Hz を再現するなど)のときは、最初のフレームを基準にした区切りを使わない。
+ * 実際のモニターの周期はわずかにずれる(59.998Hz など)うえ、最初のフレームの時刻も刻みから少しずれるので、
+ * モニターのフレームが区切りの少し手前に来続けると、1 フレームおきに「区切りの前」とみなされ、描けているのに 30fps に見える。
+ * そのため、モニターのフレームの間隔を測り、hz の周期に近ければ、前に渡したフレームからの経過を周期で丸めた数だけ区切りを進める。
  */
 export class RefreshSlots {
   private readonly period: number;
@@ -169,6 +174,9 @@ export class RefreshSlots {
   private anchor = -1;
   private last = -Infinity;
   private earliest = -Infinity;
+  private prevNow = -1;
+  private lastTakenNow = -1;
+  private readonly gaps: number[] = [];   // 直近のモニターのフレームの間隔
 
   /** toleranceMs: 区切りに届いた・間に合ったとみなす誤差(時刻の丸めなど) */
   constructor(hz: number, toleranceMs = 1) {
@@ -176,11 +184,26 @@ export class RefreshSlots {
     this.toleranceMs = toleranceMs;
   }
 
+  /** モニターの周期が hz の周期に近いか(間隔の中央値で判断。数が少ないうちは近くないとみなす) */
+  private monitorMatchesHz(): boolean {
+    if (this.gaps.length < 16) return false;
+    const sorted = [...this.gaps].sort((a, b) => a - b);
+    return sorted[sorted.length >> 1] > this.period * 0.75;
+  }
+
   take(now: number): number | null {
+    if (this.prevNow >= 0 && now > this.prevNow) {
+      this.gaps.push(now - this.prevNow);
+      if (this.gaps.length > 32) this.gaps.shift();
+    }
+    this.prevNow = now;
     if (this.anchor < 0) this.anchor = now;
-    const slot = Math.floor((now - this.anchor + this.toleranceMs) / this.period);
+    const slot = this.lastTakenNow >= 0 && this.monitorMatchesHz()
+      ? this.last + Math.max(1, Math.round((now - this.lastTakenNow) / this.period))
+      : Math.floor((now - this.anchor + this.toleranceMs) / this.period);
     if (slot <= this.last || slot < this.earliest) return null;
     this.last = slot;
+    this.lastTakenNow = now;
     return this.anchor + slot * this.period;
   }
 

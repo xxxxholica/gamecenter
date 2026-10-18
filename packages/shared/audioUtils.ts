@@ -1,3 +1,4 @@
+import { audioRandom } from './arcadeReplay.ts';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 /**
  * Web Audio 共通ヘルパー。
  */
@@ -17,7 +18,7 @@ export function createWhiteNoiseBuffer(
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * (envelope ? envelope(i / ctx.sampleRate, i / bufferSize) : 1);
+    data[i] = (audioRandom() * 2 - 1) * (envelope ? envelope(i / ctx.sampleRate, i / bufferSize) : 1);
   }
   return buffer;
 }

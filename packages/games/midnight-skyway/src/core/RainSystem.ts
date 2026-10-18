@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { untrackedRandom as rand } from '../../../../shared/arcadeReplay';
 
 /**
  * 雨粒: 車の周りの空間に降らせる細い線。車の速度ぶんだけ後ろへ流れて見える(線の向きは、雨粒と車の相対速度)。
@@ -29,14 +30,14 @@ export class RainSystem {
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 6;
     this.mesh.visible = false;
-    for (let i = 0; i < COUNT; i++) this.fall[i] = 0.8 + Math.random() * 0.5;
+    for (let i = 0; i < COUNT; i++) this.fall[i] = 0.8 + rand() * 0.5;
   }
 
   private spawn(i: number, car: THREE.Vector3, fx: number, fz: number, anywhere: boolean): void {
-    const ahead = this.surround ? -34 + Math.random() * 68 : anywhere ? -8 + Math.random() * 52 : 14 + Math.random() * 40;
-    const side = (Math.random() - 0.5) * 34;
+    const ahead = this.surround ? -34 + rand() * 68 : anywhere ? -8 + rand() * 52 : 14 + rand() * 40;
+    const side = (rand() - 0.5) * 34;
     this.p[i * 3] = car.x + fx * ahead + fz * side;
-    this.p[i * 3 + 1] = car.y + (anywhere ? -1 + Math.random() * 12 : 4 + Math.random() * 8);
+    this.p[i * 3 + 1] = car.y + (anywhere ? -1 + rand() * 12 : 4 + rand() * 8);
     this.p[i * 3 + 2] = car.z + fz * ahead - fx * side;
   }
 

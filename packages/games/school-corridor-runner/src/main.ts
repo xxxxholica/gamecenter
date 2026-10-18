@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
@@ -21,7 +22,7 @@ import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
@@ -75,9 +76,8 @@ class Game {
   private powerUpClock: number = 0;
   private invincibleLight: THREE.PointLight | null = null;
   private wasInvincible: boolean = false;
-  // 「GOD」と入力するとON/OFFが切り替わる、無限無敵モード
+  // 無限無敵モード(ベンチの scene=clear で、最後まで走りきるために使う)
   private godMode: boolean = false;
-  private godKeyBuffer: string = '';
 
   // ゲームステート
   private state: GameState = GameState.TITLE;
@@ -310,7 +310,6 @@ class Game {
 
   private setupEvents(): void {
     window.addEventListener('resize', this.onResize);
-    window.addEventListener('keydown', this.onGodCodeKey);
 
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
@@ -452,16 +451,6 @@ class Game {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** 「G」「O」「D」の順に押すと、無限無敵モードが切り替わる */
-  private onGodCodeKey = (e: KeyboardEvent): void => {
-    if (e.repeat || !/^Key[A-Z]$/.test(e.code)) return;
-    this.godKeyBuffer = (this.godKeyBuffer + e.code.slice(3)).slice(-3);
-    if (this.godKeyBuffer !== 'GOD') return;
-    this.godKeyBuffer = '';
-    this.godMode = !this.godMode;
-    if (!this.godMode) this.player.isInvincible = false;
-  };
-
   private onResize = (): void => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -482,6 +471,7 @@ class Game {
 
     // 1. ゲームステートを即時PLAYINGに設定
     this.state = GameState.PLAYING;
+    reportRoundStart();
     mountPlayGuide();
     this.isFallingDeath = false;
     this.deathFallTimer = 0;
@@ -708,7 +698,7 @@ class Game {
    */
   private startGame(isDemo: boolean): void {
     this.state = isDemo ? GameState.DEMO : GameState.PLAYING;
-    if (!isDemo) mountPlayGuide();
+    if (!isDemo) { mountPlayGuide(); reportRoundStart(); }
     this.scoreData = {
       score: 0,
       combo: 0,
@@ -1003,7 +993,7 @@ class Game {
       return;
     }
 
-    // GODモード: 無敵が切れないよう残り時間を補充し続ける
+    // GODモード(ベンチのみ): 無敵が切れないよう残り時間を補充し続ける
     if (this.godMode) {
       if (!this.player.isInvincible) this.uiManager.triggerInvincibleStart();
       if (this.player.getInvincibleRemaining() < 5.0 || !this.player.isInvincible) this.player.triggerInvincible(10.0);
@@ -1887,6 +1877,7 @@ class Game {
 
     if (this.state !== GameState.PLAYING || this.isFallingDeath) return;
     this.lastDeathCause = obs ? (OBSTACLE_DEATH_LABELS[obs.type] ?? '障害物に激突') : '出席簿(先生の攻撃)';
+    reportDeathPoint('corridor', this.scoreData.distance, this.player.currentX, this.lastDeathCause);
 
     // 1. スローモーション効果
     this.timeScale = 0.25;
@@ -2289,6 +2280,7 @@ class Game {
     reportDeepAnalytics('progression_update', {
       result: state === GameState.CLEARED ? 'clear' : 'gameover',
       ...(state === GameState.CLEARED ? {} : { deathReason: this.lastDeathCause || '障害物に激突' }),
+      score: Math.floor(score),
       maxCombo: this.scoreData.maxCombo,
       enemiesDefeated: this.scoreData.destroyedCount,
       extraStats: {

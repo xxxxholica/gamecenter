@@ -7,7 +7,8 @@ import path from 'node:path';
 import { hiddenSlugs } from '../packages/hub/src/games.ts';
 
 const root = path.dirname(fileURLToPath(import.meta.url)) + '/..';
-const run = (args) => execFileSync('npm', args, { cwd: root, stdio: 'inherit' });
+// Windows では npm が npm.cmd なので shell 経由で起動する。
+const run = (args) => execFileSync('npm', args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
 
 run(['run', 'build', '-w', 'packages/hub']);
 for (const slug of readdirSync(path.join(root, 'packages/games'))) {

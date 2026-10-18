@@ -1,4 +1,5 @@
 import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 /**
  * Procedural Sound Effects Synthesizer using Web Audio API
  * 100% generated in code - no external audio files needed!
@@ -167,7 +168,7 @@ export class SynthSfx {
   playExpPickup() {
     const now = this.ctx.currentTime;
     const notes = [1046.5, 1318.5, 1567.98]; // C6, E6, G6
-    const note = notes[Math.floor(Math.random() * notes.length)];
+    const note = notes[Math.floor(audioRandom() * notes.length)];
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();

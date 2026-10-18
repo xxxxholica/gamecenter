@@ -1,5 +1,6 @@
 import { PadEdge, startPadLoop } from '../arcadePad';
 import { buttonIconHtml } from '../arcadeGuide';
+import { reportDeepAnalytics, reportPhase } from '../arcadeAnalytics';
 
 export interface ModeItem {
   id: string;
@@ -133,6 +134,7 @@ export class ModeSelect {
   private readonly cardsEl: HTMLElement;
   private readonly onSelect: (id: string) => void;
   private readonly onBack: () => void;
+  private readonly screen: string;
   private readonly onFocus?: (id: string) => void;
   private focusedId: string | null = null;
   private items: ModeItem[] = [];
@@ -144,8 +146,11 @@ export class ModeSelect {
 
 
   constructor(opts: ModeSelectOptions, onSelect: (id: string) => void, onBack: () => void) {
-    this.onSelect = onSelect;
-    this.onBack = onBack;
+    // アナリティクス: どの選択画面で、何を選んだか・戻ったか
+    const screen = opts.title ?? 'mode';
+    this.screen = screen;
+    this.onSelect = (id) => { reportDeepAnalytics('menu_select', { screen, id }); onSelect(id); };
+    this.onBack = () => { reportDeepAnalytics('menu_back', { screen }); onBack(); };
     this.onFocus = opts.onFocus;
     ensureModeSelectStyle();
     this.root = document.createElement('div');
@@ -230,6 +235,7 @@ export class ModeSelect {
 
   /** initialId: 最初に選んでおく項目(省略すると、選べる先頭の項目) */
   public show(items: ModeItem[], initialId?: string): void {
+    reportPhase('menu', { screen: this.screen });
     this.items = items;
     const first = Math.max(0, items.findIndex((i) => !i.disabled));
     const wanted = initialId === undefined ? -1 : items.findIndex((i) => i.id === initialId && !i.disabled);

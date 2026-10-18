@@ -22,7 +22,7 @@ import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 
@@ -129,7 +129,8 @@ export class Game {
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // 等倍の画面では 1.5 倍の解像度で描いて縮める(細い線や遠くの模様がなめらかになり、GPU の仕事も増えて省電力でクロックが下がりきらない)
+    this.renderer.setPixelRatio(window.devicePixelRatio < 1.5 ? 1.5 : Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -376,6 +377,7 @@ export class Game {
       difficulty: LEVELS[this.level].label,
       extraStats: { requirement: this.graduationRequirement },
     });
+    reportRoundStart({ difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
     this.effects.clearAll();
     if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
 
@@ -653,6 +655,8 @@ export class Game {
         inputManager.rumble(250, 0.8, 0.5);
         this.effects.shake(0.4, 0.28);
         const newTotal = this.currentCredits - hitPositions.length;
+        // 死亡地点マップ: 障害物で脱落した場所(横・進んだ距離)と人数
+        reportDeathPoint(`level:${this.level}`, ob.currentX, -ob.spec.z, '障害物', { lost: hitPositions.length });
         this.setCredits(newTotal, -hitPositions.length);
         if (this.state !== 'RUNNING') return;
       }
@@ -925,6 +929,7 @@ export class Game {
     reportDeepAnalytics('progression_update', {
       result: 'clear',
       difficulty: LEVELS[this.level].label,
+      score,
       itemsCollected: this.pickupsCollected,
       extraStats: { requirement: this.graduationRequirement, creditsAtWall: this.creditsAtWall, maxMultiplier: this.maxAchievedMultiplier, ringsHit: this.ringsHit, ringsTotal: this.world.rings.length },
     });

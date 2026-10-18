@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { untrackedRandom as rand } from '../../../../shared/arcadeReplay';
 
 /**
  * 風切りの筋: 車の周りの空間に細い光の線を置き、車が通り過ぎるぶんだけ後ろへ流れて見える。
@@ -42,14 +43,14 @@ export class SpeedStreaks {
       this.carry -= 1;
       const i = this.cursor;
       this.cursor = (this.cursor + 1) % COUNT;
-      const ahead = 8 + Math.random() * 34;
-      const side = (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 6);
+      const ahead = 8 + rand() * 34;
+      const side = (rand() < 0.5 ? -1 : 1) * (1.6 + rand() * 6);
       this.head[i * 3] = car.x + fx * ahead + fz * side;
-      this.head[i * 3 + 1] = car.y + 0.3 + Math.random() * 5;
+      this.head[i * 3 + 1] = car.y + 0.3 + rand() * 5;
       this.head[i * 3 + 2] = car.z + fz * ahead - fx * side;
       this.age[i] = 0;
-      this.len[i] = 1.5 + Math.random() * 2.5;
-      this.tint[i] = Math.random();
+      this.len[i] = 1.5 + rand() * 2.5;
+      this.tint[i] = rand();
     }
 
     const stretch = 0.6 + speed * 0.02 + boost * 0.4;          // 線の長さの倍率(最高速で約1.4倍、ブーストで約1.8倍)

@@ -2,6 +2,7 @@ import type { BaseRoom } from './core';
 import { LobbyConnection } from './LobbyConnection';
 import type { NetClient } from './NetClient';
 import { ButtonCardNav, el } from './buttonCardNav';
+import { reportPhase } from '../arcadeAnalytics';
 
 /** 待機画面に出す枠の数(どのゲームでも4人分にそろえる。ゲームの定員を超える枠はダミー) */
 const SLOTS = 4;
@@ -98,6 +99,7 @@ export class WaitScreen<S extends { t: string }, C extends { t: string }> {
   }
 
   public show(): void {
+    reportPhase('lobby');
     if (this.visible) {
       this.render();
       return;

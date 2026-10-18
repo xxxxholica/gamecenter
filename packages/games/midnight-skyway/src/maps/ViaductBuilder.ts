@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mulberry32 } from '../../../../shared/online/seededRandom';
 
 export interface ViaductOptions {
   /** Drivable surface width between the parapets (metres). */
@@ -31,8 +32,9 @@ export function makeHighwayTexture(roadWidth: number, repeatMetres: number): THR
   g.fillStyle = '#4b4c50';
   g.fillRect(0, 0, W, H);
   const img = g.getImageData(0, 0, W, H);
+  const rand = mulberry32(101);
   for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 22;
+    const n = (rand() - 0.5) * 22;
     img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
   }
   g.putImageData(img, 0, 0);

@@ -7,6 +7,7 @@ import type { DriveHUD } from '../ui/DriveHUD';
 import type { TimeAttackManager, TimeAttackResult } from './TimeAttackManager';
 import { AutoPilot } from './AutoPilot';
 import { GhostCar, GhostPlayer, GhostRecorder, buildPaceBot, type GhostTrace } from './Ghost';
+import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 
 /** コース(ルート)の署名。点数・開始点・長さが変わったら別のコースとみなす(端末に保存した自己ベストの無効化に使う) */
 function routeSignature(route: THREE.Vector3[]): string {
@@ -155,6 +156,7 @@ export class RaceDirector {
     const cc = this.scene.carController;
     if (!result.timedOut && route && cc) this.winningRun = new AutoPilot(route, cc);
     if (!this.active) return;
+    if (result.timedOut && cc && this.map) reportDeathPoint(`course:${this.map.metadata.id}`, cc.position.x, cc.position.z, 'タイムアップ');
     if (result.timedOut && this.scene.carController) this.scene.carController.canDrive = false;
     if (!result.timedOut && !this.online) this.lastTrace = this.recorder.finish(result.totalTimeMs, this.carName);
   }

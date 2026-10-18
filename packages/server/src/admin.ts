@@ -16,13 +16,16 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { ADMIN_CSS, ADMIN_HTML, ADMIN_JS, LOGIN_HTML } from './adminPage.ts';
 import { handleAdminRequest, safeUrl, type ControlHandlers } from './control.ts';
+import { ipKey } from './limits.ts';
 import { log } from './log.ts';
 
 const MIN_SECRET_LENGTH = 16;
 const SESSION_COOKIE = 'online_admin_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12時間でログアウトが要る
+const MAX_ADMIN_SESSIONS = 100;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 監視側の検知窓と合わせてある
+const MAX_LOGIN_TRACKED_IPS = 5000;
 const MAX_BODY_BYTES = 1024;
 
 /** 長さの違いで時間差が出ないよう、SHA-256 にかけて同じ長さにしてから比べる。 */
@@ -88,7 +91,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
 
   // メモリ上のセッション(再起動で全員ログアウトになる。イベント用途として許容)。
   const sessions = new Map<string, number>(); // token -> 作成時刻
-  // ログイン失敗の回数制限(IPごと)。固定ウィンドウ: findtime 内に maxAttempts 回失敗したら以降は 429。
+  // ログイン失敗の回数制限(IPごと。IPv6 は /64 に丸めてローテーション抜けを防ぐ)。固定ウィンドウ: findtime 内に maxAttempts 回失敗したら以降は 429。
   const loginFails = new Map<string, { start: number; n: number }>();
 
   function sweepSessions(now: number): void {
@@ -96,14 +99,22 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
     for (const [ip, f] of loginFails) if (now - f.start >= LOGIN_WINDOW_MS) loginFails.delete(ip);
   }
   function tooManyFailures(ip: string, now: number): boolean {
-    const f = loginFails.get(ip);
+    const f = loginFails.get(ipKey(ip));
     if (!f || now - f.start >= LOGIN_WINDOW_MS) return false;
     return f.n >= LOGIN_MAX_ATTEMPTS;
   }
   function recordFailure(ip: string, now: number): void {
-    const f = loginFails.get(ip);
-    if (!f || now - f.start >= LOGIN_WINDOW_MS) loginFails.set(ip, { start: now, n: 1 });
-    else f.n++;
+    const key = ipKey(ip);
+    const f = loginFails.get(key);
+    if (!f || now - f.start >= LOGIN_WINDOW_MS) {
+      loginFails.set(key, { start: now, n: 1 });
+      if (loginFails.size > MAX_LOGIN_TRACKED_IPS) {
+        const oldest = loginFails.keys().next().value;
+        if (oldest) loginFails.delete(oldest);
+      }
+    } else {
+      f.n++;
+    }
   }
 
   const server = http.createServer((req, res) => {
@@ -153,6 +164,10 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
       if (safeEqual(u, user) && safeEqual(p, pass)) {
         const token = crypto.randomBytes(32).toString('hex');
         sessions.set(token, now);
+        if (sessions.size > MAX_ADMIN_SESSIONS) {
+          const oldest = sessions.keys().next().value;
+          if (oldest) sessions.delete(oldest);
+        }
         log(`admin login ok ip=${ip}`);
         return html(302, '', {
           location: '/admin/',

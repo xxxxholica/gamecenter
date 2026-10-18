@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
@@ -15,7 +16,7 @@ import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
@@ -435,6 +436,7 @@ class StreetBBoyGame {
     this.cleanupGameplay();
 
     this.currentStage = this.benchStartStage();
+    if (!isDemo) reportRoundStart({ stage: this.currentStage });
     this.score = 0;
     this.timeLeft = this.getStageInitialTime(this.currentStage);
     this.lives = INITIAL_LIVES;
@@ -561,6 +563,7 @@ class StreetBBoyGame {
   private advanceToNextStage(): void {
     if (this.currentStage >= FINAL_STAGE) return;
     this.currentStage++;
+    reportPhase('playing', { stage: this.currentStage });
 
     if (this.stage) {
       this.stage.dispose();
@@ -1322,7 +1325,8 @@ class StreetBBoyGame {
       maxCombo: this.maxComboSeen,
       enemiesDefeated: this.stompKills,
       itemsCollected: this.cassettesTaken,
-      extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score },
+      score: this.score,
+      extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score, timeLeft: Math.round(this.timeLeft) },
     });
 
     this.player.x = this.stage.goalX;
@@ -1445,6 +1449,10 @@ class StreetBBoyGame {
     if (!this.player || this.player.isDead) return;
     this.lastDeathCause = cause;
     this.deathsByCause[cause] = (this.deathsByCause[cause] ?? 0) + 1;
+    if (this.state === 'playing') {
+      reportDeepAnalytics('life_lost', { cause, stage: this.currentStage, livesLeft: this.lives - 1, timeLeft: Math.round(this.timeLeft), score: this.score });
+      reportDeathPoint(`stage${this.currentStage}`, this.player.x, this.player.y, cause);
+    }
 
     this.player.isDead = true;
     this.hud.setHordeWarning(0);
@@ -1493,7 +1501,8 @@ class StreetBBoyGame {
           maxCombo: this.maxComboSeen,
           enemiesDefeated: this.stompKills,
           itemsCollected: this.cassettesTaken,
-          extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score },
+          score: this.score,
+      extraStats: { goldCassettes: this.goldTaken, livesLeft: this.lives, deaths: this.deathsByCause, score: this.score, timeLeft: Math.round(this.timeLeft) },
         });
         this.openResultScreen('gameover');
       }

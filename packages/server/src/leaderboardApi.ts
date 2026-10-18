@@ -5,6 +5,8 @@ import { RunTickets } from './runTickets.ts';
 import { safeUrl } from './control.ts';
 import { LeaderboardStore } from './leaderboardStore.ts';
 import type { AnalyticsStore } from './analyticsStore.ts';
+import { MAX_REPLAY_CHUNK_BYTES, type ReplayStore } from './replayStore.ts';
+import type { ReplayTickets } from './replayTickets.ts';
 import { log } from './log.ts';
 
 /** 本文の上限。ゴースト(数千サンプル)を含む登録が通る大きさ */
@@ -18,7 +20,11 @@ const postRate = new RateWindow(num('LEADERBOARD_POSTS_PER_MIN', 120), 60_000);
 const analyticsRate = new RateWindow(num('ANALYTICS_POSTS_PER_MIN', 1200), 60_000);
 // プレイチケットの発行(ゲームを開くたびに1回+結果を送るたびに1回)。会場の共有NATを考慮して多めに許可する
 const ticketRate = new RateWindow(num('LEADERBOARD_TICKETS_PER_MIN', 240), 60_000);
-setInterval(() => { postRate.sweep(); analyticsRate.sweep(); ticketRate.sweep(); }, 30_000).unref();
+// 操作の記録(リプレイ)の小分け。1台が10秒ごとに1回(+長いものは分割)なので、会場の共有NATでも足りる枠
+const replayRate = new RateWindow(num('REPLAY_POSTS_PER_MIN', 600), 60_000);
+// リプレイの読み込み(管理画面で再生するたびに1回)
+const replayViewRate = new RateWindow(num('REPLAY_VIEWS_PER_MIN', 60), 60_000);
+setInterval(() => { postRate.sweep(); analyticsRate.sweep(); ticketRate.sweep(); replayRate.sweep(); replayViewRate.sweep(); }, 30_000).unref();
 
 /**
  * スコア申告にプレイチケットを必須にするか。既定は必須('enforce')。
@@ -124,11 +130,13 @@ export function handleLeaderboardRequest(
   store: LeaderboardStore,
   originAllowed: (origin: string) => boolean,
   analytics?: AnalyticsStore,
+  replays?: ReplayStore,
+  replayTickets?: ReplayTickets,
 ): boolean {
   const url = safeUrl(req.url);
   if (!url || !url.pathname.startsWith('/api/')) return false;
   try {
-    route(req, res, url, ip, store, originAllowed, analytics);
+    route(req, res, url, ip, store, originAllowed, analytics, replays, replayTickets);
   } catch (e) {
     log(`leaderboard error: ${(e as Error).message}`);
     if (!res.headersSent) send(res, 500, { error: 'internal' });
@@ -145,6 +153,8 @@ function route(
   store: LeaderboardStore,
   originAllowed: (origin: string) => boolean,
   analytics?: AnalyticsStore,
+  replays?: ReplayStore,
+  replayTickets?: ReplayTickets,
 ): void {
   const rateKey = ipKey(ip);
   const decoded = url.pathname.split('/').slice(2).map(decodeSegment);
@@ -218,6 +228,9 @@ function route(
         }
         elapsedMs = t.elapsedMs + ELAPSED_BONUS_MS;
       }
+      // リプレイの参照は、その記録の書き込みの鍵を持っている時だけ受け取る(他人の記録を指して、消えないようにすることを防ぐ)
+      const ref = body.replay as { id?: unknown; key?: unknown } | undefined;
+      if (ref && !(replays && typeof ref.id === 'string' && replays.verifyKey(ref.id, ref.key))) delete body.replay;
       const r = store.submit(parts[1], parts[2], body, { elapsedMs });
       if (!r.ok) {
         store.releaseAnon(body.anonToken);                  // 登録されなかったので、予約した匿名名は返す
@@ -249,6 +262,7 @@ function route(
         const b = raw as Record<string, unknown>;
         const type = typeof b.type === 'string' ? b.type.trim().slice(0, 64) : '';
         if (!type) continue;
+        if (accepted > 0 && !analyticsRate.hit(rateKey)) { limited = true; break; }
         const r = analytics.recordEvent({
           sessionId: typeof b.sessionId === 'string' ? b.sessionId.trim().slice(0, 80) : '',
           type,
@@ -269,6 +283,32 @@ function route(
       send(res, 200, { ...first, accepted });
     }).catch((e: Error) => {
       log(`analytics error: ${e.message}`);
+      if (!res.headersSent) send(res, 500, { error: 'internal' });
+    });
+    return;
+  }
+
+  // リプレイの中身: 管理画面が発行した札(ReplayTickets)がある時だけ返す。再生するゲームは、管理画面とは別のオリジンで動く
+  if (method === 'GET' && parts[0] === 'replay' && parts[1] === 'view' && parts.length === 2) {
+    if (!replays || !replayTickets) return send(res, 503, { error: 'replay_unavailable' });
+    if (!replayViewRate.hit(rateKey)) return send(res, 429, { error: 'rate' });
+    const id = url.searchParams.get('id') ?? '';
+    if (!replayTickets.verify(id, url.searchParams.get('ticket'))) return send(res, 403, { error: 'forbidden' });
+    const r = replays.get(id);
+    return r ? send(res, 200, r) : send(res, 404, { error: 'not_found' });
+  }
+
+  if (method === 'POST' && parts[0] === 'replay' && parts[1] === 'chunk' && parts.length === 2) {
+    if (!replays) return send(res, 503, { error: 'replay_unavailable' });
+    if (rejectBadPost(req, res, originAllowed)) return;
+    if (!replayRate.hit(rateKey)) return send(res, 429, { error: 'rate' });
+    readJson(req, res, MAX_REPLAY_CHUNK_BYTES).then((body) => {
+      if (!body) return;
+      const r = replays.append(body, rateKey);
+      const code = r.ok ? 200 : ({ too_large: 413, forbidden: 403, rate: 429, full: 503 } as Record<string, number>)[r.error ?? ''] ?? 400;
+      send(res, code, r.ok ? { ok: true } : { error: r.error });
+    }).catch((e: Error) => {
+      log(`replay error: ${e.message}`);
       if (!res.headersSent) send(res, 500, { error: 'internal' });
     });
     return;

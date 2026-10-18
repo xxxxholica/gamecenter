@@ -3,10 +3,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { NightCity } from './NightCity';
 import { RainSystem } from './RainSystem';
 import { Lightning } from './Lightning';
-import { PostFX } from './PostFX';
+import { PostFX, compileInParallel } from './PostFX';
 import { TireSmokeSystem } from './TireSmokeSystem';
 import { carByGroup } from '../models/CarBase';
 import { DragonCarModel } from '../models/DragonCarModel';
+import { untrackedRandom } from '../../../../shared/arcadeReplay';
 
 /** 背景が後ろへ流れる速さ(m/s)。約110km/h */
 const CRUISE_SPEED = 30;
@@ -277,7 +278,9 @@ export class GarageScene {
   private animationFrameId: number | null = null;
 
   /** 初回起動時(最初の requestAnimationFrame の前)に、ガレージと後処理のシェーダー・テクスチャを事前コンパイルする。 */
-  public warmup(): void {
+  public async warmup(): Promise<void> {
+    // 描画の前に、シェーダを並列にコンパイルし終えるまで(メインスレッドを止めずに)待つ(PostFX.ts の compileInParallel)
+    await compileInParallel(this.renderer, this.scene, this.camera, this.postFx.sceneTarget);
     if (this.postFx.enabled) this.postFx.render();
     else this.renderer.render(this.scene, this.camera);
     this.renderer.getContext().finish();
@@ -318,8 +321,8 @@ export class GarageScene {
       const side = Math.sign(v.x - center.x) || 1;
       const out = this.sideDir.set(side, 0, 0);
       const rear = i >= 2;
-      if (Math.random() < (rear ? 0.7 : 0.25)) this.spray.emitSplash(v, ground, out, 0.8);
-      if (rear && Math.random() < 0.12) this.spray.emitSmoke(v, ground, 0.5);
+      if (untrackedRandom() < (rear ? 0.7 : 0.25)) this.spray.emitSplash(v, ground, out, 0.8);
+      if (rear && untrackedRandom() < 0.12) this.spray.emitSmoke(v, ground, 0.5);
     });
   }
 
@@ -355,8 +358,8 @@ export class GarageScene {
     // ロード中は、速いほどカメラが震える(メーターが赤くなるにつれて強く)
     const shakeAmp = lv * lv * 0.05 + rush * 0.02;
     if (shakeAmp > 0.0005) {
-      this.camera.position.x += (Math.random() - 0.5) * shakeAmp;
-      this.camera.position.y += (Math.random() - 0.5) * shakeAmp;
+      this.camera.position.x += (untrackedRandom() - 0.5) * shakeAmp;
+      this.camera.position.y += (untrackedRandom() - 0.5) * shakeAmp;
     }
 
     // レース中と同じ後処理。速く走っているようにブラーと速度線もかける

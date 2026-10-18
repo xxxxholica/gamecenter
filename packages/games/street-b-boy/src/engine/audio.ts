@@ -1,4 +1,5 @@
 import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 const midiToHz = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -196,7 +197,7 @@ export class SoundManager {
     for (let c = 0; c < 2; c++) {
       const data = impulse.getChannelData(c);
       for (let i = 0; i < length; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.4);
+        data[i] = (audioRandom() * 2 - 1) * Math.pow(1 - i / length, 2.4);
       }
     }
     const convolver = ctx.createConvolver();

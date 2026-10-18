@@ -1,5 +1,6 @@
 // 効果音: UI・カウントダウン・エンジン音・ドリフト音・衝突・ゴールなど。すべてWeb Audioで合成する。
 import type { AudioEngine } from './engine';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 const midiHz = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -310,7 +311,7 @@ export class Sfx {
   public backfire(): void {
     const t = this.ctx.currentTime;
     for (let i = 0; i < 3; i++) {
-      this.noiseHit(t + i * 0.07 + Math.random() * 0.03, 0.09, 'bandpass', 900 + Math.random() * 600, 300, 0.06, 0.003);
+      this.noiseHit(t + i * 0.07 + audioRandom() * 0.03, 0.09, 'bandpass', 900 + audioRandom() * 600, 300, 0.06, 0.003);
     }
     this.tone('square', 150, 60, t, 0.1, 0.02);
   }

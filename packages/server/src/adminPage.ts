@@ -1,6 +1,7 @@
 // 管理画面の静的ファイル(HTML/CSS/JS)。/admin(末尾スラッシュなし)で開かれても崩れないよう、参照はすべて /admin/ からの絶対パスにする。
 // 一般向け(Hub)の明るい方眼グリッド＋落書き背景と手書き風フォント(Yusei Magic)を取り入れたポップなデザイン。
 // アナリティクスボードは、全収集データを多角的にタブで切り替えて閲覧・JSON出力できる。
+import deathMapGeometry from './deathMapGeometry.json' with { type: 'json' };
 
 export const ADMIN_HTML = `<!doctype html>
 <html lang="ja">
@@ -25,7 +26,7 @@ export const ADMIN_HTML = `<!doctype html>
 
   <section class="card" id="server-card">
     <div class="card-head">
-      <h2>🌐 オンライン対戦</h2>
+      <h2>オンライン対戦</h2>
     </div>
     <div id="summary" class="stats"></div>
     <div id="games" class="server-games-container"></div>
@@ -34,7 +35,7 @@ export const ADMIN_HTML = `<!doctype html>
   <!-- アナリティクス ボード -->
   <section class="card" id="analytics-card">
     <div class="card-head">
-      <h2>📈 アナリティクス</h2>
+      <h2>アナリティクス</h2>
       <button id="analytics-reload" class="ghost">再読み込み</button>
     </div>
 
@@ -43,7 +44,7 @@ export const ADMIN_HTML = `<!doctype html>
       <div class="filter-group">
         <label for="analytics-game-filter">表示対象:</label>
         <select id="analytics-game-filter">
-          <option value="all">すべてのゲーム (全体集計)</option>
+          <option value="all">すべてのゲーム 全体集計</option>
           <option value="midnight-skyway">ミッドナイト・スカイウェイ</option>
           <option value="street-b-boy">ストリートビーボーイ</option>
           <option value="cyber-2d-fighter-3d">サイバー２Dファイター３D</option>
@@ -62,10 +63,11 @@ export const ADMIN_HTML = `<!doctype html>
     <!-- タブ切り替えバー -->
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="tab-overview">サマリー</button>
+      <button class="tab-btn" data-tab="tab-replays">リプレイ</button>
+      <button class="tab-btn" data-tab="tab-deathmap">死亡マップ</button>
       <button class="tab-btn" data-tab="tab-hardware">ハードウェア</button>
       <button class="tab-btn" data-tab="tab-performance">パフォーマンス</button>
       <button class="tab-btn" data-tab="tab-progression">進行・死因</button>
-      <button class="tab-btn" data-tab="tab-input">操作・APM</button>
       <button class="tab-btn" data-tab="tab-raw">生イベントログ</button>
     </div>
 
@@ -74,15 +76,33 @@ export const ADMIN_HTML = `<!doctype html>
       <!-- 全体表示用 -->
       <div id="analytics-all-view">
         <div id="analytics-summary" class="stats"></div>
-        <div id="analytics-table-wrap" class="table-wrap"></div>
+
+        <div id="analytics-table-wrap" class="table-wrap" style="margin-top: 14px;"></div>
       </div>
       <!-- 個別ゲーム表示用 -->
       <div id="analytics-game-view" style="display:none;">
         <div id="game-view-header" class="game-view-header"></div>
         <div id="game-stats" class="stats"></div>
         <div id="game-progression-details" class="sub-grids"></div>
+        <div id="game-deathmap-wrap"></div>
         <div id="game-plays-wrap"></div>
       </div>
+    </div>
+
+    <!-- リプレイ専用タブ -->
+    <div id="tab-replays" class="tab-panel">
+      <div class="sub-card">
+        <div class="table-title-row">
+          <h4>ランキングのリプレイ</h4>
+          <span class="table-hint-text" id="replays-count-hint"></span>
+        </div>
+        <div id="all-replays-wrap" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- 死亡マップ専用タブ -->
+    <div id="tab-deathmap" class="tab-panel">
+      <div id="deathmap-tab-content"></div>
     </div>
 
     <div id="tab-hardware" class="tab-panel">
@@ -100,11 +120,6 @@ export const ADMIN_HTML = `<!doctype html>
       <div id="progression-details" class="game-boxes"></div>
     </div>
 
-    <div id="tab-input" class="tab-panel">
-      <div id="input-stats" class="stats"></div>
-      <div id="input-details" class="sub-grids"></div>
-    </div>
-
     <div id="tab-raw" class="tab-panel">
       <div id="raw-logs-wrap"></div>
     </div>
@@ -117,12 +132,12 @@ export const ADMIN_HTML = `<!doctype html>
       </div>
       <div class="export-controls">
         <select id="export-type">
-          <option value="all">すべてのデータ (完全統合)</option>
+          <option value="all">すべてのデータ 完全統合</option>
           <option value="summary">集計サマリー</option>
           <option value="hardware">ハードウェア・環境スペック</option>
           <option value="performance">パフォーマンス・FPS・エラー</option>
           <option value="progression">ゲーム進行・到達度・死因</option>
-          <option value="input">操作・APM・入力統計</option>
+          <option value="input">入力デバイス統計</option>
           <option value="errors">クライアントエラーログ</option>
           <option value="plays">プレイ履歴一覧</option>
           <option value="sessions">訪問セッション一覧</option>
@@ -135,7 +150,7 @@ export const ADMIN_HTML = `<!doctype html>
 
   <section class="card" id="boards-card">
     <div class="card-head">
-      <h2>🏆 ランキング管理</h2>
+      <h2>ランキング管理</h2>
       <button id="boards-reload" class="ghost">再読み込み</button>
     </div>
     <div id="boards"></div>
@@ -155,7 +170,12 @@ export const LOGIN_HTML = (showError: boolean): string => `<!doctype html>
 <meta name="robots" content="noindex, nofollow">
 <title>ゲームセンター 管理 — ログイン</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&family=Yusei+Magic&display=swap');
+@font-face {
+  font-family: 'Yusei Magic';
+  src: url('/fonts/YuseiMagic-Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
 html { font-size: clamp(14px, 1.2vw + 9px, 20px); }
 body {
   margin: 0;
@@ -228,7 +248,12 @@ button:active { transform: translateY(1px); }
 `;
 
 export const ADMIN_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&family=Yusei+Magic&display=swap');
+@font-face {
+  font-family: 'Yusei Magic';
+  src: url('/fonts/YuseiMagic-Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
 
 html { font-size: clamp(14px, 1.2vw + 9px, 19px); }
 body {
@@ -573,6 +598,87 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
   min-width: 0;
 }
 .game-box-grid .sub-card { background: #f8fafc; min-width: 0; }
+
+/* 死亡地点マップ */
+.deathmap { display: flex; flex-direction: column; gap: 10px; }
+.deathmap canvas { width: 100%; background: #0b1120; border-radius: 10px; border: 1.5px solid #334155; display: block; }
+.deathmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 12px; align-items: start; }
+.deathmap-panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.deathmap-panel.wide { grid-column: 1 / -1; }
+.deathmap-panel-head { font-size: 13px; font-weight: 800; color: #0f172a; }
+.deathmap-geo-legend { font-size: 11px; color: #475569; }
+.deathmap-causes { font-size: 12px; font-weight: 700; color: #334155; }
+.deathmap-hover { position: fixed; z-index: 2000; display: none; max-width: 300px; padding: 6px 9px; border-radius: 8px; background: rgba(15,23,42,.94); color: #f1f5f9; font-size: 12px; font-weight: 700; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+.deathmap-geo-legend i { box-shadow: none; border-radius: 2px; }
+#deathmap-tab-content { display: flex; flex-direction: column; gap: 14px; }
+.deathmap-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: #334155; padding: 4px 2px; }
+.deathmap-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; box-shadow: 0 0 4px currentColor; }
+.deathmap-tip { font-size: 12px; color: #475569; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; border-left: 3px solid #0284c7; }
+
+
+/* リプレイ */
+.replay-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #ffffff;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+  transition: transform .1s ease, filter .1s ease, box-shadow .1s ease;
+}
+.replay-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.45);
+}
+.replay-btn:active {
+  transform: translateY(1px);
+}
+.replay-btn.sm {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.game-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  white-space: nowrap;
+}
+.status-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.status-pill.clear { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.status-pill.retire { background: #fef3c7; color: #b45309; border: 1px solid #fde047; }
+.status-pill.unknown { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+.replay-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.86); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
+.replay-stage { position: relative; overflow: hidden; background: #000; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.replay-stage iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #000; }
+.replay-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #e2e8f0; font-size: 13px; }
+.replay-bar button { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid #64748b; background: #1e293b; color: #e2e8f0; cursor: pointer; }
+.replay-bar button.on { background: #6366f1; border-color: #818cf8; }
+.replay-status { min-width: 240px; }
+.replay-status .bad { color: #fca5a5; }
+.replay-status .good { color: #86efac; }
 .ranking-item .label { overflow-wrap: anywhere; padding-right: 8px; }
 .ranking-item .count { white-space: nowrap; }
 .ranking-more { font-size: .75rem; font-weight: 700; color: #64748b; text-align: right; padding-top: 2px; }
@@ -892,6 +998,7 @@ button:disabled { opacity: .5; cursor: default; transform: none; filter: none; }
 
 export const ADMIN_JS = `
 (function () {
+  var DEATH_MAP_GEOMETRY = ${JSON.stringify(deathMapGeometry)};   // 死亡マップの背景(実際のゲームのマップ。npm run deathmap で作る)
   var gamesEl = document.getElementById('games');
   var summaryEl = document.getElementById('summary');
 
@@ -975,6 +1082,8 @@ export const ADMIN_JS = `
   // ゲームごとの大きなボックス。中に項目(死因・車両・キャラ…)ごとのカードをまとめる
   var PROG_SECTIONS = [
     ['deathReasons', '死因・ゲームオーバー要因'],
+    ['exitPhases', '離脱した場面'],
+    ['exitReasons', '閉じた理由'],
     ['vehicles', '選択車両'],
     ['characters', '選択キャラクター'],
     ['maxStages', '到達ステージ / WAVE'],
@@ -1002,10 +1111,17 @@ export const ADMIN_JS = `
       document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
       document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
       btn.classList.add('active');
-      var target = document.getElementById(btn.getAttribute('data-tab'));
+      var tabId = btn.getAttribute('data-tab');
+      var target = document.getElementById(tabId);
       if (target) target.classList.add('active');
+      if (tabId === 'tab-replays') {
+        loadAllReplays();
+      } else if (tabId === 'tab-deathmap') {
+        loadDeathMapTab();
+      }
     });
   });
+
 
   // ---- オンライン対戦 稼働状況 ----
   function buildCard(g) {
@@ -1111,7 +1227,7 @@ export const ADMIN_JS = `
         statusEl.style.display = 'flex';
         statusEl.textContent = '';
         statusEl.appendChild(el('span', { text: meta.name + ' に絞り込み中' }));
-        var clearBtn = el('button', { text: '✕ 解除', title: '全ゲーム表示に戻す' });
+        var clearBtn = el('button', { text: '解除', title: '全ゲーム表示に戻す' });
         clearBtn.addEventListener('click', function () {
           var sel = document.getElementById('analytics-game-filter');
           if (sel) sel.value = 'all';
@@ -1127,40 +1243,39 @@ export const ADMIN_JS = `
     }
   }
 
-  function renderGamePlays(plays) {
-    var wrap = document.getElementById('game-plays-wrap');
-    if (!wrap) return;
-    wrap.textContent = '';
-    var sub = el('div', { className: 'sub-card' });
-    sub.appendChild(el('h4', { text: '最近のプレイ履歴 (直近20件)' }));
+  function renderPlaysTable(container, plays, showGameColumn, maxRows) {
+    if (!container) return;
+    container.textContent = '';
     if (!plays || plays.length === 0) {
-      sub.appendChild(el('div', { className: 'empty', text: 'このゲームのプレイ履歴はまだありません。' }));
-      wrap.appendChild(sub);
+      container.appendChild(el('div', { className: 'empty', text: 'プレイ履歴はまだありません。' }));
       return;
     }
+    var list = plays.slice(-(maxRows || 50)).reverse();
     var tbl = el('table', { className: 'analytics-table' });
-    tbl.appendChild(el('thead', null, [
-      el('tr', null, [
-        el('th', { text: '日時' }),
-        el('th', { text: '時間' }),
-        el('th', { text: '結果' }),
-        el('th', { text: 'ラウンド' }),
-        el('th', { text: 'スコア' }),
-        el('th', { text: '平均/最低FPS' }),
-        el('th', { text: 'APM' }),
-        el('th', { text: 'カスタム選択 / 到達' }),
-        el('th', { text: '死因 (各ラウンド)' }),
-      ])
-    ]));
+    var headers = [
+      ...(showGameColumn ? [el('th', { text: 'ゲーム' })] : []),
+      el('th', { text: '日時' }),
+      el('th', { text: '時間' }),
+      el('th', { text: '結果' }),
+      el('th', { text: 'スコア' }),
+      el('th', { text: 'カスタム選択 / 到達' }),
+      el('th', { text: 'FPS' }),
+      el('th', { text: '離脱・死因' }),
+    ];
+    tbl.appendChild(el('thead', null, [el('tr', null, headers)]));
     var tbody = el('tbody');
-    plays.slice(-20).reverse().forEach(function (p) {
+    list.forEach(function (p) {
+      var gid = gidOfPlay(p);
+      var gname = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || TITLES[gid] || gid;
       var timeStr = p.startedAt ? new Date(p.startedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
       var durStr = p.durationSec ? formatDuration(p.durationSec) : '-';
+      
+      var resPillClass = p.completed ? 'status-pill clear' : (p.endedAt ? 'status-pill retire' : 'status-pill unknown');
       var resText = p.completed ? '完走/クリア' : (p.endedAt ? 'リタイア' : '終了未受信');
-      var roundText = p.rounds && p.rounds.length ? p.rounds.length + '回' : '-';
+      var resPill = el('span', { className: resPillClass, text: resText });
+
       var scoreText = p.formattedScore || (p.score !== undefined ? String(p.score) : '-');
-      var fpsText = p.performance ? (p.performance.avgFps + ' / ' + (p.performance.minFps || '-')) : '-';
-      var apmText = p.input ? String(p.input.apm) : '-';
+      var fpsText = p.performance ? (p.performance.avgFps + 'fps') : '-';
       var customText = '-';
       if (p.progression) {
         var parts = [];
@@ -1169,29 +1284,532 @@ export const ADMIN_JS = `
         if (p.progression.maxStage) parts.push(p.progression.maxStage);
         if (parts.length > 0) customText = parts.join(' / ');
       }
-      var deathText = '-';
+
+      var deathInfo = '';
       if (p.rounds && p.rounds.length) {
         var reasons = p.rounds.map(function (r) { return r.deathReason; }).filter(Boolean);
-        if (reasons.length) deathText = reasons.slice(-3).join(' → ');
+        if (reasons.length) deathInfo = ' ' + reasons.slice(-2).join('・');
       } else if (p.progression && p.progression.deathReason) {
-        deathText = p.progression.deathReason;
+        deathInfo = ' ' + p.progression.deathReason;
       }
-      tbody.appendChild(el('tr', null, [
+
+      var rowCells = [
+        ...(showGameColumn ? [el('td', null, [el('span', { className: 'game-badge', text: gname })])] : []),
         el('td', { text: timeStr }),
         el('td', { text: durStr }),
-        el('td', { text: resText }),
-        el('td', { className: 'num', text: roundText }),
+        el('td', null, [resPill]),
         el('td', { className: 'num', text: scoreText }),
-        el('td', { className: 'num', text: fpsText }),
-        el('td', { className: 'num', text: apmText }),
         el('td', { text: customText }),
-        el('td', { text: deathText }),
-      ]));
+        el('td', { className: 'num', text: fpsText }),
+        el('td', { text: exitText(p) + deathInfo }),
+      ];
+      tbody.appendChild(el('tr', null, rowCells));
     });
     tbl.appendChild(tbody);
-    var tWrap = el('div', { className: 'table-wrap' }, [tbl]);
+    container.appendChild(tbl);
+  }
+
+  function renderGamePlays(plays) {
+    var wrap = document.getElementById('game-plays-wrap');
+    if (!wrap) return;
+    wrap.textContent = '';
+    var sub = el('div', { className: 'sub-card' });
+    sub.appendChild(el('h4', { text: '最近のプレイ履歴とリプレイ 直近20件' }));
+    var tWrap = el('div', { className: 'table-wrap' });
+    renderPlaysTable(tWrap, plays, false, 20);
     sub.appendChild(tWrap);
     wrap.appendChild(sub);
+  }
+
+  var EXIT_REASON_LABEL = { exit: 'ゲームから戻った', browser_close: 'ページを閉じた', closed: '閉じた' };
+  var PHASE_LABEL = { title: 'タイトル', menu: 'メニュー', playing: 'プレイ中', paused: 'ポーズ', result: '結果', name_entry: '名前登録', lobby: 'ロビー' };
+
+  /** 離脱: どの場面で・どう閉じたか(終了が届かなかったものは、最後に分かっている場面) */
+  function exitText(p) {
+    var phase = p.exitPhase || p.lastPhase;
+    var where = phase ? (PHASE_LABEL[phase] || phase) : '-';
+    if (p.exitPhaseSec !== undefined && p.exitPhase) where += ' ' + Math.round(p.exitPhaseSec) + '秒';
+    var how = p.exitReason ? (EXIT_REASON_LABEL[p.exitReason] || p.exitReason) : (p.endedAt ? '' : '終了未受信');
+    return how ? where + ' / ' + how : where;
+  }
+
+  function gidOfPlay(p) { return p.gameId; }
+
+  /** リプレイの再生ボタン。seekSec: そのラウンドが始まった所(少し前から見せる) */
+  function replayButton(gid, replayId, seekSec) {
+    var b = el('button', { className: 'replay-btn', type: 'button', text: '▶ リプレイ' });
+    b.addEventListener('click', function () { openReplay(gid, replayId, Math.max(0, (seekSec || 0) - 2)); });
+    return b;
+  }
+
+  // ---- リプレイの再生(ゲームを iframe で開き、記録した操作を入れ直して動かす) ----
+  var replayModal = null;
+  function closeReplay() {
+    if (replayModal) { replayModal.remove(); replayModal = null; }
+    window.removeEventListener('message', onReplayMessage);
+    document.removeEventListener('keydown', onReplayKey);
+  }
+  function onReplayKey(e) { if (e.key === 'Escape') closeReplay(); }
+  var replayStatusEl = null;
+  var replayFrame = null;
+  // ゲームを開くオリジン(サーバーの REPLAY_ORIGIN)。記録の中身は誰でも送れるので、管理画面とは別のオリジンで動かし、ログインを持たせない
+  var replayOrigin = location.origin;
+  function onReplayMessage(e) {
+    if (e.origin !== replayOrigin || !replayFrame || e.source !== replayFrame.contentWindow) return;
+    var m = e.data;
+    if (!m || m.type !== 'gamecenter:replay-status' || !replayStatusEl) return;
+    var st = m.status;
+    replayStatusEl.textContent = '';
+    replayStatusEl.appendChild(el('span', { text: formatDuration(st.sec || 0) + '  ' + st.frame + ' / ' + st.frames + ' フレーム  照合 ' + st.checkpoints + '  ' }));
+    if (st.versionMismatch) replayStatusEl.appendChild(el('span', { className: 'bad', text: '記録した時とゲームの版が違います(途中で止まったり、ずれたりすることがあります)' }));
+    if (st.seeking) replayStatusEl.appendChild(el('span', { text: 'ラウンドの頭まで進めています…' }));
+    if (st.diverged) replayStatusEl.appendChild(el('span', { className: 'bad', text: '記録とずれました: ' + (st.divergeNote || '') }));
+    else if (st.done) replayStatusEl.appendChild(el('span', { className: 'good', text: '最後まで記録どおりに再生しました' }));
+  }
+  function openReplay(gid, replayId, seekSec) {
+    closeReplay();
+    replayModal = el('div', { className: 'replay-modal' });
+    var info = el('div', { className: 'replay-bar', text: '記録を読み込み中...' });
+    replayModal.appendChild(info);
+    document.body.appendChild(replayModal);
+    document.addEventListener('keydown', onReplayKey);
+    Promise.all([
+      call('GET', '/admin/api/replay?id=' + encodeURIComponent(replayId)),
+      call('GET', '/admin/api/replay-ticket?id=' + encodeURIComponent(replayId)),
+    ]).then(function (got) {
+      if (!replayModal) return;
+      var rec = got[0];
+      var tk = got[1] || {};
+      var isProdHost = location.hostname.replace(/\\.$/, '') === 'game.hinata.works';
+      replayOrigin = typeof tk.origin === 'string' && /^https?:\\/\\/[\\w.-]+(:\\d+)?$/.test(tk.origin) ? tk.origin : (isProdHost ? '' : location.origin);
+      if (!replayOrigin || (isProdHost && replayOrigin.replace(/\\.$/, '') === location.origin.replace(/\\.$/, ''))) {
+        info.textContent = 'リプレイ用の別オリジン(REPLAY_ORIGIN)が設定されていないため再生できません';
+        var errClose = el('button', { type: 'button', text: '閉じる' });
+        errClose.addEventListener('click', closeReplay);
+        info.appendChild(errClose);
+        return;
+      }
+      var h = rec.header || {};
+      var w = Math.max(320, Math.min(3840, Number(h.w) || 1280));
+      var hh = Math.max(240, Math.min(2160, Number(h.h) || 720));
+      var scale = Math.min(window.innerWidth * 0.92 / w, (window.innerHeight - 120) / hh, 1.5);
+      var stage = el('div', { className: 'replay-stage' });
+      stage.style.width = Math.round(w * scale) + 'px';
+      stage.style.height = Math.round(hh * scale) + 'px';
+      replayFrame = el('iframe', { title: 'リプレイ' });
+      replayFrame.width = String(w);
+      replayFrame.height = String(hh);
+      replayFrame.style.width = w + 'px';
+      replayFrame.style.height = hh + 'px';
+      replayFrame.style.transform = 'scale(' + scale + ')';
+      replayFrame.setAttribute('allow', 'autoplay; gamepad');
+      replayFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      var targetGame = typeof h.game === 'string' && /^[a-z0-9-]+$/.test(h.game) ? h.game : gid;
+      replayFrame.src = replayOrigin + '/games/' + encodeURIComponent(targetGame) + '/?replay=' + encodeURIComponent(replayId) + '&ticket=' + encodeURIComponent(String(tk.ticket || '')) + (seekSec > 0 ? '&seek=' + Math.max(0, Math.round(seekSec * 10) / 10) : '');
+      stage.appendChild(replayFrame);
+      var bar = el('div', { className: 'replay-bar' });
+      var speedBtns = [];
+      [0.5, 1, 2, 4].forEach(function (v) {
+        var b = el('button', { type: 'button', text: v + 'x', className: v === 1 ? 'on' : '' });
+        b.addEventListener('click', function () {
+          speedBtns.forEach(function (x) { x.className = ''; });
+          b.className = 'on';
+          replayFrame.contentWindow.postMessage({ type: 'gamecenter:replay-control', speed: v }, replayOrigin);
+        });
+        speedBtns.push(b);
+        bar.appendChild(b);
+      });
+      var paused = false;
+      var pauseBtn = el('button', { type: 'button', text: '一時停止' });
+      pauseBtn.addEventListener('click', function () {
+        paused = !paused;
+        pauseBtn.textContent = paused ? '再開' : '一時停止';
+        replayFrame.contentWindow.postMessage({ type: 'gamecenter:replay-control', paused: paused }, replayOrigin);
+      });
+      bar.appendChild(pauseBtn);
+      var closeBtn = el('button', { type: 'button', text: '閉じる' });
+      closeBtn.addEventListener('click', closeReplay);
+      bar.appendChild(closeBtn);
+      replayStatusEl = el('span', { className: 'replay-status', text: '' });
+      bar.appendChild(replayStatusEl);
+      var notes = [];
+      if (h.startedAt || h.e0) notes.push(new Date(h.e0).toLocaleString('ja-JP'));
+      if (rec.gapAt !== undefined) notes.push('記録の途中が届いていないため、そこまでを再生します');
+      else if (!rec.final) notes.push('記録の最後が届いていません ブラウザが強制終了した可能性');
+      if (h.framed === false) notes.push('ハブを通さずに開いたプレイ');
+      info.textContent = notes.join(' / ');
+      replayModal.appendChild(stage);
+      replayModal.appendChild(bar);
+      window.addEventListener('message', onReplayMessage);
+    }).catch(function (e) {
+      info.textContent = '記録を読み込めませんでした: ' + e.message;
+    });
+  }
+
+  // ---- 死亡地点マップ ----
+  // 背景は、ゲームの本物のコードから取り出した実際のマップ(deathMapGeometry.json。npm run deathmap で作る)。
+  // マップを持つゲームだけを、マップ(ステージ・コース)ごとに全部並べる(選ぶ操作はない)。
+  var DEATHMAP_ORDER = ['street-b-boy', 'falldown', 'school-corridor-runner', 'tower-stack', 'tani-runner-124', 'midnight-skyway'];
+  /** 地点の呼び方(skyway は死亡ではなく、ぶつかった・時間切れになった場所) */
+  var POINT_LABEL = { 'midnight-skyway': '衝突・タイムアップ地点' };
+  var SKYWAY_COURSE_NAMES = { tokyo_skyway: '首都高速(東京)', helsinki_technical: 'ヘルシンキ・テクニカル', tokyo_climb: '東京クライム' };
+  var DEATHMAP_NOTE = '赤いバツが地点です。バツに合わせると、死因と日時が出ます。';
+
+  // バツに合わせた時に、カーソルの横に出す小さな説明(1つを使い回す)
+  var deathHover = null;
+  function showDeathHover(e, text) {
+    if (!deathHover) { deathHover = el('div', { className: 'deathmap-hover' }); document.body.appendChild(deathHover); }
+    deathHover.textContent = text;
+    deathHover.style.display = 'block';
+    deathHover.style.left = Math.min(window.innerWidth - 300, e.clientX + 14) + 'px';
+    deathHover.style.top = (e.clientY + 14) + 'px';
+  }
+  function hideDeathHover() { if (deathHover) deathHover.style.display = 'none'; }
+
+  function hasDeathMap(gid) { return !!DEATH_MAP_GEOMETRY[gid]; }
+
+  /** マップの見出し */
+  function mapTitle(gid, mapId, geo) {
+    if (gid === 'midnight-skyway') return SKYWAY_COURSE_NAMES[mapId.replace('course:', '')] || mapId;
+    if (gid === 'street-b-boy') return 'STAGE ' + mapId.replace('stage', '') + ' ' + (geo.title || '');
+    if (gid === 'tani-runner-124') return geo.title || mapId;
+    return '';
+  }
+
+  /**
+   * マップごとの描き方。range: 描く範囲(死亡地点で広げる)。equal: 縦横同じ縮尺。flipY: 上が +y。aspect: 縦/横の比(equal でない時の画面の形)
+   * draw(ctx, P, s): P(x, y) で画面の座標。s は1単位の画面上の長さ
+   */
+  function mapSpec(gid, mapId, geo, deaths) {
+    var maxY = 0, maxX = 0;
+    deaths.forEach(function (d) { maxY = Math.max(maxY, d.y); maxX = Math.max(maxX, d.x); });
+    if (gid === 'midnight-skyway') {
+      var xs = geo.road.map(function (p) { return p[0]; }), zs = geo.road.map(function (p) { return p[1]; });
+      return {
+        range: [Math.min.apply(null, xs) - 40, Math.max.apply(null, xs) + 40, Math.min.apply(null, zs) - 40, Math.max.apply(null, zs) + 40],
+        equal: true, bg: '#0b1220',
+        draw: function (ctx, P, s) {
+          var line = function (w, color) {
+            ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            ctx.beginPath();
+            geo.road.forEach(function (p, i) { var q = P(p[0], p[1]); if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]); });
+            ctx.closePath(); ctx.stroke();
+          };
+          line(Math.max(6, 14 * s), '#334155');            // 道路(幅は約14m)
+          line(Math.max(4, 11 * s), '#475569');
+          ctx.setLineDash([6, 6]); line(1, 'rgba(250,204,21,.7)'); ctx.setLineDash([]);   // 中央線
+          var st = P(geo.road[0][0], geo.road[0][1]);
+          ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.arc(st[0], st[1], 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#e2e8f0'; ctx.font = '700 12px system-ui'; ctx.fillText('START / GOAL', st[0] + 9, st[1] - 8);
+        },
+      };
+    }
+    if (gid === 'street-b-boy') {
+      var x0 = Infinity, x1 = -Infinity, y1 = 6;
+      geo.platforms.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0] + p[2]); y1 = Math.max(y1, p[1] + 4); });
+      x1 = Math.max(x1, geo.goal[0] + 6);
+      return {
+        range: [x0 - 2, x1 + 2, -4, Math.max(y1, maxY + 2)], equal: true, flipY: true, bg: '#111827', minH: 150,
+        draw: function (ctx, P, s) {
+          var rect = function (x, yTop, w, h, fill, stroke) {
+            var a = P(x, yTop), b = P(x + w, yTop - h);
+            ctx.fillStyle = fill; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+            if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.strokeRect(a[0], a[1], b[0] - a[0], b[1] - a[1]); }
+          };
+          // 足場(地面は濃く、すり抜けられる足場は明るく薄く)
+          geo.platforms.forEach(function (p) { rect(p[0], p[1], p[2], Math.max(p[3], 0.3), p[4] ? '#64748b' : '#334155', p[4] ? '#94a3b8' : '#475569'); });
+          if (geo.shaft) { var a = P(geo.shaft.x0, 2), b = P(geo.shaft.x1, -4); ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]); }
+          geo.crumbling.forEach(function (c) { ctx.setLineDash([3, 3]); rect(c[0], c[1], c[2], 0.5, 'rgba(180,83,9,.5)', '#f59e0b'); ctx.setLineDash([]); });
+          geo.moving.forEach(function (m) {
+            rect(m[0], m[1], m[2], 0.5, 'rgba(14,165,233,.55)', '#38bdf8');
+            if (m[3] || m[4]) { var a1 = P(m[0] + m[2] / 2, m[1]), b1 = P(m[0] + m[2] / 2 + m[3], m[1] + m[4]); ctx.strokeStyle = 'rgba(56,189,248,.6)'; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(a1[0], a1[1]); ctx.lineTo(b1[0], b1[1]); ctx.stroke(); ctx.setLineDash([]); }
+          });
+          geo.rails.forEach(function (g) { var a = P(g[0], g[1]), b = P(g[0] + g[2], g[1]); ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); });
+          geo.blocks.forEach(function (b) { rect(b[0] - 0.5, b[1] + 0.5, 1, 1, b[2] === 'question' ? '#ca8a04' : '#92400e'); });
+          geo.lasers.forEach(function (l) { rect(l[0] - l[2] / 2, l[1] + l[3], l[2], l[3], 'rgba(239,68,68,.45)'); });
+          geo.vlasers.forEach(function (l) { rect(l[0] - 0.2, l[1] + l[2], 0.4, l[2], 'rgba(239,68,68,.6)'); });
+          var icon = function (list, color, r) { list.forEach(function (o) { var q = P(o[0], o[1] + 0.4); ctx.fillStyle = color; ctx.fillRect(q[0] - r, q[1] - r, r * 2, r * 2); }); };
+          icon(geo.hydrants, '#ef4444', 3); icon(geo.subwoofers, '#a855f7', 3); icon(geo.vents, '#e5e7eb', 2.5); icon(geo.obstacles, '#a16207', 3);
+          geo.checkpoints.forEach(function (c) { var a = P(c[0], c[1]), b = P(c[0], c[1] + 3); ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.fillStyle = '#22c55e'; ctx.fillRect(b[0], b[1], 7, 5); });
+          geo.enemies.forEach(function (e) { var q = P(e[0], e[1] + 0.7); ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(2.5, 0.6 * s), 0, Math.PI * 2); ctx.stroke(); });
+          var g1 = P(geo.goal[0], geo.goal[1]); ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(g1[0], g1[1] - 6, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fde68a'; ctx.font = '700 11px system-ui'; ctx.fillText('GOAL', g1[0] - 14, g1[1] - 16);
+        },
+        legend: [['#334155', '地面・足場'], ['#64748b', 'すり抜け足場'], ['#38bdf8', '動く足場'], ['#f59e0b', '崩れる足場'], ['#ef4444', 'レーザー・消火栓'], ['#fb923c', '敵(○)'], ['#22c55e', 'チェックポイント']],
+      };
+    }
+    if (gid === 'falldown') {
+      return {
+        range: [-0.5, geo.width + 0.5, -4, Math.max(geo.goalDepth + 15, maxY + 10)], aspect: 1.5, bg: '#1c1917',
+        draw: function (ctx, P) {
+          geo.strata.forEach(function (layer, i) {
+            var next = i + 1 < geo.strata.length ? geo.strata[i + 1].depth : geo.goalDepth;
+            var a = P(0, layer.depth), b = P(geo.width, next);
+            ctx.fillStyle = layer.back; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+            ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 11px system-ui'; ctx.fillText(layer.name + ' ' + layer.depth + 'm', a[0] + 4, a[1] + 13);
+          });
+          var g = P(0, geo.goalDepth), g2 = P(geo.width, geo.goalDepth + 10);
+          ctx.fillStyle = '#ca8a04'; ctx.fillRect(g[0], g[1], g2[0] - g[0], g2[1] - g[1]);
+          ctx.fillStyle = '#fff7d6'; ctx.fillText('黄金郷(ゴール) ' + geo.goalDepth + 'm', g[0] + 4, g[1] + 12);
+          ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
+          for (var c = 1; c < geo.width; c++) { var a1 = P(c, 0), b1 = P(c, geo.goalDepth); ctx.beginPath(); ctx.moveTo(a1[0], a1[1]); ctx.lineTo(b1[0], b1[1]); ctx.stroke(); }
+        },
+      };
+    }
+    if (gid === 'school-corridor-runner') {
+      var len = Math.max(400, Math.ceil((maxX + 40) / geo.segment) * geo.segment);
+      var hw = geo.width / 2;
+      return {
+        range: [0, len, -hw - 0.8, hw + 0.8], aspect: 0.18, bg: '#1e1b16', minH: 140,
+        draw: function (ctx, P) {
+          var a = P(0, -hw), b = P(len, hw);
+          ctx.fillStyle = '#a8a29e'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);            // 床
+          for (var z = 0; z < len; z += geo.segment) {                                             // 区画(36m)ごとの継ぎ目
+            var t = P(z, -hw), u = P(z, hw); ctx.strokeStyle = 'rgba(68,64,60,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(u[0], u[1]); ctx.stroke();
+          }
+          for (var w = 0; w < len; w += geo.windowChunk) {                                         // 窓側の壁(左)
+            var p1 = P(w + 1, -hw - 0.8), p2 = P(w + geo.windowChunk - 1, -hw);
+            ctx.fillStyle = '#7dd3fc'; ctx.fillRect(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1]);
+          }
+          var r1 = P(0, hw), r2 = P(len, hw + 0.8); ctx.fillStyle = '#78716c'; ctx.fillRect(r1[0], r1[1], r2[0] - r1[0], r2[1] - r1[1]);   // 教室側の壁(右)
+          ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
+          for (var i = 0; i < geo.lanes.length - 1; i++) { var m = (geo.lanes[i] + geo.lanes[i + 1]) / 2, q1 = P(0, m), q2 = P(len, m); ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke(); }
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#1c1917'; ctx.font = '700 11px system-ui';
+          for (var d = 100; d < len; d += 100) { var q = P(d, hw); ctx.fillText(d + 'm', q[0] + 2, q[1] - 3); }
+          var w1 = P(2, -hw - 0.8); ctx.fillStyle = '#e0f2fe'; ctx.fillText('窓', w1[0], w1[1] - 3);
+        },
+      };
+    }
+    if (gid === 'tower-stack') {
+      var top = Math.max(20, maxY + 4);
+      return {
+        range: [-geo.moveLimit - 2, geo.moveLimit + 2, geo.killY - 1, top], equal: true, flipY: true, bg: '#0c1a33', minH: 220,
+        draw: function (ctx, P, s) {
+          var a = P(-geo.platformHalfW, 0), b = P(geo.platformHalfW, -1);
+          ctx.fillStyle = '#7a5236'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);             // 土台
+          ctx.strokeStyle = 'rgba(148,163,184,.5)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 1;
+          [-geo.moveLimit, geo.moveLimit].forEach(function (x) { var p = P(x, geo.killY), q = P(x, top); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); });   // ブロックを動かせる範囲
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(226,232,240,.6)'; ctx.font = '700 11px system-ui';
+          for (var h = 5; h < top; h += 5) { var q = P(geo.moveLimit + 0.3, h); ctx.fillText(h + 'm', q[0], q[1] + 4); var l1 = P(-geo.moveLimit, h), l2 = P(geo.moveLimit, h); ctx.strokeStyle = 'rgba(148,163,184,.12)'; ctx.beginPath(); ctx.moveTo(l1[0], l1[1]); ctx.lineTo(l2[0], l2[1]); ctx.stroke(); }
+        },
+        legend: [['#7a5236', '土台'], ['#94a3b8', 'ブロックを動かせる範囲(点線)']],
+      };
+    }
+    if (gid === 'tani-runner-124') {
+      var end = geo.zones.length ? geo.zones[geo.zones.length - 1][1] : geo.wallDist + 50;
+      var half = geo.trackWidth / 2;
+      return {
+        range: [0, end, -half - 2, half + 2], aspect: 0.16, bg: '#14532d', minH: 130,
+        draw: function (ctx, P) {
+          var a = P(0, -half), b = P(geo.wallDist, half);
+          ctx.fillStyle = '#365314'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);             // 走るコース(黒板色)
+          var colors = ['#8b0000', '#b22222', '#c71585', '#d2691e', '#b8860b', '#006400', '#1e90ff', '#4b0082'];
+          geo.zones.forEach(function (z, i) {                                                     // 壁の先の倍率ゾーン
+            var p = P(z[0], -half - 2), q = P(z[1], half + 2);
+            ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(p[0], p[1], q[0] - p[0], q[1] - p[1]);
+            ctx.fillStyle = '#fff'; ctx.font = '700 10px system-ui'; ctx.fillText(z[2], p[0] + 2, (p[1] + q[1]) / 2 + 3);
+          });
+          var w1 = P(geo.wallDist, -half - 2), w2 = P(geo.wallDist, half + 2);
+          ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w1[0], w1[1]); ctx.lineTo(w2[0], w2[1]); ctx.stroke();
+          ctx.fillStyle = '#f8fafc'; ctx.font = '700 11px system-ui'; ctx.fillText('卒業要件の壁 ' + geo.wallDist + 'm', w1[0] - 120, w1[1] - 2);
+          ctx.fillStyle = 'rgba(255,255,255,.7)';
+          for (var d = 50; d < geo.wallDist; d += 50) { var q2 = P(d, half); ctx.fillText(d + 'm', q2[0] + 2, q2[1] + 12); }
+        },
+        legend: [['#365314', 'コース(ゲート・障害物は毎回ちがう)'], ['#f8fafc', '卒業要件の壁']],
+      };
+    }
+    return null;
+  }
+
+  function drawDeathMapCanvas(st) {
+    var spec = st.spec, r = spec.range;
+    var minX = r[0], maxX = r[1], minY = r[2], maxY = r[3];
+    st.deaths.forEach(function (d) { minX = Math.min(minX, d.x - 1); maxX = Math.max(maxX, d.x + 1); minY = Math.min(minY, d.y - 1); maxY = Math.max(maxY, d.y + 1); });
+    var cw = st.canvas.clientWidth || 800;
+    var ch = spec.equal ? cw * (maxY - minY) / (maxX - minX) : cw * (spec.aspect || 0.6);
+    ch = Math.max(spec.minH || 180, Math.min(620, ch));
+    st.canvas.style.height = Math.round(ch) + 'px';
+    var dpr = window.devicePixelRatio || 1;
+    st.canvas.width = Math.round(cw * dpr);
+    st.canvas.height = Math.round(ch * dpr);
+    var ctx = st.canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = spec.bg || '#0b1120';
+    ctx.fillRect(0, 0, cw, ch);
+    var pad = 10;
+    var sx = (cw - pad * 2) / (maxX - minX), sy = (ch - pad * 2) / (maxY - minY);
+    if (spec.equal) sx = sy = Math.min(sx, sy);
+    var ox = pad + ((cw - pad * 2) - (maxX - minX) * sx) / 2, oy = pad + ((ch - pad * 2) - (maxY - minY) * sy) / 2;
+    var P = function (x, y) { return [ox + (x - minX) * sx, spec.flipY ? oy + (maxY - y) * sy : oy + (y - minY) * sy]; };
+    ctx.save();
+    spec.draw(ctx, P, sx);
+    ctx.restore();
+    // 地点は赤いバツ(背景の赤いもの・暗い所でも見えるよう、黒い縁を付ける)
+    st.placed = [];
+    var cross = function (x, y, color, w) {
+      var k = 4.5;
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k); ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k); ctx.stroke();
+    };
+    st.deaths.forEach(function (d) {
+      var p = P(d.x, d.y);
+      cross(p[0], p[1], 'rgba(0,0,0,.75)', 4.2);
+      cross(p[0], p[1], '#ef4444', 2.2);
+      st.placed.push({ x: p[0], y: p[1], d: d });
+    });
+  }
+
+  /** 1つのマップ(ステージ・コース)の図。バツに合わせると、死因と日時が出る */
+  function createMapPanel(gid, mapId, geo, deaths) {
+    var spec = mapSpec(gid, mapId, geo, deaths);
+    if (!spec) return null;
+    // 横長のマップ(ステージ・廊下・コース)は、横いっぱいに広げる
+    var wideMap = (spec.range[1] - spec.range[0]) / (spec.range[3] - spec.range[2]) > 2.5;
+    var panel = el('div', { className: 'deathmap-panel' + (wideMap ? ' wide' : '') });
+    var title = mapTitle(gid, mapId, geo);
+    if (title) panel.appendChild(el('div', { className: 'deathmap-panel-head', text: title + ' — ' + deaths.length + '件' }));
+    var canvas = el('canvas');
+    panel.appendChild(canvas);
+    var st = { gid: gid, canvas: canvas, spec: spec, deaths: deaths, placed: [], legend: spec.legend };
+    var nearest = function (e) {
+      var r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, best = null, bd = 80;
+      st.placed.forEach(function (p) { var d = (p.x - mx) * (p.x - mx) + (p.y - my) * (p.y - my); if (d < bd) { bd = d; best = p.d; } });
+      return best;
+    };
+    canvas.addEventListener('mousemove', function (e) {
+      var d = nearest(e);
+      if (!d) { hideDeathHover(); return; }
+      showDeathHover(e, (d.cause || '不明') + ' / ' + new Date(d.at).toLocaleString('ja-JP') + (d.round ? ' / ' + d.round + 'ラウンド目' : '') + (d.t !== undefined ? ' / 開始から' + Math.round(d.t) + '秒' : ''));
+    });
+    canvas.addEventListener('mouseleave', hideDeathHover);
+    deathMapPanels.push(st);
+    return { el: panel, st: st };
+  }
+
+  /** 1つのゲームの死亡マップ(マップを全部並べる)。マップを持たないゲームは null */
+  function createGameDeathMaps(gid, sp) {
+    var maps = DEATH_MAP_GEOMETRY[gid];
+    if (!maps) return null;
+    var deaths = (sp && sp.deaths) || [];
+    var causeCount = {};
+    deaths.forEach(function (d) { var k = d.cause || '不明'; causeCount[k] = (causeCount[k] || 0) + 1; });
+    var causes = Object.keys(causeCount).sort(function (a, b) { return causeCount[b] - causeCount[a]; });
+    var card = el('div', { className: 'sub-card deathmap' });
+    var gMeta = GAME_META[gid] || { name: gid };
+    card.appendChild(el('h4', { text: gMeta.name + ' — ' + (POINT_LABEL[gid] || '死亡地点') + ' ' + deaths.length + '件' }));
+    // 死因ごとの件数(地点はどれも赤いバツ。死因は、バツに合わせると出る)
+    var legend = el('div', { className: 'deathmap-causes', text: causes.length === 0 ? 'まだ記録はありません' : causes.map(function (k) { return k + ' ' + causeCount[k] + '件'; }).join(' ・ ') });
+    card.appendChild(legend);
+    var grid = el('div', { className: 'deathmap-grid' });
+    // 死亡地点の多いマップから並べる(記録がなくても、マップは全部出す)
+    var ids = Object.keys(maps).sort(function (a, b) {
+      var na = deaths.filter(function (d) { return d.map === a; }).length, nb = deaths.filter(function (d) { return d.map === b; }).length;
+      return nb - na || (a < b ? -1 : 1);
+    });
+    var panels = [];
+    ids.forEach(function (id) {
+      var p = createMapPanel(gid, id, maps[id], deaths.filter(function (d) { return d.map === id; }));
+      if (p) { grid.appendChild(p.el); panels.push(p.st); }
+    });
+    card.appendChild(grid);
+    // 背景の見方(マップの描き方はゲームで共通なので、1回だけ出す)
+    var geoLegend = panels.length && panels[0].legend;
+    if (geoLegend) {
+      var lg = el('div', { className: 'deathmap-legend deathmap-geo-legend' });
+      geoLegend.forEach(function (x) { var it = el('span'), dot = el('i'); dot.style.background = x[0]; it.appendChild(dot); it.appendChild(document.createTextNode(x[1])); lg.appendChild(it); });
+      card.appendChild(lg);
+    }
+    return { card: card, panels: panels };
+  }
+
+  var deathMapPanels = [];
+  function redrawDeathMaps() { deathMapPanels.forEach(function (st) { if (st.canvas.isConnected) drawDeathMapCanvas(st); }); }
+  window.addEventListener('resize', function () { redrawDeathMaps(); });
+
+  // 個別ゲームの表示の中の死亡マップ(マップを持つゲームだけ)
+  function loadDeathMap(gid) {
+    var wrap = document.getElementById('game-deathmap-wrap');
+    if (!wrap) return;
+    wrap.textContent = '';
+    if (!hasDeathMap(gid)) return;
+    call('GET', '/admin/api/analytics/spatial?game=' + encodeURIComponent(gid)).then(function (sp) {
+      wrap.textContent = '';
+      var res = createGameDeathMaps(gid, sp);
+      if (!res) return;
+      wrap.appendChild(res.card);
+      res.panels.forEach(drawDeathMapCanvas);
+    }).catch(function () { wrap.textContent = ''; });
+  }
+
+  // 死亡マップのタブ: マップを持つゲームを全部、マップごとに並べる
+  function loadDeathMapTab() {
+    var wrap = document.getElementById('deathmap-tab-content');
+    if (!wrap) return;
+    wrap.textContent = '死亡マップを読み込み中...';
+    deathMapPanels = [];
+    hideDeathHover();
+    Promise.all(DEATHMAP_ORDER.filter(hasDeathMap).map(function (gid) {
+      return call('GET', '/admin/api/analytics/spatial?game=' + encodeURIComponent(gid))
+        .then(function (sp) { return { gid: gid, sp: sp }; })
+        .catch(function () { return { gid: gid, sp: { deaths: [] } }; });
+    })).then(function (list) {
+      wrap.textContent = '';
+      wrap.appendChild(el('div', { className: 'deathmap-tip', text: DEATHMAP_NOTE }));   // 見方の説明は、タブの上に1回だけ
+      var all = [];
+      list.forEach(function (x) {
+        var res = createGameDeathMaps(x.gid, x.sp);
+        if (!res) return;
+        wrap.appendChild(res.card);
+        all = all.concat(res.panels);
+      });
+      all.forEach(drawDeathMapCanvas);
+    }).catch(function (err) {
+      wrap.textContent = '死亡マップの読み込みに失敗しました: ' + (err.message || err);
+    });
+  }
+
+
+  /** リプレイのタブ: ランキングに載っているプレイのリプレイ(残すのはこれだけ)。表示対象のゲームで絞る */
+  function loadAllReplays() {
+    var wrap = document.getElementById('all-replays-wrap');
+    var hint = document.getElementById('replays-count-hint');
+    if (wrap) wrap.textContent = 'ランキングを読み込み中...';
+    return call('GET', '/admin/api/lb')
+      .then(function (res) {
+        var rows = [];
+        (res.boards || []).forEach(function (b) {
+          if (selectedGame !== 'all' && b.slug !== selectedGame) return;
+          b.entries.forEach(function (e) { if (e.replay && e.replay.id) rows.push({ b: b, e: e }); });
+        });
+        if (hint) hint.textContent = 'ランキングに載っている間だけ残します(' + rows.length + '件)';
+        wrap.textContent = '';
+        if (rows.length === 0) { wrap.appendChild(el('div', { className: 'empty', text: 'リプレイのあるランキングの記録はまだありません。' })); return; }
+        var tbl = el('table', { className: 'analytics-table' });
+        tbl.appendChild(el('thead', null, [el('tr', null, [
+          el('th', { text: '' }), el('th', { text: 'ゲーム' }), el('th', { text: '枠' }), el('th', { text: '順位' }),
+          el('th', { text: '名前' }), el('th', { text: 'スコア' }), el('th', { text: '日付' }),
+        ])]));
+        var tbody = el('tbody');
+        rows.forEach(function (x) {
+          var gname = (GAME_META[x.b.slug] && GAME_META[x.b.slug].name) || BOARD_TITLES[x.b.slug] || x.b.slug;
+          tbody.appendChild(el('tr', null, [
+            el('td', null, [replayButton(x.b.slug, x.e.replay.id, x.e.replay.seek)]),
+            el('td', { text: gname }),
+            el('td', { text: x.b.variantLabel || '-' }),
+            el('td', { className: 'num', text: x.e.rank + '位' }),
+            el('td', { text: x.e.name }),
+            el('td', { className: 'num', text: x.e.formattedScore }),
+            el('td', { text: x.e.date }),
+          ]));
+        });
+        tbl.appendChild(tbody);
+        wrap.appendChild(tbl);
+      })
+      .catch(function (err) {
+        if (wrap) showLoadError(wrap, 'ランキングのリプレイ', err);
+      });
   }
 
   function loadGamePlays(gid) {
@@ -1223,7 +1841,6 @@ export const ADMIN_JS = `
         ['総ゲームプレイ数', String(data.totalPlays), '回'],
         ['総プレイ時間', formatDuration(data.totalPlayTimeSec)],
         ['全体平均FPS', String(data.avgFpsOverall || 60), 'fps'],
-        ['平均APM', String(data.avgApmOverall || 0)],
         ['パッド利用率', String(Math.round(data.gamepadUserRate * 100)) + '%'],
         ['エラー発生件数', String(data.totalErrors || 0), '件', (data.totalErrors || 0) > 0 ? 'warn' : false],
       ]);
@@ -1238,12 +1855,11 @@ export const ADMIN_JS = `
           el('tr', null, [
             el('th', { text: 'ゲーム' }),
             el('th', { text: 'プレイ数' }),
-            el('th', { text: '食いつき度 (リピート/滞在)' }),
+            el('th', { text: '食いつき度 リピート・滞在' }),
             el('th', { text: 'クリア/完走率' }),
             el('th', { text: '平均時間' }),
             el('th', { text: 'ハイスコア' }),
             el('th', { text: '平均FPS' }),
-            el('th', { text: '平均APM' }),
             el('th', { text: 'エラー' }),
           ])
         ]));
@@ -1251,7 +1867,7 @@ export const ADMIN_JS = `
         allKeys.forEach(function (gid) {
           var g = data.games[gid];
           var name = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || TITLES[gid] || gid;
-          var clearText = g.completeCount + '回 (' + Math.round(g.clearRate * 100) + '%)';
+          var clearText = g.completeCount + '回 ' + Math.round(g.clearRate * 100) + '%';
           var bestText = g.bestScore !== undefined ? String(g.bestScore) : '-';
           var rep = g.repeatRate !== undefined ? Number(g.repeatRate.toFixed(1)) : 1;
           var engSec = g.engagementScore || g.avgPlayTimeSec || 0;
@@ -1259,7 +1875,7 @@ export const ADMIN_JS = `
           var badgeLabel = badgeType === 'hot' ? '超没入' : (badgeType === 'good' ? '好評' : '通常');
           var engCell = el('span', { className: 'engagement-badge ' + badgeType }, [
             el('span', { text: badgeLabel + ' ' }),
-            el('small', { text: '(' + rep + '回/人, ' + formatDuration(engSec) + ')' })
+            el('small', { text: rep + '回/人 ' + formatDuration(engSec) })
           ]);
           tbody.appendChild(el('tr', null, [
             el('td', { text: name }),
@@ -1269,7 +1885,6 @@ export const ADMIN_JS = `
             el('td', { text: formatDuration(g.avgPlayTimeSec) }),
             el('td', { className: 'num', text: bestText }),
             el('td', { className: 'num', text: g.avgFps ? String(g.avgFps) + 'fps' : '-' }),
-            el('td', { className: 'num', text: g.avgApm ? String(g.avgApm) : '-' }),
             el('td', { text: g.errorCount > 0 ? g.errorCount + '件' : '0' }),
           ]));
         });
@@ -1321,14 +1936,14 @@ export const ADMIN_JS = `
       setStats(document.getElementById('game-stats'), [
         ['総プレイ回数', String(g.launchCount), '回'],
         ['遊んだ人数', String(g.uniquePlayers || 1), '人'],
-        ['食いつき度 (リピート)', (g.repeatRate ? g.repeatRate.toFixed(1) : '1.0') + '回/人', (g.repeatRate >= 2.0 || (g.engagementScore || 0) >= 300) ? '超没入' : ((g.repeatRate >= 1.3 || (g.engagementScore || 0) >= 120) ? '好評' : '通常'), (g.repeatRate >= 1.3)],
+        ['食いつき度 リピート', (g.repeatRate ? g.repeatRate.toFixed(1) : '1.0') + '回/人', (g.repeatRate >= 2.0 || (g.engagementScore || 0) >= 300) ? '超没入' : ((g.repeatRate >= 1.3 || (g.engagementScore || 0) >= 120) ? '好評' : '通常'), (g.repeatRate >= 1.3)],
         ['1人あたり滞在時間', formatDuration(g.engagementScore || g.avgPlayTimeSec)],
-        ['完走/クリア率', String(Math.round(g.clearRate * 100)) + '%', '(' + g.completeCount + '回)', g.completeCount > 0],
+        ['完走/クリア率', String(Math.round(g.clearRate * 100)) + '%', g.completeCount + '回', g.completeCount > 0],
         ['1プレイ平均時間', formatDuration(g.avgPlayTimeSec)],
         ['ハイスコア', g.bestScore !== undefined ? String(g.bestScore) : '-', g.avgScore ? '平均 ' + Math.round(g.avgScore) : ''],
         ['平均FPS', g.avgFps ? String(g.avgFps) : '-', 'fps'],
-        ['最低FPS (1% Low)', g.minFps ? String(g.minFps) : '-', 'fps'],
-        ['平均APM', g.avgApm ? String(g.avgApm) : '-', ''],
+        ['最低FPS 1% Low', g.minFps ? String(g.minFps) : '-', 'fps'],
+        ['平均ロード時間', g.avgLoadMs ? (g.avgLoadMs / 1000).toFixed(1) : '-', '秒'],
         ['ゲームパッド利用', String(g.gamepadCount || 0), '回'],
         ['エラー発生件数', String(g.errorCount || 0), '件', (g.errorCount || 0) > 0 ? 'warn' : false],
       ]);
@@ -1341,6 +1956,14 @@ export const ADMIN_JS = `
           hasProg = true;
           renderShareList(gProg, '死因・ゲームオーバー要因', g.deathReasons);
         }
+        if (Object.keys(g.exitPhases || {}).length > 0) {
+          hasProg = true;
+          renderShareList(gProg, '離脱した場面', g.exitPhases);
+        }
+        if (Object.keys(g.exitReasons || {}).length > 0) {
+          hasProg = true;
+          renderShareList(gProg, '閉じた理由', g.exitReasons);
+        }
         if (Object.keys(g.vehicles || {}).length > 0) {
           hasProg = true;
           renderShareList(gProg, '選択車両ランキング', g.vehicles);
@@ -1351,7 +1974,7 @@ export const ADMIN_JS = `
         }
         if (Object.keys(g.maxStages || {}).length > 0) {
           hasProg = true;
-          renderShareList(gProg, '到達ステージ / WAVE 分布', g.maxStages);
+          renderShareList(gProg, '到達ステージ・WAVE分布', g.maxStages);
         }
         if (Object.keys(g.difficulties || {}).length > 0) {
           hasProg = true;
@@ -1363,13 +1986,14 @@ export const ADMIN_JS = `
         }
         if (!hasProg) {
           var emptyCard = el('div', { className: 'sub-card' });
-          emptyCard.appendChild(el('div', { className: 'empty', text: 'このゲームの固有データ（死因・キャラ・車両等）はまだ記録されていません。' }));
+          emptyCard.appendChild(el('div', { className: 'empty', text: 'このゲームの固有データ 死因・キャラ・車両等はまだ記録されていません。' }));
           gProg.appendChild(emptyCard);
         }
       }
 
       // 個別プレイ履歴の読み込み
       loadGamePlays(selectedGame);
+      loadDeathMap(selectedGame);
     }
 
     // 2. ハードウェアタブ (全体)
@@ -1380,11 +2004,10 @@ export const ADMIN_JS = `
     ]);
     var hwDetails = document.getElementById('hardware-details');
     hwDetails.textContent = '';
-    renderShareList(hwDetails, 'GPU レンダラー (グラフィックチップ)', data.hardware.gpuRenderers);
+    renderShareList(hwDetails, 'GPU レンダラー グラフィックチップ', data.hardware.gpuRenderers);
     renderShareList(hwDetails, 'GPU ベンダー', data.hardware.gpuVendors);
-    renderShareList(hwDetails, 'オペレーティングシステム (OS)', data.hardware.os);
+    renderShareList(hwDetails, 'オペレーティングシステム OS', data.hardware.os);
     renderShareList(hwDetails, 'ブラウザ', data.hardware.browsers);
-    renderShareList(hwDetails, 'ネットワーク回線種別', data.hardware.networkTypes);
     renderShareList(hwDetails, '画面解像度', data.hardware.screenResolutions);
 
     // 3. パフォーマンスタブ
@@ -1397,7 +2020,7 @@ export const ADMIN_JS = `
       var gameG = data.games[selectedGame];
       setStats(document.getElementById('performance-stats'), [
         ['平均FPS', gameG && gameG.avgFps ? String(gameG.avgFps) : '-', 'fps'],
-        ['最低FPS (1% Low)', gameG && gameG.minFps ? String(gameG.minFps) : '-', 'fps'],
+        ['最低FPS 1% Low', gameG && gameG.minFps ? String(gameG.minFps) : '-', 'fps'],
         ['エラー発生件数', String((gameG && gameG.errorCount) || 0), '件', ((gameG && gameG.errorCount) || 0) > 0 ? 'warn' : false],
       ]);
     }
@@ -1409,7 +2032,7 @@ export const ADMIN_JS = `
       el('tr', null, [
         el('th', { text: 'ゲーム' }),
         el('th', { text: '平均FPS' }),
-        el('th', { text: '最低FPS (1% Low)' }),
+        el('th', { text: '最低FPS 1% Low' }),
         el('th', { text: 'エラー発生数' }),
       ])
     ]));
@@ -1438,34 +2061,12 @@ export const ADMIN_JS = `
       progDetails.appendChild(el('div', { className: 'empty', text: '対象の進行・死因データはありません。' }));
     }
 
-    // 5. 操作＆APMタブ
-    if (selectedGame === 'all') {
-      setStats(document.getElementById('input-stats'), [
-        ['全体平均APM', String(data.avgApmOverall || 0)],
-        ['ゲームパッド利用率', String(Math.round(data.gamepadUserRate * 100)) + '%'],
-      ]);
-    } else {
-      var gObj = data.games[selectedGame];
-      setStats(document.getElementById('input-stats'), [
-        ['平均APM', gObj && gObj.avgApm ? String(gObj.avgApm) : '-'],
-        ['ゲームパッド利用', String((gObj && gObj.gamepadCount) || 0), '回'],
-      ]);
-    }
-    var inputDetails = document.getElementById('input-details');
-    inputDetails.textContent = '';
-    var apmMap = {};
-    activeKeys.forEach(function (gid) {
-      var g = data.games[gid];
-      var name = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || gid;
-      if (g.avgApm) apmMap[name] = g.avgApm;
-    });
-    renderShareList(inputDetails, 'ゲーム別 平均APM (操作の激しさ)', apmMap);
   }
 
   function showLoadError(box, label, err) {
     if (!box) return;
     box.textContent = '';
-    box.appendChild(el('div', { className: 'empty load-error', text: label + 'を読み込めませんでした (' + (err && err.message ? err.message : err) + ')。再読み込みを押してください。' }));
+    box.appendChild(el('div', { className: 'empty load-error', text: label + 'を読み込めませんでした。' + (err && err.message ? err.message : err) + ' 再読み込みを押してください。' }));
   }
 
   function loadAnalytics() {
@@ -1499,7 +2100,7 @@ export const ADMIN_JS = `
         wrap.appendChild(el('div', { className: 'empty', text: '対象のイベントログはまだありません。' }));
         return;
       }
-      wrap.appendChild(el('div', { className: 'raw-log-note', text: '新しい順に直近' + events.length + '件(全' + (res.count || events.length) + '件中)' }));
+      wrap.appendChild(el('div', { className: 'raw-log-note', text: '新しい順に直近' + events.length + '件 全' + (res.count || events.length) + '件中' }));
       var tbl = el('table', { className: 'raw-log-table' });
       tbl.appendChild(el('thead', null, [
         el('tr', null, [el('th', { text: '時刻' }), el('th', { text: '種別' }), el('th', { text: 'ゲーム' }), el('th', { text: 'データ' })])
@@ -1562,11 +2163,12 @@ export const ADMIN_JS = `
     } else if (e.dev) {
       kids.push(el('span', { className: 'mark dev', text: '開発者' }));
     }
-    if (e.origName) kids.push(el('span', { className: 'meta orig', text: '（元: ' + e.origName + '）' }));
+    if (e.origName) kids.push(el('span', { className: 'meta orig', text: '元: ' + e.origName }));
     if (e.extra) kids.push(el('span', { className: 'meta', text: e.extra }));
     kids.push(el('span', { className: 'meta', text: e.date + (e.hasGhost ? ' ゴースト有' : '') }));
 
     var acts = el('span', { className: 'acts' });
+    if (e.replay && e.replay.id) acts.appendChild(replayButton(b.slug, e.replay.id, e.replay.seek));
     var hasRole = !!(e.role || e.dev);
 
     var formOpen = false;
@@ -1587,7 +2189,7 @@ export const ADMIN_JS = `
 
     var delBtn = el('button', { className: 'danger', text: '削除' });
     delBtn.addEventListener('click', function () {
-      if (window.confirm(boardTitle(b) + ' の ' + e.rank + '位 (' + e.name + ' ' + e.formattedScore + ') を削除します。よろしいですか？')) {
+      if (window.confirm(boardTitle(b) + ' の ' + e.rank + '位 ' + e.name + ' ' + e.formattedScore + ' を削除します。よろしいですか？')) {
         actBoards('/admin/api/lb-remove?board=' + encodeURIComponent(b.board) + '&rank=' + e.rank);
       }
     });
@@ -1613,7 +2215,7 @@ export const ADMIN_JS = `
 
       var nameInput = el('input', {
         type: 'text',
-        placeholder: '好きな名前 (漢字カタカナひらがな英数 1〜10文字)',
+        placeholder: '好きな名前 漢字カタカナひらがな英数 1〜10文字',
         maxLength: 10,
         value: defaultName,
       });
@@ -1626,7 +2228,7 @@ export const ADMIN_JS = `
       var saveBtn = el('button', { className: 'primary', text: '決定' });
       var cancelBtn = el('button', { className: 'ghost', text: 'キャンセル' });
       var errEl = el('div', { className: 'form-error' });
-      var hintEl = el('div', { className: 'form-hint', text: '※ランキングでは「好きな名前（ロール）」で表示されます。漢字・カタカナ・ひらがな・英数が使えます。' });
+      var hintEl = el('div', { className: 'form-hint', text: '※ランキングでは「好きな名前 ロール」で表示されます。漢字・カタカナ・ひらがな・英数が使えます。' });
 
       function validate() {
         var v = nameInput.value.trim();
@@ -1686,7 +2288,7 @@ export const ADMIN_JS = `
     if (b.entries.length > 0) {
       var clear = el('button', { className: 'danger clear', text: 'このボードの記録をすべて消す' });
       clear.addEventListener('click', function () {
-        if (window.confirm(boardTitle(b) + ' の記録 ' + b.entries.length + ' 件をすべて消します(ゴーストも消えます)。よろしいですか？')) {
+        if (window.confirm(boardTitle(b) + ' の記録 ' + b.entries.length + ' 件をすべて消します ゴーストも消えます。よろしいですか？')) {
           actBoards('/admin/api/lb-clear?board=' + encodeURIComponent(b.board));
         }
       });
@@ -1734,6 +2336,14 @@ export const ADMIN_JS = `
     loadAnalytics();
     loadRawLogs();
     loadErrors();
+    var replaysTab = document.getElementById('tab-replays');
+    if (replaysTab && replaysTab.classList.contains('active')) {
+      loadAllReplays();
+    }
+    var deathMapTab = document.getElementById('tab-deathmap');
+    if (deathMapTab && deathMapTab.classList.contains('active')) {
+      loadDeathMapTab();
+    }
   });
 
   // ゲームフィルターの変更イベント
@@ -1745,6 +2355,14 @@ export const ADMIN_JS = `
       if (cachedAnalyticsData) renderAnalytics(cachedAnalyticsData);
       loadRawLogs();
       loadErrors();
+      var replaysTab = document.getElementById('tab-replays');
+      if (replaysTab && replaysTab.classList.contains('active')) {
+        loadAllReplays();
+      }
+      var deathMapTab = document.getElementById('tab-deathmap');
+      if (deathMapTab && deathMapTab.classList.contains('active')) {
+        loadDeathMapTab();
+      }
     });
   }
 
@@ -1793,6 +2411,10 @@ export const ADMIN_JS = `
     loadAnalytics();
     loadRawLogs();
     loadErrors();
+    var replaysTab = document.getElementById('tab-replays');
+    if (replaysTab && replaysTab.classList.contains('active')) {
+      loadAllReplays();
+    }
   }, 30000);
 })();
 `;

@@ -6,6 +6,7 @@
  */
 
 import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 export type BgmTrack = 'menu' | 'battle';
 
@@ -129,7 +130,7 @@ export class SumoBgm {
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     src.connect(f).connect(g).connect(this.out);
-    src.start(t, Math.random() * 0.5);
+    src.start(t, audioRandom() * 0.5);
     src.stop(t + dur + 0.02);
   }
 

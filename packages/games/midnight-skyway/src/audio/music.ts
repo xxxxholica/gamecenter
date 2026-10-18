@@ -1,6 +1,7 @@
 // BGM: public/bgm の音源ファイルをストリーミング再生する。曲が終わるとプールの中から別の曲をランダムに選んで続ける
 // (同じ曲は連続させない)。走行中は速度・ブースト・コースの進み具合に合わせて、音のこもり・きらめき・音量が変わる。
 import type { AudioEngine } from './engine';
+import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
 interface Track {
   id: string;
@@ -57,12 +58,12 @@ export class Bgm {
       // フィッシャー・イェーツ シャッフルで完全ランダム順序を生成
       const shuffled = [...candidates];
       for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(audioRandom() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
       // 直前に流れた曲と同じ曲が先頭になった場合は別の曲と入れ替え
       if (shuffled.length > 1 && shuffled[0].id === this.lastId) {
-        const swapIdx = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+        const swapIdx = 1 + Math.floor(audioRandom() * (shuffled.length - 1));
         [shuffled[0], shuffled[swapIdx]] = [shuffled[swapIdx], shuffled[0]];
       }
       queue = shuffled;

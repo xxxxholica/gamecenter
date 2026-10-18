@@ -1,3 +1,5 @@
+import { realNow, replayBarrier, untrackedCancelFrame, untrackedFrame, untrackedRandom, untrackedTimeout } from '../../../../shared/arcadeReplay';
+
 const STOPS: ReadonlyArray<readonly [number, readonly [number, number, number]]> = [
   [0, [0, 240, 255]], [0.45, [255, 204, 0]], [0.8, [255, 0, 85]], [1, [255, 0, 85]],
 ];
@@ -72,9 +74,10 @@ export class StageLoadingScreen {
     this.container.style.display = 'flex';
     this.isVisible = true;
     this.paint(0);
-    this.lastTick = performance.now();
-    cancelAnimationFrame(this.raf);
-    this.raf = requestAnimationFrame(this.tick);
+    // メーターは見た目と音だけに効くので、本当の時刻・追わないフレームで動かす(目標は読み込みの進み次第で、記録と再生とで変わるため)
+    this.lastTick = realNow();
+    untrackedCancelFrame(this.raf);
+    this.raf = untrackedFrame(this.tick);
   }
 
   /** メーターの値(0〜1)を、数字・バー・色・揺れに反映する */
@@ -102,11 +105,11 @@ export class StageLoadingScreen {
     if (!this.container.classList.contains('leaving')) {
       const k = Math.max(0, this.shown - 0.3) / 0.7;
       const amp = k * k * 6;
-      this.wrapEl.style.transform = amp > 0.05 ? `translate(${((Math.random() - 0.5) * amp).toFixed(2)}px, ${((Math.random() - 0.5) * amp).toFixed(2)}px)` : '';
+      this.wrapEl.style.transform = amp > 0.05 ? `translate(${((untrackedRandom() - 0.5) * amp).toFixed(2)}px, ${((untrackedRandom() - 0.5) * amp).toFixed(2)}px)` : '';
     } else {
       this.wrapEl.style.transform = '';
     }
-    this.raf = requestAnimationFrame(this.tick);
+    this.raf = untrackedFrame(this.tick);
   };
 
   public updateProgress(loaded: number, total: number): void {
@@ -117,8 +120,15 @@ export class StageLoadingScreen {
   /** メーターを振り切るまで上げ(読み込みが速くても、最後までなめらかに)、カードをしまう。画面は閉じない(発進演出のあとで hide する)。 */
   public async finish(): Promise<void> {
     this.target = 1;
-    const t0 = performance.now();
-    while (this.shown < 0.995 && performance.now() - t0 < 3000) await new Promise((resolve) => setTimeout(resolve, 30));
+    // 振り切るまで待つ(メーターは本当の時刻で動くので、操作のリプレイでは、記録と同じ所で振り切ったことにする)
+    await replayBarrier('loading-meter', new Promise<void>((resolve) => {
+      const t0 = realNow();
+      const poll = (): void => {
+        if (this.shown >= 0.995 || realNow() - t0 >= 3000) resolve();
+        else untrackedTimeout(poll, 30);
+      };
+      poll();
+    }));
     await new Promise((resolve) => setTimeout(resolve, 320));        // 振り切ったまま、ひと呼吸
     this.container.classList.add('leaving');
     await new Promise((resolve) => setTimeout(resolve, 220));
@@ -137,7 +147,7 @@ export class StageLoadingScreen {
     void el.offsetWidth;                                   // 初期状態(透明)を確定させてから、不透明へ
     el.style.opacity = '1';
     // 何かで明転されなかった時に、画面が暗いまま残らないようにする
-    window.setTimeout(() => { if (this.fadeEl === el) this.reveal(400); }, 10000);
+    untrackedTimeout(() => { if (this.fadeEl === el) this.reveal(400); }, 10000);
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -149,7 +159,7 @@ export class StageLoadingScreen {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       el.style.transition = `opacity ${ms}ms ease-out`;
       el.style.opacity = '0';
-      window.setTimeout(() => el.remove(), ms + 80);
+      untrackedTimeout(() => el.remove(), ms + 80);
     }));
   }
 
@@ -157,7 +167,7 @@ export class StageLoadingScreen {
     const wasVisible = this.isVisible;
     this.container.style.display = 'none';
     this.isVisible = false;
-    cancelAnimationFrame(this.raf);
+    untrackedCancelFrame(this.raf);
     this.onLevel?.(0);
     if (wasVisible) this.onHide?.();
   }

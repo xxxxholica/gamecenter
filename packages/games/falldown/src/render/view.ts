@@ -318,7 +318,14 @@ export class View {
     this.particles = new Particles(this.scene);
 
     // ---- ポストエフェクト ----
-    this.composer = new EffectComposer(r);
+    // 3D の場面は、後処理の描画先に描く。その描画先に MSAA(4 倍)をかける(EffectComposer の既定の描画先は MSAA なしなので、
+    // レンダラーの antialias は、3D の場面の輪郭には効いていなかった)。等倍の画面だけ(高解像度の画面では、ギザギザが目立たず負荷だけ増える)。
+    // 計測(Windows・NVIDIA、1920x1080 @1x): MSAA なしでは GPU の仕事が軽く、省電力でクロックが最低(300MHz 台)まで下がり、
+    // メモリのクロックも下がっては戻るのを繰り返して、60 秒に 10〜30 回 33ms 以上のフレームが出ていた(8 場面中 5 場面が不合格)。
+    // MSAA をかけると、クロックは 540MHz 前後、メモリのクロックはほぼ一定になり、8 場面すべて合格(GPU の消費電力は約 2W 増)
+    const samples = window.devicePixelRatio < 1.5 ? 4 : 0;
+    const pr = r.getPixelRatio();
+    this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(window.innerWidth * pr, window.innerHeight * pr, { type: THREE.HalfFloatType, samples }));
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.45, 0.9);
     this.composer.addPass(this.bloom);

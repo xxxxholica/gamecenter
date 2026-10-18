@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { AutoPilot } from './core/AutoPilot';
 import { GarageScene } from './core/GarageScene';
@@ -26,7 +27,8 @@ import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
+import { replayBarrier } from '../../../shared/arcadeReplay';
 import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
@@ -166,12 +168,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Preload GLTF binary models before scene initialization
-  await preloadGlbCars();
+  await replayBarrier('boot-load', preloadGlbCars());   // (操作のリプレイ: 読み込みが終わった所を、記録と揃える)
+
+  // 起動の各段階(ガレージ・車・走行シーン・マップ・シェーダ準備)を続けて行うと、1 回で 1 秒以上画面が止まる
+  // (Firefox: 約1.2秒。Windows の Chrome: ガレージ〜マップ作りまでの 1 回だけで 0.8〜1.35 秒)。
+  // 段階の間で1フレーム譲り、1回の止まりを短くする(ページが裏にあって rAF が来なくても、少し待てば進める)
+  const yieldFrame = () => new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); setTimeout(resolve, 100); });
 
   // ==========================================
   // 1. Initialize Garage Scene
   // ==========================================
   const garage = new GarageScene(container);
+  await yieldFrame();
 
   // Car Models (3 Dragon Cars)
   const carModels: Record<CarType, CarBase> = {
@@ -179,6 +187,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     dragon_b: new DragonCarModel('b'),
     dragon_c: new DragonCarModel('c'),
   };
+  await yieldFrame();
 
   let currentCar: CarBase = carModels.dragon_a;
   garage.turntableGroup.add(currentCar.group);
@@ -209,6 +218,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 2. Initialize Drive Scene & Maps
   // ==========================================
   const driveScene = new DriveScene(garage.renderer);
+  await yieldFrame();
 
   // Map registry
   const mapFactories: Record<string, () => MapBase> = {
@@ -225,17 +235,15 @@ window.addEventListener('DOMContentLoaded', async () => {
   const bootMapId = currentMapId;   // 起動時に作っておくマップ(通常は東京。ベンチでは指定のステージ)
   let currentMapInstance: MapBase = mapFactories[currentMapId]();
   let bootMapUnused = true;
+  await yieldFrame();
   driveScene.loadMap(currentMapInstance, false);
   driveScene.setTimeOfDay(currentTimeOfDay);
-  // マップ作り・走行シーンのシェーダ準備・ガレージのシェーダ準備を続けて行うと、合わせて約1.2秒画面が止まる(Firefox)。
-  // 段階の間で1フレーム譲り、1回の止まりを短くする(ページが裏にあって rAF が来なくても、少し待てば進める)
-  const yieldFrame = () => new Promise<void>((resolve) => { requestAnimationFrame(() => resolve()); setTimeout(resolve, 100); });
   await yieldFrame();
-  driveScene.warmup(Object.values(carModels));
+  await driveScene.warmupAsync(Object.values(carModels));   // シェーダは並列にコンパイルし終えてから描く(リンクの完了待ちで止まらない)
   for (const car of Object.values(carModels)) driveScene.clearPaintEnvironment(car);   // ガレージ側の環境マップに戻す
   garage.renderer.clear();   // 準備の描画(全車種を原点に重ねた走行シーン)が、譲ったフレームで画面に出ないように消す
   await yieldFrame();
-  garage.warmup();
+  await garage.warmup();
 
   // ==========================================
   // 3. Initialize Time Attack Manager
@@ -307,6 +315,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       maxStage: currentMapId,
       extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay },
     });
+    reportRoundStart({ map: currentMapId, car: currentCar.specs.name, timeOfDay: currentTimeOfDay, mode: online ? 'オンライン' : 'ひとり' });
     syncBestTimeDisplay();
     if (online) return;                                      // オンライン: 全員のロードが揃って go が来てから始める
     timeAttack.startCountdown();
@@ -374,7 +383,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       vehicle: currentCar.specs.name,
       mode: online ? 'オンライン' : 'ひとり',
       maxStage: currentMapId,
-      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay, totalTimeMs: Math.round(result.totalTimeMs) },
+      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay, totalTimeMs: Math.round(result.totalTimeMs), sectorMs: result.sectors.map((x) => Math.round(x.timeMs)) },
     });
     raceDirector.onGoal(result);
     if (online && !online.disconnected && !result.timedOut) {
@@ -775,6 +784,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     const colors = new Map<number, number>(online.players.map((p) => [p.id, p.car.body]));
     onlineHUD.showResults(m.entries, online.you, m.done, colors, m.endsInMs);
+    if (m.done) {
+      const mine = m.entries.findIndex((e) => e.id === online!.you);
+      reportDeepAnalytics('online_results', { rank: mine + 1, players: m.entries.length, timeMs: m.entries[mine]?.timeMs ?? null, finished: m.entries.filter((e) => e.timeMs !== null).length });
+    }
   });
 
   net.onClose((code) => {
@@ -994,10 +1007,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       try {
         if (currentMapInstance.loadOpenData) {
-          await Promise.race([
+          // (読み込みが終わる時刻は端末・ネットワーク次第なので、操作のリプレイでは記録と同じ所で終わったことにする)
+          await replayBarrier('stage-load', Promise.race([
             currentMapInstance.loadOpenData(),
             new Promise((resolve) => setTimeout(resolve, 15000)),
-          ]);
+          ]));
         }
       } catch (err) {
         console.warn('Map open data load error:', err);
@@ -1027,7 +1041,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (isPreviewMode) { hudContainer.style.display = 'none'; previewPilot = null; }
       const raceGuide = guideRace(true);                 // 明転に合わせてフェードインさせる(それまでは見えない)
       restartRace();
-      driveScene.warmup();                             // 暗転中に、時間帯・マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)
+      await driveScene.warmupAsync();                  // 暗転中に、時間帯・マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)。並列にコンパイルし終えてから描く
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
       stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)

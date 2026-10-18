@@ -406,6 +406,9 @@ const GradeShader = {
   `,
 };
 
+// warmup の描画の前に、シェーダを並列にコンパイルし終えておく(ennichi-shateki と共通。packages/shared/shaderCompile.ts)
+export { compileInParallel } from '../../../../shared/shaderCompile';
+
 export class PostFX {
   public enabled = true;
   private readonly composer: EffectComposer;
@@ -522,6 +525,11 @@ export class PostFX {
     this.bloom.radius = p.bloomRadius + this.rain * 0.15;
     this.bloom.threshold = p.bloomThreshold - this.rain * 0.05;
     this.bloom.enabled = this.bloom.strength >= 0.1;
+  }
+
+  /** シーンを描く先(RenderPass が描く、後処理の入力)。シェーダを事前にコンパイルするとき、この描画先を設定しておく(画面に描く設定とはシェーダが違う) */
+  public get sceneTarget(): THREE.WebGLRenderTarget | null {
+    return this.enabled ? this.composer.readBuffer : null;
   }
 
   /** 1フレーム描画する。画面サイズや解像度が変わっていたら、描画先も合わせる。 */

@@ -1,12 +1,13 @@
 // グラグラタワー (TOWER STACK)
 // 落ちてくるブロックを物理演算で積み上げ、できるだけ高いタワーを目指すゲーム。
 // 描画: Three.js (透視カメラ・影つきの3D表示) / 物理: cannon-es (Z方向を固定して2Dとして使う)
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { BestMarker } from './bestMarker';
 import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
@@ -1850,6 +1851,15 @@ function stopPlaying(title: string, sub: string): void {
 function onOnlineResults(entries: ResultEntry[]): void {
   if (!match) return;
   match.results = entries;
+  const rank = entries.findIndex((e) => e.id === onlineYou) + 1;
+  reportDeepAnalytics('progression_update', {
+    result: rank === 1 ? 'clear' : 'gameover',
+    ...(rank === 1 ? {} : { deathReason: 'オンライン対戦で敗北' }),
+    mode: 'オンライン',
+    maxStage: `${Math.floor(bestHeight)}m`,
+    score: score(),
+    extraStats: { rank, players: entries.length, bestHeightM: Math.round(bestHeight * 10) / 10, blocksPlaced: placed, drops },
+  });
   if (state === 'playing') {
     if (entries[0]?.id === onlineYou) stopPlaying('WIN', '最後まで残った');
     else stopPlaying('試合終了', '');
@@ -2102,6 +2112,7 @@ function startGame(): void {
   state = 'playing';
   stateTime = 0;
   soloCountdown = mode === 'solo' && !isPreview ? SOLO_COUNTDOWN : 0;
+  if (!isPreview) reportRoundStart({ mode: mode === 'online' ? 'オンライン' : 'ひとり' });
   soloGo = 0;
   soloCountSec = 0;
   if (!isPreview) {
@@ -2141,7 +2152,9 @@ function gameOver(): void {
   reportDeepAnalytics('progression_update', {
     result: 'gameover',
     deathReason: 'ブロックの落下が上限',
+    mode: 'ひとり',
     maxStage: `${Math.floor(bestHeight)}m`,
+    score: s,
     itemsCollected: itemsGained,
     extraStats: { bestHeightM: Math.round(bestHeight * 10) / 10, blocksPlaced: placed, drops, itemsUsed: itemsUsedByKind },
   });
@@ -2280,6 +2293,8 @@ function updatePlaying(dt: number, inp: Input): void {
       }
       if (counts) {
         drops++;
+        // 死亡地点マップ: どの横位置から、タワーがどの高さの時に落ちたか(タイトルの背景のデモは除く)
+        if (!demoActive && state === 'playing') reportDeathPoint('tower', p.x, currentHeight, `${drops}個目`);
         shake = 0.35;
         boom();
         if (drops >= MAX_DROPS) {

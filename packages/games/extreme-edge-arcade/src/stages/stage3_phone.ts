@@ -175,6 +175,24 @@ export class Stage3Phone implements Stage {
     this.stageGroup.add(this.cableGroup);
     this.updateCablePosition();
     this.drawScreen(1.0, false);
+    this.warmChargingGlyphs();
+  }
+
+  // 充電成功の画面でだけ使う文字(⚡ と日本語)のフォント探しを、読み込みのうちに済ませておく(描画はしない)。
+  // Windows の Chrome では ⚡ を初めて fillText すると絵文字フォントを探して約 21ms かかり、
+  // 差し込んだ瞬間のフレームが 33ms になっていた(第2種目 成功: 5.3 秒の場面で 1%low 45)
+  private warmChargingGlyphs() {
+    const ctx = this.screenCtx;
+    ctx.save();
+    for (const [font, text] of [
+      ['bold 32px Impact, sans-serif', '⚡挿入時の残量'],
+      ['bold 64px Impact, Arial Black, sans-serif', '充電成功'],
+      ['bold 76px Impact, Arial Black, sans-serif', '0123456789.%'],
+    ]) {
+      ctx.font = font;
+      ctx.measureText(text);
+    }
+    ctx.restore();
   }
 
   start() {

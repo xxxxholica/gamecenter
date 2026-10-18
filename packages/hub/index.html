@@ -581,6 +581,20 @@
       /* 背景(方眼メモ帳)の色に合わせた帯。通り過ぎる所の絵を、背景の色で消していく */
       background: linear-gradient(to bottom, rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 70%, rgba(250, 249, 246, 0.98) 100%);
     }
+    /* ページの最下部(全要素のあと)。中身が短くても画面の下端に置く */
+    .hub-gpu {
+      position: relative;
+      z-index: 1;
+      margin-top: auto;
+      margin-bottom: -48px;
+      padding-top: 44px;
+      font: 11px/1.3 ui-monospace, Consolas, monospace;
+      color: #64748b;
+      text-align: center;
+    }
+    .hub-gpu.warn {
+      color: #b91c1c;
+    }
     .hub-sweep.run {
       animation: hubSweep 0.85s cubic-bezier(0.4, 0, 0.2, 1);
     }

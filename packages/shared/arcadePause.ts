@@ -6,6 +6,7 @@ import { PadEdge, startPadLoop } from './arcadePad';
 import { applyResultMenuFocus, setupResultMenu, type ResultMenuItem } from './arcadeResultMenu';
 import { returnToHub } from './homeReturn';
 import { getArcadeGuideOptions, mountArcadeGuide, type ArcadeGuideOptions } from './arcadeGuide';
+import { reportDeepAnalytics } from './arcadeAnalytics';
 
 export interface ArcadePauseOptions {
   /** 見出しの下線と、「再開」の選択色 */
@@ -77,8 +78,8 @@ export class ArcadePause {
       this.enabled.push(!!run);
     };
     add('再開', opts.accent, () => this.close());
-    add('やり直す', '#7bdff2', opts.onRestart ? () => { this.close(); opts.onRestart!(); } : null);
-    add(opts.exitLabel ?? 'ゲームを終了', '#ff8fa3', () => { this.close(); (opts.onExit ?? returnToHub)(); });
+    add('やり直す', '#7bdff2', opts.onRestart ? () => { this.close('restart'); opts.onRestart!(); } : null);
+    add(opts.exitLabel ?? 'ゲームを終了', '#ff8fa3', () => { this.close('exit'); (opts.onExit ?? returnToHub)(); });
     setupResultMenu(menu, this.items);
 
     // 捕まえる側(capture)で受け、開いている間は、押す操作(keydown)だけをゲーム側に渡さない。
@@ -137,12 +138,14 @@ export class ArcadePause {
       else if (p.any(0)) this.actions[this.focus]();
       else if (p.any(1)) this.close();
     });
+    reportDeepAnalytics('pause', { action: 'open' });
     this.opts.onOpen?.();
   }
 
-  /** ポーズを閉じる(再開) */
-  close(): void {
+  /** ポーズを閉じる(再開)。action はアナリティクス用: どのボタンで閉じたか */
+  close(action: 'resume' | 'restart' | 'exit' = 'resume'): void {
     if (!this.open_) return;
+    reportDeepAnalytics('pause', { action });
     this.open_ = false;
     this.root.classList.remove('ap-open');
     this.stopPad?.();

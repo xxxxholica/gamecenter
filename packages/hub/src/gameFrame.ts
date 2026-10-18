@@ -8,6 +8,7 @@ import {
   GAME_ANALYTICS_MESSAGE,
   applyDeepAnalytics,
   attachGameInputSource,
+  sendAnalyticsEvent,
   trackGameClose,
   trackGameLaunch,
 } from '../../shared/arcadeAnalytics';
@@ -26,6 +27,9 @@ export function initFramedHub(): void {
 let frame: HTMLIFrameElement | null = null;
 let onClosed: (() => void) | null = null;
 let activeGameId: string | undefined = undefined;
+/** ハブが表示された(開いた・ゲームから戻った)時刻。ゲームを選ぶまでに何秒見ていたかに使う */
+let hubShownAt = Date.now();
+let gamesOpened = 0;
 
 export function isGameFrameOpen(): boolean {
   return frame !== null;
@@ -44,7 +48,8 @@ export function openGameFrame(url: string, closed: () => void, gameId?: string):
   activeGameId = gameId;
   onClosed = closed;
   if (gameId) {
-    trackGameLaunch(gameId, undefined, undefined, false);
+    gamesOpened++;
+    trackGameLaunch(gameId, undefined, undefined, false, { hubBrowseSec: Math.round((Date.now() - hubShownAt) / 100) / 10, nthGame: gamesOpened });
   }
   const el = document.createElement('iframe');
   el.src = url;
@@ -67,6 +72,7 @@ export function closeGameFrame(): void {
   activeGameId = undefined;
   frame.remove();
   frame = null;
+  hubShownAt = Date.now();
   window.focus();
   const cb = onClosed;
   onClosed = null;
@@ -74,8 +80,10 @@ export function closeGameFrame(): void {
 }
 
 // ゲームを開いたままハブごとページを離れた場合も、終了(プレイ時間・FPSなど)を送る
+// ハブの画面のままページを離れた場合は、ハブを最後に見てからの秒数と、開いたゲームの数を送る
 window.addEventListener('pagehide', () => {
-  if (frame) trackGameClose(activeGameId, { unload: true });
+  if (frame) trackGameClose(activeGameId, { unload: true, reason: 'browser_close' });
+  else if (!isFramedHub) void sendAnalyticsEvent('hub_leave', { beacon: true, data: { hubSec: Math.round((Date.now() - hubShownAt) / 100) / 10, gamesOpened } });
 });
 
 /** iframeのゲームからのメッセージ(閉じる・全画面切り替え)を受ける。 */

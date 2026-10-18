@@ -1,4 +1,5 @@
 import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+import { audioRandom } from '../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 /**
  * Procedural Web Audio API sound synthesizer for arcade festival cork shooting.
  * 100% self-contained, zero external sound files.
@@ -695,7 +696,7 @@ class SoundSystem {
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     osc.type = 'triangle';
-    const baseFreq = (220 + Math.random() * 60) * pitchMod;
+    const baseFreq = (220 + audioRandom() * 60) * pitchMod;
     osc.frequency.setValueAtTime(baseFreq, t);
     osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.35, t + 0.08);
 

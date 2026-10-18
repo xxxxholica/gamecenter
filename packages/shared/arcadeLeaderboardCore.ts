@@ -255,6 +255,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'falldown': {
     slug: 'falldown',
     hasScore: true,
+    maxScore: 2_000_000,
+    minRunMs: 3_000,
+    maxScorePerSec: 15_000,
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),

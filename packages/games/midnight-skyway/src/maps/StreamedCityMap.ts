@@ -1,5 +1,7 @@
-import { IS_FIREFOX, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips } from './textureStrips';
+import { IS_FIREFOX, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
 import { benchMark } from '../../../../shared/arcadeBenchTargets';
+import { realNow, untrackedFrame, untrackedTimeout } from '../../../../shared/arcadeReplay';
+import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 import { audio } from '../audio';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -55,7 +57,8 @@ class RequestPacer {
   private schedule(): void {
     if (this.timer !== null) return;
     const wait = Math.max(50, (1 - this.tokens) * this.intervalMs);
-    this.timer = window.setTimeout(() => {
+    // (読み込みの裏方なので、操作の記録・再生で追わないタイマーを使う。終わる時刻がネットワーク次第で変わるため)
+    this.timer = untrackedTimeout(() => {
       this.timer = null;
       this.refill();
       while (this.queue.length > 0) {
@@ -230,6 +233,10 @@ export abstract class StreamedCityMap extends MapBase {
   private prepPumpScheduled = false;
   private uploadJobs: { textures: THREE.Texture[]; resolve: () => void; gen?: Generator<void, void, void>; fast?: boolean }[] = [];
   private uploadPumpScheduled = false;
+  /** テクスチャを帯で送るか(textureStrips.ts の usesStripUpload。attachRenderer で決める) */
+  private stripUpload = IS_FIREFOX;
+  /** 最後にテクスチャを転送したフレームの時刻(document.timeline.currentTime) */
+  private lastUploadFrame: CSSNumberish | null = null;
   private farObjects = new Map<string, THREE.Object3D>();
   /** Keys of near chunks that are fully faded in (their far twin is hidden). */
   private nearOpaque = new Set<string>();
@@ -269,7 +276,7 @@ export abstract class StreamedCityMap extends MapBase {
     this.onProgress?.(0, initial.length);
     await Promise.all(initial.map((c) => this.loadChunk(c, true).then(() => this.onProgress?.(++loaded, initial.length))));
     this.onProgress?.(initial.length, initial.length);
-    if (IS_FIREFOX && this.renderer) await this.runPerFrame(prewarmStripPool(this.renderer));   // 走行中に確保すると約 20ms 止まるので、読み込み中に済ませる
+    if (this.stripUpload && this.renderer) await this.runPerFrame(prewarmStripPool(this.renderer));   // 走行中に確保すると約 20ms 止まるので、読み込み中に済ませる
     if (this.hasFarTier) void this.loadFarTier();
   }
 
@@ -280,14 +287,15 @@ export abstract class StreamedCityMap extends MapBase {
         if (this.disposed) { resolve(); return; }
         let done = true;
         try { done = gen.next().done === true; } catch (e) { console.warn('prewarm failed', e); }
-        if (done) resolve(); else requestAnimationFrame(step);
+        if (done) resolve(); else untrackedFrame(step);
       };
-      requestAnimationFrame(step);
+      untrackedFrame(step);
     });
   }
 
   public attachRenderer(renderer: THREE.WebGLRenderer): void {
     this.renderer = renderer;
+    this.stripUpload = usesStripUpload(renderer);
     this.ensureShaderWarmupMesh();
   }
 
@@ -380,18 +388,18 @@ export abstract class StreamedCityMap extends MapBase {
 
   private prepDeadline = 0;
   private prepShouldYield(): boolean {
-    return performance.now() >= this.prepDeadline;
+    return realNow() >= this.prepDeadline;   // (1フレームの中の予算なので本当の時刻で測る)
   }
 
   /** 1フレームに進めるのは1つのチャンクだけ(終わったら次のフレーム)。 */
   private pumpPrep(): void {
     if (this.prepPumpScheduled || this.prepJobs.length === 0) return;
     this.prepPumpScheduled = true;
-    requestAnimationFrame(() => {
+    untrackedFrame(() => {
       this.prepPumpScheduled = false;
       const job = this.prepJobs[0];
       if (job) {
-        this.prepDeadline = performance.now() + job.budgetMs;
+        this.prepDeadline = realNow() + job.budgetMs;
         if (job.step()) this.prepJobs.shift();
       }
       if (this.prepJobs.length > 0) this.pumpPrep();
@@ -417,11 +425,14 @@ export abstract class StreamedCityMap extends MapBase {
     if (!this.renderer || set.size === 0) return;
 
     const textures = [...set];
-    if (IS_FIREFOX) for (const tex of textures) rememberStripTemplate(tex);   // 読み込み中に、大きなテクスチャの設定を覚えておく(あとでプールを先に確保する)
-    if (IS_FIREFOX) {
-      // Firefox: 4096² のテクスチャを一度に転送すると rAF が約 40ms 止まるので、帯に分けて1フレームに1つずつ送る(textureStrips.ts)
+    if (this.stripUpload) {
+      // 大きなテクスチャ(2048 以上)は、帯に分けて1フレームに1つずつ送る(textureStrips.ts)。
+      // Firefox: 4096² を一度に転送すると rAF が約 40ms 止まる。
+      // Chrome(Windows, ANGLE D3D11): 下の Worker の方法だと、GPU プロセスで 1024² 12ms・4096² 193ms 止まる(東京の 150〜183ms の停止、
+      //   ヘルシンキの 33ms の連続)。CPU 側の画像のまま送る(小さい画像は 1024² 3.5ms、帯は 1 帯 3ms 前後)。
+      for (const tex of textures) rememberStripTemplate(tex);   // 読み込み中に、大きなテクスチャの設定を覚えておく(あとでプールを先に確保する)
       const r = this.renderer;
-      await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));   // 小さい画像(ImageBitmap)は、これまでどおり Worker で GPU 側に載せてから転送する(HTMLImageElement は対象外)
+      if (IS_FIREFOX) await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));   // Firefox は、これまでどおり、小さい画像(ImageBitmap)を Worker で GPU 側に載せてから転送する
       if (this.disposed || !this.renderer) {
         for (const tex of textures) releaseUploadedImage(tex);
         return;
@@ -447,7 +458,7 @@ export abstract class StreamedCityMap extends MapBase {
   private pumpUploads(): void {
     if (this.uploadPumpScheduled || this.uploadJobs.length === 0 || !this.renderer) return;
     this.uploadPumpScheduled = true;
-    requestAnimationFrame(() => {
+    untrackedFrame(() => {
       this.uploadPumpScheduled = false;
       this.tickUploads();
       if (this.uploadJobs.length > 0) {
@@ -459,13 +470,22 @@ export abstract class StreamedCityMap extends MapBase {
   private tickUploads(): void {
     const r = this.renderer;
     if (!r || this.uploadJobs.length === 0) return;
+    // 転送は 1 フレームに 1 回まで。tickUploads は pumpUploads の rAF と constrainCar の両方から呼ばれるので、
+    // そのままだと 1 フレームに 2 枚送る。Windows の Chrome では 1024px を 2 枚ずつ(ミップマップ込み)送り続けると、
+    // GPU プロセスの処理が追いつかず、3 フレームほどで 33ms のフレームが続いていた(ヘルシンキ: 走行 40 秒で 142 回)
+    const frame = document.timeline?.currentTime ?? null;
+    if (frame !== null) {
+      if (frame === this.lastUploadFrame) return;
+      this.lastUploadFrame = frame;
+    }
     const job = this.uploadJobs[0];
     if (job.gen) {
       let done = true;
       try {
         // 開始前の読み込み中(fast)は、止まっても見えないので、1フレームに 12ms ぶんまとめて進める。走行中は1ステップ
-        const until = performance.now() + (job.fast ? 12 : 0);
-        do { done = job.gen.next().done === true; } while (!done && performance.now() < until);
+        // (本当の時刻で区切る。操作の記録中の performance.now() はフレームの中で止まっていて、区切りにならない)
+        const until = realNow() + (job.fast ? 12 : 0);
+        do { done = job.gen.next().done === true; } while (!done && realNow() < until);
       } catch (e) { console.warn('texture strip upload failed', e); }
       if (done) { this.uploadJobs.shift(); job.resolve(); }
       return;
@@ -732,9 +752,19 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
       if (!(o instanceof THREE.Mesh)) return;
       o.geometry.dispose();
       const m = o.material as THREE.MeshBasicMaterial;
-      if (m.map && !(IS_FIREFOX && releaseStripTexture(m.map))) m.map.dispose();   // 帯で転送したテクスチャは、捨てずに次のチャンクへ使い回す
+      if (m.map && !(this.stripUpload && releaseStripTexture(m.map))) m.map.dispose();   // 帯で転送したテクスチャは、捨てずに次のチャンクへ使い回す
       m.dispose();
     });
+  }
+
+  private lastCrashReport = -Infinity;
+  /** 死亡地点マップ: ぶつかった場所(プレイヤーが運転している間だけ。続けて当たっている間は1秒に1回) */
+  private reportCrash(car: CarController, p: { x: number; z: number }, impact: number, what: string): void {
+    if (!car.canDrive || impact < 0.2) return;
+    const now = performance.now();
+    if (now - this.lastCrashReport < 1000) return;
+    this.lastCrashReport = now;
+    reportDeathPoint(`course:${this.metadata.id}`, p.x, p.z, what, { impact: Math.round(impact * 100) / 100 });
   }
 
   /** Load chunks that came into range, release the ones that fell out of it. */
@@ -895,6 +925,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
         p.z += col.pushZ;
         car.speed *= Math.max(0.15, 1.0 - col.impact * 0.75);
         audio.sfx.crash(col.impact);
+        this.reportCrash(car, p, col.impact, 'バリケード');
       }
     }
 
@@ -906,6 +937,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
         if (tCol.fresh) {
           car.speed = car.speed * tCol.speedFactor + tCol.speedAdd;
           audio.sfx.crash(tCol.impact);
+          this.reportCrash(car, p, tCol.impact, '一般車');
         }
       }
     }

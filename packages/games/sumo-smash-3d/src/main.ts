@@ -1,3 +1,4 @@
+import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Dohyo } from './entities/Dohyo';
@@ -11,7 +12,7 @@ import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
-import { reportDeepAnalytics } from '../../../shared/arcadeAnalytics';
+import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
@@ -214,7 +215,11 @@ class SumoGame {
     this.fxSink = {
       sound: this.soundManager,
       particle: this.particleManager,
-      showBanner: (m, s, ms) => this.uiManager.showBanner(m, s, ms),
+      showBanner: (m, s, ms) => {
+        // アナリティクス: 1番ごとの勝負(勝った力士と決まり手)・取り直し
+        if (m === '勝負あり' || m.includes('取り直し')) reportDeepAnalytics('bout_end', { banner: m, detail: s });
+        this.uiManager.showBanner(m, s, ms);
+      },
       blast: (c, r) => this.onBlastEvent(c, r),
     };
     this.inputManager = new InputManager();
@@ -434,6 +439,7 @@ class SumoGame {
    */
   public startCpuBattle() {
     reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
+    reportRoundStart({ mode: 'CPU対戦' });
     this.match = null;
     this.showViews(2, ['あなた', null]);
     this.uiManager.setMultiLayout(null);
@@ -679,6 +685,7 @@ class SumoGame {
 
     this.onlineNames = m.players.map((p) => p.name);
     reportDeepAnalytics('progression_update', { mode: 'オンライン', extraStats: { players: count } });
+    reportRoundStart({ mode: 'オンライン', players: count });
     this.showViews(count, FIGHTERS.slice(0, count).map((_, i) => (i === slot ? 'あなた' : null)));
     this.uiManager.setMultiLayout(
       FIGHTERS.slice(0, count).map((f, i) => ({ name: this.onlineNames[i] ?? f.name, css: f.css, label: `${i + 1}P`, me: i === slot }))

@@ -8,10 +8,32 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 //   JPEG のデコーダの種類・スレッドは関係なく、転送するバイト数で決まる。
 // 画質を落とさず、同じテクスチャを、帯(既定 128 行 = 約2MB)に分けて、1フレームに1つずつ転送する。
 // 帯の転送は copyTextureToTexture(texSubImage2D)、ミップマップは最後の帯で一度だけ作る。
+// ANGLE の Direct3D で描く Chrome(Windows)でも使う(usesStripUpload)。ただし 4096² を 2048² に縮めるのは、Firefox だけ
+// (これまでどおり。見た目が粗くなるので、ほかのブラウザには広げない)。
 
 export { IS_FIREFOX };
 
 type PlainImage = { width: number; height: number };
+
+/**
+ * テクスチャを帯で送るか(StreamedCityMap.stageUpload)。Firefox と、ANGLE の Direct3D で描く Chrome(Windows)。
+ * ほか(Mac の Chrome = ANGLE Metal など)は、Worker の OffscreenCanvas で GPU 側に載せた画像を、1フレームに1枚ずつ送る。
+ * 速い送り方が GPU の描画方式で逆になるため(1枚を送るのにかかる時間。scripts/upload-probe で測れる):
+ *   Windows(RTX 4050, D3D11): GPU 側の画像 → sRGB が 1024² 12ms・4096² 193ms(GPU プロセスで止まる)。CPU 側の画像を 128 行の帯で送ると 1 帯 3ms 前後。
+ *   Mac(M4, Metal): GPU 側の画像は 4096² でも 0.1ms 未満。帯は 4096² で 1 帯 2.3ms かかり、走行中に GPU の待ちで 300ms 前後止まることがあった
+ *   (東京 丸の内スカイウェイ: 帯 1%low 33〜37、GPU 側の画像 60)。
+ */
+export function usesStripUpload(r: THREE.WebGLRenderer): boolean {
+  if (IS_FIREFOX) return true;
+  const gl = r.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  return /Direct3D|D3D1[01]/i.test(String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)));
+}
+
+/** 実際に転送するテクスチャの大きさ。縮めるのは Firefox だけ(textureStripsCore.ts の STRIP_MAX_SIDE)、ほかは元の大きさのまま。 */
+function targetSize(w: number, h: number): { w: number; h: number; down: number } {
+  return IS_FIREFOX ? stripTargetSize(w, h) : { w, h, down: 1 };
+}
 
 // ---- 確保済みテクスチャの使い回し(プール) ----
 // 計測(Firefox): 帯が遅い(約 20ms)のは、確保した直後の最初の1帯(k=0)だけ。Firefox は、確保しただけのテクスチャへ初めて書くときに、
@@ -51,7 +73,7 @@ function stripKey(tex: THREE.Texture, w: number, h: number): string {
 export function rememberStripTemplate(tex: THREE.Texture): void {
   const img = tex.image as PlainImage | null;
   if (!img || !(img.width >= STRIP_MIN_WIDTH)) return;
-  const target = stripTargetSize(img.width, img.height);
+  const target = targetSize(img.width, img.height);
   const key = stripKey(tex, target.w, target.h);
   const t = templates.get(key);
   if (t) { t.count++; return; }
@@ -171,7 +193,7 @@ export function* uploadInStrips(
     return;
   }
   const SRC_W = img.width, SRC_H = img.height;
-  const { w: W, h: H, down } = stripTargetSize(SRC_W, SRC_H);
+  const { w: W, h: H, down } = targetSize(SRC_W, SRC_H);
 
   // 1) 空のテクスチャを確保する(転送はしない)。素材が参照している設定を、そのまま引き継ぐ。プールに初期化済みのものがあれば、それを使う
   const key = stripKey(tex, W, H);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BillboardPool, type Particle } from './BillboardPool';
 import { radialTexture } from './fxTextures';
 import { BOOST_THEMES, type BoostTheme } from './BoostTheme';
+import { untrackedRandom as rand } from '../../../../shared/arcadeReplay';
 
 const SPARK_ORANGE = [[0, '#ffffff'], [0.15, '#fff6a9'], [0.4, '#ff9000'], [0.75, 'rgba(255, 34, 0, 0.4)'], [1, 'rgba(255, 0, 0, 0)']] as const;
 // ブーストの色つきの粒は、白いテクスチャに粒ごとの色を掛ける(色は BoostTheme の主色)
@@ -62,13 +63,13 @@ export class TireSmokeSystem {
   public emitSmoke(position: THREE.Vector3, carVelocity: THREE.Vector3, intensity: number = 1.0): void {
     const p = this.smoke.spawn();
     if (!p) return;
-    p.maxAge = 0.55 + Math.random() * 0.35;
-    p.s0 = 0.3 + Math.random() * 0.15;
-    p.s1 = 1.2 + Math.random() * 0.6 + intensity * 0.4;
+    p.maxAge = 0.55 + rand() * 0.35;
+    p.s0 = 0.3 + rand() * 0.15;
+    p.s1 = 1.2 + rand() * 0.6 + intensity * 0.4;
     p.o0 = Math.min(0.65, 0.3 + intensity * 0.25);
-    p.pos.set(position.x + (Math.random() - 0.5) * 0.14, position.y + 0.08 + Math.random() * 0.05, position.z + (Math.random() - 0.5) * 0.14);
+    p.pos.set(position.x + (rand() - 0.5) * 0.14, position.y + 0.08 + rand() * 0.05, position.z + (rand() - 0.5) * 0.14);
     if (this.wet) { p.r = 0.78; p.g = 0.88; p.b = 1; }
-    p.vel.set(carVelocity.x * 0.12 + (Math.random() - 0.5) * 0.5, 0.35 + Math.random() * 0.45, carVelocity.z * 0.12 + (Math.random() - 0.5) * 0.5);
+    p.vel.set(carVelocity.x * 0.12 + (rand() - 0.5) * 0.5, 0.35 + rand() * 0.45, carVelocity.z * 0.12 + (rand() - 0.5) * 0.5);
   }
 
   /** ドリフト・衝突・着地の火花(boosted: ブースト中は、車の主色の火花) */
@@ -77,20 +78,20 @@ export class TireSmokeSystem {
     const p = (boosted ? this.glints : this.sparks).spawn();
     if (!p) return;
     if (boosted) this.tint(p, theme.streak, 8.5);
-    p.maxAge = 0.16 + Math.random() * 0.16;
-    p.s0 = 0.15 + Math.random() * 0.15 + intensity * 0.08;
-    p.pos.set(position.x + (Math.random() - 0.5) * 0.1, position.y + 0.04 + Math.random() * 0.04, position.z + (Math.random() - 0.5) * 0.1);
+    p.maxAge = 0.16 + rand() * 0.16;
+    p.s0 = 0.15 + rand() * 0.15 + intensity * 0.08;
+    p.pos.set(position.x + (rand() - 0.5) * 0.1, position.y + 0.04 + rand() * 0.04, position.z + (rand() - 0.5) * 0.1);
 
     // 火花は、車の進行と逆向きと、すべる向きの外側へ飛ぶ
     const speed = carVelocity.length();
     const backward = Math.max(2.0, speed * 0.25);
-    const outward = driftDirection !== 0 ? -driftDirection : (Math.random() - 0.5) * 2;
+    const outward = driftDirection !== 0 ? -driftDirection : (rand() - 0.5) * 2;
     const fx = speed > 0.1 ? carVelocity.x / speed : 0;
     const fz = speed > 0.1 ? carVelocity.z / speed : 1;
     p.vel.set(
-      -fx * (backward + Math.random() * 4.0) + fz * outward * (2.0 + Math.random() * 3.5),
-      0.8 + Math.random() * 2.2,
-      -fz * (backward + Math.random() * 4.0) - fx * outward * (2.0 + Math.random() * 3.5)
+      -fx * (backward + rand() * 4.0) + fz * outward * (2.0 + rand() * 3.5),
+      0.8 + rand() * 2.2,
+      -fz * (backward + rand() * 4.0) - fx * outward * (2.0 + rand() * 3.5)
     );
   }
 
@@ -101,14 +102,14 @@ export class TireSmokeSystem {
   public emitSplash(position: THREE.Vector3, worldVelocity: THREE.Vector3, outward: THREE.Vector3, intensity: number = 1.0): void {
     const p = this.drops.spawn();
     if (!p) return;
-    p.maxAge = 0.3 + Math.random() * 0.4;
-    p.s0 = (0.08 + Math.random() * 0.1) * (0.8 + intensity * 0.4);
-    p.pos.set(position.x + (Math.random() - 0.5) * 0.2, position.y + 0.05, position.z + (Math.random() - 0.5) * 0.2);
-    const out = Math.random() * 2.0 * intensity;
+    p.maxAge = 0.3 + rand() * 0.4;
+    p.s0 = (0.08 + rand() * 0.1) * (0.8 + intensity * 0.4);
+    p.pos.set(position.x + (rand() - 0.5) * 0.2, position.y + 0.05, position.z + (rand() - 0.5) * 0.2);
+    const out = rand() * 2.0 * intensity;
     p.vel.set(
-      worldVelocity.x + outward.x * out + (Math.random() - 0.5) * 1.4,
-      1.2 + Math.random() * 2.6 * intensity,
-      worldVelocity.z + outward.z * out + (Math.random() - 0.5) * 1.4
+      worldVelocity.x + outward.x * out + (rand() - 0.5) * 1.4,
+      1.2 + rand() * 2.6 * intensity,
+      worldVelocity.z + outward.z * out + (rand() - 0.5) * 1.4
     );
   }
 
@@ -125,10 +126,10 @@ export class TireSmokeSystem {
     for (let n = 0; n < f.count; n++) {
       const p = this.flames.spawn();
       if (!p) return;
-      p.maxAge = (0.14 + Math.random() * 0.12) * f.life;
-      p.s0 = (0.6 + Math.random() * 0.35) * (0.7 + intensity * 0.7) * f.size;
-      p.pos.set(position.x + (Math.random() - 0.5) * 0.12, position.y + (Math.random() - 0.5) * 0.12, position.z + (Math.random() - 0.5) * 0.12);
-      p.vel.set(carVelocity.x * 0.55, f.rise * (0.5 + Math.random()), carVelocity.z * 0.55);
+      p.maxAge = (0.14 + rand() * 0.12) * f.life;
+      p.s0 = (0.6 + rand() * 0.35) * (0.7 + intensity * 0.7) * f.size;
+      p.pos.set(position.x + (rand() - 0.5) * 0.12, position.y + (rand() - 0.5) * 0.12, position.z + (rand() - 0.5) * 0.12);
+      p.vel.set(carVelocity.x * 0.55, f.rise * (0.5 + rand()), carVelocity.z * 0.55);
       p.r0 = theme.primary.r; p.g0 = theme.primary.g; p.b0 = theme.primary.b;
       p.o0 = f.alpha;
     }
@@ -139,10 +140,10 @@ export class TireSmokeSystem {
     const p = this.glints.spawn();
     if (!p) return;
     this.tint(p, theme.streak, -1.5);
-    p.maxAge = 0.5 + Math.random() * 0.5;
-    p.s0 = 0.08 + Math.random() * 0.1 + intensity * 0.03;
-    p.pos.set(position.x + (Math.random() - 0.5) * 0.3, position.y + Math.random() * 0.2, position.z + (Math.random() - 0.5) * 0.3);
-    p.vel.set(carVelocity.x * 0.4 + (Math.random() - 0.5) * 2.4, 1.2 + Math.random() * 2.8, carVelocity.z * 0.4 + (Math.random() - 0.5) * 2.4);
+    p.maxAge = 0.5 + rand() * 0.5;
+    p.s0 = 0.08 + rand() * 0.1 + intensity * 0.03;
+    p.pos.set(position.x + (rand() - 0.5) * 0.3, position.y + rand() * 0.2, position.z + (rand() - 0.5) * 0.3);
+    p.vel.set(carVelocity.x * 0.4 + (rand() - 0.5) * 2.4, 1.2 + rand() * 2.8, carVelocity.z * 0.4 + (rand() - 0.5) * 2.4);
   }
 
   /** 金の粉(Gold): 車の周りにきらめきながら漂い、ゆっくり舞い上がる。center は車の位置、spread はその周りの広がり */
@@ -150,11 +151,11 @@ export class TireSmokeSystem {
     const p = this.glints.spawn();
     if (!p) return;
     this.tint(p, theme.streak, -0.2);
-    p.s1 = 1 + Math.random() * 6;                                        // きらめきの位相(0 以外でまたたく)
-    p.maxAge = 0.8 + Math.random() * 0.6;
-    p.s0 = 0.1 + Math.random() * 0.12;
-    p.pos.set(center.x + (Math.random() - 0.5) * 2 * spread, center.y + 0.2 + Math.random() * 1.1, center.z + (Math.random() - 0.5) * 2 * spread);
-    p.vel.set(carVelocity.x * 0.3 + (Math.random() - 0.5) * 1.2, 0.5 + Math.random() * 1.2, carVelocity.z * 0.3 + (Math.random() - 0.5) * 1.2);
+    p.s1 = 1 + rand() * 6;                                        // きらめきの位相(0 以外でまたたく)
+    p.maxAge = 0.8 + rand() * 0.6;
+    p.s0 = 0.1 + rand() * 0.12;
+    p.pos.set(center.x + (rand() - 0.5) * 2 * spread, center.y + 0.2 + rand() * 1.1, center.z + (rand() - 0.5) * 2 * spread);
+    p.vel.set(carVelocity.x * 0.3 + (rand() - 0.5) * 1.2, 0.5 + rand() * 1.2, carVelocity.z * 0.3 + (rand() - 0.5) * 1.2);
   }
 
   /**
@@ -167,25 +168,25 @@ export class TireSmokeSystem {
       out.set(carPos.x + lx * cs + lz * sn, carPos.y + ly, carPos.z - lx * sn + lz * cs);
     const color = this.tmpColor.copy(theme.primary).lerp(this.white, 0.55);
     for (let b = 0; b < count; b++) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const sx = side * (0.8 + Math.random() * 0.3), sy = 0.3 + Math.random() * 0.6, sz = (Math.random() - 0.5) * 3.4;
-      const ex = sx + side * (1.2 + Math.random() * 2.2);
-      const ey = Math.random() < 0.4 ? 0.05 : sy + (Math.random() - 0.3) * 1.6;      // ときどき地面まで落ちる
-      const ez = sz + (Math.random() - 0.5) * 2.4;
-      const life = 0.06 + Math.random() * 0.06;
+      const side = rand() < 0.5 ? -1 : 1;
+      const sx = side * (0.8 + rand() * 0.3), sy = 0.3 + rand() * 0.6, sz = (rand() - 0.5) * 3.4;
+      const ex = sx + side * (1.2 + rand() * 2.2);
+      const ey = rand() < 0.4 ? 0.05 : sy + (rand() - 0.3) * 1.6;      // ときどき地面まで落ちる
+      const ez = sz + (rand() - 0.5) * 2.4;
+      const life = 0.06 + rand() * 0.06;
       const seg = 6;
       toWorld(sx, sy, sz, this.boltA);
       for (let i = 1; i <= seg; i++) {
         const u = i / seg, j = i === seg ? 0 : 0.22;
-        toWorld(sx + (ex - sx) * u + (Math.random() - 0.5) * j, sy + (ey - sy) * u + (Math.random() - 0.5) * j,
-          sz + (ez - sz) * u + (Math.random() - 0.5) * j, this.boltB);
+        toWorld(sx + (ex - sx) * u + (rand() - 0.5) * j, sy + (ey - sy) * u + (rand() - 0.5) * j,
+          sz + (ez - sz) * u + (rand() - 0.5) * j, this.boltB);
         const p = this.arcs.spawn();
         if (!p) return;
         // 画面上の向きと長さ: 線分をカメラ空間に直し、その向きに細長く伸ばす
         this.tmpV.subVectors(this.boltB, this.boltA);
         const worldLen = this.tmpV.length();
         this.tmpV.applyQuaternion(this.camInv);
-        const thick = 0.1 + Math.random() * 0.05;
+        const thick = 0.1 + rand() * 0.05;
         p.angle = Math.atan2(this.tmpV.y, this.tmpV.x);
         p.sx = Math.hypot(this.tmpV.x, this.tmpV.y) * 1.2 + thick * 2;
         p.sy = thick * (1 + 0.5 * (1 - u));
