@@ -1,6 +1,7 @@
 import { Entity } from './Entity';
 import { EnemyType } from '../types';
 import { BulletPool } from '../weapons/BulletPool';
+import { drawFilledText } from '../ui/outlinedText';
 
 export class Enemy extends Entity {
   public type: EnemyType = 'NORMAL';
@@ -408,7 +409,7 @@ export class Enemy extends Entity {
       ctx.font = '900 11px Impact, sans-serif';
       ctx.fillStyle = '#ff0033';
       ctx.textAlign = 'center';
-      ctx.fillText('突撃兵', 0, -this.radius - 16);
+      drawFilledText(ctx, '突撃兵', 0, -this.radius - 16);
     } else if (this.type === 'WEAPON_MASTER') {
       // 重火器兵: サイバー重装甲砲塔
       const angle = Math.atan2(this.vy, this.vx);
@@ -451,7 +452,7 @@ export class Enemy extends Entity {
       ctx.font = '900 11px Impact, sans-serif';
       ctx.fillStyle = this.weaponMode === 'LASER' ? '#e000ff' : '#ffaa00';
       ctx.textAlign = 'center';
-      ctx.fillText(this.weaponMode === 'LASER' ? '重レーザー' : '追尾ミサイル', 0, -this.radius - 16);
+      drawFilledText(ctx, this.weaponMode === 'LASER' ? '重レーザー' : '追尾ミサイル', 0, -this.radius - 16);
     }
 
     // Overhead Health Bar for any damaged enemy

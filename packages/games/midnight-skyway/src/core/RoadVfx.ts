@@ -249,11 +249,11 @@ export class RoadVfx {
 
   /**
    * 毎フレームの更新。car は車の位置・向き・進行方向、tires は後輪の接地点。
-   * night: 夜は光跡・発光を強める / drift: 0〜1 / boost: 0〜1
+   * drift: 0〜1 / boost: 0〜1
    */
   public update(dt: number, car: { position: THREE.Vector3; rotationY: number; speed: number },
     tires: { rearLeft: THREE.Vector3; rearRight: THREE.Vector3 }, skidding: boolean, skidStrength: number,
-    night: boolean, drift: number, boost: number, scale: number, theme: BoostTheme): void {
+    drift: number, boost: number, scale: number, theme: BoostTheme): void {
     const fx = Math.sin(car.rotationY), fz = Math.cos(car.rotationY);
     const speed = Math.abs(car.speed);
 
@@ -265,7 +265,7 @@ export class RoadVfx {
       lights[i].z -= fz * 0.75;
       lights[i].y = car.position.y + 0.62;
     });
-    const trailStrength = Math.min(1, speed / 14) * (night ? 1 : 0.45) * (0.6 + 0.4 * scale);
+    const trailStrength = Math.min(1, speed / 14) * (0.6 + 0.4 * scale);
     this.trail.update(dt, lights, car.rotationY, trailStrength, boost, theme.primary);
 
     // タイヤ痕
@@ -275,9 +275,8 @@ export class RoadVfx {
     // アンダーグロー: 普段は淡い青、ドリフトで桃色、ブーストで青白く強く
     const target = this.glowTarget.copy(GLOW_BASE).lerp(GLOW_DRIFT, drift).lerp(theme.glow, boost);
     this.glowColor.lerp(target, Math.min(1, 8 * dt));
-    const base = night ? 0.5 : 0.18;
     this.glow.material.color.copy(this.glowColor);
-    this.glow.material.opacity = Math.min(1, (base + drift * 0.18 + boost * 0.5) * Math.min(1, 0.3 + speed / 12));
+    this.glow.material.opacity = Math.min(1, (0.5 + drift * 0.18 + boost * 0.5) * Math.min(1, 0.3 + speed / 12));
     this.glow.position.set(car.position.x, car.position.y + 0.07, car.position.z);
     this.glow.rotation.y = car.rotationY;
     const len = 6.5 + boost * 3, wid = 4.2 + boost * 1.2;

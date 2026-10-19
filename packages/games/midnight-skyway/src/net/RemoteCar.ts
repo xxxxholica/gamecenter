@@ -37,7 +37,7 @@ export class RemoteCar {
 
   private readonly track = new RemoteTrack();
 
-  constructor(id: number, name: string, spec: CarSpec, night: boolean) {
+  constructor(id: number, name: string, spec: CarSpec) {
     this.id = id;
     this.name = name;
     this.color = spec.body;
@@ -45,7 +45,7 @@ export class RemoteCar {
     this.car.setBodyColor(spec.body);
     this.car.setRoofColor(spec.roof);
     this.car.initSuspension();
-    this.car.setLights(night);
+    this.car.setLights(true);
     this.car.group.visible = false;
     this.label = makeLabel(name, spec.body);
     this.car.group.add(this.label);

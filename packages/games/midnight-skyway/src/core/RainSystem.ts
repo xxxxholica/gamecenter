@@ -41,12 +41,12 @@ export class RainSystem {
     this.p[i * 3 + 2] = car.z + fz * ahead - fx * side;
   }
 
-  public update(dt: number, car: THREE.Vector3, heading: number, carVel: THREE.Vector3, night: boolean): void {
+  public update(dt: number, car: THREE.Vector3, heading: number, carVel: THREE.Vector3): void {
     this.mesh.visible = this.intensity > 0.01;
     if (!this.mesh.visible) return;
     const fx = Math.sin(heading), fz = Math.cos(heading);
     const shown = Math.floor(COUNT * this.intensity);
-    const bright = night ? 0.42 : 0.28;
+    const bright = 0.42;
     for (let i = 0; i < COUNT; i++) {
       const o = i * 6;
       if (i >= shown) { this.col.fill(0, o, o + 6); this.pos.fill(0, o, o + 6); continue; }

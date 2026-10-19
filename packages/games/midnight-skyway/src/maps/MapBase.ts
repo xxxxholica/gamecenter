@@ -57,9 +57,6 @@ export abstract class MapBase {
   /** Called when the car is (re)placed at the start: reset any road tracking and put it on the road surface. */
   public onRespawn(_car: CarController): void {}
 
-  /** Day / night: maps switch their own lights (street lamps) here. */
-  public setNight(_night: boolean): void {}
-
   /** Shows / hides the goal hologram (maps without one ignore it). */
   public setGoalVisible(_on: boolean): void {}
 

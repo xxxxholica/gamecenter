@@ -2,6 +2,7 @@ import { Entity } from './Entity';
 import { WeaponSystem } from '../weapons/WeaponSystem';
 import { SwordSystem } from '../weapons/SwordSystem';
 import { BulletPool } from '../weapons/BulletPool';
+import { drawOutlinedText } from '../ui/outlinedText';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { Enemy } from './Enemy';
 import { SoundManager } from '../audio/SoundManager';
@@ -272,8 +273,7 @@ export class Player extends Entity {
     ctx.shadowBlur = 15;
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4;
-    ctx.strokeText('あなた', 0, -this.radius - 28 + bounce);
-    ctx.fillText('あなた', 0, -this.radius - 28 + bounce);
+    drawOutlinedText(ctx, 'あなた', 0, -this.radius - 28 + bounce);
     ctx.shadowBlur = 0;
 
     // 2. Overhead HP Bar

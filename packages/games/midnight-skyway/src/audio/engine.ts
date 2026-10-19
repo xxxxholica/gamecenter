@@ -2,10 +2,9 @@ import { readGamepads } from '../../../../shared/gamepadFrame';
 import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
 import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
 
-// Web Audio の土台: AudioContext、BGM/SEのバス、ミュート(Mキー)、自動再生制限の解除、タブ非表示時の停止。
+// Web Audio の土台: AudioContext、BGM/SEのバス、自動再生制限の解除、タブ非表示時の停止。
 // 効果音はすべて合成。BGMだけは public/bgm の音源ファイルを使う(music.ts)。
 
-const MUTE_KEY = 'skyway_muted';
 const MASTER_VOLUME = 0.8;
 
 export class AudioEngine {
@@ -14,13 +13,11 @@ export class AudioEngine {
   public readonly musicDuck: GainNode;
   public readonly musicBus: GainNode;
   public readonly sfxBus: GainNode;
-  public muted = false;
 
   private readonly master: GainNode;
   private readonly noiseBuf: AudioBuffer;
   private readyCallbacks: Array<() => void> = [];
   private suspendedByHide = false;
-  private toastTimer = 0;
 
   constructor() {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -50,18 +47,12 @@ export class AudioEngine {
 
     this.noiseBuf = createWhiteNoiseBuffer(ctx, 2);
 
-    try {
-      this.muted = localStorage.getItem(MUTE_KEY) === '1';
-    } catch {
-      // 保存できない環境では音あり
-    }
-    this.master.gain.value = this.muted ? 0 : MASTER_VOLUME;
+    this.master.gain.value = MASTER_VOLUME;
 
     ctx.addEventListener('statechange', () => {
       if (ctx.state === 'running') this.flushReady();
     });
     this.installUnlock();
-    this.installMuteKey();
     this.installVisibility();
   }
 
@@ -118,38 +109,6 @@ export class AudioEngine {
       requestAnimationFrame(pollPad);
     };
     requestAnimationFrame(pollPad);
-  }
-
-  private installMuteKey(): void {
-    window.addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyM' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
-      this.setMuted(!this.muted);
-    });
-  }
-
-  public setMuted(muted: boolean): void {
-    this.muted = muted;
-    this.master.gain.setTargetAtTime(muted ? 0 : MASTER_VOLUME, this.ctx.currentTime, 0.03);
-    try {
-      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
-    } catch {
-      // 保存できなくても切り替えは効く
-    }
-    this.toast(muted ? 'SOUND OFF  (M)' : 'SOUND ON  (M)');
-  }
-
-  private toast(text: string): void {
-    let el = document.getElementById('audio-toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'audio-toast';
-      el.style.cssText = 'position:fixed;top:14px;right:16px;z-index:2147483001;padding:6px 14px;font:900 13px/1 system-ui,sans-serif;letter-spacing:2px;color:#fff;background:rgba(5,8,14,.82);border-left:4px solid #00f0ff;pointer-events:none;transition:opacity .3s';
-      document.body.appendChild(el);
-    }
-    el.textContent = text;
-    el.style.opacity = '1';
-    window.clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => { if (el) el.style.opacity = '0'; }, 1400);
   }
 
   private installVisibility(): void {

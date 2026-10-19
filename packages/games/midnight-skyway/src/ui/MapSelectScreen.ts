@@ -1,17 +1,12 @@
-import { buttonIconHtml } from '../../../../shared/arcadeGuide';
 import { btnHtml, setBtnLabel } from './btnGuide';
 import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import { StoredRecord } from '../core/TimeAttackManager';
 import { courseOutlineSvg } from './courseOutline';
 import { STAGES } from './stages';
-import { TIME_ART } from './timeArt';
-import type { TimeOfDay } from '../core/TimeOfDay';
 
 export interface MapSelectEvents {
   onSelectMap: (mapId: string) => void;
   onStartRace: () => void;
-  /** 時間帯(日中 / 夜間)を切り替えた。 */
-  onChangeTime: (t: TimeOfDay) => void;
   /** オンライン対戦: コース希望から待機画面へ進む。 */
   onStartOnline: () => void;
   onBack: () => void;
@@ -30,7 +25,6 @@ export class MapSelectScreen {
   private isVisible: boolean = false;
   private padEdge = new PadEdge();
   private stopPad: (() => void) | null = null;
-  private timeOfDay: TimeOfDay = 'night';
   /** オンライン対戦のコース希望: 決定ボタンは無く(時間で自動開始)、選んだ時点で希望として送られる。 */
   private onlineMode = false;
   /** 主催者がコースを固定している間は、希望は変えられない。 */
@@ -71,7 +65,6 @@ export class MapSelectScreen {
       <!-- Action buttons -->
       <div class="arcade-action-bar">
         <button id="ms-btn-back" class="arcade-btn-back">${btnHtml('マシン選択へ', [1], 'Backspace')}</button>
-        <button id="ms-btn-time" class="arcade-btn-back" type="button"><span class="btn-guide">${buttonIconHtml([2, 3, 4, 5], 'C')}</span><span class="btn-label-col"><span class="btn-label">時間帯変更</span><span class="btn-current"><span class="time-chip" id="ms-time-chip"></span><span id="ms-time-name"></span></span></span></button>
         <button id="ms-btn-start" class="arcade-btn-start glow">${btnHtml('決定', [0], 'Enter')}</button>
       </div>
     `;
@@ -96,7 +89,6 @@ export class MapSelectScreen {
     });
 
     this.container.querySelector('#ms-btn-back')?.addEventListener('click', () => this.events.onBack());
-    this.container.querySelector('#ms-btn-time')?.addEventListener('click', () => this.cycleTime());
     this.container.querySelector('#ms-btn-start')?.addEventListener('click', () => this.confirm());
   }
 
@@ -107,22 +99,6 @@ export class MapSelectScreen {
       c.classList.toggle('active', c.dataset.map === mapId);
     });
     this.events.onSelectMap(mapId);
-  }
-
-  /** 時間帯の表示を合わせる(イベントは出さない)。 */
-  public setTimeOfDay(t: TimeOfDay): void {
-    this.timeOfDay = t;
-    const chip = this.container.querySelector('#ms-time-chip');
-    if (chip) chip.innerHTML = TIME_ART[t].art;
-    const name = this.container.querySelector('#ms-time-name');
-    if (name) name.textContent = TIME_ART[t].name;
-  }
-
-  /** 日中 ⇄ 夜間。オンラインでは主催者が決めるので変えられない。 */
-  private cycleTime(): void {
-    if (this.onlineMode) return;
-    this.setTimeOfDay(this.timeOfDay === 'day' ? 'night' : 'day');
-    this.events.onChangeTime(this.timeOfDay);
   }
 
   private order(): string[] {
@@ -153,7 +129,6 @@ export class MapSelectScreen {
   public setOnlineMode(on: boolean): void {
     this.onlineMode = on;
     if (!on) this.locked = false;
-    this.container.querySelector<HTMLElement>('#ms-btn-time')?.classList.toggle('hidden', on);
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel);
     const title = q('.arcade-title-main');
     if (title) title.textContent = on ? 'コース希望' : 'コース選択';
@@ -208,12 +183,11 @@ export class MapSelectScreen {
     this.container.style.display = 'flex';
 
     this.stopPad?.();
-    // レバー左右: コース選択 / X・Y・LB・RB: 時間帯変更 / A: 決定(レース開始) / B: マシン選択へ戻る
+    // レバー左右: コース選択 / A: 決定(レース開始) / B: マシン選択へ戻る
     this.stopPad = startPadLoop(this.padEdge, (p) => {
       if (!this.isVisible) return;
       if (p.left) this.stepMap(-1);
       else if (p.right) this.stepMap(1);
-      else if (p.any(2, 3, 4, 5)) this.cycleTime();
       else if (p.any(0)) this.confirm();
       else if (p.any(1)) this.events.onBack();
     });
@@ -228,9 +202,6 @@ export class MapSelectScreen {
           // 戻る。オンラインでは、コースを希望している間は先に希望の取り消しになり(下)、希望がなければ戻る
           e.preventDefault();
           this.events.onBack();
-        } else if (e.code === 'KeyC') {
-          e.preventDefault();
-          this.cycleTime();
         } else if (e.code === 'KeyA') {
           this.stepMap(-1);
         } else if (e.code === 'Backspace' && this.onlineMode) {

@@ -184,11 +184,16 @@ export class RefreshSlots {
     this.toleranceMs = toleranceMs;
   }
 
-  /** モニターの周期が hz の周期に近いか(間隔の中央値で判断。数が少ないうちは近くないとみなす) */
+  /**
+   * モニターの周期が hz の周期に近いか(間隔の短いほうから 1/4 の値で判断。数が少ないうちは近くないとみなす)。
+   * 中央値では足りない: Safari は rAF が 0〜2ms おきに続けて来ることがあり、それが混ざっていても中央値は周期に近くなる。
+   * 近いとみなすと、その短い間隔でも区切りを 1 つ進めるので、渡す時刻が実際より先へ進み(最大 267ms)、
+   * 最初のフレームを基準にした区切りに戻ったとき、実際の時刻が追いつくまでゲームにフレームを渡せない(165〜299ms)。
+   */
   private monitorMatchesHz(): boolean {
     if (this.gaps.length < 16) return false;
     const sorted = [...this.gaps].sort((a, b) => a - b);
-    return sorted[sorted.length >> 1] > this.period * 0.75;
+    return sorted[sorted.length >> 2] > this.period * 0.75;
   }
 
   take(now: number): number | null {

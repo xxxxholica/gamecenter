@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { IS_FIREFOX } from '../core/browser';
+import { IS_FIREFOX, IS_SAFARI } from '../core/browser';
 import { STRIP_MIN_WIDTH, STRIP_ROWS, imageSize, stripRanges, stripTargetSize } from './textureStripsCore';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -8,26 +8,29 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 //   JPEG のデコーダの種類・スレッドは関係なく、転送するバイト数で決まる。
 // 画質を落とさず、同じテクスチャを、帯(既定 128 行 = 約2MB)に分けて、1フレームに1つずつ転送する。
 // 帯の転送は copyTextureToTexture(texSubImage2D)、ミップマップは最後の帯で一度だけ作る。
-// ANGLE の Direct3D で描く Chrome(Windows)でも使う(usesStripUpload)。ただし 4096² を 2048² に縮めるのは、Firefox だけ
+// ANGLE の Metal で描く Chrome(Mac)のほかは、どれもこれを使う(usesStripUpload)。ただし 4096² を 2048² に縮めるのは、Firefox だけ
 // (これまでどおり。見た目が粗くなるので、ほかのブラウザには広げない)。
 
-export { IS_FIREFOX };
+export { IS_FIREFOX, IS_SAFARI };
 
 type PlainImage = { width: number; height: number };
 
 /**
- * テクスチャを帯で送るか(StreamedCityMap.stageUpload)。Firefox と、ANGLE の Direct3D で描く Chrome(Windows)。
- * ほか(Mac の Chrome = ANGLE Metal など)は、Worker の OffscreenCanvas で GPU 側に載せた画像を、1フレームに1枚ずつ送る。
+ * テクスチャを帯で送るか(StreamedCityMap.stageUpload)。ANGLE の Metal で描く Chrome(Mac)のほかは、帯で送る。
+ * Mac の Chrome だけは、Worker の OffscreenCanvas で GPU 側に載せた画像を、1フレームに1枚ずつ送る。
  * 速い送り方が GPU の描画方式で逆になるため(1枚を送るのにかかる時間。scripts/upload-probe で測れる):
  *   Windows(RTX 4050, D3D11): GPU 側の画像 → sRGB が 1024² 12ms・4096² 193ms(GPU プロセスで止まる)。CPU 側の画像を 128 行の帯で送ると 1 帯 3ms 前後。
- *   Mac(M4, Metal): GPU 側の画像は 4096² でも 0.1ms 未満。帯は 4096² で 1 帯 2.3ms かかり、走行中に GPU の待ちで 300ms 前後止まることがあった
+ *   Mac(M4, Chrome の ANGLE Metal): GPU 側の画像は 4096² でも 0.1ms 未満。帯は 4096² で 1 帯 2.3ms かかり、走行中に GPU の待ちで 300ms 前後止まることがあった
  *   (東京 丸の内スカイウェイ: 帯 1%low 33〜37、GPU 側の画像 60)。
+ *   Mac(M4, Safari 26。GPU 名は「Apple GPU」とだけ出る): GPU 側の画像も CPU 側の画像も 4096² で 50ms(走行中に 60〜95ms 止まり、東京で 1%low 7〜12)。
+ *   帯は 1 帯 5ms、いちばん遅い帯(ミップマップを作る最後の帯)で 10ms。
+ * 分からない描画方式も、1フレームにかかる時間の上限が決まる帯にする。
  */
 export function usesStripUpload(r: THREE.WebGLRenderer): boolean {
   if (IS_FIREFOX) return true;
   const gl = r.getContext();
   const ext = gl.getExtension('WEBGL_debug_renderer_info');
-  return /Direct3D|D3D1[01]/i.test(String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)));
+  return !/ANGLE Metal Renderer/i.test(String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)));
 }
 
 /** 実際に転送するテクスチャの大きさ。縮めるのは Firefox だけ(textureStripsCore.ts の STRIP_MAX_SIDE)、ほかは元の大きさのまま。 */
@@ -170,6 +173,72 @@ export function decodeWithImageElement(loader: GLTFLoader): void {
       };
     }
     return { name: 'DecodeWithImageElement' };
+  });
+}
+
+// ---- Safari: 画像の展開を Worker で ----
+let decodeWorker: Worker | null | undefined;
+let decodeSeq = 0;
+const decodeWaiters = new Map<number, { resolve: (b: ImageBitmap) => void; reject: (e: unknown) => void }>();
+
+function getDecodeWorker(): Worker | null {
+  if (decodeWorker !== undefined) return decodeWorker;
+  try {
+    const code = `
+      self.onmessage = async (e) => {
+        const { id, blob, opts } = e.data;
+        try {
+          const bmp = await createImageBitmap(blob, opts);
+          self.postMessage({ id, bmp }, [bmp]);
+        } catch (err) {
+          self.postMessage({ id, error: String(err) });
+        }
+      };
+    `;
+    const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    const w = new Worker(url);
+    URL.revokeObjectURL(url);
+    w.onmessage = (e: MessageEvent<{ id: number; bmp?: ImageBitmap; error?: string }>) => {
+      const waiter = decodeWaiters.get(e.data.id);
+      if (!waiter) { e.data.bmp?.close(); return; }
+      decodeWaiters.delete(e.data.id);
+      if (e.data.bmp) waiter.resolve(e.data.bmp); else waiter.reject(new Error(e.data.error));
+    };
+    decodeWorker = w;
+  } catch {
+    decodeWorker = null;
+  }
+  return decodeWorker;
+}
+
+/**
+ * Safari 向け: GLTFLoader の画像の展開(ImageBitmapLoader の createImageBitmap(blob))を、Worker で行う。
+ * Safari はメインスレッドの createImageBitmap(blob) で JPEG を同期で展開し、その間メインスレッドが止まる。
+ *   計測(Safari 26, M4): 1024² 14ms・2048² 36ms・4096² 155ms。Worker で展開すると、どの大きさでも止まらない
+ *   (走行中にチャンクを読み込むたびに 35〜60ms 止まり、ヘルシンキで 33ms のフレームが毎秒1回ほど出ていた)。
+ *   Chrome はメインスレッドでもほとんど止まらない(4096² で 16ms)ので、これまでどおり。
+ */
+export function decodeInWorker(loader: GLTFLoader): void {
+  const worker = getDecodeWorker();
+  if (!worker) return;
+  loader.register((parser) => {
+    const tl = (parser as unknown as { textureLoader?: { isImageBitmapLoader?: boolean; options?: ImageBitmapOptions; load: (...a: unknown[]) => unknown } }).textureLoader;
+    if (tl?.isImageBitmapLoader) {
+      tl.load = (url: unknown, onLoad?: unknown, _onProgress?: unknown, onError?: unknown): unknown => {
+        const p = (async (): Promise<ImageBitmap> => {
+          const blob = await (await fetch(String(url))).blob();
+          const opts: ImageBitmapOptions = { premultiplyAlpha: 'none', ...(tl.options ?? {}), colorSpaceConversion: 'none' };
+          const id = ++decodeSeq;
+          return new Promise<ImageBitmap>((resolve, reject) => {
+            decodeWaiters.set(id, { resolve, reject });
+            worker.postMessage({ id, blob, opts });
+          });
+        })();
+        p.then(onLoad as (im: ImageBitmap) => void, onError as (e: unknown) => void);
+        return p;
+      };
+    }
+    return { name: 'DecodeInWorker' };
   });
 }
 

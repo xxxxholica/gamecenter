@@ -1448,7 +1448,7 @@ body :is(#screen-car-select, #screen-map-select) .arcade-action-bar button { whi
 body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn { flex: 0 1 auto; min-width: 0; }
 @media (max-width: 1150px) {
   body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn { padding: 0.4em 0.8em; gap: 0.5em; }
-  body #screen-map-select .time-chip, body #screen-car-select .color-chip-preview { display: none; }
+  body #screen-car-select .color-chip-preview { display: none; }
 }
 body :is(#screen-car-select, #screen-map-select) .arcade-color-cycle-btn :is(.color-name-arcade, .color-sub-hint) { white-space: nowrap; }
 
@@ -1458,26 +1458,12 @@ body .msel.msel-arcade .msel-bar button { gap: 0.6em; }
 .btn-guide, .msel-guide { display: inline-flex; align-items: center; flex: none; }
 .btn-label { white-space: nowrap; }
 
-/* コース選択の下バー中央: 時間帯(日中 / 夜間)の切り替え。マシン選択の「カラー変更」と同じ形 */
-#screen-map-select .arcade-action-bar .arcade-color-cycle-btn { width: auto; flex: 0 1 22em; min-width: 0; padding: 0.6em 1.2em; gap: 0.9em; transform: skewX(-10deg); }
-#screen-map-select .arcade-action-bar .arcade-color-cycle-btn:hover { transform: skewX(-10deg); }
-#screen-map-select .arcade-action-bar .arcade-color-cycle-btn.hidden { display: none; }
-#screen-map-select .color-name-arcade { font-size: 1.15em; }
-#screen-map-select .color-sub-hint { font-size: 0.85em; }
-#screen-map-select .time-chip { display: flex; align-items: center; justify-content: center; width: 3.2em; height: 2.2em; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.35); background: #0a1220; overflow: hidden; }
-#screen-map-select .time-chip svg { height: 90%; width: auto; }
-
-/* 「カラー変更」「時間帯変更」: 戻るボタンと同じ長方形・同じ大きさ(クラス arcade-btn-back を共用) */
-#screen-map-select .arcade-action-bar #ms-btn-time.hidden { display: none; }
-
 /* 変更ボタン: 「カラー変更 ● 名前」を1行に並べる。横長になってよい(高さは戻る・決定と同じ) */
-#screen-car-select .arcade-action-bar #cs-btn-cycle-color, #screen-map-select .arcade-action-bar #ms-btn-time { min-width: 0; padding-inline: calc(36 * var(--u)); }
+#screen-car-select .arcade-action-bar #cs-btn-cycle-color { min-width: 0; padding-inline: calc(36 * var(--u)); }
 .btn-label-col { display: flex; flex-direction: row; align-items: center; gap: 0.7em; white-space: nowrap; }
 .btn-current { display: inline-flex; align-items: center; gap: 0.4em; padding-left: 0.7em; border-left: 1px solid rgba(255, 255, 255, 0.35); font-size: 0.85em; color: #00f0ff; }
 .btn-current .color-chip-preview { width: 1.1em; height: 1.1em; border-width: 1px; display: inline-block; }
-.btn-current .time-chip { display: inline-flex; width: 1.8em; height: 1.2em; }
-.btn-current .time-chip svg { height: 100%; width: auto; }
-body #screen-map-select .btn-current .time-chip, body #screen-car-select .btn-current .color-chip-preview { display: inline-flex; }
+body #screen-car-select .btn-current .color-chip-preview { display: inline-flex; }
 
 /* マシン選択・コース選択の背景: モード選択と同じ、上下をうっすら暗くするぼかし(下のボタン帯と文字が背景に埋もれない) */
 #screen-car-select::before, #screen-map-select::before {

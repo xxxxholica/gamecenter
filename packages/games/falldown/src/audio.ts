@@ -11,7 +11,6 @@ export class Sound {
   private sfxBus!: GainNode;
   private bgmBus!: GainNode;
   private noiseBuf!: AudioBuffer;
-  muted = false;
   private bgmOn = false;
   private nextNote = 0;
   private step = 0;
@@ -36,11 +35,6 @@ export class Sound {
     this.bgmBus.gain.value = 0.32;
     this.bgmBus.connect(this.master);
     this.noiseBuf = createWhiteNoiseBuffer(this.ctx, 1);
-  }
-
-  toggleMute() {
-    this.muted = !this.muted;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.02);
   }
 
   private tone(freq: number, dur: number, type: OscillatorType, vol: number, slideTo?: number, delay = 0, bus?: GainNode) {

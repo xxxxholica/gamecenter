@@ -2,7 +2,7 @@ import { forceSinglePassForTransparent } from './singlePass';
 import { PostFX, compileInParallel } from './PostFX';
 import { audio } from '../audio';
 import { audioRandom, untrackedRandom, untrackedTimeout } from '../../../../shared/arcadeReplay';
-import { createSkyEnvironments, type SkyEnvironments } from './SkyEnvironment';
+import { createSkyEnvironment } from './SkyEnvironment';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MapBase } from '../maps/MapBase';
@@ -16,7 +16,6 @@ import { RoadVfx } from './RoadVfx';
 import { RainSystem } from './RainSystem';
 import { Lightning } from './Lightning';
 import { RoadsideRhythm } from './RoadsideRhythm';
-import type { TimeOfDay } from './TimeOfDay';
 
 export interface DriveSceneCallbacks {
   onSpeedUpdate?: (speedKmH: number, rpm: number, gear: string, isDrifting?: boolean) => void;
@@ -48,7 +47,7 @@ export class DriveScene {
   public currentCar: CarBase | null = null;
   /** ドラゴン・カーのFKアニメ用の経過秒(ポーズ中は進まない)。 */
   private dragonTime = 0;
-  private skyEnv: SkyEnvironments | null = null;
+  private skyEnv: THREE.Texture | null = null;
   private postFx: PostFX;
   public carController: CarController | null = null;
   public tireSmoke: TireSmokeSystem;
@@ -121,14 +120,13 @@ export class DriveScene {
   /** 天候は雨のみ。確認用に URL の ?rain=0 で晴れにできる。 */
   private readonly rainy = new URLSearchParams(location.search).get('rain') !== '0';
   private mapFogDensity = 0.0035;
-  private hemiBase = 0.45;
+  private hemiBase = 1.0;
   private readonly lightning = new Lightning(12);
 
   /** Frozen (pause menu): nothing moves, the last frame stays on screen. */
   public paused: boolean = false;
   /** スタート位置のずらし(オンライン対戦のグリッド): lateral=+で進行方向の右、back=後ろへ(m)。 */
   public gridOffset: { lateral: number; back: number } | null = null;
-  private timeOfDay: TimeOfDay = 'day';
   private headSpot!: THREE.SpotLight;
 
   // Environment lights
@@ -139,7 +137,6 @@ export class DriveScene {
   private skyUniforms!: {
     uTime: { value: number };
     uSunDir: { value: THREE.Vector3 };
-    uNight: { value: number };
   };
 
   // Callbacks
@@ -151,8 +148,8 @@ export class DriveScene {
 
     // 1. Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb); // Sky blue
-    this.scene.fog = new THREE.FogExp2(0xcfe4ee, 0.0035);
+    this.scene.background = new THREE.Color(0x0d1528);
+    this.scene.fog = new THREE.FogExp2(0x1a2646, 0.0035);
 
     // 2. Camera setup
     const aspect = renderer.domElement.clientWidth / renderer.domElement.clientHeight;
@@ -200,13 +197,11 @@ export class DriveScene {
   }
 
   private setupLighting(): void {
-    // Now that the city and road (StreamedCityMap / ViaductBuilder) are lit materials too, not just the car: less flat
-    // ambient/hemi fill than before so cast shadows keep real contrast, and the sun trimmed a touch so concrete facades
-    // don't clip white under ACES tonemapping.
-    this.hemiLight = new THREE.HemisphereLight(0xddeeff, 0x3d4840, 0.45);
+    // Night is a deep blue dusk, not black: the city stays readable (moon, sky glow and lit windows do the work)
+    this.hemiLight = new THREE.HemisphereLight(0x7d92d6, 0x2c3550, 1.0);
     this.scene.add(this.hemiLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xfff7e6, 1.75);
+    this.sunLight = new THREE.DirectionalLight(0xb4c6ff, 1.0);
     this.sunLight.position.set(200, 400, 150);
     this.sunLight.castShadow = true;
     // 影マップの大きさと範囲は、ファイル先頭の SHADOW_MAP_SIZE / SHADOW_HALF_EXTENT を参照(4096px・約120m四方で約3cm/テクセル)。
@@ -223,12 +218,11 @@ export class DriveScene {
     this.sunLight.shadow.normalBias = 0.04;   // 解像度を上げた分の影のぎざぎざ(シャドウアクネ)を抑える
     this.scene.add(this.sunLight);
 
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+    this.ambientLight = new THREE.AmbientLight(0xa4b4e6, 0.5);
     this.scene.add(this.ambientLight);
 
-    // Headlights of the car (night only): one spot light that follows the car
+    // Headlights of the car: one spot light that follows the car
     this.headSpot = new THREE.SpotLight(0xfff0d0, 700, 110, 0.5, 0.7, 2);
-    this.headSpot.visible = false;
     this.scene.add(this.headSpot, this.headSpot.target);
   }
 
@@ -250,30 +244,6 @@ export class DriveScene {
     if (this.active && rain) audio.sfx.startRain(); else audio.sfx.stopRain();
   }
 
-  /** Day: sunlit, clouds, street lamps off. Night: moon, stars, dark blue city, headlights and street lamps on. */
-  public setTimeOfDay(t: TimeOfDay): void {
-    this.timeOfDay = t;
-    const night = t === 'night';
-    this.skyUniforms.uNight.value = night ? 1 : 0;
-    this.postFx.setTimeOfDay(night ? 'night' : 'day');
-    // Night is a deep blue dusk, not black: the city stays readable (moon, sky glow and lit windows do the work)
-    if (this.scene.fog instanceof THREE.FogExp2) this.scene.fog.color.set(night ? 0x1a2646 : 0xcfe4ee);
-    this.hemiLight.color.set(night ? 0x7d92d6 : 0xddeeff);
-    this.hemiLight.groundColor.set(night ? 0x2c3550 : 0x3d4840);
-    this.hemiBase = night ? 1.0 : 0.45;
-    this.hemiLight.intensity = this.hemiBase;
-    this.sunLight.color.set(night ? 0xb4c6ff : 0xfff7e6);
-    this.sunLight.intensity = night ? 1.0 : 1.75;
-    this.ambientLight.color.set(night ? 0xa4b4e6 : 0xffffff);
-    this.ambientLight.intensity = night ? 0.5 : 0.1;
-    if (this.skyEnv) this.scene.environment = night ? this.skyEnv.night : this.skyEnv.day;
-    this.scene.environmentIntensity = 1;
-    this.applyPaintEnvironment();
-    this.headSpot.visible = night;
-    this.currentMap?.setNight(night);
-    this.currentCar?.setLights(night);
-  }
-
   private setupSky(): void {
     // Large hemisphere sky dome with procedural dynamic moving clouds
     const skyGeo = new THREE.SphereGeometry(1500, 32, 24);
@@ -281,7 +251,6 @@ export class DriveScene {
     this.skyUniforms = {
       uTime: { value: 0 },
       uSunDir: { value: new THREE.Vector3(0.5, 0.7, 0.4).normalize() },
-      uNight: { value: 0 },
     };
 
     const vertexShader = `
@@ -295,7 +264,6 @@ export class DriveScene {
     const fragmentShader = `
       uniform float uTime;
       uniform vec3 uSunDir;
-      uniform float uNight;
       varying vec3 vWorldPosition;
 
       // 2D Hash function
@@ -329,9 +297,9 @@ export class DriveScene {
         float h = dir.y; // Height factor (-1 to +1)
 
         // 1. Natural Sky Gradient (moody, rich atmospheric tone)
-        vec3 zenithColor = mix(vec3(0.14, 0.28, 0.50), vec3(0.020, 0.040, 0.120), uNight);   // Deep slate blue / night
-        vec3 midSkyColor = mix(vec3(0.38, 0.54, 0.70), vec3(0.050, 0.090, 0.220), uNight);   // Calm sky blue / night
-        vec3 horizonColor = mix(vec3(0.81, 0.89, 0.93), vec3(0.102, 0.149, 0.275), uNight); // Matches road fog (#cfe4ee / #1a2646)
+        vec3 zenithColor = vec3(0.020, 0.040, 0.120);   // Deep night blue
+        vec3 midSkyColor = vec3(0.050, 0.090, 0.220);   // Night sky blue
+        vec3 horizonColor = vec3(0.102, 0.149, 0.275); // Matches road fog (#1a2646)
 
         vec3 skyColor;
         if (h > 0.25) {
@@ -378,7 +346,7 @@ export class DriveScene {
             vec3 cloudBase = vec3(0.62, 0.67, 0.75); // Shaded base
             vec3 cloudLit = vec3(0.97, 0.98, 1.0) + vec3(0.14, 0.10, 0.05) * sunHighlight;
             vec3 cloudColor = mix(cloudBase, cloudLit, clamp(f2 * 1.25 + sunHighlight * 0.8, 0.0, 1.0));
-            cloudColor *= 1.0 - 0.92 * uNight;   // clouds are only dark shapes at night
+            cloudColor *= 0.08;   // clouds are only dark shapes at night
 
             // Soft blend near horizon into distance fog
             float horizonFade = smoothstep(0.01, 0.15, h);
@@ -389,19 +357,17 @@ export class DriveScene {
         }
 
         // Night: stars, and the moon where the light comes from
-        if (uNight > 0.01) {
-          vec3 sp = dir * 220.0;
-          vec3 cell = floor(sp);
-          float r = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-          float d = length(fract(sp) - 0.5);
-          float star = step(0.9965, r) * smoothstep(0.36, 0.0, d);
-          star *= smoothstep(0.02, 0.25, h) * (0.65 + 0.35 * sin(uTime * 2.0 + r * 60.0));
-          skyColor += vec3(star) * uNight;
-          float md = dot(dir, normalize(uSunDir));
-          float moon = smoothstep(0.9988, 0.9994, md);
-          skyColor = mix(skyColor, vec3(0.95, 0.96, 1.0), moon * uNight);
-          skyColor += vec3(0.35, 0.45, 0.75) * pow(max(md, 0.0), 60.0) * 0.35 * uNight;
-        }
+        vec3 sp = dir * 220.0;
+        vec3 cell = floor(sp);
+        float r = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+        float d = length(fract(sp) - 0.5);
+        float star = step(0.9965, r) * smoothstep(0.36, 0.0, d);
+        star *= smoothstep(0.02, 0.25, h) * (0.65 + 0.35 * sin(uTime * 2.0 + r * 60.0));
+        skyColor += vec3(star);
+        float md = dot(dir, normalize(uSunDir));
+        float moon = smoothstep(0.9988, 0.9994, md);
+        skyColor = mix(skyColor, vec3(0.95, 0.96, 1.0), moon);
+        skyColor += vec3(0.35, 0.45, 0.75) * pow(max(md, 0.0), 60.0) * 0.35;
 
         // Fade below horizon to seamlessly integrate with road fog
         if (h < 0.01) {
@@ -427,9 +393,10 @@ export class DriveScene {
     this.skyMesh.frustumCulled = false;
     this.scene.add(this.skyMesh);
 
-    // 車の塗装・ガラス・クロームに映る環境マップ(昼用・夜用)。明るさが1を超えるHDRで作り、鋭いハイライトを出す
-    this.skyEnv = createSkyEnvironments(this.renderer, new THREE.Vector3(0.3, 0.88, 0.22));
-    this.scene.environment = this.timeOfDay === 'night' ? this.skyEnv.night : this.skyEnv.day;
+    // 車の塗装・ガラス・クロームに映る夜用の環境マップ。明るさが1を超えるHDRで作り、鋭いハイライトを出す
+    this.skyEnv = createSkyEnvironment(this.renderer);
+    this.scene.environment = this.skyEnv;
+    this.scene.environmentIntensity = 1;
   }
 
   /** respawn=false: 車はまだ台座にあるので、スタート地点へは置かない(あとで setCar が置く)。 */
@@ -449,7 +416,6 @@ export class DriveScene {
     this.camera.far = map.viewDistance ?? 2000;
     map.traffic?.setFogDensity(this.mapFogDensity * (this.rainy ? 1.6 : 1), this.camera.far);
     this.camera.updateProjectionMatrix();
-    map.setNight(this.timeOfDay === 'night');
 
     // If car exists, respawn it at map start point
     if (this.carController && respawn) {
@@ -460,13 +426,12 @@ export class DriveScene {
   /**
    * 塗装・ガラス・クロームの素材に、環境マップを直接持たせる。three.js では、scene.environment を使う素材の
    * envMapIntensity は無視される(scene.environmentIntensity が全体に効く)ため、素材ごとに強さを変えるには
-   * 素材自身の envMap を設定する必要がある。目印は material.userData.skyEnv(昼の強さ)。
+   * 素材自身の envMap を設定する必要がある。目印は material.userData.skyEnv(基準の強さ)。
    * 車の選択画面(別シーン)に戻る時は clearPaintEnvironment() で外し、そちらの環境マップを使わせる。
    */
   public applyPaintEnvironment(): void {
     if (!this.skyEnv) return;
-    const night = this.timeOfDay === 'night';
-    const tex = night ? this.skyEnv.night : this.skyEnv.day;
+    const tex = this.skyEnv;
     this.scene.traverse((o) => {
       const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
       if (!mat) return;
@@ -475,7 +440,7 @@ export class DriveScene {
         if (base === undefined) continue;
         const pm = m as THREE.MeshStandardMaterial;
         if (pm.envMap !== tex) { const first = pm.envMap === null; pm.envMap = tex; if (first) pm.needsUpdate = true; }
-        pm.envMapIntensity = base * (night ? m.userData.skyEnvNight ?? 1 : 1);
+        pm.envMapIntensity = base * (m.userData.skyEnvNight ?? 1);
       }
     });
   }
@@ -499,6 +464,7 @@ export class DriveScene {
 
     this.currentCar = car;
     this.scene.add(car.group);
+    car.setLights(true);
 
     if (!this.carController) {
       this.carController = new CarController(car);
@@ -906,14 +872,14 @@ export class DriveScene {
 
     // 風切り音、路肩の反射板の列、すれ違い、スリップストリーム
     audio.sfx.setWind(sf, this.boostLevel);
-    this.rhythm.update(cc.position, this.timeOfDay === 'night');
+    this.rhythm.update(cc.position);
     this.callbacks.onFxUpdate?.(sf, this.boostLevel, this.slipstream);
     this.updateTrafficFx(dt, cc);
 
     // 路面・車まわりの演出(光跡・タイヤ痕・アンダーグロー・衝撃波)
     const slip = Math.abs(cc.slipAngle);
     const skidding = cc.isDrifting || (cc.speed > 8 && slip > 0.1);
-    this.roadVfx.update(dt, cc, this.tires, skidding, Math.min(1, slip * 3), this.timeOfDay === 'night', cc.driftFactor, this.boostLevel, m, this.boostTheme);
+    this.roadVfx.update(dt, cc, this.tires, skidding, Math.min(1, slip * 3), cc.driftFactor, this.boostLevel, m, this.boostTheme);
 
     // ニアミス: 走行中の車の脇をかすめた瞬間に、小さなパンチと風切り音
     this.nearMissCooldown = Math.max(0, this.nearMissCooldown - dt);
@@ -943,7 +909,7 @@ export class DriveScene {
 
     // 雨: 雨粒・稲光・水しぶき
     if (this.rainy) {
-      this.rainSystem.update(dt, cc.position, cc.rotationY, this.carVel, this.timeOfDay === 'night');
+      this.rainSystem.update(dt, cc.position, cc.rotationY, this.carVel);
       this.updateLightning(dt);
       if (cc.speedKmH > 45) {
         const spray = Math.min(1.0, 0.35 + (cc.speedKmH - 45) / 90);
@@ -974,10 +940,8 @@ export class DriveScene {
       this.tireSmoke.emitFlame(this.exhaustR, this.carVel, lv);
       if (th.kind === 'fire') {
         // 炎息: 火の粉が排気口から舞い上がる
-        for (let i = 0; i < 2; i++) {
-          this.tireSmoke.emitEmber(this.exhaustL, this.carVel, lv);
-          this.tireSmoke.emitEmber(this.exhaustR, this.carVel, lv);
-        }
+        this.tireSmoke.emitEmber(this.exhaustL, this.carVel, lv);
+        this.tireSmoke.emitEmber(this.exhaustR, this.carVel, lv);
       } else if (th.kind === 'storm') {
         // 雷: 車の横を、電撃が走る
         this.boltCarry += dt * 16 * lv;
@@ -988,9 +952,9 @@ export class DriveScene {
         // 黄金の咆哮: 4連ノズル(内側の2本を足す)と、金の粉
         this.exhaustInnerL.lerpVectors(this.exhaustL, this.exhaustR, 0.3);
         this.exhaustInnerR.lerpVectors(this.exhaustL, this.exhaustR, 0.7);
-        this.tireSmoke.emitFlame(this.exhaustInnerL, this.carVel, lv * 0.85);
-        this.tireSmoke.emitFlame(this.exhaustInnerR, this.carVel, lv * 0.85);
-        if (untrackedRandom() < lv * 0.9) this.tireSmoke.emitMote(cc.position, this.carVel, 1.3);
+        this.tireSmoke.emitFlame(this.exhaustInnerL, this.carVel, lv * 0.5);
+        this.tireSmoke.emitFlame(this.exhaustInnerR, this.carVel, lv * 0.5);
+        if (untrackedRandom() < lv * 0.7) this.tireSmoke.emitMote(cc.position, this.carVel, 1.3);
       }
     }
   }
@@ -1002,15 +966,15 @@ export class DriveScene {
     switch (this.boostTheme.kind) {
       case 'fire':      // 火の粉が一気に噴き上がる
         for (const pos of [this.exhaustL, this.exhaustR]) {
-          for (let i = 0; i < 18 * k; i++) this.tireSmoke.emitEmber(pos, this.carVel, 1.8);
-          for (let i = 0; i < 3; i++) this.tireSmoke.emitFlame(pos, this.carVel, 1.5);
+          for (let i = 0; i < 10 * k; i++) this.tireSmoke.emitEmber(pos, this.carVel, 1.2);
+          this.tireSmoke.emitFlame(pos, this.carVel, 0.9);
         }
         break;
       case 'storm':     // 電撃が車の周りに一斉に走る
         this.tireSmoke.emitBolts(Math.round(10 * k), cc.position, cc.rotationY, this.carVel);
         break;
       case 'radiant':   // 金の粉が車の周りに舞い上がる
-        for (let i = 0; i < 34 * k; i++) this.tireSmoke.emitMote(cc.position, this.carVel, 1.8);
+        for (let i = 0; i < 20 * k; i++) this.tireSmoke.emitMote(cc.position, this.carVel, 1.6);
         break;
     }
   }

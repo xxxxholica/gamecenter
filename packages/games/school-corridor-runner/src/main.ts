@@ -25,6 +25,7 @@ import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -190,15 +191,17 @@ class Game {
       { id: 'clear', label: '90秒を走りきってクリア(無敵・ランダム入力)', kind: 'run', params: { scene: 'clear' }, input: 'random', seconds: 130 },
     ]);
     const benchScene = benchParam('scene');
+    // タイトル・デモで着いたと知らせるのは、ページの立ち上がりが済み、フレームが落ち着いてから(どちらもすぐ始まる。計測を始める所だけ遅らせる)。
+    // 計測(Windows, Firefox): すぐに知らせると、最初の 0.2 秒に 33〜83ms のフレームが 2 回ほど入っていた
     if (benchScene === 'demo') {
       this.arcadeTitleScreen.hide();
       this.startGame(true);
-      benchReady('demo-start');
+      void waitFramesSettled().then(() => benchReady('demo-start'));
     } else if (benchScene === 'play' || benchScene === 'clear') {
       if (benchScene === 'clear') this.godMode = true;
       this.startWithCountdown();
     } else if (benchScene === 'title') {
-      benchReady('title');
+      void waitFramesSettled().then(() => benchReady('title'));
     }
   }
 
@@ -239,6 +242,9 @@ class Game {
       this.balancePointLights();
       this.renderer.compile(this.scene, this.camera);
       this.corridor.compileGlassReflection(this.renderer, this.scene, this.camera);
+      // 作ったシェーダは、初めて使う時の確認(エラーの記録・uniform の一覧)まで、リンクが終わったものから済ませておく
+      // (片付けた物のシェーダは、タイトルの障害物の入れ替わりや、プレイ中の初登場で初めて使われ、そこで GPU を待っていた)
+      finishPrograms(this.renderer);
     });
     ps.clearAll();
     // holder の中身は dispose しない: 素材・ジオメトリを実物と共有していることがあり、dispose するとシェーダが解放されて、また初回コンパイルになる

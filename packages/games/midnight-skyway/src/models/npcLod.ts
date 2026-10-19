@@ -16,7 +16,7 @@ const TINY_PART_RADIUS = 0.07;         // これより小さい部品(メッシ�
 let farGlass: THREE.MeshStandardMaterial | null = null;
 
 function getFarGlass(): THREE.MeshStandardMaterial {
-  farGlass ??= new THREE.MeshStandardMaterial({ color: 0x141b27, roughness: 0.25, metalness: 0.4 });
+  farGlass ??= new THREE.MeshStandardMaterial({ color: 0x141b27, roughness: 0.55, metalness: 0.15, envMapIntensity: 0.35 });
   return farGlass;
 }
 
@@ -63,7 +63,7 @@ export function buildFarVariant(car: CarBase): THREE.Group {
 
 let ultraDark: THREE.MeshStandardMaterial | null = null;
 function getUltraDark(): THREE.MeshStandardMaterial {
-  ultraDark ??= new THREE.MeshStandardMaterial({ color: 0x0c1018, roughness: 0.5, metalness: 0.3 });
+  ultraDark ??= new THREE.MeshStandardMaterial({ color: 0x0c1018, roughness: 0.7, metalness: 0.15, envMapIntensity: 0.3 });
   return ultraDark;
 }
 

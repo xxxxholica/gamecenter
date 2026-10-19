@@ -51,6 +51,7 @@ export function createArticulatedChainRig(
   numJoints: number,
   isDual: boolean,
   partType: DragonPartType,
+  mirrorSign = 1,
 ): ArticulatedChainRig | null {
   if (!partObj) return null;
   const meshes: THREE.Mesh[] = [];
@@ -166,7 +167,7 @@ export function createArticulatedChainRig(
         const chain = chains[ch];
         chain.curJoints[0].copy(chain.restJoints[0]);
         chain.curQuats[0].identity();
-        const sideSign = ch === 0 ? -1.0 : 1.0;
+        const sideSign = (ch === 0 ? -1.0 : 1.0) * mirrorSign;
 
         for (let k = 1; k <= numJoints; k++) {
           const s = k / numJoints;
@@ -207,18 +208,19 @@ export function createArticulatedChainRig(
             const broadSweep = 0.65 * Math.sin(t * 1.85 - s * 2.2);
             const whip = 1.0 + 0.35 * Math.sin(t * 7.8 - s * 10.5) * s;
             const envSweep = Math.pow(s, 0.85);
-            dYaw = (1.35 / numJoints) * (env * Math.sin(phaseY) * whip + envSweep * broadSweep) * ampScale;
+            dYaw = (1.35 / numJoints) * (env * Math.sin(phaseY) * whip + envSweep * broadSweep) * ampScale * mirrorSign;
             dPitch = (0.48 / numJoints) * env * Math.cos(phaseX) * ampScale;
-            dRoll = (0.42 / numJoints) * env * Math.sin(phaseY + 1.1) * ampScale;
+            dRoll = (0.42 / numJoints) * env * Math.sin(phaseY + 1.1) * ampScale * mirrorSign;
           } else if (presetKey === 'c') {
-            // C (重装甲バトルアックス＆メイステール): 戦斧を大きく左右に振り回す重厚な横なぎスイング
-            const phaseY = t * 2.8 - s * 4.2;
-            const phaseX = t * 2.2 - s * 3.8;
-            const heavySwing = 0.80 * Math.sin(t * 1.45 - s * 1.8);
-            const envSweep = Math.pow(s, 0.80);
-            dYaw = (1.18 / numJoints) * (env * Math.sin(phaseY) + envSweep * heavySwing) * ampScale;
-            dPitch = (0.54 / numJoints) * env * (Math.sin(phaseX) + 0.25 * Math.cos(phaseX * 2.0)) * ampScale;
-            dRoll = (0.36 / numJoints) * env * Math.cos(phaseY) * ampScale;
+            // C (中央並列ツイン・バトルアックス＆メイステール): 中央から左右へ広がり、中央で交差しすぎず自然にしなる双尾モーション
+            const phaseY = t * 2.6 - s * 4.0;
+            const phaseX = t * 2.3 - s * 3.8;
+            const heavySwing = 0.48 * Math.sin(t * 1.4 - s * 1.8);
+            const envSweep = Math.pow(s, 0.85);
+            const yawWave = env * Math.sin(phaseY) * 0.68 + envSweep * heavySwing - 0.12 * env;
+            dYaw = (0.76 / numJoints) * yawWave * ampScale * mirrorSign;
+            dPitch = (0.50 / numJoints) * env * (Math.sin(phaseX) + 0.22 * Math.cos(phaseX * 2.0)) * ampScale;
+            dRoll = (0.30 / numJoints) * env * Math.cos(phaseY) * ampScale * mirrorSign;
           } else {
             // A (ワイバーン・ウィップテール): しなやかな鞭の横しなり＋大きな左右スイング
             const phaseY = t * 3.6 - s * 5.4;
@@ -226,9 +228,9 @@ export function createArticulatedChainRig(
             const broadSweep = 0.72 * Math.cos(t * 1.65 - s * 2.0);
             const whip = 1.0 + 0.30 * Math.cos(t * 6.8 - s * 9.5) * s;
             const envSweep = Math.pow(s, 0.82);
-            dYaw = (1.24 / numJoints) * (env * Math.sin(phaseY) * whip + envSweep * broadSweep) * ampScale;
+            dYaw = (1.24 / numJoints) * (env * Math.sin(phaseY) * whip + envSweep * broadSweep) * ampScale * mirrorSign;
             dPitch = (0.42 / numJoints) * env * Math.cos(phaseX) * ampScale;
-            dRoll = (0.36 / numJoints) * env * Math.sin(phaseY + 0.8) * ampScale;
+            dRoll = (0.36 / numJoints) * env * Math.sin(phaseY + 0.8) * ampScale * mirrorSign;
           }
 
           tmpEuler.set(dPitch, dYaw, dRoll, 'YXZ');
@@ -436,6 +438,47 @@ function addPartGlow(partObj: THREE.Object3D | null | undefined, uniforms: PartG
   }
 }
 
+/**
+ * 尻尾オブジェクトを左右対称に反転(頂点のX座標とX法線を反転し、三角形の頂点巻き順を入れ替える)して複製する。
+ * C(DRAGON GOLD)の双尾(ツインテール)化に使用。
+ */
+function createMirroredTail(srcTail: THREE.Object3D): THREE.Object3D {
+  const clone = srcTail.clone(true);
+  clone.name = 'Dragon_Tail_R';
+  clone.position.x = -srcTail.position.x;
+  clone.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (!m.isMesh || !m.geometry) return;
+    const geo = m.geometry.clone();
+    const pos = geo.attributes.position as THREE.BufferAttribute | undefined;
+    if (pos) {
+      const arr = pos.array as Float32Array;
+      for (let i = 0; i < arr.length; i += 3) arr[i] = -arr[i];
+      pos.needsUpdate = true;
+    }
+    const norm = geo.attributes.normal as THREE.BufferAttribute | undefined;
+    if (norm) {
+      const arr = norm.array as Float32Array;
+      for (let i = 0; i < arr.length; i += 3) arr[i] = -arr[i];
+      norm.needsUpdate = true;
+    }
+    if (geo.index) {
+      const idx = geo.index.array;
+      for (let i = 0; i < idx.length; i += 3) {
+        const tmp = idx[i + 1];
+        idx[i + 1] = idx[i + 2];
+        idx[i + 2] = tmp;
+      }
+      geo.index.needsUpdate = true;
+    }
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    m.geometry = geo;
+  });
+  srcTail.parent?.add(clone);
+  return clone;
+}
+
 export class DragonCarModel extends CarBase {
   public readonly specs: CarSpecs;
   public readonly variant: DragonVariant;
@@ -443,6 +486,7 @@ export class DragonCarModel extends CarBase {
   public hornRig: ArticulatedChainRig | null = null;
   public wingRig: ArticulatedChainRig | null = null;
   public tailRig: ArticulatedChainRig | null = null;
+  public tailRigMirror: ArticulatedChainRig | null = null;
   private lastRigT = -1;
 
   private paintMaterials: THREE.MeshStandardMaterial[] = [];
@@ -530,9 +574,27 @@ export class DragonCarModel extends CarBase {
     });
     this.windshield = proxy;
 
+    const tailObj = carRoot.getObjectByName('Dragon_Tail');
+    let mirroredTailObj: THREE.Object3D | null = null;
+    if (this.variant === 'c' && tailObj) {
+      mirroredTailObj = createMirroredTail(tailObj);
+      // リア中央に2本の根元を並べて配置し、そこから左右外側へ広がりながら後方へ伸びるシルエットにする
+      const rootX = 0.22, rootY = 0.64, rootZ = -1.98;
+      const inwardYaw = 0.22;   // 約12.6°: 元モデルの左右への曲がりを活かしつつ、横に広がりすぎないよう後方へ整える
+      const pitchDown = -0.08;  // 約-4.5°: 根元から後方へ自然に流れる角度
+      const tailScale = 0.88;
+      tailObj.position.set(-rootX, rootY, rootZ);
+      tailObj.rotation.set(pitchDown, -inwardYaw, 0, 'YXZ');
+      tailObj.scale.setScalar(tailScale);
+      mirroredTailObj.position.set(rootX, rootY, rootZ);
+      mirroredTailObj.rotation.set(pitchDown, inwardYaw, 0, 'YXZ');
+      mirroredTailObj.scale.setScalar(tailScale);
+    }
+
     this.hornRig = createArticulatedChainRig(carRoot.getObjectByName('Dragon_Horns'), 16, true, 'horn');
     this.wingRig = createArticulatedChainRig(carRoot.getObjectByName('Dragon_Wings'), 16, true, 'wing');
-    this.tailRig = createArticulatedChainRig(carRoot.getObjectByName('Dragon_Tail'), 32, false, 'tail');
+    this.tailRig = createArticulatedChainRig(tailObj, 32, false, 'tail', 1);
+    this.tailRigMirror = createArticulatedChainRig(mirroredTailObj, 32, false, 'tail', -1);
 
     if (def.partGlow > 0) {
       const emissive = this.emissiveMaterials[0]?.emissive;
@@ -544,7 +606,10 @@ export class DragonCarModel extends CarBase {
       };
       addPartGlow(carRoot.getObjectByName('Dragon_Horns'), this.partGlow);
       addPartGlow(carRoot.getObjectByName('Dragon_Wings'), this.partGlow);
-      if (def.tailGlow) addPartGlow(carRoot.getObjectByName('Dragon_Tail'), this.partGlow);
+      if (def.tailGlow) {
+        addPartGlow(tailObj, this.partGlow);
+        addPartGlow(mirroredTailObj, this.partGlow);
+      }
     }
 
     this.group.add(carRoot);
@@ -563,7 +628,10 @@ export class DragonCarModel extends CarBase {
     // 1フレームのJSの約1割を占める(Firefox ではフレームの予算を超えやすい)。時間が戻ったとき(別の画面から戻った)は、すぐ更新する。
     if (t >= this.lastRigT && t - this.lastRigT < RIG_STEP_SEC) return;
     this.lastRigT = t;
-    this.tailRig?.update(t + phase, this.variant, 1.15 * (1 + s * 0.4));
+    const tailAmp = 1.15 * (1 + s * 0.4);
+    this.tailRig?.update(t + phase, this.variant, tailAmp);
+    // 右側の双尾は位相(+1.15秒)と周期(0.94倍)を少しずらし、機械的な同時開閉にならない自然な揺れにする
+    this.tailRigMirror?.update(t * 0.94 + phase + 1.15, this.variant, tailAmp);
     this.hornRig?.update(t + phase, this.variant, 1.0);
     this.wingRig?.update(t + phase, this.variant, 1.1 * (1 + s * 0.35));
   }

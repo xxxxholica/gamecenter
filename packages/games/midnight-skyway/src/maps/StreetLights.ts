@@ -19,8 +19,6 @@ export function glowTexture(): THREE.CanvasTexture {
 
 export interface StreetLights {
   group: THREE.Group;
-  /** Night: lamps glow and light the road; day: the lamps are just unlit fixtures. */
-  setLit(on: boolean): void;
 }
 
 export interface StreetLightOptions {
@@ -116,11 +114,5 @@ export function buildStreetLights(road: THREE.Vector3[], roadWidth: number, opts
   steel.forEach((g) => g.dispose());
   heads.forEach((g) => g.dispose());
 
-  const setLit = (on: boolean): void => {
-    headMat.color.set(on ? 0xfff1c9 : 0xb9bcc0);          // an unlit lamp head is just a grey fixture
-    halo.visible = on;
-    pools.visible = on;
-  };
-  setLit(false);
-  return { group, setLit };
+  return { group };
 }

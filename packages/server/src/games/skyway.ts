@@ -1,7 +1,7 @@
 // midnight-skyway(レース)の対戦ルール。待機中: マシン(種類+色。他の参加者と body 色が被れない)とコースの希望。
 // 開始時: 未選択のマシンを自動決定、コースは「主催者の固定 > 希望の多数決 > 抽選」。実行中: 座標の中継と完走タイムの集計。
 import type { CarSpec, CarState, FinishEntry, RacerInfo } from '../../../shared/netProtocol.ts';
-import { MAP_IDS, MIN_FINISH_MS, STATE_HZ, TIME_IDS } from '../../../shared/netProtocol.ts';
+import { MAP_IDS, MIN_FINISH_MS, STATE_HZ } from '../../../shared/netProtocol.ts';
 import { CAR_PALETTES, CAR_TYPES, type CarType } from '../../../shared/carPalette.ts';
 import type { ConfigField, GameModule, Member, Msg, Room } from '../engine.ts';
 import { decide, RANDOM, tally } from '../vote.ts';
@@ -76,8 +76,8 @@ export class SkywayGame implements GameModule<SkywayMember> {
   readonly maxPlayers = 4;
   readonly maxPlayMs = MAX_RACE_MS;
   /**
-   * 管理画面に出す設定項目: なし。コースは常に「参加者の希望の多数決(なければ抽選)」、時間帯は常にランダム。
-   * setConfig はテスト・緊急用(ctl の map=…/tod=…)に残してあり、管理画面からは変えられない。
+   * 管理画面に出す設定項目: なし。コースは常に「参加者の希望の多数決(なければ抽選)」。
+   * setConfig はテスト・緊急用(ctl の map=…)に残してあり、管理画面からは変えられない。
    */
   readonly config: ConfigField[] = [];
   readonly playerNames: string[] = SKYWAY_PLAYER_NAMES;
@@ -85,9 +85,6 @@ export class SkywayGame implements GameModule<SkywayMember> {
   private room!: Room<SkywayMember>;
   /** 主催者の設定: コースのid=固定 / 'random'=参加者の希望で決める(なければ抽選) */
   private mapMode = RANDOM;
-  private todMode = RANDOM;
-  /** 次のレースの時間帯(決まった値) */
-  private tod = TIME_IDS[0];
   /** いま走っている(ロード中を含む)レースのコース */
   private raceMap = MAP_IDS[0];
   private dirty = false;
@@ -101,29 +98,21 @@ export class SkywayGame implements GameModule<SkywayMember> {
 
   attach(room: Room<SkywayMember>): void {
     this.room = room;
-    this.resolveTod();                                       // 時間帯は最初から引いておく(ランダム)
   }
 
   getConfig(): Record<string, string> {
-    return { map: this.mapMode, tod: this.todMode };
+    return { map: this.mapMode };
   }
 
   setConfig(cfg: Record<string, string>): void {
     if (cfg.map === RANDOM || MAP_IDS.includes(cfg.map)) this.mapMode = cfg.map;
-    if (cfg.tod === RANDOM || TIME_IDS.includes(cfg.tod)) this.todMode = cfg.tod;
     if (this.room.phase === 'lobby') {
-      this.resolveTod();
       this.room.broadcastRoom();
     }
   }
 
   resolved(): Record<string, string> {
-    return { tod: this.tod };
-  }
-
-  /** 時間帯を決める(ランダムならここで引く)。 */
-  private resolveTod(): void {
-    this.tod = this.todMode === RANDOM ? TIME_IDS[Math.floor(Math.random() * TIME_IDS.length)] : this.todMode;
+    return {};
   }
 
   private data(m: Member<SkywayMember>): SkywayMember {
@@ -147,7 +136,6 @@ export class SkywayGame implements GameModule<SkywayMember> {
     this.finishDeadline = 0;
     this.goAt = 0;
     this.dirty = false;
-    this.resolveTod();                                       // ランダム設定なら次のレースの分を引き直す
   }
 
   playerInfo(m: Member<SkywayMember>): object {
@@ -159,7 +147,7 @@ export class SkywayGame implements GameModule<SkywayMember> {
   }
 
   roomExtra(): object {
-    return { mapMode: this.mapMode, votes: this.votes(), tod: this.tod };
+    return { mapMode: this.mapMode, votes: this.votes() };
   }
 
   /**
@@ -212,8 +200,8 @@ export class SkywayGame implements GameModule<SkywayMember> {
       this.data(m).track = null;
       this.data(m).finish = null;
     }
-    log(`skyway map=${map} tod=${this.tod}`);
-    return { t: 'start', seed, map, tod: this.tod, grid, players };
+    log(`skyway map=${map}`);
+    return { t: 'start', seed, map, grid, players };
   }
 
   onGo(): Msg {

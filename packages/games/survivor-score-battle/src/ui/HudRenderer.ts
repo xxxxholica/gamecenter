@@ -3,6 +3,7 @@ import { Boss } from '../entities/Boss';
 import { PickupItem } from '../items/ExpGem';
 import { getInputMode } from '../../../../shared/arcadeGuide';
 import { currentScale, drawChevron, drawShadowedLabel, LOCATOR_FONT } from './locatorSprites';
+import { drawFilledText, drawOutlinedText } from './outlinedText';
 
 /** SPECIAL を発動するボタン名(コントローラー / キーボード) */
 const SPECIAL_BUTTONS_PAD = ['Y', 'LB', 'RB', 'RT'];
@@ -96,7 +97,7 @@ export class HudRenderer {
     ctx.fillStyle = tint ?? '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, left + w / 2, cy + (isKey ? 0 : 1));
+    drawFilledText(ctx, label, left + w / 2, cy + (isKey ? 0 : 1));
     ctx.restore();
     return w;
   }
@@ -155,9 +156,8 @@ export class HudRenderer {
       ctx.lineWidth = 6;
       ctx.lineJoin = 'round';
       ctx.strokeStyle = '#000000';
-      ctx.strokeText(label, textX, cy);
       ctx.fillStyle = textFill;
-      ctx.fillText(label, textX, cy);
+      drawOutlinedText(ctx, label, textX, cy);   // 虹色(グラデーション)の時は、そのまま描く
     };
 
     if (progress === null) {
@@ -222,7 +222,7 @@ export class HudRenderer {
       ctx.font = '900 18px Impact, sans-serif';
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText(`${activeBoss.bossName}  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
+      drawFilledText(ctx, `${activeBoss.bossName}  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
     }
 
     // 4. Center: Rank Up / Rank Down / #1 Cut-in Banner
@@ -247,7 +247,7 @@ export class HudRenderer {
 
       ctx.font = '900 36px Impact, sans-serif';
       ctx.fillStyle = ctx.strokeStyle;
-      ctx.fillText(this.rankChangeText, width / 2, boxY);
+      drawFilledText(ctx, this.rankChangeText, width / 2, boxY);
       ctx.restore();
     }
 
@@ -270,7 +270,7 @@ export class HudRenderer {
 
       ctx.font = '900 32px Impact, sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(warningBanner, width / 2, boxY);
+      drawFilledText(ctx, warningBanner, width / 2, boxY);
       ctx.restore();
     }
 
@@ -380,12 +380,10 @@ export class HudRenderer {
       ctx.textAlign = col.align;
       ctx.font = `900 ${labelSize}px Impact, sans-serif`;
       ctx.fillStyle = '#8899aa';
-      ctx.strokeText(col.label, col.x, topLabelY);
-      ctx.fillText(col.label, col.x, topLabelY);
+      drawOutlinedText(ctx, col.label, col.x, topLabelY);
       ctx.font = `900 ${valueSize}px Impact, sans-serif`;
       ctx.fillStyle = col.color;
-      ctx.strokeText(col.value, col.x, topValueY);
-      ctx.fillText(col.value, col.x, topValueY);
+      drawOutlinedText(ctx, col.value, col.x, topValueY);
     }
     ctx.restore();
 
@@ -439,8 +437,7 @@ export class HudRenderer {
     ctx.lineWidth = 4;
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = color;
-    ctx.strokeText(text, x, y + 1);
-    ctx.fillText(text, x, y + 1);
+    drawOutlinedText(ctx, text, x, y + 1);
     ctx.restore();
   }
 

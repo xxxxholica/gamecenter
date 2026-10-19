@@ -5,6 +5,8 @@
 // shadowBlur は座標変換(拡大)を受けず、画面の px で効く。そこで絵は、貼る先の拡大率(画面の px / ゲームの座標)と同じ解像度で描き、
 // 1px = 画面の 1px で貼る(ぼかしの幅も、図形の大きさも、元の描き方と同じになる)。
 
+import { drawFilledText } from './outlinedText';
+
 const CHEVRON_BLUR = 12;
 const LABEL_BLUR = 4;
 export const LOCATOR_FONT = '900 13px sans-serif';
@@ -115,8 +117,13 @@ export function drawShadowedLabel(ctx: CanvasRenderingContext2D, text: string, x
     ctx.drawImage(sp.canvas, cx - sp.originX / sp.scale, y - sp.originY / sp.scale, sp.canvas.width / sp.scale, sp.canvas.height / sp.scale);
     cx += advance(ctx, ch);
   }
+  // 文字も 1 文字ずつ貼る(距離は動くたびに変わるので、文字列ごとの絵にすると、毎フレーム作り直しになる)
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, x - total / 2, y);
+  cx = x - total / 2;
+  for (const ch of text) {
+    drawFilledText(ctx, ch, cx, y);
+    cx += advance(ctx, ch);
+  }
 }

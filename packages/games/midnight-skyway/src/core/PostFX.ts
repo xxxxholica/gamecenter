@@ -9,37 +9,16 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 /**
  * 画面全体にかける後処理: ブルーム(明るい部分のにじみ) → トーンマッピング → 色調補正(陰影の色の乗せ・彩度・
  * コントラスト・ビネット・フィルムグレイン)。車・街・道路・空を同じ調子に揃える。
- * 昼と夜でプリセットを切り替える。URL に ?fx=0 を付けると無効(比較用)。
+ * URL に ?fx=0 を付けると無効(比較用)。
  */
 
-interface Preset {
-  bloomStrength: number;
-  bloomRadius: number;
-  bloomThreshold: number;
-  contrast: number;
-  saturation: number;
-  /** 影の側に乗せる色 / 明るい側に乗せる色(表示色空間の加算値) */
-  shadowTint: [number, number, number];
-  highlightTint: [number, number, number];
-  vignette: number;
-  grain: number;
-}
-
-const PRESETS: Record<'day' | 'night', Preset> = {
-  // 夜: 青緑の影と暖色の明かり。ネオンと窓の光をにじませる
-  night: {
-    bloomStrength: 0.28, bloomRadius: 0.35, bloomThreshold: 0.95,
-    contrast: 1.08, saturation: 1.1,
-    shadowTint: [-0.012, 0.02, 0.038], highlightTint: [0.035, 0.014, -0.018],
-    vignette: 0.38, grain: 0.026,
-  },
-  // 昼: 少し暖色寄りの落ち着いたフィルム調。彩度を抑えて街の灰色と揃える
-  day: {
-    bloomStrength: 0.08, bloomRadius: 0.3, bloomThreshold: 1.0,
-    contrast: 1.05, saturation: 0.98,
-    shadowTint: [0.0, 0.008, 0.022], highlightTint: [0.016, 0.009, -0.006],
-    vignette: 0.24, grain: 0.018,
-  },
+// 夜: 青緑の影と暖色の明かり。ネオンと窓の光をにじませる
+const NIGHT_PRESET = {
+  bloomStrength: 0.28, bloomRadius: 0.35, bloomThreshold: 0.95,
+  contrast: 1.08, saturation: 1.1,
+  shadowTint: [-0.012, 0.02, 0.038] as [number, number, number],
+  highlightTint: [0.035, 0.014, -0.018] as [number, number, number],
+  vignette: 0.38, grain: 0.026,
 };
 
 
@@ -59,7 +38,6 @@ const WetShader = {
     uRes: { value: new THREE.Vector2(1, 1) },
     uWet: { value: 0 },
     uTime: { value: 0 },
-    uNight: { value: 1 },
     uPrevVP: { value: new THREE.Matrix4() },
     uMotion: { value: 0 },
     /** xy = 自車の画面位置(0〜1)、z = 自車の大きさ(画面の高さに対する半径) */
@@ -76,7 +54,7 @@ const WetShader = {
     uniform sampler2D tDiffuse, tDepth;
     uniform mat4 uProj, uProjInv, uView, uViewInv, uPrevVP;
     uniform vec2 uRes;
-    uniform float uWet, uTime, uNight, uMotion;
+    uniform float uWet, uTime, uMotion;
     uniform vec3 uCarUV;
     varying vec2 vUv;
 
@@ -195,7 +173,7 @@ const WetShader = {
         }
       }
       // 反射が当たらなかった所は、空の色を薄く映す
-      vec3 sky = mix(vec3(0.42, 0.52, 0.62), vec3(0.025, 0.04, 0.09), uNight) * (0.5 + 0.5 * max(0.0, (mat3(uViewInv) * R).y));
+      vec3 sky = vec3(0.025, 0.04, 0.09) * (0.5 + 0.5 * max(0.0, (mat3(uViewInv) * R).y));
       refl = mix(sky, refl, conf);
 
       // 濡れると地面が暗くなり、その上に反射が乗る
@@ -418,14 +396,12 @@ export class PostFX {
   private readonly wet: WetReflectionPass;
   private readonly anamorphic: ShaderPass;
   private motion = 0;
-  private night = true;
   private rain = 0;
   private readonly grade: ShaderPass;
   private readonly clock = new THREE.Clock();
   private width = 0;
   private height = 0;
   private pixelRatio = 0;
-  private preset: Preset = PRESETS.day;
 
   constructor(private readonly renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
     const size = renderer.getSize(new THREE.Vector2());
@@ -452,18 +428,11 @@ export class PostFX {
     this.composer.addPass(new OutputPass());                                  // トーンマッピング(ACES)とsRGB変換は、ここで1回だけ
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
-    this.setTimeOfDay('day');
-    this.enabled = new URLSearchParams(location.search).get('fx') !== '0';
-  }
-
-  public setTimeOfDay(t: 'day' | 'night'): void {
-    const p = PRESETS[t];
-    this.preset = p;
-    this.night = t === 'night';
+    const p = NIGHT_PRESET;
     this.bloom.strength = p.bloomStrength;
     this.bloom.radius = p.bloomRadius;
     this.bloom.threshold = p.bloomThreshold;
-    this.bloom.enabled = p.bloomStrength >= 0.1;   // ほぼ見えない強さなら、ブルームの全画面パスごと省く(昼)
+    this.bloom.enabled = true;
     const u = this.grade.uniforms;
     u.uContrast.value = p.contrast;
     u.uSaturation.value = p.saturation;
@@ -471,6 +440,7 @@ export class PostFX {
     (u.uHighlightTint.value as THREE.Vector3).set(...p.highlightTint);
     u.uVignette.value = p.vignette;
     u.uGrain.value = p.grain;
+    this.enabled = new URLSearchParams(location.search).get('fx') !== '0';
   }
 
   /** 雨(0〜1)。路面の反射を有効にし、明かりのにじみを強める。 */
@@ -514,13 +484,13 @@ export class PostFX {
       flash * scale                                                 // 閃光
     );
     u.uBoost.value = boost;
-    const flare = ((this.night ? 1 : 0.25) + this.rain * 0.4 + boost * 0.8 + flash * 0.6) * scale;
+    const flare = (1 + this.rain * 0.4 + boost * 0.8 + flash * 0.6) * scale;
     this.anamorphic.uniforms.uStrength.value = flare;
     this.anamorphic.enabled = flare > 0.02;
-    this.anamorphic.uniforms.uThreshold.value = this.night ? 1.0 : 1.6;
+    this.anamorphic.uniforms.uThreshold.value = 1.0;
     this.anamorphic.uniforms.uTint.value.copy(this.flareBase).lerp(this.boostFlare, Math.min(1, boost * 1.5));
     (u.uMood.value as THREE.Vector2).set(finale * scale, drift * scale);
-    const p = this.preset;
+    const p = NIGHT_PRESET;
     this.bloom.strength = p.bloomStrength + boost * 0.45 + flash * 0.4 + finale * 0.12 + this.rain * 0.12;
     this.bloom.radius = p.bloomRadius + this.rain * 0.15;
     this.bloom.threshold = p.bloomThreshold - this.rain * 0.05;
@@ -544,7 +514,6 @@ export class PostFX {
       this.composer.setSize(size.x, size.y);
     }
     this.wet.uniforms.uTime.value = this.clock.elapsedTime;
-    this.wet.uniforms.uNight.value = this.preset === PRESETS.night ? 1 : 0;
     this.anamorphic.uniforms.uRes.value.set(size.x * pr, size.y * pr);
     this.grade.uniforms.uAspect.value = size.x / Math.max(1, size.y);
     this.grade.uniforms.uTime.value = this.clock.elapsedTime;

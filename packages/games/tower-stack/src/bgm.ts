@@ -4,7 +4,6 @@ import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 
 export type BgmScene = 'menu' | 'play';
 
-const STORAGE_KEY = 'tower-stack:bgm-muted';
 const BPM = 112;
 const STEP = 60 / BPM / 4;             // 16分音符の長さ(秒)
 const LOOKAHEAD = 0.14;                // 先に予約しておく時間(秒)
@@ -34,13 +33,8 @@ export class Bgm {
   private scene: BgmScene = 'menu';
   private nextTime = 0;
   private step = 0;
-  private muted = false;
 
-  constructor(private readonly getContext: () => AudioContext | null) {
-    try { this.muted = localStorage.getItem(STORAGE_KEY) === '1'; } catch { /* 読めなくても続行 */ }
-  }
-
-  get isMuted(): boolean { return this.muted; }
+  constructor(private readonly getContext: () => AudioContext | null) {}
 
   /** 最初の操作のあとに呼ぶ(ブラウザは操作の前には音を出せない)。音を出す準備をして、鳴らし始める */
   unlock(): void {
@@ -50,7 +44,7 @@ export class Bgm {
     this.ctx = ctx;
     this.noise = createWhiteNoiseBuffer(ctx, 1);
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : MASTER;
+    this.master.gain.value = MASTER;
     this.master.connect(ctx.destination);
     this.nextTime = ctx.currentTime + 0.1;
     window.setInterval(() => this.tick(), 25);
@@ -58,14 +52,6 @@ export class Bgm {
 
   setScene(scene: BgmScene): void {
     this.scene = scene;
-  }
-
-  toggleMute(): boolean {
-    this.muted = !this.muted;
-    try { localStorage.setItem(STORAGE_KEY, this.muted ? '1' : '0'); } catch { /* 保存できなくても続行 */ }
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : MASTER, this.ctx.currentTime, 0.05);
-    this.unlock();
-    return this.muted;
   }
 
   private tick(): void {

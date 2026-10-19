@@ -1,4 +1,4 @@
-import { IS_FIREFOX, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
+import { IS_FIREFOX, IS_SAFARI, decodeInWorker, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
 import { benchMark } from '../../../../shared/arcadeBenchTargets';
 import { realNow, untrackedFrame, untrackedTimeout } from '../../../../shared/arcadeReplay';
 import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
@@ -269,6 +269,7 @@ export abstract class StreamedCityMap extends MapBase {
     this.loader = new GLTFLoader();
     this.loader.setMeshoptDecoder(MeshoptDecoder);
     if (IS_FIREFOX) decodeWithImageElement(this.loader);   // Firefox は createImageBitmap(オプション付き)のデコードで rAF が止まる(textureStrips.ts)
+    else if (IS_SAFARI) decodeInWorker(this.loader);      // Safari はメインスレッドで展開すると、その間止まる(textureStrips.ts)
     if (!import.meta.env.DEV) this.pacer = sharedPacer ??= new RequestPacer(this.requestBurst, this.requestIntervalMs);
 
     const initial = this.wanted(this.startPosition.x, this.startPosition.z, this.loadRadius);
@@ -430,6 +431,7 @@ export abstract class StreamedCityMap extends MapBase {
       // Firefox: 4096² を一度に転送すると rAF が約 40ms 止まる。
       // Chrome(Windows, ANGLE D3D11): 下の Worker の方法だと、GPU プロセスで 1024² 12ms・4096² 193ms 止まる(東京の 150〜183ms の停止、
       //   ヘルシンキの 33ms の連続)。CPU 側の画像のまま送る(小さい画像は 1024² 3.5ms、帯は 1 帯 3ms 前後)。
+      // Safari(Mac): 下の Worker の方法でも 4096² 1枚に 50ms かかる(走行中に 60〜95ms 止まる)。帯は 1 帯 5ms。
       for (const tex of textures) rememberStripTemplate(tex);   // 読み込み中に、大きなテクスチャの設定を覚えておく(あとでプールを先に確保する)
       const r = this.renderer;
       if (IS_FIREFOX) await Promise.all(textures.map((tex) => prepareGpuTextureImage(tex)));   // Firefox は、これまでどおり、小さい画像(ImageBitmap)を Worker で GPU 側に載せてから転送する
@@ -639,22 +641,15 @@ export abstract class StreamedCityMap extends MapBase {
     return mat;
   }
 
-  /** 1 at night, 0 by day: shared by every building material, so switching needs no recompile. */
-  private readonly nightUniform = { value: 0 };
   /**
    * The lit windows of the city at night: warm rectangles on the walls of the buildings (procedural, in world space).
    * density = share of windows that are lit, floorH / winW = size of one window cell in metres. Far away they fade to a soft glow.
    */
   protected nightLook = { color: new THREE.Color(1.0, 0.9, 0.68), density: 0.5, floorH: 3.8, winW: 2.6 };
 
-  public override setNight(night: boolean): void {
-    this.nightUniform.value = night ? 1 : 0;
-  }
-
   private addNightWindows(mat: THREE.MeshLambertMaterial): void {
-    const look = this.nightLook, night = this.nightUniform;
+    const look = this.nightLook;
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uNight = night;
       shader.uniforms.uWinCol = { value: look.color };
       shader.uniforms.uWinParams = { value: new THREE.Vector3(look.density, look.floorH, look.winW) };
       shader.vertexShader = shader.vertexShader
@@ -662,13 +657,12 @@ export abstract class StreamedCityMap extends MapBase {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvNightPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNightNor = normalize(mat3(modelMatrix) * objectNormal);');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
-uniform float uNight;
 uniform vec3 uWinCol;
 uniform vec3 uWinParams;
 varying vec3 vNightPos;
 varying vec3 vNightNor;`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
+if (abs(vNightNor.y) < 0.4) {
   float along = mix(vNightPos.z, vNightPos.x, abs(vNightNor.z));      // position along the wall
   vec2 cell = vec2(along / uWinParams.z, vNightPos.y / uWinParams.y);
   vec2 id = floor(cell);
@@ -682,7 +676,7 @@ if (uNight > 0.01 && abs(vNightNor.y) < 0.4) {
     float near = 1.0;
   #endif
   float glow = mix(uWinParams.x * 0.3, lit * pane, near);              // far walls: an even soft glow
-  totalEmissiveRadiance += uWinCol * glow * uNight * (0.6 + 0.4 * fract(r * 7.0));
+  totalEmissiveRadiance += uWinCol * glow * (0.6 + 0.4 * fract(r * 7.0));
 }`);
     };
     mat.customProgramCacheKey = () => 'city-night-windows';

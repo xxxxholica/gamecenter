@@ -23,7 +23,6 @@ import { TitleScreen } from './ui/TitleScreen';
 import { CarSelectScreen } from './ui/CarSelectScreen';
 import { MapSelectScreen } from './ui/MapSelectScreen';
 import type { GhostTrace } from './core/Ghost';
-import { TimeOfDay, loadTimeOfDay, saveTimeOfDay } from './core/TimeOfDay';
 import { StageLoadingScreen } from './ui/StageLoadingScreen';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
@@ -79,7 +78,6 @@ const guideMapSelect = () => mountArcadeGuide({
   moveLabel: 'コース選択',
   keyMoveKeys: 'WASD',
   buttons: [
-    { indices: [2, 3, 4, 5], label: '時間帯変更', keyLabel: 'C' },
     { indices: [0], label: '決定' },
     { indices: [1], label: '戻る' },
   ],
@@ -192,18 +190,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   let currentCar: CarBase = carModels.dragon_a;
   garage.turntableGroup.add(currentCar.group);
 
-  // ベンチマーク(?bench=1)の場面: 全ステージ × 全マシン × 昼夜のレース、全マシンのガレージ、タイトル
+  // ベンチマーク(?bench=1)の場面: 全ステージ × 全マシンのレース、全マシンのガレージ、タイトル
   declareBenchTargets([
     { id: 'title', label: 'タイトル', kind: 'title', params: { scene: 'title' }, input: 'idle', seconds: 20 },
     ...CAR_TYPES.map((car) => ({ id: `garage-${car}`, label: `マシン選択 ${car}`, kind: 'garage', params: { scene: 'garage', car }, input: 'idle' as const, seconds: 20 })),
-    ...STAGES.flatMap((st) => CAR_TYPES.flatMap((car) => (['day', 'night'] as const).map((tod) => ({
-      id: `race-${st.id}-${car}-${tod}`,
-      label: `${st.title} / ${car} / ${tod === 'day' ? '昼' : '夜'}`,
+    ...STAGES.flatMap((st) => CAR_TYPES.map((car) => ({
+      id: `race-${st.id}-${car}`,
+      label: `${st.title} / ${car}`,
       kind: 'race',
-      params: { scene: 'race', stage: st.id, car, tod },
+      params: { scene: 'race', stage: st.id, car },
       input: 'self' as const,
       seconds: 300,      // 1周走りきると benchDone() で止まる。これは打ち切りの上限
-    })))),
+    }))),
   ]);
   const benchScene = benchParam('scene');
   const benchAutoDrive = benchScene === 'race';   // ベンチ: HUD は出したまま、コースの1周をオートパイロットで走る
@@ -227,8 +225,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     tokyo_climb: () => new TokyoClimbMap(),
   };
 
-  const benchTod = benchParam('tod');
-  let currentTimeOfDay: TimeOfDay = benchTod === 'day' || benchTod === 'night' ? benchTod : loadTimeOfDay();   // ベンチでは保存済みの設定に左右されない
   let lightsBeforeRace = true;   // the garage's own headlight setting, restored when the car goes back
   const benchStage = benchParam('stage');
   let currentMapId = benchStage && benchStage in mapFactories ? benchStage : 'tokyo_skyway';
@@ -237,7 +233,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   let bootMapUnused = true;
   await yieldFrame();
   driveScene.loadMap(currentMapInstance, false);
-  driveScene.setTimeOfDay(currentTimeOfDay);
   await yieldFrame();
   await driveScene.warmupAsync(Object.values(carModels));   // シェーダは並列にコンパイルし終えてから描く(リンクの完了待ちで止まらない)
   for (const car of Object.values(carModels)) driveScene.clearPaintEnvironment(car);   // ガレージ側の環境マップに戻す
@@ -313,9 +308,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       vehicle: currentCar.specs.name,
       mode: online ? 'オンライン' : 'ひとり',
       maxStage: currentMapId,
-      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay },
+      extraStats: { map: currentMapId },
     });
-    reportRoundStart({ map: currentMapId, car: currentCar.specs.name, timeOfDay: currentTimeOfDay, mode: online ? 'オンライン' : 'ひとり' });
+    reportRoundStart({ map: currentMapId, car: currentCar.specs.name, mode: online ? 'オンライン' : 'ひとり' });
     syncBestTimeDisplay();
     if (online) return;                                      // オンライン: 全員のロードが揃って go が来てから始める
     timeAttack.startCountdown();
@@ -383,7 +378,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       vehicle: currentCar.specs.name,
       mode: online ? 'オンライン' : 'ひとり',
       maxStage: currentMapId,
-      extraStats: { map: currentMapId, timeOfDay: currentTimeOfDay, totalTimeMs: Math.round(result.totalTimeMs), sectorMs: result.sectors.map((x) => Math.round(x.timeMs)) },
+      extraStats: { map: currentMapId, totalTimeMs: Math.round(result.totalTimeMs), sectorMs: result.sectors.map((x) => Math.round(x.timeMs)) },
     });
     raceDirector.onGoal(result);
     if (online && !online.disconnected && !result.timedOut) {
@@ -615,11 +610,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         currentMapId = mapId;
       }
     },
-    onChangeTime: (t) => {
-      sfx.uiMove();
-      currentTimeOfDay = t;
-      saveTimeOfDay(t);
-    },
     onStartRace: () => {
       sfx.uiConfirm();
       if (loadingGhosts) return;
@@ -744,7 +734,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   net.on('start', (m) => {
     if (!onlineRoom || !mapFactories[m.map] || (flow.currentScreen !== 'ONLINE_LOBBY' && flow.currentScreen !== 'ONLINE_COURSE' && flow.currentScreen !== 'ONLINE_WAIT')) return;
     currentMapId = m.map;
-    currentTimeOfDay = m.tod === 'day' ? 'day' : 'night';    // 保存はしない(ひとりで遊ぶ時の設定を変えない)
     online = {
       seed: m.seed,
       slot: Math.max(0, m.grid.indexOf(onlineRoom.you)),
@@ -802,7 +791,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Title screen 2-second car rotation cycle
   const titleCarEntries = CAR_TYPES.map((type) => ({ type, model: carModels[type] }));
-  let titleCarIndex = 0;
+  let titleCarIndex = Math.max(0, titleCarEntries.findIndex((e) => e.model === currentCar));
   let titleCarTimer: number | null = null;
 
   const startTitleCarCycle = () => {
@@ -893,7 +882,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       const records = Object.fromEntries(STAGES.map((st) => [st.id, timeAttack.getBestRecord(st.id)]));
       mapSelectScreen.setOnlineMode(false);
       mapSelectScreen.setSelectedMap(currentMapId);
-      mapSelectScreen.setTimeOfDay(currentTimeOfDay);
       guideMapSelect();
       mapSelectScreen.show(records);
     },
@@ -996,7 +984,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (!reuseBootMap) {
         driveScene.loadMap(currentMapInstance, false); // 車はまだ台座にあるので、スタート地点には置かない
       }
-      driveScene.setTimeOfDay(currentTimeOfDay);       // sky, lights, street lamps and the car's headlights
       driveHUD.setMap(currentMapInstance);
 
       // Stream initial chunks and update loading progress
@@ -1025,7 +1012,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       garage.turntableGroup.remove(currentCar.group);
       garage.endLaunch();
       driveScene.setCar(currentCar);
-      driveScene.setTimeOfDay(currentTimeOfDay);       // 車のライトを、走行シーンの時間帯に合わせる
       stageLoadingScreen.hide();
 
       // 選んだゴースト(取得できなければペースボット)
@@ -1041,13 +1027,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (isPreviewMode) { hudContainer.style.display = 'none'; previewPilot = null; }
       const raceGuide = guideRace(true);                 // 明転に合わせてフェードインさせる(それまでは見えない)
       restartRace();
-      await driveScene.warmupAsync();                  // 暗転中に、時間帯・マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)。並列にコンパイルし終えてから描く
+      await driveScene.warmupAsync();                  // 暗転中に、マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)。並列にコンパイルし終えてから描く
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
       stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
       requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; if (benchAutoDrive) benchReady('race-start'); }));   // ガイドも同じタイミングでフェードイン
       if (online) {
-        online.race = new OnlineRace(net, driveScene, online.players, online.you, currentTimeOfDay === 'night', {
+        online.race = new OnlineRace(net, driveScene, online.players, online.you, {
           onStandings: (rows) => onlineHUD.setStandings(rows),
           onToast: (t) => onlineHUD.toast(t),
         });

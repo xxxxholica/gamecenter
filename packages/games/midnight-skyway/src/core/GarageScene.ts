@@ -102,7 +102,6 @@ export class GarageScene {
     this.scene.add(this.rain.mesh);
     this.scene.add(this.spray.group);
     this.postFx = new PostFX(this.renderer, this.scene, this.camera);
-    this.postFx.setTimeOfDay('night');
     this.postFx.setRain(1, 1);
     this.spray.wet = true;
 
@@ -339,7 +338,7 @@ export class GarageScene {
     // 背景を流し、雨を降らせる。車は止まっているので、雨の相対速度は「後ろへ流れる」ぶんを渡す
     const lv = this.loadLevel;
     this.city.update(dt, CRUISE_SPEED * (1 + rush * 1.6 + lv * 0.6));
-    this.rain.update(dt, GarageScene.ORIGIN, 0, GarageScene.CRUISE_VEL, true);
+    this.rain.update(dt, GarageScene.ORIGIN, 0, GarageScene.CRUISE_VEL);
 
     // 稲光
     this.lightning.update(dt);

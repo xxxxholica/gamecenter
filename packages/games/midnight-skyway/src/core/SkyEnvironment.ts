@@ -75,33 +75,6 @@ function panel(az: number, y: number, az0: number, az1: number, y0: number, y1: 
   return a * e;
 }
 
-function dayShade(sunDir: THREE.Vector3) {
-  const horizon: RGB = [0.52, 0.63, 0.78];
-  const zenith: RGB = [0.06, 0.18, 0.46];
-  const asphalt: RGB = [0.05, 0.055, 0.06];
-  return (dir: THREE.Vector3, az: number, y: number): RGB => {
-    let c: RGB;
-    if (y >= 0) {
-      // 空: 水平線は白っぽく、上は濃い青
-      c = mix(horizon, zenith, Math.pow(Math.min(1, y * 1.15), 0.6));
-      // 太陽(小さな円盤は非常に明るく、周りに柔らかい光)
-      const s = Math.max(0, dir.dot(sunDir));
-      c = [c[0] + Math.pow(s, 900) * 90 + Math.pow(s, 40) * 1.6 + Math.pow(s, 6) * 0.25, c[1] + Math.pow(s, 900) * 85 + Math.pow(s, 40) * 1.4 + Math.pow(s, 6) * 0.22, c[2] + Math.pow(s, 900) * 70 + Math.pow(s, 40) * 1.0 + Math.pow(s, 6) * 0.15];
-      // 空の光の帯(2本): ボディの側面と屋根に細長いハイライトが走る
-      const p = Math.max(panel(az, y, 0.12, 0.3, 0.38, 0.46), panel(az, y, 0.58, 0.82, 0.55, 0.64, 0.015));
-      c = mix(c, [3.2, 3.3, 3.5], p);
-      // 水平線の街並み(日中は暗い面に、日光を反射する窓がきらりと光る)
-      const city = cityBand(az, y, [0.1, 0.11, 0.13], (r) => (r > 0.965 ? [3.2, 3.1, 2.8] : null));
-      if (city) c = city;
-    } else {
-      // 路面: 暗いアスファルト。水平線近くは空を薄く映す(フレネル反射)
-      const f = Math.pow(Math.max(0, 1 + y * 4.5), 3);
-      c = mix(asphalt, [horizon[0] * 0.5, horizon[1] * 0.5, horizon[2] * 0.5], f * 0.6);
-    }
-    return c;
-  };
-}
-
 function nightShade(moonDir: THREE.Vector3) {
   const horizon: RGB = [0.05, 0.07, 0.15];
   const zenith: RGB = [0.004, 0.008, 0.03];
@@ -147,20 +120,12 @@ function nightShade(moonDir: THREE.Vector3) {
   };
 }
 
-export interface SkyEnvironments {
-  day: THREE.Texture;
-  night: THREE.Texture;
-}
-
-/** 昼用・夜用の環境マップを作る(PMREM変換済み)。 */
-export function createSkyEnvironments(renderer: THREE.WebGLRenderer, sunDir: THREE.Vector3): SkyEnvironments {
+/** 夜用の環境マップを作る(PMREM変換済み)。 */
+export function createSkyEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const daySrc = build(dayShade(sunDir.clone().normalize()));
   const nightSrc = build(nightShade(new THREE.Vector3(-0.35, 0.55, -0.4).normalize()));
-  const day = pmrem.fromEquirectangular(daySrc).texture;
   const night = pmrem.fromEquirectangular(nightSrc).texture;
-  daySrc.dispose();
   nightSrc.dispose();
   pmrem.dispose();
-  return { day, night };
+  return night;
 }

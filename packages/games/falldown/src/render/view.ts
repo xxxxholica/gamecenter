@@ -15,6 +15,7 @@ import { PlayerModel } from './playerModel.ts';
 import { Decor } from './decor.ts';
 import { hash } from './hash.ts';
 import { Particles } from './particles.ts';
+import { finishPrograms } from '../../../../shared/shaderCompile';
 
 // ルビー / トパーズ / エメラルド / サファイア
 export const BLOCK_COLORS = [0xff2e52, 0xffb51f, 0x1fd677, 0x2f7dff];
@@ -356,6 +357,9 @@ export class View {
       this.blastMats.push(m.material as THREE.MeshBasicMaterial);
     }
     this.renderer.setRenderTarget(null);
+    // 作ったシェーダは、初めて使う時の確認まで済ませておく(片付けた爆発のシェーダは、はじめての爆発で初めて使われ、
+    // 計測(Windows, Chrome): そこで getProgramInfoLog が 23〜27ms 止まり、33ms のフレームになっていた)
+    finishPrograms(this.renderer);
   }
 
   private buildSurface() {

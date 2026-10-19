@@ -48,7 +48,7 @@ export class OnlineRace {
   private offs: (() => void)[] = [];
   private readonly drive: DriveScene;
 
-  constructor(client: SkywayNet, drive: DriveScene, players: RacerInfo[], you: number, night: boolean, hooks: OnlineRaceHooks) {
+  constructor(client: SkywayNet, drive: DriveScene, players: RacerInfo[], you: number, hooks: OnlineRaceHooks) {
     this.client = client;
     this.hooks = hooks;
     this.you = you;
@@ -57,7 +57,7 @@ export class OnlineRace {
     this.myColor = me?.car.body ?? 0x00f0ff;
     for (const p of players) {
       if (p.id === you) continue;
-      const rc = new RemoteCar(p.id, p.name, p.car, night);
+      const rc = new RemoteCar(p.id, p.name, p.car);
       this.remotes.set(p.id, rc);
       drive.scene.add(rc.car.group);
     }

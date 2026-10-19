@@ -95,48 +95,52 @@ export abstract class CarBase {
   }
 
   protected initMaterials(): void {
-    // 1. High-end car paint (glossy deep clearcoat)
+    // 1. Car paint (NPC用: プレイヤーのライトや環境マップでギラつかないよう反射を抑える)
     this.bodyMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xf7b731,
-      metalness: 0.45,
-      roughness: 0.1,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.015,
+      metalness: 0.18,
+      roughness: 0.38,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.25,
       ior: 1.52,
-      reflectivity: 0.9,
-      // 昼の反射の強さ(DriveScene.applyPaintEnvironment が素材の envMap に反映する。envMapIntensity は素材に envMap が無いと効かない)
-      userData: { skyEnv: 1.7, skyEnvNight: 1.3 },
+      reflectivity: 0.4,
+      envMapIntensity: 0.35,
+      // 環境マップの反射の強さ(DriveScene.applyPaintEnvironment が素材の envMap に反映する)
+      userData: { skyEnv: 0.55, skyEnvNight: 0.65 },
     });
 
-    // 2. 2-tone roof paint (glossy contrast)
+    // 2. 2-tone roof paint
     this.roofMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x1e272e,
-      metalness: 0.3,
-      roughness: 0.12,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.015,
+      metalness: 0.15,
+      roughness: 0.42,
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.28,
       ior: 1.52,
-      userData: { skyEnv: 1.7, skyEnvNight: 1.3 },
+      reflectivity: 0.35,
+      envMapIntensity: 0.32,
+      userData: { skyEnv: 0.5, skyEnvNight: 0.65 },
     });
 
-    // 3. Automotive High-Transmission Crystal Clear Glass
+    // 3. Automotive Glass
     this.glassMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       metalness: 0.0,
-      roughness: 0.0,
+      roughness: 0.2,
       // transmission は 0 にする。0より大きいと、three.js は画面内の不透明な物をすべて、もう1回別の描画先へ描き直す
       // (透過用の描画)。計測で、描画回数も三角形数も約4割減った。透け感は opacity で出す。
       transmission: 0,
       thickness: 0.02,
       ior: 1.5,
-      reflectivity: 0.5,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
+      reflectivity: 0.25,
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.2,
       transparent: true,
       opacity: 0.10, // 白く濁る問題を解消し、クリスタルクリアな高い透明度に調整
       depthWrite: false,
       side: THREE.DoubleSide,
-      userData: { skyEnv: 1.5, skyEnvNight: 1.2 },
+      envMapIntensity: 0.3,
+      userData: { skyEnv: 0.5, skyEnvNight: 0.6 },
     });
 
     // 4. Matte black unpainted resin
@@ -149,17 +153,19 @@ export abstract class CarBase {
     // 5. Metallic Chrome
     this.chromeMaterial = new THREE.MeshStandardMaterial({
       color: 0xe0e0e0,
-      metalness: 0.95,
-      roughness: 0.08,
-      userData: { skyEnv: 1.8, skyEnvNight: 1.3 },
+      metalness: 0.65,
+      roughness: 0.32,
+      envMapIntensity: 0.4,
+      userData: { skyEnv: 0.6, skyEnvNight: 0.65 },
     });
 
     // 6. Silver metallic (Skid plates, accents)
     this.silverMaterial = new THREE.MeshStandardMaterial({
       color: 0xd2d7df,
-      metalness: 0.8,
-      roughness: 0.22,
-      userData: { skyEnv: 1.5, skyEnvNight: 1.2 },
+      metalness: 0.5,
+      roughness: 0.4,
+      envMapIntensity: 0.35,
+      userData: { skyEnv: 0.5, skyEnvNight: 0.6 },
     });
 
     // 7. Tire Rubber (Deep matte charcoal black)
@@ -172,29 +178,32 @@ export abstract class CarBase {
     // 8. Wheel Rim Dark Gunmetal Alloy
     this.wheelMaterial = new THREE.MeshStandardMaterial({
       color: 0x22262e,
-      roughness: 0.25,
-      metalness: 0.85,
+      roughness: 0.45,
+      metalness: 0.55,
+      envMapIntensity: 0.4,
     });
 
     // 8b. Wheel Rim Bright Machined Silver
     this.wheelSilverMaterial = new THREE.MeshStandardMaterial({
       color: 0xecf0f1,
-      roughness: 0.18,
-      metalness: 0.92,
+      roughness: 0.38,
+      metalness: 0.6,
+      envMapIntensity: 0.45,
     });
 
     // 9. Brake Disc (Drilled cast iron)
     this.brakeDiscMaterial = new THREE.MeshStandardMaterial({
       color: 0x95a5a6,
-      roughness: 0.3,
-      metalness: 0.92,
+      roughness: 0.45,
+      metalness: 0.65,
+      envMapIntensity: 0.4,
     });
 
     // 10. Brake Caliper (Sporty Racing Red)
     this.caliperMaterial = new THREE.MeshStandardMaterial({
       color: 0xe74c3c,
-      roughness: 0.25,
-      metalness: 0.5,
+      roughness: 0.4,
+      metalness: 0.35,
     });
 
     // 11. Headlight Emissive LED

@@ -1,3 +1,5 @@
+import { drawOutlinedText } from '../ui/outlinedText';
+
 export interface DamageText {
   x: number;
   y: number;
@@ -111,17 +113,14 @@ export class DamageNumbers {
         ctx.fillStyle = '#ff2255';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
-        ctx.strokeText(item.subText, 0, -item.size * 0.7);
-        ctx.fillText(item.subText, 0, -item.size * 0.7);
+        drawOutlinedText(ctx, item.subText, 0, -item.size * 0.7);
       }
 
       ctx.font = `900 ${item.size}px Impact, sans-serif`;
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 4;
-      ctx.strokeText(item.text, 0, 0);
-
       ctx.fillStyle = item.color;
-      ctx.fillText(item.text, 0, 0);
+      drawOutlinedText(ctx, item.text, 0, 0);
 
       ctx.restore();
     }

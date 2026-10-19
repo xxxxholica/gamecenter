@@ -38,7 +38,7 @@ export class RoadsideRhythm {
     this.plates = new THREE.InstancedMesh(plateGeo, this.plateMat, POOL * 2);
     this.plates.setColorAt(0, new THREE.Color(1, 1, 1));
     const studGeo = new THREE.BoxGeometry(0.2, 0.025, 0.34);
-    this.studMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, toneMapped: false });
+    this.studMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3, 3), fog: false, toneMapped: false });
     this.studs = new THREE.InstancedMesh(studGeo, this.studMat, POOL * 3);
     this.studs.setColorAt(0, new THREE.Color(1, 1, 1));
     for (const im of [this.plates, this.studs]) {
@@ -59,18 +59,10 @@ export class RoadsideRhythm {
 
   public reset(): void { this.lastIdx = -1; }
 
-  /** 色: 夜は光らせ、昼は目立たせすぎない */
-  private setLook(night: boolean): void {
-    const k = night ? 3.0 : 0.9;
-    this.plateMat.color.setScalar(1);
-    this.studMat.color.setRGB(k, k, k);
-  }
-
-  public update(car: THREE.Vector3, night: boolean): void {
+  public update(car: THREE.Vector3): void {
     const route = this.route;
     if (!route) return;
     const n = route.length;
-    this.setLook(night);
 
     // 車に一番近いルート番号(前回の近くだけ探す。初回は全体)
     let best = -1, bestD = Infinity;

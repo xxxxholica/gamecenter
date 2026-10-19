@@ -107,6 +107,9 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
 
     if (c.streetNetwork) {
       this.streets = buildStreetNetwork();
+      this.streets.traverse((o) => {
+        if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setScalar(0.4);
+      });
       this.group.add(this.streets);
       if (c.streetGlow) {
         this.streetGlow = buildStreetGlow();
@@ -135,7 +138,7 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
     });
     this.group.add(this.traffic.group);
 
-    this.baseMat = new THREE.MeshBasicMaterial({ color: c.ground.color });
+    this.baseMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.ground.color).multiplyScalar(0.4) });
     const base = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), this.baseMat);
     base.rotation.x = -Math.PI / 2;
     base.position.set(0, c.ground.y, 0);
@@ -143,18 +146,6 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
   }
 
   public override setGoalVisible(on: boolean): void { this.goal?.setVisible(on); }
-
-  public override setNight(night: boolean): void {
-    super.setNight(night);                                    // the lit windows of the buildings
-    this.lights?.setLit(night);
-    if (this.streetGlow) this.streetGlow.visible = night;
-    // the drawn streets and the ground plane are unlit materials: bring them down to the night level
-    const level = night ? 0.4 : 1;
-    this.baseMat?.color.set(this.cfg.ground.color).multiplyScalar(level);
-    this.streets?.traverse((o) => {
-      if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setScalar(level);
-    });
-  }
 
   public override update(dt: number, carPosition: THREE.Vector3): void {
     super.update(dt, carPosition);

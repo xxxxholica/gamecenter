@@ -3,6 +3,7 @@ import { AiArchetype, ContenderState, WeaponType } from '../types';
 import { WeaponSystem } from '../weapons/WeaponSystem';
 import { SwordSystem } from '../weapons/SwordSystem';
 import { BulletPool } from '../weapons/BulletPool';
+import { drawOutlinedText } from '../ui/outlinedText';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { Enemy } from './Enemy';
 import { Boss } from './Boss';
@@ -624,8 +625,7 @@ export class CpuPlayer extends Entity {
     ctx.fillStyle = this.accentColor;
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 3;
-    ctx.strokeText(this.name, 0, -this.radius - 20);
-    ctx.fillText(this.name, 0, -this.radius - 20);
+    drawOutlinedText(ctx, this.name, 0, -this.radius - 20);
 
     // Overhead HP Bar
     const barW = 44;

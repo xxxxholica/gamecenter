@@ -31,6 +31,7 @@ import { WaitScreen } from './online/WaitScreen';
 import { RivalStages, STAGE_SPACING, BETWEEN_TAG_X } from './online/RivalStages';
 import { readGamepads } from '../../../shared/gamepadFrame';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
 
 installHomeReturn();
@@ -830,7 +831,6 @@ let resultOpen = false;
 let nameEntryOpen = false; // 順位の確認中・名前入力中は、リザルトの操作を止める
 window.addEventListener('keydown', (e) => {
   if (!isPreview) bgm.unlock();
-  if (e.code === 'KeyM' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) bgm.toggleMute();
   if (resultOpen && !nameEntryOpen && menuNav.pushKey(e)) e.preventDefault();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) keyPressed.add(e.code);
@@ -1203,6 +1203,7 @@ function keepProgramsAlive(): void {
   hide(addSprite('fire', 0, -1000, 0, softTex, 0xffffff, true).obj);
   hide(addSprite('smoke', 0, -1000, 0, puffTex, 0x222222, false).obj);
   renderer.compile(scene, camera);
+  finishPrograms(renderer);   // 描かれないシェーダも、初めて使う時の確認まで済ませておく(プレイ中の初めての爆発で止まらないように)
 }
 
 function updateEvents(dt: number): void {
@@ -2083,6 +2084,7 @@ function startGame(): void {
   clearBlocks();
   resetRunState();
   loadRankMarkers(); // ひとりのときだけ、ランキングの線を最新にして出す
+  finishPrograms(renderer);   // 起動のあとに作ったシェーダ(ランキングのラベルなど)も、カウントダウンのあいだに使える状態にしておく
   eventTimer = isPreview || mode === 'online' ? Infinity : 30; // オンライン対戦では、おじゃまは相手から飛んでくる
   spawnTimer = 0.4;
 
@@ -2463,7 +2465,10 @@ if (isPreview) {
   eventTimer = Infinity;   // おじゃまは、指定した場面でだけ起こす
 } else {
   showTitle();
-  if (benchScene === 'title') benchReady('title');
+  // 着いたと知らせるのは、ページの立ち上がりが済み、フレームが落ち着いてから(タイトルはすぐ出る。計測を始める所だけ遅らせる)。
+  // 計測(Windows, Chrome): すぐに知らせると、最初の 0.2 秒と、ページの読み込みから約 1 秒後(Chrome の片付け)に 33〜50ms のフレームが入り、
+  // 1%low が 36〜51 に下がる回があった(同じ場面の 2 回目・3 回目は 60)
+  if (benchScene === 'title') void waitFramesSettled().then(() => benchReady('title'));
 }
 renderItems();
 requestAnimationFrame(frame);

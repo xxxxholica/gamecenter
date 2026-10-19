@@ -63,6 +63,7 @@ const MAX_SPIKES = 500;
 const MAX_SLOW_CALLS = 200;
 const MAX_LOAF = 400;
 const SLOW_GL_CALL_MS = 4;
+const MAX_ERRORS = 100;
 
 interface FrameAcc {
   jsMs: number;
@@ -504,6 +505,32 @@ function hookObservers(): void {
   });
 }
 
+/**
+ * ページの中のエラーを集める(window.__gcBenchErrors)。コンソールを読めない Safari の計測(scripts/bench-safari.mjs)が受け取る。
+ * 受け取る側がいないブラウザでも溜まりすぎないよう、上限を超えた分は捨てる。
+ */
+function collectErrors(): void {
+  const errors: string[] = [];
+  (window as unknown as Record<string, unknown>).__gcBenchErrors = errors;
+  const push = (text: string) => { if (errors.length < MAX_ERRORS) errors.push(text.slice(0, 300)); };
+  window.addEventListener('error', (e) => push(e.message || String(e.error)));
+  window.addEventListener('unhandledrejection', (e) => push(`Unhandled rejection: ${String((e.reason as Error | undefined)?.message ?? e.reason)}`));
+  const origError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    push(args.map((a) => (a instanceof Error ? a.message : String(a))).join(' '));
+    origError(...args);
+  };
+}
+
+/**
+ * キー入力の届いた時刻(performance.now() と同じ基準)。
+ * Safari は自動操作で送ったキーの timeStamp が別の基準(OS の起動からの時刻)になるので、大きくずれていたら受け取った今の時刻を使う。
+ */
+function eventTime(e: Event): number {
+  const now = realNow();
+  return Math.abs(e.timeStamp - now) > 60_000 ? now : e.timeStamp;
+}
+
 // ---- 結果 ----
 
 interface BatteryLike { charging: boolean; level: number }
@@ -616,6 +643,7 @@ export function installBench(): void {
   hookGl();
   hookObservers();
   hookMainThreadBlocks();
+  collectErrors();
   scheduleInputProbe();
 
   document.addEventListener('visibilitychange', () => benchMark(`visibility:${document.visibilityState}`));
@@ -628,7 +656,7 @@ export function installBench(): void {
       if (e.code === 'F8') { e.preventDefault(); void downloadReport(); }
       else if (e.code === 'F9') { e.preventDefault(); resetBench(); }
       else if (e.code === 'F10') { e.preventDefault(); overlayVisible = !overlayVisible; }
-      else if (!e.repeat) keyTracker.arrive(e.timeStamp);
+      else if (!e.repeat) keyTracker.arrive(eventTime(e));
     },
     true,
   );

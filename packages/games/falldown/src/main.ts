@@ -22,6 +22,7 @@ import { loadLeaderboardAndCheck, saveLeaderboardScore, type LeaderboardEntry } 
 import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { waitFramesSettled } from '../../../shared/shaderCompile';
 import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 
 installHomeReturn();
@@ -190,13 +191,20 @@ function startGame() {
   }
   view.clearLabels();
   view.snapCamera(game);
-  ui.hud.classList.remove('hidden');
+  if (PREVIEW) {
+    ui.hud.classList.add('hidden');
+    ui.depthTag.style.display = 'none';
+    const guide = document.getElementById('agc-guide');
+    if (guide) guide.style.display = 'none';
+  } else {
+    ui.hud.classList.remove('hidden');
+    guidePlay();
+    showBanner('スタート', 'normal', 'start');
+  }
   sound.tempo = 112;
   sound.start();
   sound.startBgm();
   lastLives = -1;
-  guidePlay();
-  showBanner('スタート', 'normal', 'start');
 }
 
 /** バナーの見出しの前に付けるアイコン(currentColorで塗る) */
@@ -255,7 +263,7 @@ const fxQueue: { t: number; fn: () => void }[] = [];
 function previewInput(now: number): FrameInput {
   const t = now / 1000;
   const s = Math.sin(t * 0.9);
-  return { dx: s > 0.35 ? 1 : s < -0.35 ? -1 : 0, dy: -1, dig: true, digPressed: Math.floor(t * 8) % 2 === 0, start: false, mute: false, anyPressed: false, padDx: 0, padDy: 0 };
+  return { dx: s > 0.35 ? 1 : s < -0.35 ? -1 : 0, dy: -1, dig: true, digPressed: Math.floor(t * 8) % 2 === 0, start: false, anyPressed: false, padDx: 0, padDy: 0 };
 }
 
 let hitstop = 0;
@@ -715,18 +723,20 @@ function updateResult(inp: FrameInput, now: number) {
 // ---------------- メインループ ----------------
 let last = performance.now();
 function frame(now: number) {
-  const rawDt = Math.min((now - last) / 1000, 0.05);
+  // 前のフレームより前の時刻が来たときは、0 として扱う。
+  // 計測(Windows, Firefox): 読み込みでメインスレッドが 2.6 秒ふさがると、最初のフレームの時刻が、読み込む前(last より 2.57 秒前)の時刻で来る。
+  // そのままでは dt がマイナスになり、カメラの追従(1 - exp(-dt * 5))が外れて、カメラが地下 36 万マスへ飛び、そこまで地形を作ろうとして止まっていた
+  const rawDt = Math.min(Math.max(0, (now - last) / 1000), 0.05);
   last = now;
   const inp: FrameInput = PREVIEW
     ? previewInput(now)
     : BENCH && game.phase !== 'title'
-      ? { ...benchBot(game, now), start: false, mute: false, anyPressed: false, padDx: 0, padDy: 0 }
+      ? { ...benchBot(game, now), start: false, anyPressed: false, padDx: 0, padDy: 0 }
       : input.poll();
   // スローモーション中は、ゲームも演出も、遅い時間で進める(入力と音は実時間のまま)
   const dt = rawDt * timeScale();
   slowmo = Math.max(0, slowmo - rawDt);
   if (inp.anyPressed) sound.unlock();
-  if (inp.mute) sound.toggleMute();
 
   if (game.phase === 'gameover' || game.phase === 'clear') {
     if (resultOpen) updateResult(inp, now);
@@ -754,10 +764,12 @@ function frame(now: number) {
 declareBenchTargets(fallDownBenchTargets(STRATA, GOAL_DEPTH));
 showTitle();
 if (PREVIEW) startGame();
-if (BENCH_SCENE === 'title') benchReady('title');
+// 着いたと知らせるのは、ページの立ち上がりが済み、フレームが落ち着いてから(タイトル・プレイはすぐ始まる。計測を始める所だけ遅らせる)。
+// 計測(Windows, Firefox): すぐに知らせると、最初の 0.3 秒に、ブラウザ側の待ちで 66〜100ms のフレームが 2〜5 回入っていた(そのあとは 60fps)
+if (BENCH_SCENE === 'title') void waitFramesSettled().then(() => benchReady('title'));
 else if (BENCH) {
   startGame();
-  benchReady('play');
+  void waitFramesSettled().then(() => benchReady('play'));
 }
 requestAnimationFrame(frame);
 

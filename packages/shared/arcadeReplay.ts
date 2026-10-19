@@ -1096,5 +1096,10 @@ export function installReplayCapture(): void {
     mode = 'record';
     installRecord(game);
   }
+  // ベンチの消音(?benchMute=1)。音を出さない起動のオプションが無い Safari の計測(scripts/bench-safari.mjs)で使う。ゲームが音を鳴らし始める前に入れる
+  if (mode !== 'replay' && isBenchEnabled() && params.get('benchMute') === '1') {
+    installReplayMute();
+    setReplayMuted(true);
+  }
   g.__gcReplay = { mode, id: replayId };
 }

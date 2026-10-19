@@ -1,8 +1,8 @@
 // 使い方: npm run ctl -w packages/server -- <コマンド>
 //   status                                  … 全ゲームの状態
 //   open <ゲーム> [分] [キー=値 ...]         … 開放し、指定の分後に自動で閉鎖する(分を省略すると180分。0 で手動閉鎖まで開放し続ける)
-//       例: open skyway 180 map=helsinki_technical tod=night
-//       分・各設定には random も指定できる(skyway の map=random は参加者の希望で決定、tod=random はレースごとに抽選、
+//       例: open skyway 180 map=helsinki_technical
+//       分・各設定には random も指定できる(skyway の map=random は参加者の希望で決定、
 //       分=random は 1/2/3/6 時間から開放時に1回選ぶ)。設定を省略すると前回の設定。
 //   close <ゲーム|all>                      … 閉鎖して参加者を全員切断(all で全ゲームを緊急停止)
 //   kick <ゲーム> <参加者id>                 … 参加者を追い出す(id は status の参加者一覧)

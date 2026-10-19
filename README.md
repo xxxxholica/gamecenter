@@ -48,13 +48,15 @@ npm test               # テスト(CI でも実行)
 ```bash
 npm run bench:all -- --list                                   # 場面の一覧
 npm run bench:all -- --fullscreen --hz 60 --repeat-failed 3   # 合否の判定(全場面。時間がかかる)
-npm run bench:all -- --browsers chromium --games midnight-skyway --targets 'race-helsinki.*night'   # 絞り込み
+npm run bench:all -- --games midnight-skyway --targets 'race-helsinki.*night'   # 絞り込み
 ```
 
+- 既定は Chrome だけ(本番は Windows の Chrome)。Firefox・Safari は推奨外のブラウザで、最低限の確認をするときだけ `--browsers chromium,firefox,safari` のように足す。
 - 結果は `bench-results/<日時>/summary.md` と場面ごとの JSON。
 - 場面はゲームが `declareBenchTargets()`(`packages/shared/arcadeBenchTargets.ts`)で申告し、着いたら `benchReady()`、やりきったら `benchDone()` を呼ぶ。
 - シェーダのコンパイルで落ちた場面は `node scripts/shader-trace.mjs <chromium|firefox> <ゲーム> <場面>` で、いつどのシェーダを作ったかを出せる。
 - テクスチャの送り方の速さは GPU の描画方式で逆になる(Windows の D3D11 と Mac の Metal)。新しい環境では `node scripts/upload-probe.mjs` で確かめる(midnight-skyway の `usesStripUpload`)。
+- Safari は Mac で `--browsers safari` を付けたときに測る(`scripts/bench-safari.mjs`。safaridriver で本物の Safari を動かす)。初回だけ `sudo safaridriver --enable` と、Safari の設定 → デベロッパ →「リモートオートメーションを許可」。計測中は Safari の窓にもほかのアプリにも触らない(フルスクリーンの窓が裏に回ると描画が止まる)。`--sweep` は使えない。
 - サイバー２Dファイター３Dは対象外(確かめるときは `?verify&p1=char2&p2=char3&stage=neon_shrine.jpg`)。
 
 **合否の基準**(`packages/shared/arcadeBenchCore.ts` の `ACCEPTANCE`)。全体の計測は筐体(Windows・Chrome・60Hz・フルHD)で行う。速いモニターでは `--hz 60` で 60Hz を再現する。

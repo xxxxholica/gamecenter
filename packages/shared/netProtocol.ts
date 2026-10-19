@@ -8,9 +8,8 @@ export const MAX_PLAYERS = 4;
 export const STATE_HZ = 20;
 /** 2人目が入ってから自動でレースが始まるまでの秒数。 */
 export const AUTO_START_SEC = 30;
-/** 選べるコースと時間帯(サーバーもこの一覧で検証する)。 */
+/** 選べるコース(サーバーもこの一覧で検証する)。 */
 export const MAP_IDS = ['tokyo_skyway', 'helsinki_technical', 'tokyo_climb'];
-export const TIME_IDS = ['night', 'day'];
 /**
  * コースごとの最短完走タイム(ms)。これより短い finish はサーバーが不正として捨てる。
  * コース長 ÷ 最高速(約38m/s) のおよそ半分とした保守的な値(通常の走りでは到達できない)。
@@ -20,7 +19,7 @@ export const MIN_FINISH_MS: Record<string, number> = {
   helsinki_technical: 28000,
   tokyo_climb: 58000,
 };
-/** 主催者の設定値: コース/時間帯/開放時間に「ランダム」を選べる。コースと時間帯はレースごとに引き直される。 */
+/** 主催者の設定値: コース/開放時間に「ランダム」を選べる。コースはレースごとに引き直される。 */
 export const RANDOM = 'random';
 /** 開放時間のランダムは、この中(分)から開放した時に1回だけ選ぶ。 */
 export const RANDOM_MINUTES = [60, 120, 180, 360];
@@ -85,13 +84,11 @@ export type ServerMsg =
       mapMode: string;
       /** 希望の集計(コースid → 人数)。 */
       votes: Record<string, number>;
-      /** 次のレースの時間帯(決まった値) */
-      tod: string;
       /** 自動開始の時刻(サーバー時刻ms)。2人未満なら null。 */
       countdownEnd: number | null;
     }
   /** 全員がマップのロードを始める合図。コース・マシン(未選択は自動で決定済み)が確定している。grid は走行位置順の参加者id。 */
-  | { t: 'start'; seed: number; map: string; tod: string; grid: number[]; players: RacerInfo[] }
+  | { t: 'start'; seed: number; map: string; grid: number[]; players: RacerInfo[] }
   /** 全員のロード完了。at(サーバー時刻ms)にカウントダウンを開始する。 */
   | { t: 'go'; at: number }
   /** ts: s の各車の、送信側が付けた送信時刻(サーバー時刻ms)。付いていない車は無い。 */
