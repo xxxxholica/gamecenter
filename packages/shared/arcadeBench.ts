@@ -142,6 +142,8 @@ let state: BenchState;
 let overlay: HTMLElement | null = null;
 let overlayVisible = true;
 let glContext: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+/** 描画呼び出しの回数(コンテキストごと)。いちばん多く描いているものを、ゲームの画面とみなす */
+const drawsByContext = new Map<WebGLRenderingContext | WebGL2RenderingContext, number>();
 let gpuRenderer: string | undefined;
 let lastMark = '';
 let medianCache = 16.7;
@@ -235,6 +237,10 @@ function hookGl(): void {
           return orig.apply(this, args);
         } finally {
           onGlCall(name, cat, realNow() - s);
+          if (cat === 'draw') {
+            const gl = this as WebGLRenderingContext;
+            drawsByContext.set(gl, (drawsByContext.get(gl) ?? 0) + 1);
+          }
         }
       };
     }
@@ -246,6 +252,14 @@ function hookGl(): void {
     if (ctx && /webgl/.test(type) && !glContext) glContext = ctx;
     return ctx;
   } as typeof HTMLCanvasElement.prototype.getContext;
+}
+
+/** いちばん多く描いているコンテキストの描画バッファの大きさ(最初に作られたコンテキストは、端末の確かめ用の使い捨てのことがある) */
+function mainDrawingBuffer(): string | null {
+  let busiest: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+  let most = 0;
+  for (const [gl, draws] of drawsByContext) if (draws > most) { most = draws; busiest = gl; }
+  return busiest ? `${busiest.drawingBufferWidth}x${busiest.drawingBufferHeight}` : null;
 }
 
 let gpuProbed = false;
@@ -516,6 +530,8 @@ export async function buildBenchReport(): Promise<Record<string, unknown>> {
       devicePixelRatio: window.devicePixelRatio,
       screen: `${window.screen.width}x${window.screen.height}`,
       viewport: `${window.innerWidth}x${window.innerHeight}`,
+      /** 実際に描いている解像度(キャンバスの描画バッファ)。--sweep で解像度が本当に変わったかの確かめに使う */
+      drawingBuffer: mainDrawingBuffer(),
       emulatedHz: benchHz,
       battery: battery ?? null,
       supports: {

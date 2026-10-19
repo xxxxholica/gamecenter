@@ -104,7 +104,7 @@ httpServer.on('error', (err) => {
   process.exit(1);
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, process.env.DEV_HOST, () => {
   console.log(`\n  Hub -> http://localhost:${PORT}/\n`);
 });
 
