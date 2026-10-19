@@ -97,6 +97,31 @@ export class ResultScreen {
 
     // 無操作が続いたら自動でタイトルへ戻る(残り秒数はボタンに出る)
     watchResultAutoReturn(['btn-result-title']);
+
+    this.warmUp();
+  }
+
+  /**
+   * 読み込み中に、見えないまま一度レイアウトしておく。
+   * 計測(Windows, Chrome): 表示を切り替えた瞬間の文字の組み立て(日本語の文字を Impact から代わりのフォントに回す)に 46ms かかり、
+   * ゲームオーバーのたびに 50ms のフレームが出ていた。一度組んでおけば、フォントの準備が済んでいて軽い。
+   */
+  private warmUp() {
+    this.elStatus.textContent = 'ゲームオーバー';
+    this.elRank.textContent = '1位';
+    this.elSub.textContent = '生存時間 00:00　撃破 0体　最大コンボ 0';
+    this.applyFocus();
+    this.root.style.visibility = 'hidden';
+    this.root.style.display = 'flex';
+    // ランキングの行(記録あり・記録なし)と、下の案内の 2 通り(3位までの差・ハイスコア更新)を、すべて組む
+    const filled = [1, 2, 3].map((rank) => ({ rank, name: 'アイウエオ', score: 9000 - rank * 1000, formattedScore: '', date: '' }));
+    const empty = padEmptyEntries(GAME_LEADERBOARD_DEFS[SLUG], [], 3);
+    for (const [list, rankIn] of [[filled, false], [empty, true]] as const) {
+      this.renderLeaderboard({ score: 0 } as Player, list, undefined, rankIn, false);
+      void this.root.offsetWidth;
+    }
+    this.root.style.display = 'none';
+    this.root.style.visibility = '';
   }
 
   public show(player: Player, _standings: ContenderState[], gameTime: number) {
