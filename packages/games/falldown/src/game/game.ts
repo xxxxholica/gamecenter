@@ -144,6 +144,9 @@ export class Game {
     }
     for (let i = 0; i < got.life; i++) this.gainLife(p.x, p.y + 0.6);
 
+    // ブロックの中に埋まってしまったときの救済（動けなくなるのを防ぐ）
+    this.unstick();
+
     // 潰され判定
     const crush = w.crushingBlocks(p.x, p.y);
     if (crush.length) {
@@ -236,6 +239,32 @@ export class Game {
       this.addScore(x, y, 500, '1UP!');
     } else {
       this.addScore(x, y, 3000, 'LIFE MAX BONUS!');
+    }
+  }
+
+  /**
+   * プレイヤーが止まっているブロックの中に入り込んでいたら、
+   * 真上が空いていれば押し上げる。空いていなければ潰されたあつかい（無敵中はブロックを壊す）。
+   */
+  private unstick() {
+    const p = this.player;
+    const w = this.world;
+    // 落下中・よじ登り中は、斜めに動く途中で角に一瞬かかるだけなので何もしない
+    if (p.state === 'climb' || p.state === 'fall') return;
+    const col = Math.round(p.x);
+    const row = Math.round(p.y);
+    if (Math.abs(p.x - col) > 0.45 || Math.abs(p.y - row) > 0.45) return;
+    const b = w.get(col, row);
+    if (!b || b.falling || b.kind === 'air' || b.kind === 'life') return;
+    if (!w.isSolid(col, row + 1)) {
+      p.reset(col, row + 1);
+      return;
+    }
+    if (this.invuln > 0 || this.debug) {
+      w.removeAt(col, row);
+      this.events.push({ type: 'break', x: col, y: row, kind: b.kind, color: b.color, cells: [{ x: col, y: row }] });
+    } else {
+      this.loseLife('crush');
     }
   }
 

@@ -110,7 +110,7 @@ export class Player {
         if (c.dx !== 0) {
           this.facing = c.dx as 1 | -1;
           const nx = col + c.dx;
-          if (!world.isSolid(nx, row)) {
+          if (!world.isBlockedForMove(nx, row)) {
             this.state = 'walk';
             this.tx = nx;
             this.climbHold = 0;
@@ -153,13 +153,23 @@ export class Player {
         // 空中では左右の微調整のみ
         if (c.dx !== 0 && Math.abs(this.x - this.tx) < 0.15) {
           const nx = this.tx + c.dx;
-          if (!world.isSolid(nx, Math.floor(this.y)) && !world.isSolid(nx, Math.ceil(this.y))) {
+          if (!world.isBlockedForMove(nx, Math.floor(this.y)) && !world.isBlockedForMove(nx, Math.ceil(this.y))) {
             this.tx = nx;
           }
           this.facing = c.dx as 1 | -1;
         }
         this.x += clampStep(this.tx - this.x, AIR_SHIFT_SPEED * dt);
 
+        // 落下中に、いま重なりかけている下のマスへブロックが入ってきたら、その上に着地する
+        // （そのまま落ち続けると、ブロックの中に埋まってしまう）
+        const under = Math.floor(this.y - 1e-4);
+        if (this.y - under > 1e-4 && world.isSolid(this.tx, under)) {
+          this.y = under + 1;
+          this.landedImpact = this.vy;
+          this.vy = 0;
+          this.state = 'ground';
+          break;
+        }
         this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
         const ny = this.y - this.vy * dt;
         const r = Math.floor(this.y + 1e-4);
@@ -185,8 +195,8 @@ export class Player {
     const b = world.get(col + dir, row);
     return (
       !!b && !b.falling &&
-      !world.isSolid(col, row + 1) &&
-      !world.isSolid(col + dir, row + 1)
+      !world.isBlockedForMove(col, row + 1) &&
+      !world.isBlockedForMove(col + dir, row + 1)
     );
   }
 

@@ -178,6 +178,17 @@ export class World {
     return !!b && !isItem(b.kind);
   }
 
+  /**
+   * プレイヤーが横から入ってよいか。isSolid に加えて、真上の落下中のブロックが
+   * このマスへ入りかけている（下に動き始めている）ときも入れない。
+   * （入れてしまうと、ブロックがプレイヤーと重なったまま下へ抜けて、埋まってしまう）
+   */
+  isBlockedForMove(x: number, y: number): boolean {
+    if (this.isSolid(x, y)) return true;
+    const a = this.get(x, y + 1);
+    return !!a && a.falling && a.offset > 0 && !isItem(a.kind);
+  }
+
   /** ブロックがあるか（カプセル含む） */
   occupied(x: number, y: number): boolean {
     if (x < 0 || x >= W) return true;
