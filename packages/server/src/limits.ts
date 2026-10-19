@@ -5,12 +5,12 @@ export const num = (key: string, def: number) => {
 };
 
 export const LIMITS = {
-  /** 会場の共有NAT(全員が同じIPになる)を考慮して、同一IPの同時接続は多めに許可する */
-  maxConnsPerIp: num('ONLINE_MAX_CONNS_PER_IP', 50),
+  /** 会場の実機4台は同じネットワーク(=同じIP)から繋ぐ。1台1本+入り直しの重なりが入り、一般公開で1人が枠を占められない値 */
+  maxConnsPerIp: num('ONLINE_MAX_CONNS_PER_IP', 10),
   maxConnsTotal: num('ONLINE_MAX_CONNS_TOTAL', 64),
-  connectsPerMinPerIp: num('ONLINE_CONNECTS_PER_MIN', 120),
-  /** 同一IPの「繋いだだけで join していない」接続の上限(参加済みは maxConnsPerIp で数える)。会場で操作中の人は、繋いだらすぐ join する */
-  maxUnjoinedPerIp: num('ONLINE_MAX_UNJOINED_PER_IP', 16),
+  connectsPerMinPerIp: num('ONLINE_CONNECTS_PER_MIN', 60),
+  /** 同一IPの「繋いだだけで join していない」接続の上限(参加済みは maxConnsPerIp で数える)。会場の4台が同時にモード選択していても足りる */
+  maxUnjoinedPerIp: num('ONLINE_MAX_UNJOINED_PER_IP', 8),
   /** 1つのIPが全体の枠を使い切って、他の参加者を締め出さないよう、同一IPの上限は全体の75%までに抑える(上の値と小さい方) */
   get effectiveConnsPerIp(): number {
     return Math.min(this.maxConnsPerIp, Math.max(1, Math.floor(this.maxConnsTotal * 0.75)));
