@@ -102,3 +102,15 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required https://game.hi
 2. `src/main.ts` で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼ぶ。プレイ中の Backspace は `ArcadePause`(`packages/shared/arcadePause.ts`)のポーズを開く。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにする。
 3. `packages/hub/src/games.ts` に足し、サムネイルを `packages/hub/public/thumbnails/<slug>.webp` に置く。
 4. `npm install` → `npm run build` で確かめる。
+
+## コミット・PR の規則
+
+`.githooks/`(`npm install` で有効化)と CI(`npm run check:hygiene`)で自動検査する。
+
+- **コミットメッセージ**: 1行目は `<type>(<scope>): <日本語の要約>`(Conventional Commits 形式 + 日本語)。本文を続けるときは1行空ける。
+  - 使える `type`: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`, `style`, `build`, `ci`, `revert`, `security`, `bench`, `balance`
+- **トレーラー**: `Co-Authored-By:` は可。`Claude-Session:` や `https://claude.ai/code/session_...` などのセッション URL・ID はコミットメッセージ・PR 本文・コメントすべてで記載しない。
+- **プライベート情報の禁止**:
+  - コード・スクリプト・ドキュメント・コミット・PR 本文に個人のローカルパス(`/Users/<user>/...`, `C:\Users\<user>\...`, `file:///Users/...`)を残さない。
+  - Git の Author / Committer メールアドレスにローカルホスト名(`@*.local`)や個人のフリーメール(`@gmail.com` など)を使わず、GitHub の `users.noreply.github.com` またはプロジェクト用アドレスを使う。
+

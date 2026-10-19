@@ -18,7 +18,9 @@
     "bench:all": "node scripts/bench-all.mjs",
     "deathmap": "node scripts/gen-deathmap.mjs",
     "deploy": "npm run build && node scripts/deploy.mjs",
-    "deploy:server": "node scripts/deploy-server.mjs"
+    "deploy:server": "node scripts/deploy-server.mjs",
+    "check:hygiene": "node scripts/check-hygiene.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "connect": "^3.7.0",
