@@ -14,7 +14,7 @@ import { TokyoMap } from './maps/TokyoMap';
 import { HelsinkiTechnicalMap } from './maps/HelsinkiTechnicalMap';
 import { TokyoClimbMap } from './maps/TokyoClimbMap';
 import { STAGES } from './ui/stages';
-import { benchParam, benchReady, benchDone, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { benchParam, benchReady, benchDone, benchMark, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { RaceDirector } from './core/RaceDirector';
 import { TimeAttackManager } from './core/TimeAttackManager';
 
@@ -32,6 +32,7 @@ import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
+import { BenchRivalNet, BenchRivalPlan, benchRivalPlayers, benchSelfPlayer } from './net/benchRivals';
 import { mulberry32 } from '../../../shared/online/seededRandom';
 import { fetchGhost, loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
@@ -202,10 +203,20 @@ window.addEventListener('DOMContentLoaded', async () => {
       input: 'self' as const,
       seconds: 300,      // 1周走りきると benchDone() で止まる。これは打ち切りの上限
     }))),
+    // オンライン対戦: 相手3台(サーバーなし。net/benchRivals.ts)。相手の車は本番と同じく、受け取った姿勢を補間して描くだけ
+    ...STAGES.map((st) => ({
+      id: `online-${st.id}`,
+      label: `${st.title} / オンライン対戦(相手3台)`,
+      kind: 'race',
+      params: { scene: 'race', stage: st.id, car: 'dragon_a', rivals: '3' },
+      input: 'self' as const,
+      seconds: 300,
+    })),
   ]);
   const benchScene = benchParam('scene');
   const benchAutoDrive = benchScene === 'race';   // ベンチ: HUD は出したまま、コースの1周をオートパイロットで走る
   const benchCar = benchParam('car');
+  const benchRivals = benchAutoDrive ? Math.min(3, Math.max(0, Math.floor(Number(benchParam('rivals')) || 0))) : 0;
   if (benchCar && benchCar in carModels) {
     garage.turntableGroup.remove(currentCar.group);
     currentCar = carModels[benchCar as CarType];
@@ -268,6 +279,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     finished: boolean;
   }
   let online: OnlineSession | null = null;
+  /** ベンチマークのオンライン対戦(?bench=1&rivals=N): サーバーの代わりに BenchRivalNet で相手を走らせる */
+  let benchRace: { race: OnlineRace; net: BenchRivalNet; shown: boolean } | null = null;
+  /** 走行中の対戦(本物のオンライン対戦か、ベンチマークの代わり) */
+  const activeRace = (): OnlineRace | null => online?.race ?? benchRace?.race ?? null;
   const onlineHUD = new OnlineHUD(appEl);
   const GO_COUNTDOWN_MS = 3000;
 
@@ -416,6 +431,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const teardownOnlineRace = () => {
     online?.race?.dispose();
+    benchRace?.net.stop();
+    benchRace?.race.dispose();
+    benchRace = null;
     online = null;
     raceDirector.online = false;
     driveScene.gridOffset = null;
@@ -508,9 +526,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     timeAttack.update(dt, fraction, speedKmH);
     raceDirector.update(fraction);
     const cc = driveScene.carController;
-    if (online?.race && cc) {
-      online.race.update(dt, cc, fraction, timeAttack.elapsedTimeMs);
-      driveHUD.setRemoteMarkers([...online.race.remotes.values()].filter((r) => r.valid).map((r) => ({ x: r.pos.x, z: r.pos.z, color: r.color })));
+    const race = activeRace();
+    if (race && cc) {
+      race.update(dt, cc, fraction, timeAttack.elapsedTimeMs);
+      if (benchRace && !benchRace.shown && [...race.remotes.values()].some((r) => r.valid)) {
+        benchRace.shown = true;
+        benchMark('rivals-shown');                           // 相手の車を初めて描くフレーム(スパイクの原因の手がかり)
+      }
+      driveHUD.setRemoteMarkers([...race.remotes.values()].filter((r) => r.valid).map((r) => ({ x: r.pos.x, z: r.pos.z, color: r.color })));
     }
   };
   const isPreviewMode = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
@@ -522,7 +545,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.head.append(hide);
   }
   driveScene.callbacks.onBeforeConstrain = (car) => {
-    online?.race?.collide(car);
+    activeRace()?.collide(car);
     if ((isPreviewMode || benchAutoDrive) && car) {
       car.canDrive = true;
       if (!previewPilot) {
@@ -961,6 +984,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         raceDirector.online = true;
         driveHUD.setOnlineMode(true);
         driveScene.gridOffset = { lateral: (online.slot % 2 === 0 ? -1 : 1) * 1.8, back: Math.floor(online.slot / 2) * 6 };
+      } else if (benchRivals > 0) {
+        // ベンチマークのオンライン対戦: 本番と同じく、ゴースト・ペースボットは走らせず、1番目のスタート位置に並ぶ
+        raceDirector.online = true;
+        driveHUD.setOnlineMode(true);
+        driveScene.gridOffset = { lateral: -1.8, back: 0 };
       } else {
         raceDirector.online = false;
         driveHUD.setOnlineMode(false);
@@ -1042,6 +1070,24 @@ window.addEventListener('DOMContentLoaded', async () => {
         onlineHUD.showWaiting('他のプレイヤーを待っています…');
         net.send({ t: 'loaded' });
         tryStartOnlineCountdown();
+      } else if (benchRivals > 0) {
+        const route = currentMapInstance.getRoutePoints();
+        if (route && route.length > 1) {
+          const players = benchRivalPlayers(benchRivals);
+          const rivalNet = new BenchRivalNet(new BenchRivalPlan(route, currentMapInstance.getCarLift(), benchRivals), players);
+          const race = new OnlineRace(rivalNet, driveScene, [benchSelfPlayer(benchCar && benchCar in carModels ? benchCar as CarType : 'dragon_a'), ...players], 1, {
+            onStandings: (rows) => onlineHUD.setStandings(rows),
+            onToast: (t) => onlineHUD.toast(t),
+          });
+          benchRace = { race, net: rivalNet, shown: false };
+          onlineHUD.show();
+          // 本番で相手の車が出るのは、カウントダウンが始まって姿勢が届き始めてから(明転より後)。ベンチも「プレイ中」の区間で出す
+          setTimeout(() => {
+            if (benchRace?.race !== race) return;
+            race.begin();
+            rivalNet.start();
+          }, 1000);
+        }
       }
     },
     onRetryRace: () => {

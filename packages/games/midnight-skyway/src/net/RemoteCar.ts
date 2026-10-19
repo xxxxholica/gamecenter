@@ -72,6 +72,7 @@ export class RemoteCar {
     this.valid = true;
 
     const g = this.car.group;
+    g.visible = true;                                   // 最初の姿勢が届くまでは隠してある(コンストラクタ)
     g.position.copy(this.pos);
     g.rotation.set(p.pitch, this.rotY, 0, 'YXZ');      // 路面の勾配
     this.car.bodyPivot?.rotation.set(0, 0, p.roll);     // ボディのロール

@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import type { DriveScene } from '../core/DriveScene';
 import type { CarController } from '../core/CarController';
-import type { SkywayNet } from './skywayNet';
 import { RemoteCar } from './RemoteCar';
 import { carOverlap } from './carCollision';
 import { audio } from '../audio';
 import { boostThemeFor } from '../core/BoostTheme';
-import type { CarState, FinishEntry, RacerInfo } from '../../../../shared/netProtocol';
+import type { CarState, ClientMsg, FinishEntry, RacerInfo, ServerMsg } from '../../../../shared/netProtocol';
 import { STATE_HZ } from '../../../../shared/netProtocol';
 
 export interface StandingRow {
@@ -23,6 +22,13 @@ export interface OnlineRaceHooks {
   onToast: (text: string) => void;
 }
 
+/** OnlineRace が使う通信の口。本物は SkywayNet、ベンチマークでは net/benchRivals.ts の BenchRivalNet。 */
+export interface RaceNet {
+  on<T extends ServerMsg['t']>(t: T, fn: (msg: Extract<ServerMsg, { t: T }>) => void): () => void;
+  send(msg: ClientMsg): void;
+  serverNow(): number;
+}
+
 const SEND_INTERVAL = 1 / STATE_HZ;
 const STANDINGS_INTERVAL = 0.25;
 
@@ -32,7 +38,7 @@ const STANDINGS_INTERVAL = 0.25;
  * (相手側も同じ処理をするので、両方の画面で離れる)。
  */
 export class OnlineRace {
-  private readonly client: SkywayNet;
+  private readonly client: RaceNet;
   private readonly hooks: OnlineRaceHooks;
   public readonly you: number;
   public readonly remotes = new Map<number, RemoteCar>();
@@ -48,7 +54,7 @@ export class OnlineRace {
   private offs: (() => void)[] = [];
   private readonly drive: DriveScene;
 
-  constructor(client: SkywayNet, drive: DriveScene, players: RacerInfo[], you: number, hooks: OnlineRaceHooks) {
+  constructor(client: RaceNet, drive: DriveScene, players: RacerInfo[], you: number, hooks: OnlineRaceHooks) {
     this.client = client;
     this.hooks = hooks;
     this.you = you;
