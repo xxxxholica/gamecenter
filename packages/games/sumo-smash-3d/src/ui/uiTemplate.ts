@@ -40,7 +40,7 @@ export function uiLayerHtml(): string {
                 <td>連打できる小さな突き。タメている相手を止める。当てるほど吹き飛ばしが強くなり(外してもたまった分は消えない)、満タンで次の1発が強い。</td>
               </tr>
               <tr>
-                <td><strong>ぶちかまし</strong></td>
+                <td><strong>頭突き</strong></td>
                 <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">Space</span> を<strong>長押し</strong></td>
                 <td>タメて、離すと突進。長いほど遠くへ飛ぶ。つかみを弾く。</td>
               </tr>
@@ -96,30 +96,6 @@ export function uiLayerHtml(): string {
                 <span class="knockback-unit">%</span>
               </div>
             </div>
-
-            <!-- 技: 回復に合わせて枠が満ちる -->
-            <div class="skill-stack">
-              <div class="skill-box ready" id="p1-harite-box">
-                <div class="skill-fill"></div>
-                <div class="charge-fill" id="p1-harite-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0], 'Space')}${verticalText('張り手')}</div>
-                <div class="skill-hint">連打</div>
-              </div>
-              <div class="skill-box ready" id="p1-buchi-cd">
-                <div class="skill-fill" id="p1-buchi-fill"></div>
-                <div class="charge-fill" id="p1-charge-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0], 'Space')}${verticalText('ぶちかまし')}</div>
-                <div class="skill-hint">長押し</div>
-              </div>
-              <div class="skill-box grab ready" id="p1-grab-cd">
-                <div class="skill-fill" id="p1-grab-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1], 'K')}${verticalText('つかみ')}</div>
-              </div>
-            </div>
-
-            <div class="badge-status-wrap">
-              <span class="armor-badge" id="p1-armor-badge">突進中</span>
-            </div>
           </div>
 
 
@@ -144,32 +120,35 @@ export function uiLayerHtml(): string {
                 <span class="knockback-unit">%</span>
               </div>
             </div>
-
-            <!-- 技: 回復に合わせて枠が満ちる -->
-            <div class="skill-stack">
-              <div class="skill-box p2-side ready" id="p2-harite-box">
-                <div class="skill-fill"></div>
-                <div class="charge-fill" id="p2-harite-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0], ',')}${verticalText('張り手')}</div>
-                <div class="skill-hint">連打</div>
-              </div>
-              <div class="skill-box p2-side ready" id="p2-buchi-cd">
-                <div class="skill-fill" id="p2-buchi-fill"></div>
-                <div class="charge-fill" id="p2-charge-bar"></div>
-                <div class="skill-label">${buttonIconHtml([0], ',')}${verticalText('ぶちかまし')}</div>
-                <div class="skill-hint">長押し</div>
-              </div>
-              <div class="skill-box p2-side grab ready" id="p2-grab-cd">
-                <div class="skill-fill" id="p2-grab-fill"></div>
-                <div class="skill-label">${buttonIconHtml([1], '.')}${verticalText('つかみ')}</div>
-              </div>
-            </div>
-
-            <div class="badge-status-wrap">
-              <span class="armor-badge" id="p2-armor-badge">突進中</span>
-            </div>
           </div>
           <div class="multi-row" id="multi-row"></div>
+        </div>
+
+        <!-- 技ゲージ: 下部中央に1行で並べる -->
+        <div class="skill-stack">
+          <div class="skill-box ready" id="p1-harite-box">
+            <div class="skill-fill"></div>
+            <div class="charge-fill" id="p1-harite-bar"></div>
+            <div class="skill-label">
+              <span class="skill-input">${buttonIconHtml([0], 'Space')}<span class="skill-hint">を連打</span></span>
+              <span class="skill-text">張り手</span>
+            </div>
+          </div>
+          <div class="skill-box ready" id="p1-buchi-cd">
+            <div class="skill-fill" id="p1-buchi-fill"></div>
+            <div class="charge-fill" id="p1-charge-bar"></div>
+            <div class="skill-label">
+              <span class="skill-input">${buttonIconHtml([0], 'Space')}<span class="skill-hint">を長押し</span></span>
+              <span class="skill-text">頭突き</span>
+            </div>
+          </div>
+          <div class="skill-box grab ready" id="p1-grab-cd">
+            <div class="skill-fill" id="p1-grab-fill"></div>
+            <div class="skill-label">
+              <span class="skill-input">${buttonIconHtml([1], 'K')}<span class="skill-hint">を単押し</span></span>
+              <span class="skill-text">つかみ</span>
+            </div>
+          </div>
         </div>
 
         <!-- 中央コール（はっけよい、のこった、勝負あり） -->

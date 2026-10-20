@@ -1463,7 +1463,7 @@ const titleScreen = new ArcadeTitleScreen({
   slug: 'tower-stack',
   accentColor: ACCENT,
   logoStretchY: 1.4, // 横長で上下に余白のあるロゴなので、幅は変えずに縦へ引き伸ばして、他のゲームと同じくらいの高さに見せる
-  tagline: 'ブロックを積み上げる物理パズル',
+  tagline: '揺れるブロックを限界まで積み上げろ！',
   onStart: () => void onStartPressed(),
 });
 

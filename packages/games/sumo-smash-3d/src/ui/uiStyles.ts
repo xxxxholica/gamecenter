@@ -212,18 +212,11 @@ export const UI_CSS = `
         /* ===== 多人数(オンライン2〜4人)の表示 ===== */
         .multi-row { display: none; gap: 10px; align-items: flex-start; justify-content: center; }
         #battle-hud.multi .multi-row { display: flex; }
-        /* 自分の技の箱(左下)だけを残し、1対1用のカード・中央の星取りは隠す */
+        /* 自分の技の箱(下部中央)だけを残し、1対1用のカード・中央の星取りは隠す */
         #battle-hud.multi .p2-card,
         #battle-hud.multi .hud-center-marks,
-        #battle-hud.multi .p1-card .fighter-header,
-        #battle-hud.multi .p1-card .knockback-wrap,
-        #battle-hud.multi .p1-card .badge-status-wrap { display: none; }
-        #battle-hud.multi .p1-card { min-width: 0; }
+        #battle-hud.multi .p1-card { display: none; }
         #battle-hud.multi .hud-top { gap: 0; }
-        /* 幅が狭い画面では、左上の操作ガイドに自分のカードが隠れないよう、上部バーを右に寄せる */
-        @media (max-width: 1400px) {
-          #battle-hud.multi .hud-top { justify-content: flex-end; }
-        }
         .mcard {
           position: relative;
           min-width: 124px;
@@ -489,54 +482,53 @@ export const UI_CSS = `
           white-space: nowrap;
         }
 
-        /* 技: ステータスの下に縦に並べる。クールタイムが回復するにつれて枠の中が満ちていく */
-        /* 技はカード(半透明の黒い枠)の外、すぐ下に置く。1つ1つが短冊型のボックス兼シークバー */
+        /* 技: 下部中央に1行で並べる。クールタイムが回復するにつれて枠の中が満ちていく */
         .skill-stack {
           position: fixed;
-          bottom: 14px;
-          left: 28px;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
           display: flex;
-          gap: 8px;
-        }
-
-        .p2-card .skill-stack {
-          left: auto;
-          right: 28px;
-          flex-direction: row-reverse;
+          flex-direction: row;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
         }
 
         .skill-box {
           position: relative;
-          width: 60px;
-          height: 180px;
+          width: 248px;
+          flex: 0 0 248px;
+          height: 64px;
+          padding: 0 18px;
           box-sizing: border-box;
-          border: 1px solid #b8944a;
-          border-radius: 2px;
+          border: 2px solid #b8944a;
+          border-radius: 4px;
           background: rgba(22, 17, 13, 0.88);
           overflow: hidden;
           box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(22, 17, 13, 0.88), inset 0 0 0 3px rgba(184, 148, 74, 0.4);
           transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
 
-        /* 回復の進み具合(JSで height を更新)。回復した分だけ下から満ちる */
+        /* 回復の進み具合(JSで width を更新)。回復した分だけ左から満ちる */
         .skill-fill {
           position: absolute;
           left: 0;
-          right: 0;
+          top: 0;
           bottom: 0;
-          height: 100%;
-          /* クールタイム中は、くすんだ黄色が下から溜まっていく。満ちると明るい金色(下の .ready)になる */
-          background: linear-gradient(0deg, rgba(150, 118, 40, 0.85), rgba(196, 160, 60, 0.85));
+          width: 100%;
+          /* クールタイム中は、くすんだ黄色が左から溜まっていく。満ちると明るい金色(下の .ready)になる */
+          background: linear-gradient(90deg, rgba(150, 118, 40, 0.85), rgba(196, 160, 60, 0.85));
           transition: background 0.15s ease;
         }
 
         .skill-box.ready {
           border-color: #e0b84a;
-          box-shadow: 0 0 10px rgba(224, 184, 74, 0.6), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
+          box-shadow: 0 0 12px rgba(224, 184, 74, 0.65), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
         }
 
         .skill-box.ready .skill-fill {
-          background: linear-gradient(0deg, rgba(176, 138, 52, 0.95), rgba(232, 193, 90, 0.95));
+          background: linear-gradient(90deg, rgba(176, 138, 52, 0.95), rgba(232, 193, 90, 0.95));
         }
 
         /* 張り手ゲージが満タン: 次の1発が強い。枠を脈打たせて知らせる */
@@ -551,52 +543,62 @@ export const UI_CSS = `
 
         /* つかみは打撃(黄色)と系統が違うので、青で見せる */
         .skill-box.grab .skill-fill {
-          background: linear-gradient(0deg, rgba(34, 82, 128, 0.85), rgba(70, 126, 178, 0.85));
+          background: linear-gradient(90deg, rgba(34, 82, 128, 0.85), rgba(70, 126, 178, 0.85));
         }
 
         .skill-box.grab.ready {
           border-color: #6fb6f0;
-          box-shadow: 0 0 10px rgba(90, 170, 240, 0.65), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
+          box-shadow: 0 0 12px rgba(90, 170, 240, 0.65), inset 0 0 0 2px rgba(22, 17, 13, 0.4);
         }
 
         .skill-box.grab.ready .skill-fill {
-          background: linear-gradient(0deg, rgba(48, 118, 188, 0.95), rgba(112, 184, 244, 0.95));
+          background: linear-gradient(90deg, rgba(48, 118, 188, 0.95), rgba(112, 184, 244, 0.95));
         }
 
-        /* ボタンアイコンと技名(白い明朝体の縦書き)をボックスの中に重ねる */
+        /* ボタンアイコンと技名を1行でボックスの中に並べる(操作部分は左揃え、余った余白で技名を中央揃え) */
         .skill-label {
-          position: absolute;
-          inset: 0;
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
           align-items: center;
           justify-content: flex-start;
+          gap: 10px;
+          white-space: nowrap;
+        }
+
+        .skill-input {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
           gap: 4px;
-          padding-top: 6px;
+          white-space: nowrap;
         }
 
         /* LT / RT: 2つの丸を斜めにずらし、間に斜線を引く */
         /* ボタンの丸は X / B / LT / RT すべて同じ直径にそろえる (アケコン時) */
         .skill-label .agc-pad-only .agc-btn {
           box-sizing: border-box;
-          width: 30px;
-          min-width: 30px;
-          height: 30px;
+          width: 36px;
+          min-width: 36px;
+          height: 36px;
           padding: 0;
           border-radius: 50% !important;
-          font-size: 13px;
+          font-size: 15px;
         }
 
-        /* キーボード用のキートップ: スキルボックス(幅60px)内にきれいに収まるスタイル */
+        /* キーボード用のキートップ: スキルボックス内にきれいに収まるスタイル */
         .skill-label .agc-kbd-only .agc-btn.agc-key {
           box-sizing: border-box !important;
           width: auto !important;
-          min-width: 22px !important;
-          max-width: 52px !important;
-          height: 20px !important;
-          padding: 0 5px !important;
-          border-radius: 4px !important;
-          font-size: 10px !important;
+          min-width: 28px !important;
+          max-width: 72px !important;
+          height: 30px !important;
+          padding: 0 9px !important;
+          border-radius: 5px !important;
+          font-size: 14px !important;
           font-weight: 800 !important;
           letter-spacing: 0 !important;
           line-height: 1 !important;
@@ -629,145 +631,38 @@ export const UI_CSS = `
         }
 
         .skill-text {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          font-size: 15px;
-          font-weight: bold;
-          line-height: 1.2;
+          flex: 1;
+          text-align: center;
+          font-size: 22px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          line-height: 1;
           color: #ffffff;
-          text-shadow: 0 0 3px #000, 1px 1px 2px #000;
+          text-shadow: 0 0 4px #000, 1px 1px 3px #000;
+          white-space: nowrap;
         }
 
-        /* ボタンの押し方(連打 / 長押し)。ボックスの下端に小さく */
+        /* ボタンの押し方(連打 / 長押し) */
         .skill-hint {
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 5px;
-          text-align: center;
-          font-size: 12px;
-          font-weight: bold;
+          font-size: 15px;
+          font-weight: 800;
+          line-height: 1;
           color: #ffe9a8;
           text-shadow: 0 0 3px #000, 1px 1px 2px #000;
           letter-spacing: 0;
+          white-space: nowrap;
         }
 
-        .skill-char {
-          display: block;
-          width: 1em;
-          height: 1.2em;
-          text-align: center;
-        }
-
-        /* 「ー」は縦棒にする */
-        .skill-choon {
-          transform: rotate(90deg);
-        }
-
-        /* ガード耐久: 受けるたびに下から減っていく。残りが少ないと朱色で点滅 */
-        .skill-fill.guard-fill {
-          background: linear-gradient(0deg, rgba(43, 93, 138, 0.85), rgba(127, 176, 214, 0.85));
-          transition: height 0.08s linear;
-        }
-
-        .skill-fill.guard-fill.warning {
-          background: linear-gradient(0deg, #b8272d, #e08a3c);
-          animation: guardWarningPulse 0.4s infinite alternate;
-        }
-
-        @keyframes guardWarningPulse {
-          0% { filter: brightness(1); }
-          100% { filter: brightness(1.4); }
-        }
-
-        /* ぶちかましのタメ量: クールタイムの枠(黄)の上に、赤が下から満ちていく */
+        /* ぶちかましのタメ量: クールタイムの枠(黄)の上に、赤が左から満ちていく */
         .charge-fill {
           position: absolute;
           left: 0;
-          right: 0;
+          top: 0;
           bottom: 0;
-          height: 0%;
-          background: linear-gradient(0deg, rgba(168, 28, 36, 0.92), rgba(226, 60, 52, 0.92));
+          width: 0%;
+          background: linear-gradient(90deg, rgba(168, 28, 36, 0.92), rgba(226, 60, 52, 0.92));
           box-shadow: 0 0 10px rgba(226, 60, 52, 0.7);
-          transition: height 0.05s linear;
-        }
-
-        /* 状態バッジ（アーマー・鉄壁・気絶） */
-        .badge-status-wrap {
-          display: flex;
-          gap: 5px;
-          margin-top: 6px;
-          min-height: 18px;
-          align-items: center;
-          white-space: nowrap;
-        }
-
-        .p2-card .badge-status-wrap {
-          justify-content: flex-end;
-        }
-
-        .armor-badge {
-          display: inline-block;
-          font-size: 10px;
-          background: #d9a441;
-          color: #1a1208;
-          font-weight: 900;
-          padding: 1px 6px;
-          border-radius: 3px;
-          opacity: 0;
-          transform: translateY(2px);
-          transition: opacity 0.15s ease, transform 0.15s ease;
-          box-shadow: 0 0 8px rgba(255, 170, 0, 0.6);
-          white-space: nowrap;
-        }
-
-        .armor-badge.active {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .guard-badge {
-          display: inline-block;
-          font-size: 10px;
-          background: #2f6690;
-          color: #fdf6e3;
-          font-weight: 900;
-          padding: 1px 6px;
-          border-radius: 3px;
-          opacity: 0;
-          transform: translateY(2px);
-          transition: opacity 0.15s ease, transform 0.15s ease;
-          box-shadow: 0 0 8px rgba(0, 180, 216, 0.6);
-          white-space: nowrap;
-        }
-
-        .guard-badge.active {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .stun-badge {
-          display: inline-block;
-          font-size: 10px;
-          background: #b8272d;
-          color: #fdf6e3;
-          font-weight: 900;
-          padding: 1px 7px;
-          border-radius: 3px;
-          opacity: 0;
-          animation: stunPulse 0.35s infinite alternate;
-          box-shadow: 0 0 12px #ff0054;
-          white-space: nowrap;
-        }
-
-        .stun-badge.active {
-          opacity: 1;
-        }
-
-        @keyframes stunPulse {
-          0% { transform: scale(1); filter: brightness(1); }
-          100% { transform: scale(1.08); filter: brightness(1.4); }
+          transition: width 0.05s linear;
         }
 
         /* 中央の幕内タイトル & バナー */

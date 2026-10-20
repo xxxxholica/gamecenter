@@ -101,6 +101,19 @@ export class ParticleManager {
     this.hitStopRemaining = Math.max(this.hitStopRemaining, seconds);
   }
 
+  /** 残留している爆発・連鎖予定・粒子・揺れをすべて消す */
+  public clear() {
+    this.fx.clear();
+    this.scheduled.length = 0;
+    for (const p of this.particles) {
+      this.scene.remove(p.mesh);
+      this.releaseMaterial(p.mesh.material as THREE.MeshBasicMaterial);
+    }
+    this.particles.length = 0;
+    this.hitStopRemaining = 0;
+    this.shakeIntensity = 0;
+  }
+
   public update(dt: number) {
     this.fx.update(dt);
 

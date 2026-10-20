@@ -62,6 +62,7 @@ export class HudRenderer {
     ctx.font = isKey
       ? `800 16px ${UI_FONT}`
       : `900 17px ${UI_FONT}`;
+    ctx.letterSpacing = '0px';
     const widthKey = `${isKey}|${label}`;
     let w = this.badgeWidths.get(widthKey);
     if (w === undefined) {
@@ -121,6 +122,7 @@ export class HudRenderer {
       ctx.font = isPad
         ? `900 17px ${UI_FONT}`
         : `800 16px ${UI_FONT}`;
+      ctx.letterSpacing = '0px';
       const widths = buttons.map((b) => Math.max(30, ctx.measureText(b).width + (isPad ? 18 : 22)));
       ctx.font = SPECIAL_TEXT_FONT;
       ctx.letterSpacing = SPECIAL_TEXT_SPACING;

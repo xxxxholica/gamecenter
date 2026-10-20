@@ -307,7 +307,9 @@ class StreetBBoyGame {
   private openResultScreen(status: 'clear' | 'gameover'): void {
     this.resultMenuFocus = 0; // 再挑戦がデフォルト
     this.resultArmTime = performance.now() + 600;
-    this.hud.showResult(status, this.score);
+    const totalDeaths = Object.values(this.deathsByCause).reduce((a, b) => a + b, 0);
+    const perfect = status === 'clear' && totalDeaths === 0 && this.goldTaken === 0;
+    this.hud.showResult(status, this.score, perfect);
     this.updateResultFocus();
 
     mountArcadeGuide({
@@ -372,7 +374,7 @@ class StreetBBoyGame {
       this.arcadeTitleScreen = new ArcadeTitleScreen({
         slug: 'street-b-boy',
         accentColor: '#ffea00',
-        tagline: 'ブレイクダンス横スクロールアクション',
+        tagline: 'スピンで蹴散らす爆走ダンスアクション！',
         startButtonLabel: 'スタート',
         promptLabel: 'PRESS START / ENTER / 画面クリック',
         onStart: () => {

@@ -122,6 +122,8 @@ class Game {
 
   // スローモーション演出用
   private timeScale: number = 1.0;
+  /** 無敵パワーアップを1度でも取ったか(ノーデス＋無敵アイテム未使用クリア判定用) */
+  private usedInvincibleItem: boolean = false;
 
   // カウントダウン演出用
   private isCountingDown: boolean = false;
@@ -169,7 +171,7 @@ class Game {
     this.arcadeTitleScreen = new ArcadeTitleScreen({
       slug: 'school-corridor-runner',
       accentColor: '#ffb100',
-      tagline: '放課後エンドレスランナー',
+      tagline: '先生から逃げて校門を突破せよ！',
       startButtonLabel: 'スタート',
       promptLabel: 'PRESS START / ENTER / 画面クリック',
       onStart: () => {
@@ -480,6 +482,7 @@ class Game {
     reportRoundStart();
     mountPlayGuide();
     this.isFallingDeath = false;
+    this.usedInvincibleItem = false;
     this.deathFallTimer = 0;
     this.timeScale = 1.0;
     this.shakeIntensity = 0;
@@ -725,6 +728,7 @@ class Game {
     this.shakeIntensity = 0;
     this.timeScale = 1.0;
     this.isFallingDeath = false;
+    this.usedInvincibleItem = false;
     this.deathFallTimer = 0;
     this.demoElapsedTime = 0;
     this.demoAttackTimer = 0;
@@ -1862,6 +1866,7 @@ class Game {
       if (p.isCollected) continue;
       if (playerBox.intersectsBox(p.boundingBox)) {
         p.isCollected = true;
+        this.usedInvincibleItem = true;
         this.player.triggerInvincible(10.0);
         this.soundSystem.playPowerUpCollect();
         this.uiManager.triggerInvincibleStart();
@@ -2312,12 +2317,14 @@ class Game {
       backLabel: 'タイトルへ',
     });
 
+    const cleared = state === GameState.CLEARED;
+    const perfect = cleared && !this.usedInvincibleItem;
     runHighScoreEntryFlow({
       slug: 'school-corridor-runner',
       score,
       modal: { title: '脱出記録', scoreDisplay: `${Math.floor(score).toLocaleString()} pts`, themeClass: 'theme-corridor', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { this.isNameEntryOpen = blocked; },
-      onName: (name) => saveLeaderboardScore('school-corridor-runner', score, name, undefined, undefined, { cleared: state === GameState.CLEARED }),
+      onName: (name) => saveLeaderboardScore('school-corridor-runner', score, name, undefined, undefined, { cleared, perfect }),
       onClosed: () => { this.resultArmTime = performance.now() + 800; },
     });
   }

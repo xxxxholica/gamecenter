@@ -12,7 +12,7 @@ export class TitleScreen {
     this.titleScreen = new ArcadeTitleScreen({
       slug: 'midnight-skyway',
       accentColor: '#00e5ff',
-      tagline: '夜の都市高架を駆け抜けるタイムアタック',
+      tagline: '夜の峠と都市を爆走レース！',
       startButtonLabel: 'スタート',
       promptLabel: 'PRESS START / ENTER / 画面クリック',
       startKeys: ['Enter'],

@@ -650,4 +650,29 @@ export class ExplosionFx {
       }
     }
   }
+
+  /** すべての爆発粒子・衝撃波・残り火・照り返しを即座に消す */
+  public clear() {
+    for (const fx of this.pool) {
+      if (fx.active) {
+        fx.active = false;
+        this.freeList.push(fx);
+      }
+    }
+    this.activeN = 0;
+    for (const k of Object.keys(this.batches) as BatchKey[]) {
+      const batch = this.batches[k];
+      batch.count = 0;
+      batch.geo.instanceCount = 0;
+      batch.mesh.visible = false;
+    }
+    for (const ring of this.rings) {
+      ring.active = false;
+      ring.mesh.visible = false;
+    }
+    this.burns.length = 0;
+    this.lightLife = 0;
+    this.lightPeak = 0;
+    this.light.intensity = 0;
+  }
 }

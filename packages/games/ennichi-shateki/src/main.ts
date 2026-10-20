@@ -376,7 +376,7 @@ class ArcadeCorkShooter {
       this.arcadeTitleScreen = new ArcadeTitleScreen({
         slug: 'ennichi-shateki',
         accentColor: '#ff4d4f',
-        tagline: 'むげん連射のお祭りアクション',
+        tagline: '撃ちまくって景品を総ざらい！',
         startButtonLabel: 'スタート',
         promptLabel: 'PRESS START / ボタンでスタート',
         onStart: () => {

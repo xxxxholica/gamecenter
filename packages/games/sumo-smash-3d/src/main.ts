@@ -58,7 +58,6 @@ const guideBattle = () => mountArcadeGuide({
   ],
   showHomeHint: true,
   backLabel: 'ポーズ',
-  position: 'top-left',
 });
 const guideResult = () => mountArcadeGuide({
   moveLabel: '選択',
@@ -106,13 +105,13 @@ class SumoGame {
   private gameState: GameState = 'title';
 
   // 固定カメラの基本位置・注視点（クォータービュー）
-  // 土俵が大きく見えるよう、真上寄りの斜め見下ろしを保ったまま近づけている
+  // 土俵が下部中央の技ゲージと被らないよう、画面上寄りに収める
   private readonly cameraBasePos = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
     ? new THREE.Vector3(0, 9.5, 11.2)
-    : new THREE.Vector3(0, 17.2, 18.4);
+    : new THREE.Vector3(0, 18.2, 20.0);
   private readonly cameraLookAt = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
     ? new THREE.Vector3(0, 1.2, 0)
-    : new THREE.Vector3(0, 0.5, 0);
+    : new THREE.Vector3(0, -1.5, 1.8);
 
   // タイトル画面カメラ周回用
   private titleCameraAngle: number = 0;
@@ -289,7 +288,7 @@ class SumoGame {
     this.titleScreen = new ArcadeTitleScreen({
       slug: 'sumo-smash-3d',
       accentColor: ACCENT,
-      tagline: '土俵から押し出せ',
+      tagline: 'ぶつかって土俵からぶっ飛ばせ！',
       onStart: () => {
         this.soundManager.playHyoshigi();
         void this.onStartPressed();
@@ -406,7 +405,8 @@ class SumoGame {
     this.camera.lookAt(this.cameraLookAt);
     this.computeCameraVectors();
 
-    // 吹き飛んだ客席と土俵の焦げ跡を元に戻す(新しい試合ごと)
+    // 吹き飛んだ客席・土俵の焦げ跡・残留爆発エフェクトを元に戻す(新しい試合ごと)
+    this.particleManager.clear();
     this.audience.restoreAll();
     this.dohyo.clearScorches();
 
@@ -480,6 +480,9 @@ class SumoGame {
   private showTitle() {
     this.leaveOnline();                                       // オンラインの途中だった場合の片付け(オフラインでは何もしない)
     this.cpu = null;
+    this.particleManager.clear();
+    this.audience.restoreAll();
+    this.dohyo.clearScorches();
     this.showViews(2, [null, null]);
     this.soundManager.playBgm('menu');
     this.gameState = 'title';
@@ -497,7 +500,7 @@ class SumoGame {
     const st = this.onlineStatus;
     const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
     this.modeSelect.show([
-      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・ぶちかまし・つかみで、先に二番取った方が勝ちです。' },
+      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・頭突き・つかみで、先に二番取った方が勝ちです。' },
       {
         id: 'online',
         art: ONLINE_ART,
@@ -899,23 +902,23 @@ class SumoGame {
   private updateHud(wins: number[]) {
     const v = this.views;
     if (this.match) {
-      // オンライン(多人数): 上部バーに全員のダメージ・得点。技の箱(左下)は自分の分
+      // オンライン(多人数): 上部バーに全員のダメージ・得点。技の箱(下部中央)は自分の分
       const me = v[this.match.slot];
       this.uiManager.updateMulti(
         v.slice(0, this.activeCount).map((f, i) => ({ damage: f.damagePercent, wins: wins[i] ?? 0, out: f.gone || f.state === 'fall' || f.position.y < -1.8 }))
       );
       this.uiManager.updateStats(
         me.damagePercent, 0, wins[this.match.slot] ?? 0, 0,
-        me.chargeRatio, 0, me.hasSuperArmor, false,
-        me.buchikamashiCooldownRatio, 0, me.grabCooldownRatio, 0, me.hariteGauge, 0
+        me.chargeRatio,
+        me.buchikamashiCooldownRatio, me.grabCooldownRatio, me.hariteGauge
       );
       return;
     }
     this.uiManager.updateStats(
       v[0].damagePercent, v[1].damagePercent, wins[0] ?? 0, wins[1] ?? 0,
-      v[0].chargeRatio, v[1].chargeRatio, v[0].hasSuperArmor, v[1].hasSuperArmor,
-      v[0].buchikamashiCooldownRatio, v[1].buchikamashiCooldownRatio, v[0].grabCooldownRatio, v[1].grabCooldownRatio,
-      v[0].hariteGauge, v[1].hariteGauge
+      v[0].chargeRatio,
+      v[0].buchikamashiCooldownRatio, v[0].grabCooldownRatio,
+      v[0].hariteGauge
     );
   }
 

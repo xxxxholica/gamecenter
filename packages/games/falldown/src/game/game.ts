@@ -41,6 +41,8 @@ export class Game {
   phase: Phase = 'title';
   air = MAX_AIR;
   lives = START_LIVES;
+  /** 1プレイ中にミスした回数(ノーデスクリア判定用) */
+  deaths = 0;
   score = 0;
   maxDepth = 0;
   invuln = 0;
@@ -73,6 +75,7 @@ export class Game {
     this.phase = 'playing';
     this.air = MAX_AIR;
     this.lives = START_LIVES;
+    this.deaths = 0;
     this.score = 0;
     this.maxDepth = 0;
     this.invuln = 0;
@@ -275,6 +278,7 @@ export class Game {
 
   private loseLife(reason: 'crush' | 'air') {
     this.lives--;
+    this.deaths++;
     this.lastDeath = reason;
     const p = this.player;
     if (reason === 'crush') this.events.push({ type: 'crush', x: p.x, y: p.y, lifeLost: true });

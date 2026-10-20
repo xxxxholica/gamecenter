@@ -113,6 +113,7 @@ function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEn
         date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
         extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
         cleared: item.cleared === true ? true : undefined,
+        perfect: item.perfect === true ? true : undefined,
         dev: dev ?? (role === '開発者' ? true : undefined),
         role,
       };
@@ -258,6 +259,8 @@ export function releaseAnonName(token: string): void {
 export interface SaveLeaderboardOptions {
   /** ステージを最後までクリアした記録なら true。ホームのランキングで、名前の右に ★ が付く */
   cleared?: boolean;
+  /** 全ステージをノーデス＋無敵アイテム未使用でクリアした記録なら true。ホームのランキングで、名前の右にピンクダイアモンドスターが付く */
+  perfect?: boolean;
   /** midnight-skyway: 走行の軌跡(ゴースト)。上位に入ったときだけサーバーに保存される */
   ghost?: unknown;
 }
@@ -286,6 +289,7 @@ export async function saveLeaderboardScore(
       score,
       extra: sanitizeLeaderboardExtra(extra),
       cleared: options.cleared === true ? true : undefined,
+      perfect: options.perfect === true ? true : undefined,
       ghost: options.ghost,
       ticket: ticket ?? undefined,
       anonToken: token ?? undefined,

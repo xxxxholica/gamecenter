@@ -76,6 +76,7 @@ export type SubmitInput = {
   score?: unknown;
   extra?: unknown;
   cleared?: unknown;
+  perfect?: unknown;
   ghost?: unknown;
   replay?: unknown;
   /** 登録ウィンドウを開いたときに予約した匿名名の札(reserveAnon の token) */
@@ -369,6 +370,7 @@ export class LeaderboardStore {
       date: today(),
       extra: sanitizeLeaderboardExtra(input.extra),
       cleared: input.cleared === true ? true : undefined,
+      perfect: input.perfect === true ? true : undefined,
       ghost,
       replay: parseReplayRef(input.replay),
     };

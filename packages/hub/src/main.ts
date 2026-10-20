@@ -57,7 +57,10 @@ function onlineState(status?: PublicStatus | null): 'closed' | 'open' | 'waiting
 }
 
 // ===== ランキングHTML生成 =====
-/** クリアした記録は、名前のすぐ右に ★ を付けて表示する */
+const CLEAR_STAR_DESC = 'クリアスター';
+const PINK_DIAMOND_STAR_DESC = '完全制覇スター';
+
+/** クリアした記録は、名前のすぐ右に ★ (ノーデス＋無敵アイテム未使用なら完全制覇スター) を付けて表示する */
 function renderRowsHtml(entries: LeaderboardEntry[]): string {
   const top5 = entries.slice(0, 5);
   const posLabels = ['1ST', '2ND', '3RD', '4TH', '5TH'];
@@ -68,16 +71,54 @@ function renderRowsHtml(entries: LeaderboardEntry[]): string {
       const isEmpty = e.name === '記録なし';
       const safeName = escapeHtml(e.name);
       const safeScore = escapeHtml(e.formattedScore);
+      const clearMarkHtml = e.perfect
+        ? `<span class="rank-clear-mark is-pink-diamond" data-tooltip="${PINK_DIAMOND_STAR_DESC}" aria-label="${PINK_DIAMOND_STAR_DESC}">★</span>`
+        : e.cleared
+          ? `<span class="rank-clear-mark" data-tooltip="${CLEAR_STAR_DESC}" aria-label="${CLEAR_STAR_DESC}">★</span>`
+          : '';
       return `
         <div class="ranking-row">
           <span class="rank-pos ${posClasses[idx] ?? ''}">${posLabels[idx] ?? `${idx + 1}TH`}</span>
-          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${e.cleared ? '<span class="rank-clear-mark">★</span>' : ''}</span>
+          <span class="rank-name ${isEmpty ? 'is-empty' : ''}">${safeName}${clearMarkHtml}</span>
           <span class="rank-score ${isEmpty ? 'is-empty' : ''}">${safeScore}</span>
         </div>
       `;
     })
     .join('');
 }
+
+// クリアスターのホバー説明ツールチップ
+const starTooltip = document.createElement('div');
+starTooltip.className = 'rank-star-tooltip';
+document.body.appendChild(starTooltip);
+
+document.addEventListener('mouseover', (e) => {
+  const mark = (e.target as Element | null)?.closest?.('.rank-clear-mark') as HTMLElement | null;
+  if (!mark) return;
+  const text = mark.dataset.tooltip || mark.getAttribute('title') || '';
+  if (!text) return;
+  const rect = mark.getBoundingClientRect();
+  starTooltip.textContent = text;
+  starTooltip.style.left = `${rect.left + rect.width / 2}px`;
+  starTooltip.style.top = `${rect.top - 6}px`;
+  starTooltip.classList.add('visible');
+});
+
+document.addEventListener('mouseout', (e) => {
+  const mark = (e.target as Element | null)?.closest?.('.rank-clear-mark');
+  if (mark) starTooltip.classList.remove('visible');
+});
+
+window.addEventListener('scroll', () => {
+  starTooltip.classList.remove('visible');
+}, { passive: true });
+
+document.addEventListener('click', (e) => {
+  const mark = (e.target as Element | null)?.closest?.('.rank-clear-mark');
+  if (!mark) return;
+  const link = mark.closest('.card')?.querySelector<HTMLAnchorElement>('.card-link');
+  link?.click();
+});
 
 let boards: Record<string, LeaderboardEntry[]> = {};
 
@@ -223,6 +264,39 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
   return card;
 }
 
+/** 高難易度セクションの空き枠(4枠目)に出す、クリアスター＆完全制覇ピンクスターの解説 */
+function createStarGuideCard(): HTMLDivElement {
+  const box = document.createElement('div');
+  box.className = 'star-guide-card';
+  box.innerHTML = `
+    <div class="star-guide-block">
+      <div class="star-guide-head">
+        <span class="star-guide-icon-box"><span class="star-guide-icon">★</span></span>
+        <span class="star-guide-label"><span class="star-guide-label-name">クリアスター</span><span class="star-guide-label-sub">の解放条件</span></span>
+      </div>
+      <div class="star-guide-checklist">
+        <div class="star-guide-check-item"><span class="star-guide-check-mark">✓</span><span>最終ステージを突破</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark">✓</span><span>TOP5にランクイン</span></div>
+        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty"></span><span>ミスはOK</span></div>
+        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty"></span><span>無敵アイテム使用はOK</span></div>
+      </div>
+    </div>
+    <div class="star-guide-block is-pink">
+      <div class="star-guide-head">
+        <span class="star-guide-icon-box"><span class="star-guide-icon is-pink">★</span></span>
+        <span class="star-guide-label"><span class="star-guide-label-name is-pink">完全制覇スター</span><span class="star-guide-label-sub">の解放条件</span></span>
+      </div>
+      <div class="star-guide-checklist">
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>最終ステージを突破</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>TOP5にランクイン</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>ミスは許されない</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>無敵アイテムは使えない</span></div>
+      </div>
+    </div>
+  `;
+  return box;
+}
+
 // 取得したランキングで、全カードの表示を更新する
 async function refreshBoards() {
   const next = await loadAllLeaderboards();
@@ -271,6 +345,9 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
       `;
       const grid = section.querySelector<HTMLDivElement>('.game-grid')!;
       groupGames.forEach((g) => grid.appendChild(createCard(g, statuses[g.slug])));
+      if (group.id === 'hard') {
+        grid.appendChild(createStarGuideCard());
+      }
       hubContainer.appendChild(section);
     });
 

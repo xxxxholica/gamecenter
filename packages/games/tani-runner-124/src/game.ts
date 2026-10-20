@@ -283,7 +283,7 @@ export class Game {
     this.arcadeTitleScreen = new ArcadeTitleScreen({
       slug: 'tani-runner-124',
       accentColor: '#00e676',
-      tagline: '小学校・中学校・高専を卒業して 留年の壁を打ち破れ！',
+      tagline: '単位を増やして留年の壁をぶち破れ！',
       startButtonLabel: 'スタート',
       promptLabel: 'PRESS START / ENTER / 画面クリック',
       onStart: () => {

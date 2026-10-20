@@ -29,7 +29,6 @@ export class ResultScreen {
   private elRank: HTMLElement;
   private elSub: HTMLElement;
   private elLeaderboardList: HTMLElement;
-  private elLeaderboardFooter: HTMLElement;
   private buttons: HTMLButtonElement[] = [];
 
   private focus = 0;
@@ -59,7 +58,6 @@ export class ResultScreen {
           <span class="rs-panel-title">ランキング</span>
         </div>
         <div class="rs-leaderboard-list" id="result-leaderboard-list"></div>
-        <div class="rs-lb-footer" id="result-lb-footer"></div>
       </div>
 
       <div id="result-menu" class="rs-menu">
@@ -76,7 +74,6 @@ export class ResultScreen {
     this.elRank = this.root.querySelector('#result-rank')!;
     this.elSub = this.root.querySelector('#result-sub')!;
     this.elLeaderboardList = this.root.querySelector('#result-leaderboard-list')!;
-    this.elLeaderboardFooter = this.root.querySelector('#result-lb-footer')!;
     this.buttons = ['btn-restart', 'btn-result-title', 'btn-result-exit'].map(
       (id) => this.root.querySelector<HTMLButtonElement>('#' + id)!
     );
@@ -113,11 +110,11 @@ export class ResultScreen {
     this.applyFocus();
     this.root.style.visibility = 'hidden';
     this.root.style.display = 'flex';
-    // ランキングの行(記録あり・記録なし)と、下の案内の 2 通り(3位までの差・ハイスコア更新)を、すべて組む
+    // ランキングの行(記録あり・記録なし)をすべて組む
     const filled = [1, 2, 3].map((rank) => ({ rank, name: 'アイウエオ', score: 9000 - rank * 1000, formattedScore: '', date: '' }));
     const empty = padEmptyEntries(GAME_LEADERBOARD_DEFS[SLUG], [], 3);
-    for (const [list, rankIn] of [[filled, false], [empty, true]] as const) {
-      this.renderLeaderboard({ score: 0 } as Player, list, undefined, rankIn, false);
+    for (const list of [filled, empty] as const) {
+      this.renderLeaderboard(list);
       void this.root.offsetWidth;
     }
     this.root.style.display = 'none';
@@ -142,7 +139,7 @@ export class ResultScreen {
     // ランキング表は、サーバーから取得するまで「記録なし」の枠で出しておく。
     // 順位の確認が終わるまでは、メニューの操作と名前登録の判断を保留する。
     this.nameEntryOpen = true;
-    this.renderLeaderboard(player, padEmptyEntries(GAME_LEADERBOARD_DEFS[SLUG], [], 3), undefined, false, false);
+    this.renderLeaderboard(padEmptyEntries(GAME_LEADERBOARD_DEFS[SLUG], [], 3));
 
     this.root.style.display = 'flex';
 
@@ -159,7 +156,7 @@ export class ResultScreen {
 
     void loadLeaderboardAndCheck(SLUG, score, undefined, 3).then(({ list, ...check }) => {
       if (seq !== this.showSeq) return;   // 取得中に画面が閉じられた・出し直された
-      this.renderLeaderboard(player, list, undefined, check.isRankIn, false);
+      this.renderLeaderboard(list);
       // 上位3位に入ったら、スコアを見せたあとに名前登録を出して共通ランキングへ保存する
       if (!check.isRankIn) {
         this.nameEntryOpen = false;
@@ -175,7 +172,7 @@ export class ResultScreen {
           // 保存直後のランキングを再描画し、登録された順位を光らせる(保存に失敗したら強調なしで元の表を出す)
           const res = await saveLeaderboardScore(SLUG, score, name, undefined, `撃破${player.kills}体`);
           if (seq === this.showSeq) {
-            this.renderLeaderboard(player, res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined, false, res.rank > 0);
+            this.renderLeaderboard(res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined);
           }
           this.nameEntryOpen = false;
           this.armTime = performance.now() + 800;
@@ -185,7 +182,7 @@ export class ResultScreen {
   }
 
   /** 殿堂入りハイスコアランキングの描画 */
-  private renderLeaderboard(player: Player, list: LeaderboardEntry[], highlightRank?: number, checkRankIn?: boolean, isRegistered?: boolean) {
+  private renderLeaderboard(list: LeaderboardEntry[], highlightRank?: number) {
     // 順位は文字と色(金・銀・銅)で示す
     const rankColors = ['#ffd700', '#d0e0f0', '#cd7f32'];
 
@@ -205,27 +202,6 @@ export class ResultScreen {
         `;
       })
       .join('');
-
-    // フッター情報表示
-    if (isRegistered) {
-      // 登録後は、ランキングの行の強調(黄色の枠)だけで伝える
-      this.elLeaderboardFooter.innerHTML = '';
-    } else if (checkRankIn) {
-      this.elLeaderboardFooter.innerHTML = `
-        <div class="rs-lb-msg is-rankin">
-          <span>ハイスコア更新　まもなく名前登録</span>
-        </div>
-      `;
-    } else {
-      const thirdScore = list[2]?.score || 0;
-      const diff = thirdScore > 0 ? Math.max(0, thirdScore - player.score + 1) : 0;
-      this.elLeaderboardFooter.innerHTML = `
-        <div class="rs-lb-msg is-normal">
-          <span>今回のスコア <strong>${player.score.toLocaleString()}点</strong></span>
-          ${diff > 0 ? `<span class="rs-lb-diff-hint">3位まであと <strong>${diff.toLocaleString()}点</strong></span>` : ''}
-        </div>
-      `;
-    }
   }
 
   public hide() {

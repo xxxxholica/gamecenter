@@ -24,6 +24,7 @@ export class ArcadeInput {
   // Keyboard
   private keyboard = new KeyboardTracker({
     preventDefaultKeys: SCROLL_KEYS,
+    trackEdges: true,
     onKeyDown: (e) => {
       this.menuNav.pushKey(e);
       this.lastInputTime = performance.now();
@@ -43,6 +44,8 @@ export class ArcadeInput {
   // Mouse
   private mouseLeftPressed: boolean = false;
   private mouseRightPressed: boolean = false;
+  private mouseLeftJustPressed: boolean = false;
+  private mouseRightJustPressed: boolean = false;
   private prevMouseLeft: boolean = false;
   private prevMouseRight: boolean = false;
 
@@ -67,10 +70,29 @@ export class ArcadeInput {
   constructor() {
     this.setupMouse();
     this.setupTouch();
+    this.setupFullscreenReset();
+  }
+
+  private setupFullscreenReset() {
+    const onFullscreenChange = () => this.resetAll();
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    try {
+      if (window.parent && window.parent !== window && window.parent.document) {
+        window.parent.document.addEventListener('fullscreenchange', onFullscreenChange);
+        window.parent.document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+      }
+    } catch {
+      /* クロスオリジンの場合は無視 */
+    }
   }
 
   private setupMouse() {
     window.addEventListener('mousemove', (e) => {
+      if (e.isTrusted && e.buttons === 0) {
+        this.mouseLeftPressed = false;
+        this.mouseRightPressed = false;
+      }
       this.aimX = (e.clientX / window.innerWidth) * 2 - 1;
       this.aimY = -(e.clientY / window.innerHeight) * 2 + 1;
       this.aimX = Math.max(-0.95, Math.min(0.95, this.aimX));
@@ -82,8 +104,10 @@ export class ArcadeInput {
       this.lastInputTime = performance.now();
       if (e.button === 0) {
         this.mouseLeftPressed = true;
+        this.mouseLeftJustPressed = true;
       } else if (e.button === 2) {
         this.mouseRightPressed = true;
+        this.mouseRightJustPressed = true;
       }
     });
 
@@ -138,6 +162,9 @@ export class ArcadeInput {
     let normalPressed = false;
     let explosivePressed = false;
     let startPressed = false;
+    let padNormalPressed = false;
+    let padExplosivePressed = false;
+    let padStartPressed = false;
     let hasAnyInput = false;
     let padNavX = 0;
     let padNavY = 0;
@@ -155,16 +182,20 @@ export class ArcadeInput {
 
     // Normal fire: Space, Z, Enter
     const isKeyNormal = this.keyboard.isDown('Space') || this.keyboard.isDown('KeyZ') || this.keyboard.isDown('Enter');
-    if (isKeyNormal) {
+    const keyNormalJustPressed =
+      this.keyboard.pressed.has('Space') || this.keyboard.pressed.has('KeyZ') || this.keyboard.pressed.has('Enter');
+    if (isKeyNormal || keyNormalJustPressed) {
       normalPressed = true;
       startPressed = true;
       hasAnyInput = true;
     }
 
-    // Explosive fire: X, E, Shift, F
+    // Explosive fire: X, E, Shift (KeyF is reserved for fullscreen toggle)
     const isKeyExplosive =
-      this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyE') || this.keyboard.isDown('ShiftLeft') || this.keyboard.isDown('ShiftRight') || this.keyboard.isDown('KeyF');
-    if (isKeyExplosive) {
+      this.keyboard.isDown('KeyX') || this.keyboard.isDown('KeyE') || this.keyboard.isDown('ShiftLeft') || this.keyboard.isDown('ShiftRight');
+    const keyExplosiveJustPressed =
+      this.keyboard.pressed.has('KeyX') || this.keyboard.pressed.has('KeyE') || this.keyboard.pressed.has('ShiftLeft') || this.keyboard.pressed.has('ShiftRight');
+    if (isKeyExplosive || keyExplosiveJustPressed) {
       explosivePressed = true;
       hasAnyInput = true;
     }
@@ -204,12 +235,15 @@ export class ArcadeInput {
       if (pad.buttons[0]?.pressed) {
         normalPressed = true;
         startPressed = true;
+        padNormalPressed = true;
+        padStartPressed = true;
         hasAnyInput = true;
       }
 
       // Button 1 (B/Circle), Button 2 (X/Square), Button 7 (RT): Explosive Shoot
       if (pad.buttons[1]?.pressed || pad.buttons[2]?.pressed || pad.buttons[7]?.pressed) {
         explosivePressed = true;
+        padExplosivePressed = true;
         hasAnyInput = true;
       }
 
@@ -221,12 +255,12 @@ export class ArcadeInput {
     this.menuNav.updatePad(padNavX, padNavY);
 
     // 3. Mouse / Touch
-    if (this.mouseLeftPressed || this.touchJustTapped) {
+    if (this.mouseLeftPressed || this.mouseLeftJustPressed || this.touchJustTapped) {
       normalPressed = true;
       startPressed = true;
       hasAnyInput = true;
     }
-    if (this.mouseRightPressed) {
+    if (this.mouseRightPressed || this.mouseRightJustPressed) {
       explosivePressed = true;
       hasAnyInput = true;
     }
@@ -252,10 +286,13 @@ export class ArcadeInput {
       this.aimY = Math.max(-0.95, Math.min(0.95, this.aimY));
     }
 
-    // Edge triggers
+    // Edge triggers (keyboard, gamepad, and mouse tracked independently so one never blocks another)
     const normalInitialPress =
+      keyNormalJustPressed ||
       (isKeyNormal && !this.prevNormalKey) ||
-      (normalPressed && !this.prevPadNormal && !this.prevMouseLeft) ||
+      (padNormalPressed && !this.prevPadNormal) ||
+      this.mouseLeftJustPressed ||
+      (this.mouseLeftPressed && !this.prevMouseLeft) ||
       this.touchJustTapped;
 
     // Rapid fire auto-repeat when held
@@ -276,26 +313,35 @@ export class ArcadeInput {
     }
 
     const shootExplosiveJustPressed =
+      keyExplosiveJustPressed ||
       (isKeyExplosive && !this.prevExplosiveKey) ||
-      (explosivePressed && !this.prevPadExplosive && !this.prevMouseRight);
+      (padExplosivePressed && !this.prevPadExplosive) ||
+      this.mouseRightJustPressed ||
+      (this.mouseRightPressed && !this.prevMouseRight);
 
     const startJustPressed =
+      keyNormalJustPressed ||
       (isKeyNormal && !this.prevStartKey) ||
-      (startPressed && !this.prevPadStart && !this.prevMouseLeft) ||
+      (padStartPressed && !this.prevPadStart) ||
+      this.mouseLeftJustPressed ||
+      (this.mouseLeftPressed && !this.prevMouseLeft) ||
       this.touchJustTapped;
     const isKeyCancel = this.keyboard.isDown('Backspace');
-    const cancelJustPressed = isKeyCancel && !this.prevCancelKey;
+    const cancelJustPressed = this.keyboard.pressed.has('Backspace') || (isKeyCancel && !this.prevCancelKey);
 
     this.prevNormalKey = isKeyNormal;
     this.prevExplosiveKey = isKeyExplosive;
     this.prevStartKey = isKeyNormal;
     this.prevCancelKey = isKeyCancel;
-    this.prevPadNormal = normalPressed;
-    this.prevPadExplosive = explosivePressed;
-    this.prevPadStart = startPressed;
+    this.prevPadNormal = padNormalPressed;
+    this.prevPadExplosive = padExplosivePressed;
+    this.prevPadStart = padStartPressed;
     this.prevMouseLeft = this.mouseLeftPressed;
     this.prevMouseRight = this.mouseRightPressed;
+    this.mouseLeftJustPressed = false;
+    this.mouseRightJustPressed = false;
     this.touchJustTapped = false;
+    this.keyboard.endFrame();
 
     return {
       aimX: this.aimX,
@@ -319,9 +365,12 @@ export class ArcadeInput {
 
   public resetAll() {
     this.keyboard.down.clear();
+    this.keyboard.endFrame();
     this.menuNav.clear();
     this.mouseLeftPressed = false;
     this.mouseRightPressed = false;
+    this.mouseLeftJustPressed = false;
+    this.mouseRightJustPressed = false;
     this.touchJustTapped = false;
     this.prevNormalKey = false;
     this.prevExplosiveKey = false;

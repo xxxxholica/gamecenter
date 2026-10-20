@@ -449,11 +449,42 @@
       color: #64748b;
     }
 
-    /* クリアした記録の名前のすぐ右の ★ */
+    /* クリアした記録の名前のすぐ右の ★ / ピンクダイアモンドスター */
     .rank-clear-mark {
+      position: relative;
+      z-index: 2;
+      display: inline-block;
       margin-left: 5px;
       font-size: 0.8rem;
       color: #d97706;
+      cursor: pointer;
+    }
+
+    .rank-clear-mark.is-pink-diamond {
+      color: #ec4899;
+    }
+
+    .rank-star-tooltip {
+      position: fixed;
+      z-index: 100;
+      padding: 5px 10px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.94);
+      color: #ffffff;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+      transform: translate(-50%, -100%);
+      opacity: 0;
+      transition: opacity 0.14s ease;
+    }
+
+    .rank-star-tooltip.visible {
+      opacity: 1;
     }
 
     .rank-name {
@@ -505,6 +536,140 @@
       color: #94a3b8;
       text-align: center;
       user-select: none;
+    }
+
+    /* ===== 高難易度セクションの空き枠: 白色の枠の中を2分割したスター解説 ===== */
+    .star-guide-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      padding: 20px;
+      background: #ffffff;
+      border: 2px solid #cbd5e1;
+      border-radius: 16px;
+      box-shadow:
+        0 10px 25px -3px rgba(15, 23, 42, 0.12),
+        0 4px 10px -2px rgba(15, 23, 42, 0.08),
+        0 1px 3px 0 rgba(15, 23, 42, 0.06);
+    }
+
+    .star-guide-block {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 24px;
+      padding: 26px 28px;
+      background: #fffbeb;
+      border: 1.5px solid #fde68a;
+      border-radius: 12px;
+    }
+
+    .star-guide-block.is-pink {
+      background: #fdf2f8;
+      border-color: #fbcfe8;
+    }
+
+    .star-guide-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .star-guide-icon-box {
+      width: 56px;
+      height: 56px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow:
+        0 4px 12px rgba(15, 23, 42, 0.1),
+        0 2px 4px rgba(15, 23, 42, 0.06);
+    }
+
+    .star-guide-icon {
+      font-size: 2rem;
+      line-height: 1;
+      color: #d97706;
+    }
+
+    .star-guide-icon.is-pink {
+      color: #ec4899;
+    }
+
+    .star-guide-label {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: var(--hand-font);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      line-height: 1.25;
+    }
+
+    .star-guide-label-name {
+      font-size: 1.4rem;
+      color: #b45309;
+    }
+
+    .star-guide-label-name.is-pink {
+      color: #db2777;
+    }
+
+    .star-guide-label-sub {
+      font-size: 1.1rem;
+      color: #334155;
+    }
+
+    .star-guide-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding-left: 13px;
+    }
+
+    .star-guide-check-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--hand-font);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #1e293b;
+      line-height: 1.35;
+    }
+
+    .star-guide-check-item.is-unchecked {
+      color: #64748b;
+    }
+
+    .star-guide-check-mark {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: #f59e0b;
+      color: #ffffff;
+      font-size: 1.1rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .star-guide-check-mark.is-pink {
+      background: #ec4899;
+    }
+
+    .star-guide-check-mark.is-empty {
+      background: #ffffff;
+      border: 2.5px solid #cbd5e1;
+      color: transparent;
     }
 
     /* アケコンガイドのライトスタイル調整 */

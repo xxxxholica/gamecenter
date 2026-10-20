@@ -286,7 +286,7 @@ export class GameManager {
       this.arcadeTitleScreen = new ArcadeTitleScreen({
         slug: 'extreme-edge-arcade',
         accentColor: '#ff2b4d',
-        tagline: '日常のギリギリ連続チャレンジ',
+        tagline: 'ギリギリを攻める一発勝負ミニゲーム！',
         startButtonLabel: 'スタート',
         promptLabel: 'PRESS START / ボタンでスタート',
         onStart: () => {

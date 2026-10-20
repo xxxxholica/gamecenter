@@ -95,7 +95,7 @@ function makeSprite(ctx: CanvasRenderingContext2D, text: string, s: number, outl
     c.font = ctx.font;
     c.textAlign = ctx.textAlign;
     c.textBaseline = ctx.textBaseline;
-    c.letterSpacing = ctx.letterSpacing;
+    c.letterSpacing = ctx.letterSpacing || '0px';
   };
   work ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
   font(work);
@@ -161,7 +161,7 @@ function drawSprite(ctx: CanvasRenderingContext2D, text: string, x: number, y: n
   const s = quantize(currentScale(ctx));
   const blur = ctx.shadowBlur > 0 ? `${ctx.shadowColor}/${ctx.shadowBlur}` : '';
   const line = outline ? `${ctx.lineWidth}|${ctx.lineJoin}|${ctx.miterLimit}|${ctx.strokeStyle}` : '-';
-  const key = `${text}|${ctx.font}|${ctx.textAlign}|${ctx.textBaseline}|${ctx.letterSpacing}|${line}|${ctx.fillStyle}|${blur}|${s}`;
+  const key = `${text}|${ctx.font}|${ctx.textAlign}|${ctx.textBaseline}|${ctx.letterSpacing || '0px'}|${line}|${ctx.fillStyle}|${blur}|${s}`;
   let sp = sprites.get(key);
   if (!sp) {
     const made = makeSprite(ctx, text, s, outline);

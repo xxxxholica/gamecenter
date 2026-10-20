@@ -140,7 +140,7 @@ let lastClankPopup = 0;
 const titleScreen = new ArcadeTitleScreen({
   slug: SLUG,
   accentColor: ACCENT,
-  tagline: '地下の黄金郷を目指せ! 酸素が切れる前に掘り進もう',
+  tagline: '地下500mの黄金郷へ掘り進め！',
   onStart: () => startGame(),
 });
 
@@ -698,7 +698,8 @@ function showRanking(cleared: boolean) {
       delayMs: NAME_ENTRY_AFTER_RESULT_MS,
       onComplete: async (name) => {
         menuNav.clear();
-        const res = await saveLeaderboardScore(SLUG, score, name, undefined, extra, { cleared });
+        const perfect = cleared && game.deaths === 0;
+        const res = await saveLeaderboardScore(SLUG, score, name, undefined, extra, { cleared, perfect });
         if (seq === resultSeq && res.rank > 0) renderRanking(res.list, res.rank);
         nameEntryOpen = false;
         resultArmUntil = performance.now() + 800; // 名前の決定がメニューの決定として入らないようにする

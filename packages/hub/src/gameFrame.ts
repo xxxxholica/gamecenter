@@ -165,6 +165,14 @@ window.addEventListener('pagehide', () => {
 
 /** iframeのゲームからのメッセージ(閉じる・全画面切り替え・フェーズ遷移)を受ける。 */
 export function listenGameFrameMessages(): void {
+  const refocusGameFrame = () => {
+    if (!frame || closing) return;
+    frame.focus();
+    frame.contentWindow?.focus();
+  };
+  document.addEventListener('fullscreenchange', refocusGameFrame);
+  document.addEventListener('webkitfullscreenchange', refocusGameFrame);
+
   window.addEventListener('message', (e) => {
     if (e.origin !== window.location.origin || !frame || e.source !== frame.contentWindow) return;
     const type = (e.data as { type?: string } | null)?.type;

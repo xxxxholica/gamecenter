@@ -1050,7 +1050,7 @@ export class GameEngine {
           slug: 'survivor-score-battle',
           logoUrl,
           accentColor: '#00e5ff',
-          tagline: '剣を奪い合う生き残りバトル  1人 vs CPU 7人',
+          tagline: '剣を奪い合う8人サバイバル！',
           startButtonLabel: 'スタート',
           onStart: () => this.startFromTitle(),
         });

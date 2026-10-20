@@ -45,17 +45,21 @@ export function compileInParallel(renderer: WebGLRenderer, scene: Object3D, came
  * 計測(Windows, Chrome, tower-stack のひとり用): プレイ中のその問い合わせで、1 回 14〜18ms 止まり、33〜67ms のフレームになっていた。
  * 描画には関係しない(見た目は変わらない)。確かめるのは記録しないタイマーなので、操作のリプレイにも関係しない。
  */
-export function finishPrograms(renderer: WebGLRenderer): void {
-  const check = (): void => {
-    let pending = false;
-    for (const p of renderer.info.programs ?? []) {
-      const program = p as unknown as { isReady(): boolean; getUniforms(): unknown };
-      if (program.isReady()) program.getUniforms();   // 2 回目からは、three.js が覚えている一覧を返すだけ
-      else pending = true;
-    }
-    if (pending) untrackedTimeout(check, 50);
-  };
-  untrackedTimeout(check, 0);
+export function finishPrograms(renderer: WebGLRenderer): Promise<void> {
+  // 返す Promise は、その時点で作ってあるシェーダが全部済んだら終わる(読み込み画面の間に待ち切りたいとき用。待たずに呼んでもよい)
+  return new Promise<void>((resolve) => {
+    const check = (): void => {
+      let pending = false;
+      for (const p of renderer.info.programs ?? []) {
+        const program = p as unknown as { isReady(): boolean; getUniforms(): unknown };
+        if (program.isReady()) program.getUniforms();   // 2 回目からは、three.js が覚えている一覧を返すだけ
+        else pending = true;
+      }
+      if (pending) untrackedTimeout(check, 50);
+      else resolve();
+    };
+    untrackedTimeout(check, 0);
+  });
 }
 
 /**

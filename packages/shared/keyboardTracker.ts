@@ -37,7 +37,7 @@ export class KeyboardTracker {
 
     this.handleKeyDown = (e) => {
       opts.onKeyDown?.(e);
-      if (opts.trackEdges && !this.down.has(e.code)) this.pressed.add(e.code);
+      if (opts.trackEdges && (!this.down.has(e.code) || !e.repeat)) this.pressed.add(e.code);
       this.down.add(e.code);
       if (this.prevent.has(e.code)) e.preventDefault();
     };
@@ -46,7 +46,7 @@ export class KeyboardTracker {
       if (opts.trackReleased) this.released.add(e.code);
       opts.onKeyUp?.(e);
     };
-    // フォーカスが外れると keyup が届かず押しっぱなしになるので、押下状態を捨てる
+    // フォーカスが外れる、または全画面切り替えが起きると keyup が届かず押しっぱなしになるので、押下状態を捨てる
     this.handleBlur = () => {
       this.down.clear();
       opts.onBlur?.();
@@ -55,6 +55,8 @@ export class KeyboardTracker {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('blur', this.handleBlur);
+    document.addEventListener('fullscreenchange', this.handleBlur);
+    document.addEventListener('webkitfullscreenchange', this.handleBlur);
   }
 
   isDown(code: string): boolean {
@@ -71,5 +73,7 @@ export class KeyboardTracker {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleBlur);
+    document.removeEventListener('fullscreenchange', this.handleBlur);
+    document.removeEventListener('webkitfullscreenchange', this.handleBlur);
   }
 }

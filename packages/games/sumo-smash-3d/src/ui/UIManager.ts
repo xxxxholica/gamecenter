@@ -1,4 +1,4 @@
-import { setText, setHeight } from '../../../../shared/hudDom';
+import { setText, setWidth } from '../../../../shared/hudDom';
 import { uiLayerHtml } from './uiTemplate';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../../shared/arcadeResultMenu';
 export type GameMode = 'pve' | 'pvp';
@@ -35,7 +35,6 @@ export class UIManager {
   private multiCards: { card: HTMLElement; percent: HTMLElement; stars: HTMLElement }[] = [];
   private multiLast: { wins: number; out: boolean }[] = [];
   private p1BuchiFillEl!: HTMLElement;
-  private p2BuchiFillEl!: HTMLElement;
   // バトルHUD要素
   private battleHudEl!: HTMLElement;
   private p1PercentEl!: HTMLElement;
@@ -43,19 +42,11 @@ export class UIManager {
   private p1WinsEl!: HTMLElement;
   private p2WinsEl!: HTMLElement;
   private p1ChargeBar!: HTMLElement;
-  private p2ChargeBar!: HTMLElement;
-  private p1ArmorBadge!: HTMLElement;
-  private p2ArmorBadge!: HTMLElement;
   private p1BuchiCdEl!: HTMLElement;
-  private p2GrabCdEl!: HTMLElement;
   private p1GrabCdEl!: HTMLElement;
   private p1GrabFillEl!: HTMLElement;
   private p1HariteBox!: HTMLElement;
-  private p2HariteBox!: HTMLElement;
   private p1HariteBar!: HTMLElement;
-  private p2HariteBar!: HTMLElement;
-  private p2GrabFillEl!: HTMLElement;
-  private p2BuchiCdEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private bannerSubEl!: HTMLElement;
 
@@ -102,21 +93,12 @@ export class UIManager {
     this.p1WinsEl = document.getElementById('p1-stars')!;
     this.p2WinsEl = document.getElementById('p2-stars')!;
     this.p1ChargeBar = document.getElementById('p1-charge-bar')!;
-    this.p2ChargeBar = document.getElementById('p2-charge-bar')!;
-    this.p1ArmorBadge = document.getElementById('p1-armor-badge')!;
-    this.p2ArmorBadge = document.getElementById('p2-armor-badge')!;
     this.p1HariteBox = document.getElementById('p1-harite-box')!;
-    this.p2HariteBox = document.getElementById('p2-harite-box')!;
     this.p1HariteBar = document.getElementById('p1-harite-bar')!;
-    this.p2HariteBar = document.getElementById('p2-harite-bar')!;
     this.p1GrabCdEl = document.getElementById('p1-grab-cd')!;
-    this.p2GrabCdEl = document.getElementById('p2-grab-cd')!;
     this.p1GrabFillEl = document.getElementById('p1-grab-fill')!;
-    this.p2GrabFillEl = document.getElementById('p2-grab-fill')!;
     this.p1BuchiCdEl = document.getElementById('p1-buchi-cd')!;
-    this.p2BuchiCdEl = document.getElementById('p2-buchi-cd')!;
     this.p1BuchiFillEl = document.getElementById('p1-buchi-fill')!;
-    this.p2BuchiFillEl = document.getElementById('p2-buchi-fill')!;
     this.bannerEl = document.getElementById('center-announcement')!;
     this.bannerSubEl = document.getElementById('banner-sub')!;
 
@@ -313,15 +295,9 @@ export class UIManager {
     p1Wins: number,
     p2Wins: number,
     p1Charge: number,
-    p2Charge: number,
-    p1SuperArmor: boolean,
-    p2SuperArmor: boolean,
     p1BuchiCdRatio: number,
-    p2BuchiCdRatio: number,
     p1GrabCdRatio: number,
-    p2GrabCdRatio: number,
     p1HariteGauge: number,
-    p2HariteGauge: number,
   ) {
     // 吹き飛び蓄積率（パーセント数値 ＆ ゲージ ＆ ダイナミックグロー）
     this.updateDamageStyle(this.p1PercentEl, p1Percent);
@@ -338,28 +314,17 @@ export class UIManager {
     }
 
     // チャージバー（ぶちかましタメ）
-    setHeight(this.p1ChargeBar, `${Math.min(100, p1Charge * 100)}%`);
-    setHeight(this.p2ChargeBar, `${Math.min(100, p2Charge * 100)}%`);
-
-    // ぶちかまし突進中の表示
-    this.p1ArmorBadge.classList.toggle('active', p1SuperArmor);
-    this.p2ArmorBadge.classList.toggle('active', p2SuperArmor);
+    setWidth(this.p1ChargeBar, `${Math.min(100, p1Charge * 100)}%`);
 
     // ぶちかましのクールタイム表示
     this.updateSkillBox(this.p1BuchiCdEl, this.p1BuchiFillEl, p1BuchiCdRatio);
-    this.updateSkillBox(this.p2BuchiCdEl, this.p2BuchiFillEl, p2BuchiCdRatio);
 
     // 張り手ゲージ(当て続けると赤が溜まる。満タンの間は枠が脈打つ)
-    setHeight(this.p1HariteBar, `${Math.min(100, p1HariteGauge * 100)}%`);
-    setHeight(this.p2HariteBar, `${Math.min(100, p2HariteGauge * 100)}%`);
+    setWidth(this.p1HariteBar, `${Math.min(100, p1HariteGauge * 100)}%`);
     this.p1HariteBox.classList.toggle('gauge-full', p1HariteGauge >= 1);
-    this.p2HariteBox.classList.toggle('gauge-full', p2HariteGauge >= 1);
 
     // つかみのクールタイム表示
     this.updateSkillBox(this.p1GrabCdEl, this.p1GrabFillEl, p1GrabCdRatio);
-    this.updateSkillBox(this.p2GrabCdEl, this.p2GrabFillEl, p2GrabCdRatio);
-
-    // コントローラー接続インジケーター
   }
 
   /**
@@ -383,7 +348,7 @@ export class UIManager {
     const ready = remainingRatio <= 0.02;
     boxEl.classList.toggle('ready', ready);
     boxEl.classList.toggle('cooling', !ready);
-    setHeight(fillEl, `${Math.round((1 - Math.min(1, Math.max(0, remainingRatio))) * 100)}%`);
+    setWidth(fillEl, `${Math.round((1 - Math.min(1, Math.max(0, remainingRatio))) * 100)}%`);
   }
 
   /** 対戦中の星取り: 勝ちは白い丸、まだの取組は薄い輪 */
