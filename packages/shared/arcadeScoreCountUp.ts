@@ -23,6 +23,8 @@ export interface CountUpOptions {
   delayMs?: number;
   /** 数え上げにかける時間(ms) */
   durationMs?: number;
+  /** 数え上げの開始値(省略時は 0) */
+  startValue?: number;
 }
 
 /**
@@ -32,13 +34,24 @@ export interface CountUpOptions {
 export function countUpText(el: HTMLElement, finalText: string, options: CountUpOptions = {}): () => void {
   const delay = options.delayMs ?? 150;
   const duration = options.durationMs ?? 1300;
+  const startValue = options.startValue;
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   if (reduced) {
     el.textContent = finalText;
     return () => {};
   }
 
-  el.textContent = scoreAtRatio(finalText, 0);
+  const formatProgress = (eased: number): string => {
+    if (startValue !== undefined) {
+      const target = Number(finalText.replace(/,/g, ''));
+      if (Number.isFinite(target)) {
+        return String(Math.round(startValue + (target - startValue) * eased));
+      }
+    }
+    return scoreAtRatio(finalText, eased);
+  };
+
+  el.textContent = formatProgress(0);
   let raf = 0;
   let stopped = false;
   const t0 = performance.now();
@@ -53,7 +66,7 @@ export function countUpText(el: HTMLElement, finalText: string, options: CountUp
     if (stopped) return;
     const ratio = Math.min(1, Math.max(0, (now - t0 - delay) / duration));
     if (ratio >= 1) return finish();
-    el.textContent = scoreAtRatio(finalText, 1 - Math.pow(1 - ratio, 3));
+    el.textContent = formatProgress(1 - Math.pow(1 - ratio, 3));
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);

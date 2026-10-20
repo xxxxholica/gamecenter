@@ -86,9 +86,11 @@ export class ResultMenu {
       if (e.repeat || !armed) return;
       if (e.code === 'Enter') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.buttons[this.focus]?.click();
       } else if (e.code === 'Backspace') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.handleCancel();
       }
     };
@@ -103,8 +105,8 @@ export class ResultMenu {
   };
 
   private handleCancel(): void {
-    const exitBtn = this.buttons[this.buttons.length - 1];
-    exitBtn?.click();
+    const titleBtn = this.buttons[1] ?? this.buttons[this.buttons.length - 1];
+    titleBtn?.click();
   }
 
   public close(): void {

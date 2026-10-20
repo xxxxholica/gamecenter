@@ -33,10 +33,10 @@ function injectStyle(): void {
   const st = document.createElement('style');
   st.textContent = `
     .ap-root { position: fixed; inset: 0; z-index: 2147482500; display: none; align-items: center; justify-content: center; flex-direction: column; gap: clamp(14px, 3vh, 26px);
-      background: rgba(5, 7, 18, 0.78); color: #fff; font-family: Arial, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', system-ui, sans-serif; user-select: none; }
+      background: rgba(5, 7, 18, 0.78); color: #fff; font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; user-select: none; }
     .ap-root.ap-open { display: flex; }
     .ap-root .rm-col > .rm-btn.ap-disabled, .ap-root .rm-col > .rm-btn.ap-disabled:hover { opacity: 0.35 !important; cursor: not-allowed; background: #2b2f38 !important; color: #c3c9d6 !important; border-color: #6b7385 !important; box-shadow: none !important; }
-    .ap-title { font: 900 clamp(28px, 7vh, 60px)/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.08em; }
+    .ap-title { font: 900 clamp(28px, 7vh, 60px)/1 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: 0.08em; }
     .ap-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: var(--ap-accent, #ffe600); transform: skewX(-20deg); }
   `;
   document.head.appendChild(st);

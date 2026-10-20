@@ -57,7 +57,6 @@ npm run bench:all -- --games midnight-skyway --targets 'race-tsukikage_touge'   
 - シェーダのコンパイルで落ちた場面は `node scripts/shader-trace.mjs <chromium|firefox> <ゲーム> <場面>` で、いつどのシェーダを作ったかを出せる。
 - テクスチャの送り方の速さは GPU の描画方式で逆になる(Windows の D3D11 と Mac の Metal)。新しい環境では `node scripts/upload-probe.mjs` で確かめる(midnight-skyway の `usesStripUpload`)。
 - Safari は Mac で `--browsers safari` を付けたときに測る(`scripts/bench-safari.mjs`。safaridriver で本物の Safari を動かす)。初回だけ `sudo safaridriver --enable` と、Safari の設定 → デベロッパ →「リモートオートメーションを許可」。計測中は Safari の窓にもほかのアプリにも触らない(フルスクリーンの窓が裏に回ると描画が止まる)。`--sweep` は使えない。
-- サイバー２Dファイター３Dは対象外(確かめるときは `?verify&p1=char2&p2=char3&stage=neon_shrine.jpg`)。
 
 **合否の基準**(`packages/shared/arcadeBenchCore.ts` の `ACCEPTANCE`)。全体の計測は筐体(Windows・Chrome・60Hz・フルHD)で行う。速いモニターでは `--hz 60` で 60Hz を再現する。
 

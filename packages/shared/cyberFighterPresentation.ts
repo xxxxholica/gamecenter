@@ -1,7 +1,6 @@
 /** Keep stage IDs stable: backdrop delivery formats are resolved by the renderer. */
 export const FIGHTER_STAGES = [
-  'sunny_dojo.jpg', 'pagoda_moonlight.jpg', 'sunny_rooftop.jpg',
-  'rooftop_sunset.jpg', 'neon_shrine.jpg', 'cyber_dojo.jpg', 'metro_city.jpg',
+  'pagoda_moonlight.jpg', 'rooftop_sunset.jpg', 'cyber_dojo.jpg', 'metro_city.jpg',
 ] as const;
 export type FighterStage = typeof FIGHTER_STAGES[number];
 

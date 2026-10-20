@@ -619,7 +619,7 @@ export class CpuPlayer extends Entity {
     }
 
     // CPU Name Tag above head
-    ctx.font = '700 13px Impact, sans-serif';
+    ctx.font = "700 13px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillStyle = this.accentColor;

@@ -253,7 +253,7 @@ export class ResultScreen {
     this.pending = null;
     if (!action && performance.now() >= this.armTime) {
       if (input.confirm) action = ACTIONS[this.focus];
-      else if (input.cancel) action = 'EXIT';
+      else if (input.cancel) action = 'TITLE';
     }
 
     if (action) {
@@ -279,7 +279,8 @@ export class ResultScreen {
         padding: 18px 12px;
         box-sizing: border-box;
         background: radial-gradient(circle at center, #071220 0%, #02040a 100%);
-        font-family: Impact, 'Arial Black', 'Hiragino Kaku Gothic ProN', sans-serif;
+        font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+        font-weight: 900;
         color: #fff;
       }
       #result-overlay .rs-status {

@@ -80,6 +80,8 @@ async function request(method: 'GET' | 'POST', path: string, body?: unknown): Pr
   return res.json();
 }
 
+const roundScore = (v: number): number => (Number.isInteger(v) ? v : Math.round(v * 1000) / 1000);
+
 /**
  * サーバーの応答を、型と範囲が正しい形に整える(名前の再検証・件数・日付の長さ)。
  * 文字列は素のまま返す。HTML に入れる側(innerHTML)が、出力するときに escapeHtml する。textContent に入れる側はそのまま使える。
@@ -100,13 +102,14 @@ function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEn
         (role && typeof rawName === 'string' && isValidAdminRoleName(rawName, role)) ||
         (dev === true && rawName === DEV_NAME);
 
+      const cleanScore = roundScore(item.score);
       return {
         id: typeof item.id === 'string' ? item.id : undefined,
         hasGhost: item.hasGhost === true ? true : undefined,
         rank: idx + 1,
         name: isAdminNamed ? rawName : sanitizeLeaderboardName(rawName),
-        score: item.score,
-        formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(item.score),
+        score: cleanScore,
+        formattedScore: typeof item.formattedScore === 'string' ? item.formattedScore.slice(0, 40) : def.formatScore(cleanScore),
         date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
         extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
         cleared: item.cleared === true ? true : undefined,
@@ -269,6 +272,7 @@ export async function saveLeaderboardScore(
   options: SaveLeaderboardOptions = {},
 ): Promise<{ rank: number; list: LeaderboardEntry[] }> {
   const def = GAME_LEADERBOARD_DEFS[slug];
+  score = roundScore(score);
   if (!def || !def.hasScore || score <= 0 || rankingLocked()) return { rank: -1, list: [] };
   // 札は1回きり: 使うために取り出し、次のプレイ用の札をすぐ取りに行く(取れなかった場合はここで取る)
   const pending = ticketSlug === slug ? ticketPromise : null;

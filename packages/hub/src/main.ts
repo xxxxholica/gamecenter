@@ -479,7 +479,7 @@ function launchSelected(slug?: string) {
     openGameFrame(url, () => {
       setPressed(false);
       markActive(); // ゲームから戻った時から、30秒を数える
-      void renderSections(targetSlug, true);
+      return renderSections(targetSlug, true);
     }, targetSlug);
   } else {
     window.location.href = url;

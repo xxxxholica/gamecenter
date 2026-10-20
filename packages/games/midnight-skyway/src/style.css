@@ -14,7 +14,7 @@ html, body {
   overflow: hidden;
   background: #05070c;
   color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic Bold', 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   user-select: none;
 }
 
@@ -415,7 +415,7 @@ html, body {
   --hud-warn: #e2b05e;
   --hud-danger: #d8605f;
   --hud-mono: ui-monospace, Menlo, Consolas, monospace;
-  --hud-sans: Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+  --hud-sans: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -1594,10 +1594,10 @@ body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn:hover {
 #screen-car-select .arcade-title-bar::before, #screen-map-select .arcade-title-bar::before { display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); font-weight: 400; letter-spacing: 0.36em; }
 #screen-car-select .arcade-title-bar::before { content: 'MACHINE'; }
 #screen-map-select .arcade-title-bar::before { content: 'COURSE'; }
-#screen-car-select .arcade-title-main, #screen-map-select .arcade-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em; padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
+#screen-car-select .arcade-title-main, #screen-map-select .arcade-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 inherit; letter-spacing: -0.03em; padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
 #screen-car-select .arcade-title-main::after, #screen-map-select .arcade-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: #00f0ff; transform: skewX(-20deg); }
 #screen-car-select .arcade-action-bar, #screen-map-select .arcade-action-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); max-width: none; gap: calc(18 * var(--u)); margin-bottom: 0; }
-#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start { box-sizing: border-box; width: auto; height: auto; min-width: calc(340 * var(--u)); padding: calc(20 * var(--u)) calc(52 * var(--u)); font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; animation: none; }
+#screen-car-select .arcade-action-bar .arcade-btn-back, #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start { box-sizing: border-box; width: auto; height: auto; min-width: calc(340 * var(--u)); padding: calc(20 * var(--u)) calc(52 * var(--u)); font: 900 max(14px, calc(24 * var(--u))) inherit; letter-spacing: 0.04em; transform: none; border-radius: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; animation: none; }
 #screen-car-select .arcade-action-bar .arcade-btn-back, #screen-map-select .arcade-action-bar .arcade-btn-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
 #screen-car-select .arcade-action-bar .arcade-btn-back:hover, #screen-map-select .arcade-action-bar .arcade-btn-back:hover { color: #fff; background: #34324a; border-color: #8a85a3; transform: none; }
 #screen-car-select .arcade-action-bar .arcade-btn-go, #screen-car-select .arcade-action-bar .arcade-btn-start, #screen-map-select .arcade-action-bar .arcade-btn-go, #screen-map-select .arcade-action-bar .arcade-btn-start { color: #111; background: #00f0ff; border: 0; box-shadow: 6px 6px #006b73; }
@@ -1634,7 +1634,7 @@ body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn:hover {
 #hud-pause-modal { flex-direction: column; background: rgba(5, 7, 18, 0.78); backdrop-filter: none; }
 #hud-pause-modal .hud-arcade-modal-box { display: flex; flex-direction: column; align-items: center; gap: clamp(14px, 3vh, 26px);
   min-width: 0; padding: 0; background: none; border: 0; box-shadow: none; transform: none; overflow: visible; }
-#hud-pause-modal .arcade-modal-title { margin: 0; font: 900 clamp(28px, 7vh, 60px)/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.08em; color: #fff; text-shadow: none; }
+#hud-pause-modal .arcade-modal-title { margin: 0; font: 900 clamp(28px, 7vh, 60px)/1 inherit; letter-spacing: 0.08em; color: #fff; text-shadow: none; }
 #hud-pause-modal .arcade-modal-title::after { content: ''; display: block; width: 90px; height: 6px; margin: 12px auto 0; background: var(--hud-accent, #00f0ff); transform: skewX(-20deg); }
 
 /* ---------- HUD: 速度・ブースト・スリップストリームに合わせた画面の縁の光 ---------- */
@@ -1846,9 +1846,9 @@ body #screen-car-select .btn-current .color-chip-preview { display: inline-flex;
 }
 @keyframes selBgIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+/* 日本語の文字を太めのゴシックにそろえる */
 .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
 }
 .agc-label, .ats-tagline { font-weight: 800 !important; }
 

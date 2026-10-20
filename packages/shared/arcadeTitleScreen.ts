@@ -70,7 +70,7 @@ function injectTitleScreenStyle(): void {
       user-select: none;
       /* 3Dグラフィック・主役を100%クリアに見せるため背景オーバーレイは完全透明 */
       background: transparent;
-      font-family: 'Impact', 'Arial Black', system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
       color: #fff;
       opacity: 1;
       transition: opacity 0.28s ease, transform 0.28s ease;
@@ -111,8 +111,8 @@ function injectTitleScreenStyle(): void {
     }
 
     .ats-tagline {
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
-      font-weight: 700;
+      font-family: inherit;
+      font-weight: 800;
       font-size: 0.82rem;
       letter-spacing: 0.12em;
       color: #ffffff;
@@ -181,7 +181,8 @@ function injectTitleScreenStyle(): void {
       border-radius: 36px;
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(20, 20, 30, 0.85) 100%), var(--ats-accent, #ff2fd4);
       color: #fff;
-      font-family: 'Impact', 'Arial Black', system-ui, sans-serif;
+      font-family: inherit;
+      font-weight: 900;
       font-size: 1.35rem;
       letter-spacing: 0.08em;
       border: 2px solid #fff;
@@ -236,6 +237,7 @@ export class ArcadeTitleScreen {
   private options: ArcadeTitleScreenOptions;
   private isVisible: boolean = false;
   private isStarting: boolean = false;
+  private armAt: number = 0;
   private animFrameId: number | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -324,21 +326,24 @@ export class ArcadeTitleScreen {
     reportPhase('title');
     this.isVisible = true;
     this.isStarting = false;
+    this.armAt = performance.now() + 200;
     this.overlay.classList.remove('ats-hidden');
     this.overlay.style.display = 'flex';
 
     // キーボードリスナー
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.isVisible || this.isStarting) return;
+        if (!this.isVisible || this.isStarting || performance.now() < this.armAt) return;
         // Enter or any game key starts
         if ((this.options.startKeys ?? ['Enter']).includes(e.code)) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.triggerStart();
         }
         // タイトルでの Backspace(アケコンは SELECT)は、ホーム(ハブ)へ戻る
         if (e.code === 'Backspace' && !e.repeat) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           returnToHub();
         }
       };

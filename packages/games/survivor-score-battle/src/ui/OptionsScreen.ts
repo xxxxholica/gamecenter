@@ -68,7 +68,7 @@ export class OptionsScreen {
     ctx.textBaseline = 'middle';
 
     // Title
-    ctx.font = '900 48px Impact, sans-serif';
+    ctx.font = "900 48px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#00f0ff';
     ctx.shadowColor = '#00f0ff';
     ctx.shadowBlur = 15;
@@ -93,7 +93,9 @@ export class OptionsScreen {
         ctx.strokeRect((width - barW) / 2, y - barH / 2, barW, barH);
       }
 
-      ctx.font = isSelected ? '900 28px Impact, sans-serif' : '700 24px Impact, sans-serif';
+      ctx.font = isSelected
+        ? "900 28px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"
+        : "700 24px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = isSelected ? '#ffffff' : '#778899';
 
       let valueText = '';

@@ -22,7 +22,7 @@ export class HowToPlayScreen {
     ctx.textBaseline = 'top';
 
     // Title
-    ctx.font = '900 48px Impact, sans-serif';
+    ctx.font = "900 48px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#00f0ff';
     ctx.shadowColor = '#00f0ff';
     ctx.shadowBlur = 15;
@@ -76,11 +76,11 @@ export class HowToPlayScreen {
       ctx.fillRect(x, y, cardW, cardH);
       ctx.strokeRect(x, y, cardW, cardH);
 
-      ctx.font = '900 22px Impact, sans-serif';
+      ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#ffd700';
       ctx.fillText(c.title, x + cardW / 2, y + 40);
 
-      ctx.font = '600 16px sans-serif';
+      ctx.font = "700 16px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#ccddee';
       this.wrapText(ctx, c.desc, x + cardW / 2, y + 90, cardW - 40, 26);
     }

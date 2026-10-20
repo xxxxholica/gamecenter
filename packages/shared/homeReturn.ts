@@ -8,6 +8,7 @@ import { flushReplay, getReplayMode } from './arcadeReplay';
 import { readGamepads } from './gamepadFrame';
 import { installBench } from './arcadeBench';
 import { isBenchEnabled } from './arcadeBenchCore';
+import { showHubLoading } from './hubLoadingOverlay';
 
 const SELECT_BUTTON = 8;
 // games/<slug>/ 配下からルートへは2階層上
@@ -26,6 +27,7 @@ export function returnToHub(): void {
   if (window.parent !== window) {
     window.parent.postMessage({ type: CLOSE_GAME_MESSAGE }, window.location.origin);
   } else {
+    showHubLoading();
     window.location.href = HUB_URL;
   }
 }
@@ -67,8 +69,16 @@ export function installHomeReturn(): void {
   // 全ゲーム共通のホーム操作として、Fキーの全画面切り替えもここで入れる
   mountFullscreenKey();
 
-  // Escape は無効(Backspace に統合)。各ゲームのキー処理より先に受けて、止める
+  // Escape は無効(Backspace に統合)。各ゲームのキー処理より先に受けて、止める。
+  // また、入力欄以外での Backspace によるブラウザの履歴戻り(history.back)を全体で防ぐ
   const blockEscape = (e: KeyboardEvent) => {
+    if (e.code === 'Backspace') {
+      const t = e.target as HTMLElement | null;
+      if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && !t.isContentEditable)) {
+        e.preventDefault();
+      }
+      return;
+    }
     if (e.code !== 'Escape') return;
     e.preventDefault();
     e.stopImmediatePropagation();

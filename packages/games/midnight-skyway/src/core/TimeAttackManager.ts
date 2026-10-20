@@ -268,18 +268,20 @@ export class TimeAttackManager {
 
   private finishRace(): void {
     this.state = 'GOAL';
-    const finalSector = this.elapsedTimeMs - this.lastSectorStartMs;
+    this.elapsedTimeMs = Math.round(this.elapsedTimeMs);
+    const finalSector = Math.round(this.elapsedTimeMs - this.lastSectorStartMs);
     this.sectorTimes.push(finalSector);
 
     const bestRecord = this.getBestRecord();
     const isNewRecord = !bestRecord || this.elapsedTimeMs < bestRecord.bestTimeMs;
 
     const sectors: SectorInfo[] = this.sectorTimes.map((t, i) => {
+      const timeMs = Math.round(t);
       const bestSec = this.referenceSectors?.[i] ?? bestRecord?.bestSectors[i];
       return {
         index: i + 1,
-        timeMs: t,
-        deltaMs: bestSec !== undefined ? t - bestSec : 0,
+        timeMs,
+        deltaMs: bestSec !== undefined ? Math.round(timeMs - bestSec) : 0,
         hasRef: bestSec !== undefined,
       };
     });

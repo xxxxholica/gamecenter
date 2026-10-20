@@ -57,6 +57,10 @@ interface Board {
   entries: StoredEntry[];
 }
 
+function roundScore(v: number): number {
+  return Number.isInteger(v) ? v : Math.round(v * 1000) / 1000;
+}
+
 function isStoredEntry(e: unknown): e is StoredEntry {
   const x = e as StoredEntry | null;
   return !!x && typeof x === 'object' && typeof x.id === 'string' && typeof x.score === 'number' && Number.isFinite(x.score) && typeof x.name === 'string';
@@ -200,7 +204,10 @@ export class LeaderboardStore {
         const [slug, variant] = parseBoardKey(key);
         if (!this.def(slug, variant) || !b || !Array.isArray(b.entries)) continue;     // 知らない枠・壊れた枠は捨てる
         if ((b.rev ?? 0) !== this.revisionOf(slug, variant)) continue;                 // コースが作り直された枠は破棄する
-        const entries = b.entries.filter(isStoredEntry).slice(0, LEADERBOARD_MAX_ENTRIES);   // 手で編集して壊れた行があっても、読み出しで落ちない
+        const entries = b.entries
+          .filter(isStoredEntry)
+          .slice(0, LEADERBOARD_MAX_ENTRIES)
+          .map((e) => ({ ...e, score: roundScore(e.score) }));   // 手で編集して壊れた行があっても、読み出しで落ちない
         this.boards.set(key, { rev: b.rev ?? 0, entries });
       }
     } catch (e) {
@@ -333,7 +340,7 @@ export class LeaderboardStore {
   submit(slug: string, variant: string | undefined, input: SubmitInput, ctx: SubmitContext = {}): SubmitResult {
     const def = this.def(slug, variant);
     if (!def) return { ok: false, error: 'unknown_board' };
-    const score = typeof input.score === 'number' ? input.score : NaN;
+    const score = typeof input.score === 'number' && Number.isFinite(input.score) ? roundScore(input.score) : NaN;
     if (!scoreInRange(def, score, variant)) return { ok: false, error: 'bad_score' };
     if (ctx.elapsedMs !== undefined && !scorePlausible(def, score, ctx.elapsedMs)) return { ok: false, error: 'implausible_score' };
 

@@ -191,6 +191,7 @@ export class MapSelectScreen {
       this.updateRecords(records);
     }
     this.isVisible = true;
+    const armAt = performance.now() + 150;
     this.container.style.display = 'flex';
 
     this.stopPad?.();
@@ -205,20 +206,25 @@ export class MapSelectScreen {
 
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.isVisible) return;
+        if (!this.isVisible || performance.now() < armAt) return;
         if (e.code === 'Enter') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.confirm();
-        } else if (e.code === 'Backspace' && !(this.onlineMode && !this.locked && this.selectedMapId)) {
+        } else if (e.code === 'Backspace' && !e.repeat && !(this.onlineMode && !this.locked && this.selectedMapId)) {
           // 戻る。オンラインでは、コースを希望している間は先に希望の取り消しになり(下)、希望がなければ戻る
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.events.onBack();
         } else if (e.code === 'KeyA') {
+          e.stopImmediatePropagation();
           this.stepMap(-1);
-        } else if (e.code === 'Backspace' && this.onlineMode) {
+        } else if (e.code === 'Backspace' && !e.repeat && this.onlineMode) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.clearPick();
         } else if (e.code === 'KeyD') {
+          e.stopImmediatePropagation();
           this.stepMap(1);
         } else if (e.code.startsWith('Digit') && !this.locked && this.order()[Number(e.code.slice(5)) - 1]) {
           this.setSelectedMap(this.order()[Number(e.code.slice(5)) - 1]);

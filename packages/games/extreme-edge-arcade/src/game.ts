@@ -43,7 +43,12 @@ export class GameManager {
   /** ポーズ(Backspace / SELECT): 種目の最中に止めて、最初からやり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ffcc00',
-    isPlaying: () => this.state === 'STAGE_INTRO' || this.state === 'STAGE_PLAY',
+    isPlaying: () =>
+      this.state === 'STAGE_BRIEF' ||
+      this.state === 'STAGE_INTRO' ||
+      this.state === 'STAGE_PLAY' ||
+      this.state === 'STAGE_JUDGMENT' ||
+      this.state === 'STAGE_FADEOUT',
     onRestart: () => this.startGame(),
   });
   private scene: THREE.Scene;
@@ -740,7 +745,7 @@ export class GameManager {
 
     // Bravery Deviation Formula: mean around 50, scales with average edge score
     let deviation = 50 + ((avgScore - 60) / 40) * 25;
-    deviation = Math.min(88.0, Math.max(15.0, deviation));
+    deviation = Math.round(Math.min(88.0, Math.max(15.0, deviation)) * 10) / 10;
 
     // 総合評価の区分(平均スコア%の下限が高い順)。満点近くまで細かく分け、神は平均99.5%以上
     const RANKS: { min: number; text: string; color: string }[] = [

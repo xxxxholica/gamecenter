@@ -5,6 +5,7 @@ import type { ControlState } from './game/player.ts';
 
 export interface FrameInput extends ControlState {
   start: boolean; // 決定 / スタート（押した瞬間）
+  cancel: boolean; // キャンセル / 戻る（Backspace を押した瞬間）
   anyPressed: boolean;
   /** ゲームパッド（レバー・十字キー）だけの方向。メニューの選択移動に使う（キーボードは keydown 側で拾う） */
   padDx: number;
@@ -52,6 +53,7 @@ export class Input {
     let dig = this.any(ACTION);
     let digPressed = this.hit(ACTION);
     let start = this.hit(START) || this.hit(ACTION);
+    let cancel = this.hit(['Backspace']);
     let anyPressed = this.pressed.size > 0;
 
     // ---- ゲームパッド / アケコン ----
@@ -79,6 +81,6 @@ export class Input {
     // SELECT(button 8) 長押しでホームへ戻る処理は共通の installHomeReturn()（main.ts）が担当
     this.prevPad = { action: padAction, start: padStart };
     this.pressed.clear();
-    return { dx, dy, dig, digPressed, start, anyPressed, padDx, padDy };
+    return { dx, dy, dig, digPressed, start, cancel, anyPressed, padDx, padDy };
   }
 }

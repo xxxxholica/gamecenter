@@ -13,7 +13,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   background-color: #000000;
-  font-family: "Impact", "Hiragino Kaku Gothic StdN", "Arial Black", "Meiryo", sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   color: #ffffff;
 }
 
@@ -78,7 +78,8 @@ html, body {
 }
 
 .hud-score-main .num {
-  font-family: "Impact", "Arial Black", sans-serif;
+  font-family: inherit;
+  font-weight: 900;
   font-size: 42px;
   line-height: 1;
   color: #ffcc00;
@@ -96,7 +97,8 @@ html, body {
 }
 
 .hud-tr .num {
-  font-family: "Impact", "Arial Black", sans-serif;
+  font-family: inherit;
+  font-weight: 900;
   font-size: 42px;
   line-height: 1;
   color: #ffffff;
@@ -227,7 +229,8 @@ html, body {
 }
 
 .combo-num {
-  font-family: "Impact", "Arial Black", sans-serif;
+  font-family: inherit;
+  font-weight: 900;
   font-size: 42px;
   line-height: 1;
   color: #ffcc00;
@@ -523,7 +526,8 @@ html, body {
 }
 
 .rank-score .score-num {
-  font-family: "Impact", "Arial Black", sans-serif;
+  font-family: inherit;
+  font-weight: 900;
   font-size: 36px;
   letter-spacing: 2px;
   color: #ffcc00;
@@ -643,7 +647,7 @@ html, body {
   font-size: 50px;
   font-weight: 900;
   color: #ffffff;
-  font-family: "Impact", sans-serif;
+  font-family: inherit;
   letter-spacing: 2px;
   text-shadow: 3px 3px 0 #000000, 0 0 16px rgba(255, 204, 0, 0.4);
   line-height: 1;
@@ -779,7 +783,7 @@ html, body {
   font-size: 13px;
   font-weight: 900;
   color: #ffcc00;
-  font-family: "Impact", sans-serif;
+  font-family: inherit;
   letter-spacing: 0.5px;
   line-height: 1;
   margin-top: 3px;
@@ -880,8 +884,8 @@ body.in-game {
   transition: width 0.05s linear;
 }
 
-/* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+/* 日本語の文字を太めのゴシックにそろえる */
 .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
 }
 .agc-label, .ats-tagline { font-weight: 800 !important; }

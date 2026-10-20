@@ -144,7 +144,7 @@ function injectStyle(): void {
       background: rgba(8, 8, 14, 0.82);
       border: 1px solid rgba(255, 255, 255, 0.14);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
       color: #eee;
       pointer-events: none;
       -webkit-user-select: none;
@@ -157,7 +157,7 @@ function injectStyle(): void {
       font-size: 0.74rem;
       line-height: 1.3;
       white-space: nowrap;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+      font-family: inherit !important;
     }
     .agc-icon { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; }
     .agc-stick {
@@ -180,7 +180,7 @@ function injectStyle(): void {
       color: #fff;
       flex-shrink: 0;
       box-sizing: border-box;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+      font-family: inherit !important;
       letter-spacing: normal !important;
       text-shadow: none !important;
       -webkit-text-stroke: 0 !important;
@@ -284,7 +284,7 @@ function injectStyle(): void {
     }
     .agc-label {
       color: #ddd;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+      font-family: inherit !important;
       letter-spacing: normal !important;
       text-shadow: none !important;
       -webkit-text-stroke: 0 !important;
@@ -296,7 +296,7 @@ function injectStyle(): void {
       align-items: center;
       gap: 4px;
       vertical-align: middle;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
     }
   `;
   document.head.appendChild(style);
@@ -403,7 +403,7 @@ export function renderKeyboardKeysHtml(keyString: string, _isInline: boolean = f
     const lenClass = trimmed.length >= 6 ? ' agc-key-long' : (trimmed.length >= 4 ? ' agc-key-medium' : '');
     return `<span class="agc-btn agc-key${lenClass}">${trimmed}</span>`;
   });
-  return badges.filter(Boolean).join('<span class="agc-key-sep">/</span>');
+  return badges.filter(Boolean).join('');
 }
 
 function buttonBadge(b: ArcadeGuideButton): HTMLDivElement {

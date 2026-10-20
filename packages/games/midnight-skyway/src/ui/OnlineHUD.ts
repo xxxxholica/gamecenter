@@ -4,8 +4,8 @@ import type { FinishEntry } from '../../../../shared/netProtocol';
 import type { StandingRow } from '../net/OnlineRace';
 
 const css = `
-.ohud { position: absolute; inset: 0; pointer-events: none; z-index: 60; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif; color: #fff; display: none; }
-.ohud-stand { position: absolute; top: 40px; right: 28px; display: flex; align-items: baseline; gap: 4px; font-family: Impact, 'Arial Black', system-ui, sans-serif; font-style: italic; line-height: .88; color: #fff;
+.ohud { position: absolute; inset: 0; pointer-events: none; z-index: 60; font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; color: #fff; display: none; }
+.ohud-stand { position: absolute; top: 40px; right: 28px; display: flex; align-items: baseline; gap: 4px; font-family: inherit; font-weight: 900; font-style: italic; line-height: .88; color: #fff;
   text-shadow: 0 4px 0 rgba(0,0,0,.7), 0 0 18px rgba(0,0,0,.95), 0 0 32px rgba(0,229,255,.5); transform-origin: top right; }
 .ohud-stand .num { font-size: clamp(84px, 10vw, 132px); letter-spacing: -2px; }
 .ohud-stand .suf { font-size: clamp(38px, 4.5vw, 60px); margin-left: 2px; }
@@ -55,11 +55,11 @@ const css = `
   border-left-color: #ffd54a;
 }
 .ohud-result .online-res-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ohud-result .online-res-rk { font-family: Impact, 'Arial Black', sans-serif; font-style: italic; font-size: 18px; color: #ffd54a; width: 1.9em; flex: none; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9); }
+.ohud-result .online-res-rk { font-family: inherit; font-weight: 900; font-style: italic; font-size: 18px; color: #ffd54a; width: 1.9em; flex: none; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9); }
 .ohud-result .online-res-dot { width: 11px; height: 11px; border-radius: 2px; border: 1.5px solid #fff; flex: none; transform: skewX(-6deg); }
 .ohud-result .online-res-name { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; font-size: 14px; color: #e2e8f0; }
 .ohud-pbox.me .online-res-name { color: #00f0ff; font-weight: 900; }
-.ohud-result .online-res-time { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; font-weight: 900; font-size: 16px; color: #fff; letter-spacing: 0.5px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
+.ohud-result .online-res-time { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 900; font-size: 16px; color: #fff; letter-spacing: 0.5px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
 .ohud-note { text-align: center; font-size: .88rem; font-weight: 800; color: #cbd5e1; margin: 0 0 10px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; transform: skewX(-9deg); }
 `;
 

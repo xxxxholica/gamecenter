@@ -185,9 +185,9 @@ export class Stage3Phone implements Stage {
     const ctx = this.screenCtx;
     ctx.save();
     for (const [font, text] of [
-      ['bold 32px Impact, sans-serif', '⚡挿入時の残量'],
-      ['bold 64px Impact, Arial Black, sans-serif', '充電成功'],
-      ['bold 76px Impact, Arial Black, sans-serif', '0123456789.%'],
+      ["900 32px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif", '⚡挿入時の残量'],
+      ["900 64px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif", '充電成功'],
+      ["900 76px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif", '0123456789.%'],
     ]) {
       ctx.font = font;
       ctx.measureText(text);
@@ -231,7 +231,7 @@ export class Stage3Phone implements Stage {
     const batteryPercent = batteryRatio * 1.0; // 1.000% down to 0.000%
 
     // Status bar at top
-    ctx.font = 'bold 36px Impact, Arial Black, sans-serif';
+    ctx.font = "900 36px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#ffffff';
     ctx.fillText('12:45', 40, 60);
 
@@ -245,7 +245,7 @@ export class Stage3Phone implements Stage {
       // 100% Green charging bar
       ctx.fillStyle = '#00ff66';
       ctx.fillRect(w - 136, 36, 82, 24);
-      ctx.font = 'bold 32px Impact, sans-serif';
+      ctx.font = "900 32px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillText('⚡', w - 185, 60);
     } else {
       // Red blinking bar
@@ -254,7 +254,7 @@ export class Stage3Phone implements Stage {
         ctx.fillStyle = '#ff1a1a';
         ctx.fillRect(w - 136, 36, Math.max(4, 82 * batteryRatio), 24);
       }
-      ctx.font = 'bold 22px Impact, sans-serif';
+      ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#ff1a1a';
       ctx.fillText(`${batteryPercent.toFixed(2)}%`, w - 215, 58);
     }
@@ -262,27 +262,27 @@ export class Stage3Phone implements Stage {
     // Huge center battery alert
     if (charging) {
       ctx.fillStyle = '#00ff66';
-      ctx.font = 'bold 64px Impact, Arial Black, sans-serif';
+      ctx.font = "900 64px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText('充電成功', w / 2, h / 2 - 60);
 
       // Show the exact battery % locked in at the moment of insertion
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 32px Impact, sans-serif';
+      ctx.font = "900 32px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillText('挿入時の残量', w / 2, h / 2 + 20);
       ctx.fillStyle = '#ffe600';
-      ctx.font = 'bold 76px Impact, Arial Black, sans-serif';
+      ctx.font = "900 76px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillText(`${this.insertedPercent.toFixed(3)}%`, w / 2, h / 2 + 100);
     } else {
       ctx.fillStyle = '#ff1a1a';
-      ctx.font = 'bold 50px Impact, Arial Black, sans-serif';
+      ctx.font = "900 50px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText('極限残量', w / 2, h / 2 - 90);
 
       // Giant countdown in percentage with 3 decimal places (e.g. 0.012%)
       const pctText = `${batteryPercent.toFixed(3)}%`;
       ctx.fillStyle = '#ffe600';
-      ctx.font = 'bold 82px Impact, Arial Black, sans-serif';
+      ctx.font = "900 82px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillText(pctText, w / 2, h / 2 + 10);
     }
 

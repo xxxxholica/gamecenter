@@ -109,7 +109,7 @@ export class BestMarker {
     const color = this.opts.stripe;
     g.fillStyle = color ?? '#000';
     g.fillRect(0, 0, 160, 56);
-    g.font = 'bold 34px system-ui, sans-serif';
+    g.font = '900 34px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
     g.fillStyle = '#fff';
     g.textAlign = 'center';
     g.textBaseline = 'middle';

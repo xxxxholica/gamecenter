@@ -112,13 +112,22 @@ export class TextureGenerator {
     else if (text.length > 4) fontSize = 102;
     else if (text.length > 2) fontSize = 118;
 
-    ctx.font = `900 ${fontSize}px 'Arial Black', 'Impact', 'Times New Roman', sans-serif`;
+    const fontStack = `'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif`;
+    ctx.font = `900 ${fontSize}px ${fontStack}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    // 枠内に確実に収まるよう実測幅でフォントサイズを縮小
+    const maxTextWidth = 512 - 80;
+    const measuredWidth = ctx.measureText(text).width;
+    if (measuredWidth > maxTextWidth) {
+      fontSize = Math.max(48, Math.floor(fontSize * (maxTextWidth / measuredWidth)));
+      ctx.font = `900 ${fontSize}px ${fontStack}`;
+    }
+
     // Extreme black outline
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 24;
+    ctx.lineWidth = Math.max(12, Math.round(fontSize * 0.18));
     ctx.strokeText(text, 256, 160);
 
     // Bright fill
@@ -162,7 +171,7 @@ export class TextureGenerator {
     ctx.strokeRect(100, 80, 1024 - 200, 352);
 
     // Enormous "124" text
-    ctx.font = "900 240px 'Arial Black', 'Impact', sans-serif";
+    ctx.font = "900 240px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -201,7 +210,7 @@ export class TextureGenerator {
     ctx.fillRect(0, 512 - 24, 512, 24);
 
     // Multiplier text
-    ctx.font = "900 120px 'Arial Black', 'Impact', sans-serif";
+    ctx.font = "900 120px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -238,7 +247,7 @@ export class TextureGenerator {
     }
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(56, 26, 144, 76);
-    ctx.font = "900 62px 'Arial Black', 'Impact', sans-serif";
+    ctx.font = "900 62px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
@@ -255,7 +264,7 @@ export class TextureGenerator {
     canvas.width = 256;
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
-    ctx.font = "900 92px 'Arial Black', 'Impact', sans-serif";
+    ctx.font = "900 92px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = '#000000';

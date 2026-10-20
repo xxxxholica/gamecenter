@@ -405,9 +405,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   /** 完走の記録: 上位に入るか確かめ、入れば名前を入力してランキングへ(この走行をゴーストとして一緒に送る) */
   const startScoreEntry = (result: TimeAttackResult) => {
     const trace = raceDirector.lastTrace;
+    const totalTimeMs = Math.round(result.totalTimeMs);
     runHighScoreEntryFlow({
       slug: 'midnight-skyway',
-      score: result.totalTimeMs,
+      score: totalTimeMs,
       variantId: currentMapId,
       modal: { title: '走行記録', scoreDisplay: result.formattedTime, themeClass: 'theme-skyway', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
@@ -417,7 +418,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (rank !== null) sfx.rankIn();
       },
       onName: async (name) => {
-        await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
+        await saveLeaderboardScore('midnight-skyway', totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
         syncBestTimeDisplay();
       },
     });

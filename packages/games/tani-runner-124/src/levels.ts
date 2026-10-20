@@ -8,6 +8,10 @@ export type LevelId = 'elementary' | 'middle' | 'kosen';
 export interface LevelConfig {
   id: LevelId;
   label: string;
+  /** 学校名(卒業表示・結果画面の内訳に使う) */
+  schoolName: string;
+  /** ラウンド開始前に出す大見出し */
+  headline: string;
   /** レベル選択に出す一言(どんな数式が出るか) */
   description: string;
   /** 卒業要件の候補と、抽選の重み */
@@ -43,6 +47,8 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
   elementary: {
     id: 'elementary',
     label: '小学生',
+    schoolName: '小学校',
+    headline: '小学校を卒業せよ',
     description: '四則演算',
     requirements: [
       { value: 70, weight: 0.3 },
@@ -63,6 +69,8 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
   middle: {
     id: 'middle',
     label: '中学生',
+    schoolName: '中学校',
+    headline: '中学校を卒業せよ',
     description: '一次式・√・x²・割合(%)',
     requirements: [
       { value: 115, weight: 0.25 },
@@ -83,6 +91,8 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
   kosen: {
     id: 'kosen',
     label: '高専生',
+    schoolName: '高専',
+    headline: '高専を卒業せよ',
     description: '積分・微分・固有値・極限',
     // 卒業要件はタイトルの124単位固定。最大でもギリギリ届く水準に調整
     requirements: [
@@ -103,7 +113,7 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
 };
 
 export const LEVEL_ORDER: LevelId[] = ['elementary', 'middle', 'kosen'];
-export const DEFAULT_LEVEL: LevelId = 'middle';
+export const DEFAULT_LEVEL: LevelId = 'elementary';
 
 const LEVEL_STORAGE_KEY = 'tani_runner_level';
 

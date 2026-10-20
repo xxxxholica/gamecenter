@@ -41,7 +41,7 @@ function injectStyle(): void {
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
     }
     .acd-num {
       font-size: clamp(96px, 26vmin, 280px);

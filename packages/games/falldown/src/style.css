@@ -3,16 +3,15 @@
   --gold: #ffd34d;
   --air: #39d8ff;
   --accent: #ff8a3d;
-  --font: system-ui, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
-  --num: 'Impact', 'Arial Black', system-ui, sans-serif;
-  /* HUD用: 太めの丸ゴシック(@fontsource/m-plus-rounded-1c を同梱。CSPで外部フォントは読めない) */
+  --font: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  --num: var(--font);
   /* HUDの大きさはここだけで決める(スマホ幅は下の @media で切り替え) */
   /* 他のゲームのHUD(本文32〜54px・見出し14〜22px)に合わせ、画面幅に応じて大きくする */
   --hud-label: clamp(14px, 1.3vw, 20px); /* 見出し(エリア・スコアなど) */
   --hud-value: clamp(30px, 3vw, 44px); /* 本文(エリア名・数字)・深さの表示 */
   --hud-icon: clamp(30px, 3vw, 44px); /* ハート・酸素ボンベ */
   --hud-bar: clamp(24px, 2.2vw, 32px); /* 酸素バーの太さ */
-  --hud-font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic', system-ui, sans-serif;
+  --hud-font: var(--font);
 }
 
 * {

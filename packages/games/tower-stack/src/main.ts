@@ -257,7 +257,7 @@ function makeLabel(text: string): THREE.Mesh {
     c.width = 128;
     c.height = 48;
     const g = c.getContext('2d')!;
-    g.font = 'bold 30px system-ui, sans-serif';
+    g.font = '900 30px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
     g.fillStyle = 'rgba(255,255,255,0.85)';
     g.textBaseline = 'middle';
     g.fillText(text, 4, 24);
@@ -296,7 +296,7 @@ function makeRankLabel(text: string, color: string, rank: number): THREE.Mesh {
   const g = c.getContext('2d')!;
   g.fillStyle = color; // 順位の色のブロック
   g.fillRect(0, 0, 176, 56);
-  g.font = 'bold 34px system-ui, sans-serif';
+  g.font = '900 34px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
   g.fillStyle = '#fff';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -310,7 +310,7 @@ function makeRankLabel(text: string, color: string, rank: number): THREE.Mesh {
   g.strokeStyle = '#fff';
   g.stroke();
   g.fillStyle = '#2a2118';
-  g.font = 'bold 30px system-ui, sans-serif';
+  g.font = '900 30px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
   g.fillText(String(rank), 30, 30);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -850,6 +850,7 @@ function readInput(): Input {
   inp.rotate = kp('KeyW');
   inp.item = kp('Enter');
   inp.confirm = kp('Enter');
+  inp.cancel = kp('Backspace');
   keyPressed.clear();
 
   const pads = readGamepads();
@@ -1557,15 +1558,15 @@ resultItems.forEach((it, i) => it.button?.addEventListener('click', () => { if (
 let resultFocus = 0;
 let stopCountUp: (() => void) | null = null;
 
-function openResult(isNew: boolean): void {
+function openResult(_isNew?: boolean): void {
   setResultTexts('GAME OVER', '再挑戦');
   elResultScore.style.display = '';
   resultOpen = true;
   resultFocus = 0;
   menuNav.clear();
   applyResultMenuFocus(resultItems, resultFocus);
-  elResultRecord.textContent = isNew ? '★ 自己ベスト更新!' : `ベスト ${(hiscore / 100).toFixed(1)} m`;
-  elResultRecord.classList.toggle('new', isNew);
+  elResultRecord.textContent = '';
+  elResultRecord.classList.remove('new');
   elResult.classList.add('show');
   stopCountUp = countUpText(elResultScore, `${bestHeight.toFixed(1)} m`);
   guideResult();
@@ -1707,6 +1708,7 @@ async function onStartPressed(): Promise<void> {
 
 function openModeSelect(): void {
   state = 'menu';
+  titleScreen.hide();
   const st = onlineStatus;
   const full = !!st && st.players >= st.max;
   modeSelect.show([

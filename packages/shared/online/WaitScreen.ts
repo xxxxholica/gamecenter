@@ -30,7 +30,7 @@ export interface WaitScreenOptions {
 
 // midnight-skyway の待機画面(LobbyScreen)と同じ見た目。色はゲームごとに --lb-* で変える。
 const css = `
-.lobby { position: fixed; inset: 0; display: none; z-index: 9985; pointer-events: none; font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif; color: #fff; }
+.lobby { position: fixed; inset: 0; display: none; z-index: 9985; pointer-events: none; font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; color: #fff; }
 .lobby-card { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: auto; width: min(520px, 94vw); box-sizing: border-box; padding: 16px 20px; border: 1px solid var(--lb-accent); border-radius: 14px;
   background: rgba(6, 12, 24, .9); box-shadow: 0 0 30px var(--lb-accent-glow); display: flex; flex-direction: column; gap: 10px; }
 .lobby-card.wait { bottom: 5%; }

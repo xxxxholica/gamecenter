@@ -32,8 +32,16 @@
         <span id="tani-counter" class="hud-center-num">4</span>
       </div>
 
-      <!-- 右隅の空スペーサー（中央揃え用） -->
-      <div class="hud-corner-spacer"></div>
+      <!-- 右隅: 現在のステージ (小学校 など) -->
+      <div class="hud-corner-box hud-stage-box">
+        <span id="stage-text" class="hud-corner-text">小学校</span>
+      </div>
+    </div>
+
+    <!-- ラウンド開始・ステージ突破バナー -->
+    <div id="round-intro-banner" class="round-intro-banner hidden">
+      <div id="round-intro-headline" class="intro-headline">小学校を卒業せよ</div>
+      <div id="round-intro-sub" class="intro-sub hidden"></div>
     </div>
 
     <!-- 最後のジャンプ: ゲージの緑の帯でボタンを押すほど遠くへ飛ぶ -->
@@ -61,7 +69,7 @@
     <div class="arcade-card result-card fail-card">
       <div class="result-stage">
         <div class="final-score-row">
-          <span class="final-score-text">0</span>
+          <span id="fail-score-display" class="final-score-text">0</span>
           <span class="final-score-unit">単位</span>
         </div>
         <div class="result-stamp fail">留年</div>

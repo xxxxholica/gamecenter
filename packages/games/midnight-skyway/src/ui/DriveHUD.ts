@@ -869,22 +869,28 @@ export class DriveHUD {
 
     if (e.code === 'KeyW' || e.code === 'KeyA') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       this.setPadFocus(this.padFocus - 1);
     } else if (e.code === 'KeyS' || e.code === 'KeyD') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       this.setPadFocus(this.padFocus + 1);
     } else if (performance.now() < this.modalArmTime) {
       e.preventDefault();
+      e.stopImmediatePropagation();
     } else if (e.code === 'Enter') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       const buttons = this.menuButtons(modal);
       buttons[this.padFocus]?.click();
     } else if (e.code === 'Backspace') {
       if (modal === this.pauseModalEl) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.hidePauseModal();
       } else if (modal === this.resultModalEl) {  // 結果画面の Backspace は、タイトルへ戻る
         e.preventDefault();
+        e.stopImmediatePropagation();
         document.getElementById('res-btn-title')?.click();
       }
     }

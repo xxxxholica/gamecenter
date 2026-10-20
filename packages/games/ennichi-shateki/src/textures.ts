@@ -330,7 +330,7 @@ export function createStallBannerTexture(): THREE.CanvasTexture {
   ctx.fillRect(0, 235, 1024, 10);
 
   // Big bold Japanese festival typography
-  ctx.font = '900 110px "Hiragino Kaku Gothic StdN", "Impact", sans-serif';
+  ctx.font = '900 110px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffcc00';

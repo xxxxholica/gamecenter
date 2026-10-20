@@ -71,6 +71,19 @@ const KURENAI_BEAT: Developer = {
 // この配列の順番がそのままピックアップの巡回順・一覧の表示順になる。
 const allGames: GameEntry[] = [
   {
+    slug: 'midnight-skyway',
+    title: 'ミッドナイト・スカイウェイ',
+    englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
+    description:
+      '夜の峠と高架を走るタイムアタック。温泉街の渓谷へ駆け下りる峠道と、PLATEAUの3D都市モデルで作った東京の超高層を、好きなマシンで駆け抜けよう。オンラインなら最大4人でレース！',
+    thumbnail: 'thumbnails/midnight-skyway.webp',
+    logo: 'logos/midnight-skyway.webp',
+    accent: '#00e5ff',
+    group: 'party',
+    online: true,
+    developer: XXXXHOLICA,
+  },
+  {
     slug: 'cyber-2d-fighter-3d',
     title: 'サイバー２Dファイター３D',
     englishTitle: 'CYBER 2D FIGHTER 3D',
@@ -117,19 +130,6 @@ const allGames: GameEntry[] = [
     logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
     group: 'hard',
-    developer: XXXXHOLICA,
-  },
-  {
-    slug: 'midnight-skyway',
-    title: 'ミッドナイト・スカイウェイ',
-    englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
-    description:
-      '夜の峠と高架を走るタイムアタック。温泉街の渓谷へ駆け下りる峠道と、PLATEAUの3D都市モデルで作った東京の超高層を、好きなマシンで駆け抜けよう。オンラインなら最大4人でレース！',
-    thumbnail: 'thumbnails/midnight-skyway.webp',
-    logo: 'logos/midnight-skyway.webp',
-    accent: '#00e5ff',
-    group: 'party',
-    online: true,
     developer: XXXXHOLICA,
   },
   {
@@ -202,7 +202,7 @@ const allGames: GameEntry[] = [
     thumbnail: 'thumbnails/falldown.webp',
     logo: 'logos/falldown.webp',
     accent: '#ff8a3d',
-    group: 'score',
+    group: 'hard',
     developer: THOUSANDL000,
   },
 ];

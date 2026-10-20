@@ -244,7 +244,10 @@ const MAX_SPATIAL_GAMES = 32;
 /** 本番のゲームID(ランダムな gameId で押し出されないよう保護する) */
 const KNOWN_SPATIAL_GAMES = new Set([
   'street-b-boy', 'falldown', 'school-corridor-runner', 'tower-stack', 'tani-runner-124', 'midnight-skyway',
-  'cyber-fighter', 'cyber-2d-fighter-3d', 'skyway', 'time-attack', 'tani-runner', 'super-golf', 'super-golf-3d',
+]);
+/** 廃止済みの旧ゲームID(保存ファイルに残っていても読み込まない) */
+const RETIRED_GAMES = new Set([
+  'phaser-fighter', 'rudbeckia', 'super-golf', 'super-golf-3d', 'cyber-fighter', 'time-attack', 'tani-runner',
 ]);
 /** 再送で同じイベントが重複して届いても二重に数えないための、直近の clientEventId の保持数 */
 const MAX_SEEN_EVENT_IDS = 20000;
@@ -272,19 +275,39 @@ const DEVICE_STRING_KEYS = ['os', 'browser', 'gpuRenderer', 'gpuVendor', 'gamepa
 const DEVICE_NUMBER_KEYS = ['screenWidth', 'screenHeight', 'devicePixelRatio', 'cpuCores', 'deviceMemoryGb'] as const;
 const DEVICE_BOOL_KEYS = ['isMobile', 'hasGamepad'] as const;
 
+/** 浮動小数点の誤差で長い小数が出ないよう、小数第3位までに丸める */
+export function roundNum(v: number): number {
+  return Number.isInteger(v) ? v : Math.round(v * 1000) / 1000;
+}
+
+function roundNumbersDeep<T>(v: T, depth = 0): T {
+  if (typeof v === 'number') return (Number.isFinite(v) ? roundNum(v) : v) as T;
+  if (depth >= MAX_DEPTH) return v;
+  if (Array.isArray(v)) return v.map((x) => roundNumbersDeep(x, depth + 1)) as T;
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      out[k] = roundNumbersDeep(x, depth + 1);
+    }
+    return out as T;
+  }
+  return v;
+}
+
 /** 届いた端末情報から、決まったキー・型の値だけを取り出す。 */
 export function sanitizeDevice(raw: unknown): ClientDevice | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const k of DEVICE_STRING_KEYS) if (typeof r[k] === 'string') out[k] = (r[k] as string).slice(0, 120);
-  for (const k of DEVICE_NUMBER_KEYS) if (typeof r[k] === 'number' && Number.isFinite(r[k])) out[k] = r[k];
+  for (const k of DEVICE_NUMBER_KEYS) if (typeof r[k] === 'number' && Number.isFinite(r[k])) out[k] = roundNum(r[k] as number);
   for (const k of DEVICE_BOOL_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k];
   return out as ClientDevice;
 }
 
 function num(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) ? roundNum(v) : undefined;
 }
 
 function launchInfo(data: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
@@ -301,7 +324,7 @@ const GAME_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 export function sanitizeJson(v: unknown, budget = { n: MAX_NODES }, depth = 0): unknown {
   if (budget.n-- <= 0) return undefined;
   if (typeof v === 'string') return v.length > MAX_STR_LEN ? v.slice(0, MAX_STR_LEN) : v;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'number') return Number.isFinite(v) ? roundNum(v) : undefined;
   if (typeof v === 'boolean' || v === null) return v;
   if (depth >= MAX_DEPTH) return undefined;
   if (Array.isArray(v)) return v.slice(0, MAX_ARRAY).map((x) => sanitizeJson(x, budget, depth + 1));
@@ -359,16 +382,16 @@ export class AnalyticsStore {
       const data = JSON.parse(raw) as Partial<AnalyticsDataPayload>;
       if (Array.isArray(data.sessions)) {
         for (const s of data.sessions) {
-          if (s && typeof s.id === 'string') this.sessions.set(s.id, s);
+          if (s && typeof s.id === 'string') this.sessions.set(s.id, roundNumbersDeep(s));
         }
       }
       if (Array.isArray(data.plays)) {
         for (const p of data.plays) {
-          if (p && typeof p.playId === 'string') this.plays.set(p.playId, p);
+          if (p && typeof p.playId === 'string' && !RETIRED_GAMES.has(p.gameId)) this.plays.set(p.playId, roundNumbersDeep(p));
         }
       }
       if (Array.isArray(data.events)) {
-        this.events = data.events.filter((e) => e && typeof e.id === 'string').slice(-MAX_EVENTS);
+        this.events = data.events.filter((e) => e && typeof e.id === 'string' && (!e.gameId || !RETIRED_GAMES.has(e.gameId))).slice(-MAX_EVENTS).map((e) => roundNumbersDeep(e));
         for (const e of this.events) {
           if (e.clientEventId) this.seenEventIds.add(e.clientEventId);
           const size = (e.data ? JSON.stringify(e.data).length : 0) + 200;
@@ -378,11 +401,11 @@ export class AnalyticsStore {
         this.trimEvents();
       }
       if (Array.isArray(data.errors)) {
-        this.errors = data.errors.filter((e) => e && typeof e.id === 'string').slice(-MAX_ERRORS);
+        this.errors = data.errors.filter((e) => e && typeof e.id === 'string' && (!e.gameId || !RETIRED_GAMES.has(e.gameId))).slice(-MAX_ERRORS);
       }
       if (data.spatial && typeof data.spatial === 'object') {
         for (const [gid, sp] of Object.entries(data.spatial)) {
-          if (!GAME_ID_RE.test(gid) || !sp) continue;
+          if (!GAME_ID_RE.test(gid) || RETIRED_GAMES.has(gid) || !sp) continue;
           if (this.spatial.size >= MAX_SPATIAL_GAMES && !KNOWN_SPATIAL_GAMES.has(gid)) continue;
           this.spatial.set(gid, {
             deaths: Array.isArray(sp.deaths) ? sp.deaths.slice(-MAX_DEATHS_PER_GAME) : [],
@@ -691,7 +714,7 @@ export class AnalyticsStore {
     if (type === 'game_clear' || data.completed === true) play.completed = true;
     if (typeof data.score === 'number' && Number.isFinite(data.score) && data.score >= 0 && data.score <= MAX_SCORE && !(typeof play.score === 'number' && play.score >= data.score)) {
       play.score = data.score;
-      if (typeof data.formattedScore === 'string') play.formattedScore = data.formattedScore;
+      if (typeof data.formattedScore === 'string') play.formattedScore = data.formattedScore.slice(0, 40);
     }
     if (type === 'score_submit' && data.cleared === true) play.completed = true;
     if (data.performance && typeof data.performance === 'object') play.performance = data.performance as PerformanceMetrics;
@@ -754,8 +777,9 @@ export class AnalyticsStore {
     };
 
     const countKey = (map: Record<string, number>, key?: string) => {
-      if (!key || typeof key !== 'string') return;
-      map[key] = (Object.hasOwn(map, key) ? map[key] : 0) + 1;
+      if (!key || typeof key !== 'string' || key === '__proto__' || key === 'constructor' || key === 'prototype') return;
+      const k = key.slice(0, 120);
+      map[k] = (Object.hasOwn(map, k) ? map[k] : 0) + 1;
     };
 
     for (const s of this.sessions.values()) {
@@ -827,9 +851,10 @@ export class AnalyticsStore {
       if (p.completed) g.completeCount++;
       if (p.inputDevice === 'gamepad') g.gamepadCount++;
       if (typeof p.score === 'number') {
+        const cleanScore = roundNum(p.score);
         g.scoresCount++;
-        scoreSums[p.gameId] = (scoreSums[p.gameId] ?? 0) + p.score;
-        if (g.bestScore === undefined || p.score > g.bestScore) g.bestScore = p.score;
+        scoreSums[p.gameId] = (scoreSums[p.gameId] ?? 0) + cleanScore;
+        if (g.bestScore === undefined || cleanScore > g.bestScore) g.bestScore = cleanScore;
       }
 
       // パフォーマンス集計(プレイごとの平均を、合計/件数で正しく平均する)

@@ -410,6 +410,7 @@ class SumoGame {
     this.audience.restoreAll();
     this.dohyo.clearScorches();
 
+    this.titleScreen.hide();
     this.uiManager.hideTitleScreen();
     this.uiManager.hideVictoryModal();
     guideBattle();
@@ -491,6 +492,7 @@ class SumoGame {
   /** モード選択(CPU対戦 / オンライン対戦) */
   private openModeSelect() {
     this.gameState = 'menu';
+    this.titleScreen.hide();
     this.armInput();
     const st = this.onlineStatus;
     const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
@@ -592,6 +594,9 @@ class SumoGame {
 
     if (padConfirm || this.inputManager.isKeyTriggered('Enter')) {
       this.uiManager.confirmCurrentResultSelection();
+    } else if (this.inputManager.isKeyTriggered('Backspace')) {
+      this.uiManager.hideVictoryModal();
+      this.returnToTitle();
     } else if (padExit) {
       returnToHub();
     }
