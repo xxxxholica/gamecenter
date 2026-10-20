@@ -128,6 +128,8 @@ export interface TrafficOptions {
 export class Traffic {
   public readonly group = new THREE.Group();
   public cars: NpcCar[] = [];
+  private readonly forwardCars: NpcCar[] = [];
+  private readonly forwardPositions: THREE.Vector2[] = [];
 
   // Opposite route arcs
   private oppRoute: THREE.Vector3[] = [];
@@ -261,6 +263,12 @@ export class Traffic {
           this.group.add(car);
         }
       }
+      for (const c of this.cars) {
+        if (c.isForward) {
+          this.forwardCars.push(c);
+          this.forwardPositions.push(new THREE.Vector2());
+        }
+      }
     }
   }
 
@@ -327,7 +335,7 @@ export class Traffic {
 
   /** NPCの速度調整と走行距離を dt だけ進める。 */
   private advance(dt: number): void {
-    const forwardCars = this.cars.filter((c) => c.isForward);
+    const forwardCars = this.forwardCars;
 
     // 1. Adaptive Cruise Control / Anti-pileup for diverse speed NPC traffic
     if (this.fwdTotal > 0 && forwardCars.length > 1) {
@@ -548,13 +556,11 @@ export class Traffic {
    * Returns positions of forward traffic cars for HUD minimap display.
    */
   public getForwardCarPositions(): THREE.Vector2[] {
-    const list: THREE.Vector2[] = [];
-    for (const c of this.cars) {
-      if (c.isForward) {
-        list.push(new THREE.Vector2(c.obj.position.x, c.obj.position.z));
-      }
+    for (let i = 0; i < this.forwardCars.length; i++) {
+      const p = this.forwardCars[i].obj.position;
+      this.forwardPositions[i].set(p.x, p.z);
     }
-    return list;
+    return this.forwardPositions;
   }
 
 }

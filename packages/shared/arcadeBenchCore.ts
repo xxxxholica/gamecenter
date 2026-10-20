@@ -203,9 +203,10 @@ export class RefreshSlots {
     }
     this.prevNow = now;
     if (this.anchor < 0) this.anchor = now;
+    const floorSlot = Math.floor((now - this.anchor + this.toleranceMs) / this.period);
     const slot = this.lastTakenNow >= 0 && this.monitorMatchesHz()
-      ? this.last + Math.max(1, Math.round((now - this.lastTakenNow) / this.period))
-      : Math.floor((now - this.anchor + this.toleranceMs) / this.period);
+      ? Math.max(floorSlot, Math.min(floorSlot + 1, this.last + Math.max(1, Math.round((now - this.lastTakenNow) / this.period))))
+      : floorSlot;
     if (slot <= this.last || slot < this.earliest) return null;
     this.last = slot;
     this.lastTakenNow = now;

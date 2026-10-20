@@ -164,6 +164,8 @@ export class DriveScene {
 
   // Callbacks
   public callbacks: DriveSceneCallbacks = {};
+  private viewWidth = 1920;
+  private viewHeight = 1080;
 
   constructor(renderer: THREE.WebGLRenderer) {
     this.renderer = renderer;
@@ -175,7 +177,9 @@ export class DriveScene {
     this.scene.fog = new THREE.FogExp2(0x1a2646, 0.0035);
 
     // 2. Camera setup
-    const aspect = renderer.domElement.clientWidth / renderer.domElement.clientHeight;
+    this.viewWidth = renderer.domElement.clientWidth || 1920;
+    this.viewHeight = renderer.domElement.clientHeight || 1080;
+    const aspect = this.viewWidth / this.viewHeight;
     this.camera = new THREE.PerspectiveCamera(55, aspect, 0.2, 2000);
     this.camera.position.set(0, 5, -10);
 
@@ -727,7 +731,7 @@ export class DriveScene {
     }
   }
 
-  /** warmup の状態にする(車を足し、視錐台カリングを外す)。戻す関数を返す。 */
+  /** warmup の状態にする(車を足し、視錐台カリングを外し、隠れている物・個数0の InstancedMesh も一時的に描画対象にする)。戻す関数を返す。 */
   private prepareWarmup(cars: CarBase[]): () => void {
     const prevParents = new Map<THREE.Object3D, THREE.Object3D | null>();
     for (const c of cars) {
@@ -736,17 +740,29 @@ export class DriveScene {
     }
     this.applyPaintEnvironment();
     const toggled: THREE.Object3D[] = [];
+    const hidden: THREE.Object3D[] = [];
+    const emptyInstanced: THREE.InstancedMesh[] = [];
     const unculled = (o: THREE.Object3D): void => {
       if (o.userData?.skipWarmup) return;
+      if (!o.visible) {
+        o.visible = true;
+        hidden.push(o);
+      }
       if (o.frustumCulled) {
         o.frustumCulled = false;
         toggled.push(o);
+      }
+      if (o instanceof THREE.InstancedMesh && o.count === 0) {
+        o.count = 1;
+        emptyInstanced.push(o);
       }
       for (const child of o.children) unculled(child);
     };
     unculled(this.scene);
     return () => {
       for (const o of toggled) o.frustumCulled = true;
+      for (const o of hidden) o.visible = false;
+      for (const m of emptyInstanced) m.count = 0;
       for (const c of cars) {
         this.scene.remove(c.group);
         const p = prevParents.get(c.group);
@@ -787,8 +803,10 @@ export class DriveScene {
   }
 
   private onResize(): void {
-    const width = this.renderer.domElement.clientWidth;
-    const height = this.renderer.domElement.clientHeight;
+    const width = this.renderer.domElement.clientWidth || 1920;
+    const height = this.renderer.domElement.clientHeight || 1080;
+    this.viewWidth = width;
+    this.viewHeight = height;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
@@ -872,7 +890,7 @@ export class DriveScene {
 
     // リザルト中は、画面全体を上へずらして、下をリザルト(中央下部に大きく出る)に空ける
     if (e > 0.002) {
-      const w = this.renderer.domElement.clientWidth, h = this.renderer.domElement.clientHeight;
+      const w = this.viewWidth, h = this.viewHeight;
       this.camera.setViewOffset(w, h, 0, e * 0.22 * h, w, h);
       this.viewOffsetOn = true;
     } else if (this.viewOffsetOn) {

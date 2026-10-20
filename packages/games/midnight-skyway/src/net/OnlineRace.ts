@@ -108,7 +108,14 @@ export class OnlineRace {
 
   /** 毎フレーム(自車の物理の後)。progress は 0..1、elapsedMs はレース時計。 */
   public update(dt: number, cc: CarController, progress: number, elapsedMs: number): void {
-    for (const rc of this.remotes.values()) rc.update();
+    const now = performance.now();
+    const count = Math.max(1, this.remotes.size);
+    this.remoteTick = (this.remoteTick + 1) % count;
+    let idx = 0;
+    for (const rc of this.remotes.values()) {
+      rc.update(now, cc.position, idx === this.remoteTick);
+      idx++;
+    }
     this.updateRemoteFx(cc);
     this.crashCooldown = Math.max(0, this.crashCooldown - dt);
 
@@ -135,15 +142,23 @@ export class OnlineRace {
     }
   }
 
+  /** 相手車両のFK更新・パーティクル放出を1フレームに1台ずつ順番に回すためのカウンタ */
+  private remoteTick = 0;
   /** 相手の車ごとの、前回の「自車から見た前後の位置」(すれ違いの検出用) */
   private readonly lastAhead = new Map<number, number>();
   private readonly fxVel = new THREE.Vector3();
   private readonly fxPos = new THREE.Vector3();
   private readonly fxWater = new THREE.Vector3();
   private readonly fxOut = new THREE.Vector3();
+  private readonly tireFL = new THREE.Vector3();
+  private readonly tireFR = new THREE.Vector3();
+  private readonly tireRL = new THREE.Vector3();
+  private readonly tireRR = new THREE.Vector3();
+  private readonly tireList = [this.tireRL, this.tireRR, this.tireFL, this.tireFR] as const;
+  private readonly rearTireList = [this.tireRL, this.tireRR] as const;
 
   /** 遠い相手には演出を出さない距離(m) */
-  private static readonly FX_RANGE = 90;
+  private static readonly FX_RANGE = 65;
 
   /**
    * 相手の車の演出を、自車と同じものを出す: ドリフトの火花とスモーク、ブーストの炎、雨の水しぶき、エンジン音、すれ違い音。
@@ -154,7 +169,10 @@ export class OnlineRace {
     const rainy = this.drive.isRainy;
     const fwdX = Math.sin(cc.rotationY), fwdZ = Math.cos(cc.rotationY);
     const rightX = Math.cos(cc.rotationY), rightZ = -Math.sin(cc.rotationY);
+    let idx = 0;
     for (const rc of this.remotes.values()) {
+      const emitParticles = idx === this.remoteTick;
+      idx++;
       if (!rc.valid || rc.stale || !this.racing) {
         audio.sfx.removeRemoteEngine(rc.id);
         continue;
@@ -174,8 +192,8 @@ export class OnlineRace {
         audio.sfx.passBy(rel, 1 - lateral / 9);
       }
 
-      if (dist > OnlineRace.FX_RANGE) continue;
-      const tires = this.remoteTires(rc);
+      if (!emitParticles || dist > OnlineRace.FX_RANGE) continue;
+      this.computeRemoteTires(rc);
       const vel = this.fxVel.set(Math.sin(rc.rotY) * rc.speed, 0, Math.cos(rc.rotY) * rc.speed);
       const steerDir = rc.steer >= 0 ? 1 : -1;
 
@@ -184,24 +202,24 @@ export class OnlineRace {
         const intensity = Math.min(1.8, 0.9 + speedKmH / 150);
         const blue = rc.boost > 0.3;
         const theme = boostThemeFor(rc.car);
-        smoke.emitSpark(tires.rearLeft, vel, steerDir, intensity, blue, theme);
-        smoke.emitSpark(tires.rearRight, vel, steerDir, intensity, blue, theme);
-        smoke.emitSmoke(tires.rearLeft, vel, Math.min(1.6, 0.6 + speedKmH / 120));
-        smoke.emitSmoke(tires.rearRight, vel, Math.min(1.6, 0.6 + speedKmH / 120));
+        smoke.emitSpark(this.tireRL, vel, steerDir, intensity, blue, theme);
+        smoke.emitSpark(this.tireRR, vel, steerDir, intensity, blue, theme);
+        smoke.emitSmoke(this.tireRL, vel, Math.min(1.6, 0.6 + speedKmH / 120));
+        smoke.emitSmoke(this.tireRR, vel, Math.min(1.6, 0.6 + speedKmH / 120));
       }
 
       // 高速のタイヤスモーク
       if (speedKmH >= 115) {
         const k = Math.min(1.4, 0.4 + (speedKmH - 115) / 20) * 0.5;
-        smoke.emitSmoke(tires.rearLeft, vel, k);
-        smoke.emitSmoke(tires.rearRight, vel, k);
+        smoke.emitSmoke(this.tireRL, vel, k);
+        smoke.emitSmoke(this.tireRR, vel, k);
       }
 
       // ブースト: 排気口から、その車の主色の炎
       if (rc.boost > 0.15) {
         const theme = boostThemeFor(rc.car);
         const back = this.fxPos.set(-Math.sin(rc.rotY) * 0.55, 0.4, -Math.cos(rc.rotY) * 0.55);
-        for (const w of [tires.rearLeft, tires.rearRight]) {
+        for (const w of this.rearTireList) {
           const pos = this.fxOut.copy(w).lerp(rc.pos, 0.35).add(back);
           smoke.emitFlame(pos, vel, rc.boost, theme);
         }
@@ -210,11 +228,11 @@ export class OnlineRace {
       // 雨: 水しぶき
       if (rainy && speedKmH > 45) {
         const spray = Math.min(1.0, 0.35 + (speedKmH - 45) / 90);
-        for (const w of [tires.rearLeft, tires.rearRight]) smoke.emitSmoke(w, vel, spray);
+        for (const w of this.rearTireList) smoke.emitSmoke(w, vel, spray);
         const latX = Math.cos(rc.rotY), latZ = -Math.sin(rc.rotY);
         const water = this.fxWater.copy(vel).multiplyScalar(0.4);
         const n = (speedKmH > 80 ? 0.7 : 0.4) + (rc.drift > 0.5 ? 0.5 : 0);
-        for (const w of [tires.rearLeft, tires.rearRight, tires.frontLeft, tires.frontRight]) {
+        for (const w of this.tireList) {
           if (Math.random() >= n) continue;
           const side = Math.sign((w.x - rc.pos.x) * latX + (w.z - rc.pos.z) * latZ) || 1;
           smoke.emitSplash(w, water, this.fxOut.set(latX * side, 0, latZ * side), spray * (rc.drift > 0.5 ? 1.2 : 1));
@@ -223,25 +241,17 @@ export class OnlineRace {
     }
   }
 
-  /** 相手の車のタイヤの接地位置(前左・前右・後左・後右)。モデルの車輪から、無ければ車体から求める */
-  private remoteTires(rc: RemoteCar) {
-    const wheels = rc.car.wheels;
-    const make = (i: number, ox: number, oz: number): THREE.Vector3 => {
-      const v = new THREE.Vector3();
-      if (wheels && wheels[i]) {
-        wheels[i].getWorldPosition(v);
-        v.y = rc.pos.y;
-      } else {
-        v.set(ox, 0, oz).applyAxisAngle(new THREE.Vector3(0, 1, 0), rc.rotY).add(rc.pos);
-      }
-      return v;
+  /** 相手の車のタイヤの接地位置(前左・前右・後左・後右)を、オブジェクト確保・行列走査なしで求める */
+  private computeRemoteTires(rc: RemoteCar): void {
+    const s = Math.sin(rc.rotY), c = Math.cos(rc.rotY);
+    const px = rc.pos.x, py = rc.pos.y, pz = rc.pos.z;
+    const set = (out: THREE.Vector3, ox: number, oz: number): void => {
+      out.set(px + ox * c + oz * s, py, pz - ox * s + oz * c);
     };
-    return {
-      frontLeft: make(0, -0.65, 1.2),
-      frontRight: make(1, 0.65, 1.2),
-      rearLeft: make(2, -0.65, -1.2),
-      rearRight: make(3, 0.65, -1.2),
-    };
+    set(this.tireFL, -0.65, 1.2);
+    set(this.tireFR, 0.65, 1.2);
+    set(this.tireRL, -0.65, -1.2);
+    set(this.tireRR, 0.65, -1.2);
   }
 
   /** 自車の物理の直後・マップの拘束の前に呼ぶ。重なりを解消し、ぶつかった分だけ減速する。 */

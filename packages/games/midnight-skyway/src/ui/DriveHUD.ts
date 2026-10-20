@@ -310,6 +310,14 @@ export class DriveHUD {
     };
     bindHoverFocus(this.pauseModalEl);
     bindHoverFocus(this.resultModalEl);
+
+    // ゴール時・ポーズ時に初めて DOM と <style> を差し込むとレイアウト再計算のスパイクになるため、起動時に組み立てておく
+    for (const modal of [this.pauseModalEl, this.resultModalEl]) {
+      const buttons = this.menuButtons(modal);
+      const colors = modal === this.resultModalEl ? ['#e2b05e', '#8fd3a6', this.accent] : [this.accent];
+      const items = buttons.map((button, i) => ({ button, color: modal === this.resultModalEl ? (colors[i] ?? colors[0]) : colors[0] }));
+      setupResultMenu(buttons[0]?.parentElement ?? null, items);
+    }
   }
 
   public setMap(map: MapBase): void {
@@ -390,15 +398,16 @@ export class DriveHUD {
    * 速度(0〜1)・ブースト(0〜1)・スリップストリーム(0〜1)を伝える: 画面の縁が光り、バンドがブースト表示になる。
    */
   public setFx(speed: number, boost: number, slipstream: number): void {
-    const key = `${speed.toFixed(2)}|${boost.toFixed(2)}|${slipstream.toFixed(2)}`;
+    const edgeAlpha = Math.min(1, speed * 0.35 + boost * 0.9 + slipstream * 0.5);
+    const qAlpha = Math.round(edgeAlpha * 20) / 20;
+    const boosting = boost > 0.3;
+    const key = `${qAlpha.toFixed(2)}|${boosting ? 1 : 0}`;
     if (key === this.fxKey) return;
     this.fxKey = key;
-    const st = this.container.style;
-    st.setProperty('--fx-speed', speed.toFixed(2));
-    st.setProperty('--fx-boost', boost.toFixed(2));
-    st.setProperty('--fx-slip', slipstream.toFixed(2));
-    this.edgeEl?.classList.toggle('on', speed > 0.05 || boost > 0.02 || slipstream > 0.02);
-    this.bandEl.classList.toggle('boosting', boost > 0.3);
+    if (this.edgeEl) {
+      this.edgeEl.style.opacity = qAlpha > 0.02 ? qAlpha.toFixed(2) : '0';
+    }
+    this.bandEl.classList.toggle('boosting', boosting);
   }
 
   // ==========================================
@@ -579,9 +588,7 @@ export class DriveHUD {
     this.resTitleEl.textContent = 'タイムアップ';
     this.resTitleEl.style.display = timedOut ? '' : 'none';
     const timeEl = this.resTotalTimeEl;
-    timeEl.classList.remove('stamp');
     timeEl.classList.toggle('record', !timedOut && result.isNewRecord && result.prevBestMs !== undefined);   // ベストタイム更新は金色
-    void timeEl.offsetWidth;                            // 打ち込みのアニメーションを最初から
     timeEl.classList.add('stamp');
     countUpText(timeEl, result.formattedTime);
 
@@ -656,6 +663,7 @@ export class DriveHUD {
   }
 
   public hideResultModal(): void {
+    this.resTotalTimeEl.classList.remove('stamp');
     this.resultModalEl.style.display = 'none';
     this.container.classList.remove('result-open');
     this.syncPadMenu();

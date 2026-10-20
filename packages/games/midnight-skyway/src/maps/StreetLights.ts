@@ -93,7 +93,6 @@ export function buildStreetLights(road: THREE.Vector3[], roadWidth: number, opts
   }
 
   const poleMesh = new THREE.Mesh(mergeGeometries(steel), new THREE.MeshLambertMaterial({ color: 0x9aa0a6 }));
-  poleMesh.castShadow = true;
   const headMat = new THREE.MeshBasicMaterial({ color: 0xfff1c9, fog: false });
   const headMesh = new THREE.Mesh(mergeGeometries(heads), headMat);
   const tex = glowTexture();

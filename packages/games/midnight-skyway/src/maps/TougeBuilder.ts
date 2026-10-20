@@ -806,10 +806,23 @@ export function buildTougeCourse(road: THREE.Vector3[], opts: TougeBuildOptions)
         }
       }
     });
+    const remap = new Int32Array(pos.length / 3).fill(-1);
+    const cPos: number[] = [], cUv: number[] = [], cIdx: number[] = [];
+    for (let m = 0; m < idx.length; m++) {
+      const oldV = idx[m];
+      let newV = remap[oldV];
+      if (newV === -1) {
+        newV = cPos.length / 3;
+        remap[oldV] = newV;
+        cPos.push(pos[oldV * 3], pos[oldV * 3 + 1], pos[oldV * 3 + 2]);
+        if (withUv) cUv.push(uv[oldV * 2], uv[oldV * 2 + 1]);
+      }
+      cIdx.push(newV);
+    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    if (withUv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
+    if (withUv) g.setAttribute('uv', new THREE.Float32BufferAttribute(cUv, 2));
+    g.setIndex(cIdx);
     g.computeVertexNormals();
     return g;
   };
@@ -986,16 +999,18 @@ export function buildTougeCourse(road: THREE.Vector3[], opts: TougeBuildOptions)
   root.add(alcoveFloorMesh);
 
   // Solid Concrete End-Cap Wing Walls at every transition boundary of hasLeftCribWall so wall edges are never open
+  const cribCapGeos: THREE.BufferGeometry[] = [cribWallGeo];
   for (let k = cribStartIdx; k <= cribEndIdx; k++) {
     if (hasLeftCribWall(k) && (!hasLeftCribWall(k - 1) || !hasLeftCribWall(k + 1))) {
       const r = road[k], yw = yaw[k];
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(3.6, 7.0, 1.4), cribWallMat);
+      const capGeo = new THREE.BoxGeometry(3.6, 7.0, 1.4);
       const lat = -(half + 2.0);
-      cap.position.set(r.x + sNx[k] * lat, r.y + 3.1, r.z + sNz[k] * lat);
-      cap.rotation.y = yw;
-      root.add(cap);
+      capGeo.rotateY(yw);
+      capGeo.translate(r.x + sNx[k] * lat, r.y + 3.1, r.z + sNz[k] * lat);
+      cribCapGeos.push(capGeo);
     }
   }
+  cribWallMesh.geometry = mergeGeometries(cribCapGeos);
 
   // Rockfall wire mesh fence above the concrete crib wall (落石防止ネット)
   const netGeo = sweepWhere(
@@ -1037,7 +1052,6 @@ export function buildTougeCourse(road: THREE.Vector3[], opts: TougeBuildOptions)
   );
   const guardrailMat = new THREE.MeshStandardMaterial({ color: 0xdcdfe4, roughness: 0.45, metalness: 0.35, side: THREE.DoubleSide });
   const guardrailMesh = new THREE.Mesh(mergeGeometries([guardrailRightGeo, guardrailLeftGeo]), guardrailMat);
-  guardrailMesh.castShadow = true;
   guardrailMesh.receiveShadow = true;
   guardrailMesh.frustumCulled = false;
   root.add(cribWallMesh, netMesh, guardrailMesh);
@@ -1302,7 +1316,6 @@ function buildTougeStreetLights(
 
   if (steel.length) {
     const poleMesh = new THREE.Mesh(mergeGeometries(steel), new THREE.MeshLambertMaterial({ color: 0x7c8288 }));
-    poleMesh.castShadow = true;
     group.add(poleMesh);
     steel.forEach((g) => g.dispose());
   }
@@ -1548,6 +1561,9 @@ function buildTougeRoadsideProps(
   const orangeHoods: THREE.BufferGeometry[] = [];
   const mirrorFaces: THREE.BufferGeometry[] = [];
   const jizoStones: THREE.BufferGeometry[] = [];
+  const warnSigns: THREE.BufferGeometry[] = [];
+  const chevLeftBoards: THREE.BufferGeometry[] = [];
+  const chevRightBoards: THREE.BufferGeometry[] = [];
 
   for (const run of runs) {
     const leftTurn = run.turnSum > 0;
@@ -1588,10 +1604,10 @@ function buildTougeRoadsideProps(
     wPole.translate(wx, rw.y + 1.25, wz);
     yellowPoles.push(wPole);
 
-    const diamond = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.15), warnMat);
-    diamond.position.set(wx, rw.y + 2.25, wz);
-    diamond.rotation.y = wYaw + Math.PI;
-    group.add(diamond);
+    const diamondGeo = new THREE.PlaneGeometry(1.15, 1.15);
+    diamondGeo.rotateY(wYaw + Math.PI);
+    diamondGeo.translate(wx, rw.y + 2.25, wz);
+    warnSigns.push(diamondGeo);
 
     // 3. Red-and-White Chevron Boards + Inner Apex Stone Jizo Statue on sharp corners
     if (run.maxC > 0.15) {
@@ -1601,10 +1617,10 @@ function buildTougeRoadsideProps(
         const rc = road[idx], cYaw = yaw[idx];
         const cLat = outSide * (half + 0.52);
         const cx = rc.x + nx[idx] * cLat, cz = rc.z + nz[idx] * cLat;
-        const board = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 1.05), leftTurn ? chevLeftMat : chevRightMat);
-        board.position.set(cx, rc.y + 1.48, cz);
-        board.rotation.y = cYaw + Math.PI;
-        group.add(board);
+        const boardGeo = new THREE.PlaneGeometry(1.45, 1.05);
+        boardGeo.rotateY(cYaw + Math.PI);
+        boardGeo.translate(cx, rc.y + 1.48, cz);
+        (leftTurn ? chevLeftBoards : chevRightBoards).push(boardGeo);
       }
 
       const rp = road[run.peak];
@@ -1624,6 +1640,9 @@ function buildTougeRoadsideProps(
   if (orangeHoods.length) group.add(new THREE.Mesh(mergeGeometries(orangeHoods), orangeHoodMat));
   if (mirrorFaces.length) group.add(new THREE.Mesh(mergeGeometries(mirrorFaces), mirrorFaceMat));
   if (jizoStones.length) group.add(new THREE.Mesh(mergeGeometries(jizoStones), stoneMat));
+  if (warnSigns.length) group.add(new THREE.Mesh(mergeGeometries(warnSigns), warnMat));
+  if (chevLeftBoards.length) group.add(new THREE.Mesh(mergeGeometries(chevLeftBoards), chevLeftMat));
+  if (chevRightBoards.length) group.add(new THREE.Mesh(mergeGeometries(chevRightBoards), chevRightMat));
 
   const delinParts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < n; i += 8) {
@@ -1908,6 +1927,7 @@ function buildRedArchBridgeAndOnsenTown(
     { text: '露天風呂', bg: '#281805', fg: '#ffcc33' },
   ];
   const neonMats = neonTexts.map((ns) => new THREE.MeshBasicMaterial({ map: makeOnsenNeonTexture(ns.text, ns.bg, ns.fg), fog: false, toneMapped: false }));
+  const neonGeos: THREE.BufferGeometry[][] = neonTexts.map(() => []);
 
   let bCount = 0;
   for (let k = 6; k < indices.length - 4; k += 5) {
@@ -1962,13 +1982,10 @@ function buildRedArchBridgeAndOnsenTown(
         }
 
         if (tier === 0 && bCount % 2 === 0) {
-          const sign = new THREE.Mesh(
-            new THREE.BoxGeometry(2.3, 8.2, 2.3),
-            neonMats[bCount % neonMats.length],
-          );
-          sign.position.set(bx - nx[idx] * side * (bw * 0.48), by + bh * 0.65, bz - nz[idx] * side * (bw * 0.48));
-          sign.rotation.y = yw;
-          onsenGroup.add(sign);
+          const signGeo = new THREE.BoxGeometry(2.3, 8.2, 2.3);
+          signGeo.rotateY(yw);
+          signGeo.translate(bx - nx[idx] * side * (bw * 0.48), by + bh * 0.65, bz - nz[idx] * side * (bw * 0.48));
+          neonGeos[bCount % neonMats.length].push(signGeo);
         }
 
         for (let l = 0; l < 3; l++) {
@@ -1982,6 +1999,10 @@ function buildRedArchBridgeAndOnsenTown(
       }
     }
   }
+
+  neonGeos.forEach((geos, mIdx) => {
+    if (geos.length) onsenGroup.add(new THREE.Mesh(mergeGeometries(geos), neonMats[mIdx]));
+  });
 
   onsenGroup.add(
     new THREE.Mesh(mergeGeometries(plinths), new THREE.MeshLambertMaterial({ color: 0x444a52, emissive: 0x101216 })),
@@ -2276,6 +2297,7 @@ function buildMountainBypassTunnel(
   // 6. Ceiling Twin Jet Fan Turbines, Green Emergency Exit Signs & Sidewall Orange Reflectors
   const jetFans: THREE.BufferGeometry[] = [];
   const reflectors: THREE.BufferGeometry[] = [];
+  const exitSigns: THREE.BufferGeometry[] = [];
   const exitMat = new THREE.MeshBasicMaterial({ map: makeEmergencyExitTexture(), fog: false, toneMapped: false, side: THREE.DoubleSide });
 
   let stepCount = 0;
@@ -2301,11 +2323,11 @@ function buildMountainBypassTunnel(
         cyl.translate(r.x + nx[i] * side * 1.45, r.y + 6.35, r.z + nz[i] * side * 1.45);
         jetFans.push(cyl);
 
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 1.2), exitMat);
+        const signGeo = new THREE.PlaneGeometry(0.95, 1.2);
         const lat = side * (W - 0.06);
-        sign.position.set(r.x + nx[i] * lat, r.y + 2.45, r.z + nz[i] * lat);
-        sign.rotation.y = yw - side * (Math.PI / 2);
-        group.add(sign);
+        signGeo.rotateY(yw - side * (Math.PI / 2));
+        signGeo.translate(r.x + nx[i] * lat, r.y + 2.45, r.z + nz[i] * lat);
+        exitSigns.push(signGeo);
       }
     }
   }
@@ -2315,6 +2337,9 @@ function buildMountainBypassTunnel(
   }
   if (reflectors.length) {
     group.add(new THREE.Mesh(mergeGeometries(reflectors), new THREE.MeshBasicMaterial({ color: 0xff7700, fog: false, toneMapped: false })));
+  }
+  if (exitSigns.length) {
+    group.add(new THREE.Mesh(mergeGeometries(exitSigns), exitMat));
   }
 
   return group;
@@ -2368,41 +2393,22 @@ function buildCurveSectionSceneryVariations(
 
   // Helper to spawn a parked JDM Spectator Car with glowing headlights, red tailbar, amber hazards & underglow
   const carBodyColors = [0xf2f6fa, 0xf5b800, 0x1888e8, 0xd82228, 0x22c866, 0x9838e8];
+  const carBodyParts: THREE.BufferGeometry[][] = carBodyColors.map(() => []);
   const addSpectatorCar = (pos: THREE.Vector3, carYaw: number, colorIdx: number) => {
-    const cGroup = new THREE.Group();
-    cGroup.position.copy(pos);
-    cGroup.rotation.y = carYaw;
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: carBodyColors[colorIdx % carBodyColors.length],
-      roughness: 0.32,
-      metalness: 0.55,
-    });
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.68, 4.35), bodyMat);
-    lower.position.y = 0.52;
-    const cabin = new THREE.Mesh(
-      new THREE.BoxGeometry(1.56, 0.56, 2.15),
-      new THREE.MeshStandardMaterial({ color: 0x141a24, roughness: 0.2, metalness: 0.8 }),
-    );
-    cabin.position.set(0, 1.08, -0.15);
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.1, 0.36), bodyMat);
-    wing.position.set(0, 1.05, -1.95);
-    const headLights = new THREE.Mesh(
-      new THREE.BoxGeometry(1.65, 0.18, 0.12),
-      new THREE.MeshBasicMaterial({ color: 0xe8f8ff, fog: false }),
-    );
-    headLights.position.set(0, 0.58, 2.18);
-    const tailLights = new THREE.Mesh(
-      new THREE.BoxGeometry(1.68, 0.16, 0.12),
-      new THREE.MeshBasicMaterial({ color: 0xff2211, fog: false }),
-    );
-    tailLights.position.set(0, 0.62, -2.18);
-    const hazardLights = new THREE.Mesh(
-      new THREE.BoxGeometry(1.86, 0.12, 4.38),
-      new THREE.MeshBasicMaterial({ color: 0xff9900, fog: false }),
-    );
-    hazardLights.position.set(0, 0.42, 0);
-    cGroup.add(lower, cabin, wing, headLights, tailLights, hazardLights);
-    group.add(cGroup);
+    const q = new THREE.Quaternion().setFromAxisAngle(UP, carYaw);
+    const put = (g: THREE.BufferGeometry, lx: number, ly: number, lz: number, into: THREE.BufferGeometry[]) => {
+      g.translate(lx, ly, lz);
+      g.applyQuaternion(q);
+      g.translate(pos.x, pos.y, pos.z);
+      into.push(g);
+    };
+    const bodyArr = carBodyParts[colorIdx % carBodyColors.length];
+    put(new THREE.BoxGeometry(1.88, 0.68, 4.35), 0, 0.52, 0, bodyArr);
+    put(new THREE.BoxGeometry(1.78, 0.1, 0.36), 0, 1.05, -1.95, bodyArr);
+    put(new THREE.BoxGeometry(1.56, 0.56, 2.15), 0, 1.08, -0.15, darkRoofParts);
+    put(new THREE.BoxGeometry(1.65, 0.18, 0.12), 0, 0.58, 2.18, cyanGlowParts);
+    put(new THREE.BoxGeometry(1.68, 0.16, 0.12), 0, 0.62, -2.18, redLanternParts);
+    put(new THREE.BoxGeometry(1.86, 0.12, 4.38), 0, 0.42, 0, yellowHazardParts);
     warmLanternPts.push(pos.x + Math.sin(carYaw) * 2.6, pos.y + 0.7, pos.z + Math.cos(carYaw) * 2.6);
   };
 
@@ -2624,25 +2630,26 @@ function buildCurveSectionSceneryVariations(
 
     // Warm Crimson & Gold Ground Uplight Pools illuminating the Autumn Momiji & Ginkgo Trees (idx = 375..580)
     const upTex = glowTexture();
-    const autumnPoolGeo = new THREE.PlaneGeometry(11.0, 11.0);
-    autumnPoolGeo.rotateX(-Math.PI / 2);
+    const goldPools: THREE.BufferGeometry[] = [];
+    const crimsonPools: THREE.BufferGeometry[] = [];
     for (let k = 376; k <= 580; k += 10) {
       for (const side of [-1, 1]) {
         const p = placeAt(k, side * (half + 4.5), 0.12, 0, true);
-        const pool = new THREE.Mesh(
-          autumnPoolGeo,
-          new THREE.MeshBasicMaterial({
-            map: upTex,
-            color: (k + side) % 3 === 0 ? 0xffbb22 : 0xff3811,
-            transparent: true,
-            opacity: 0.48,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-          }),
-        );
-        pool.position.copy(p);
-        group.add(pool);
+        const g = new THREE.PlaneGeometry(11.0, 11.0);
+        g.rotateX(-Math.PI / 2);
+        g.translate(p.x, p.y, p.z);
+        ((k + side) % 3 === 0 ? goldPools : crimsonPools).push(g);
       }
+    }
+    if (goldPools.length) {
+      group.add(new THREE.Mesh(mergeGeometries(goldPools), new THREE.MeshBasicMaterial({
+        map: upTex, color: 0xffbb22, transparent: true, opacity: 0.48, blending: THREE.AdditiveBlending, depthWrite: false,
+      })));
+    }
+    if (crimsonPools.length) {
+      group.add(new THREE.Mesh(mergeGeometries(crimsonPools), new THREE.MeshBasicMaterial({
+        map: upTex, color: 0xff3811, transparent: true, opacity: 0.48, blending: THREE.AdditiveBlending, depthWrite: false,
+      })));
     }
   }
 
@@ -2678,8 +2685,8 @@ function buildCurveSectionSceneryVariations(
 
     // Glowing Cut-Bamboo Footlight Lanterns (竹灯籠), Mossy Garden Stones & Emerald Uplight Pools along the Bamboo Grove (idx = 720..766)
     const upTex = glowTexture();
-    const bambooPoolGeo = new THREE.PlaneGeometry(9.5, 9.5);
-    bambooPoolGeo.rotateX(-Math.PI / 2);
+    const bambooPoolsLeft: THREE.BufferGeometry[] = [];
+    const bambooPoolsRight: THREE.BufferGeometry[] = [];
     const bambooSleeveParts: THREE.BufferGeometry[] = [];
     for (let k = 720; k <= 766; k += 4) {
       for (const side of [-1, 1]) {
@@ -2708,21 +2715,22 @@ function buildCurveSectionSceneryVariations(
 
         if (k % 8 === 0) {
           const p = placeAt(k, side * (half + 3.2), baseDy + 0.08, 0, true);
-          const pool = new THREE.Mesh(
-            bambooPoolGeo,
-            new THREE.MeshBasicMaterial({
-              map: upTex,
-              color: side === -1 ? 0x22ff88 : 0x88ff44,
-              transparent: true,
-              opacity: 0.42,
-              blending: THREE.AdditiveBlending,
-              depthWrite: false,
-            }),
-          );
-          pool.position.copy(p);
-          group.add(pool);
+          const g = new THREE.PlaneGeometry(9.5, 9.5);
+          g.rotateX(-Math.PI / 2);
+          g.translate(p.x, p.y, p.z);
+          (side === -1 ? bambooPoolsLeft : bambooPoolsRight).push(g);
         }
       }
+    }
+    if (bambooPoolsLeft.length) {
+      group.add(new THREE.Mesh(mergeGeometries(bambooPoolsLeft), new THREE.MeshBasicMaterial({
+        map: upTex, color: 0x22ff88, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false,
+      })));
+    }
+    if (bambooPoolsRight.length) {
+      group.add(new THREE.Mesh(mergeGeometries(bambooPoolsRight), new THREE.MeshBasicMaterial({
+        map: upTex, color: 0x88ff44, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false,
+      })));
     }
     if (mossyRockParts.length) {
       group.add(
@@ -2937,6 +2945,13 @@ function buildCurveSectionSceneryVariations(
   if (cyanGlowParts.length) {
     group.add(new THREE.Mesh(mergeGeometries(cyanGlowParts), new THREE.MeshBasicMaterial({ color: 0x55eeff, fog: false })));
   }
+  carBodyParts.forEach((geos, cIdx) => {
+    if (geos.length) {
+      group.add(new THREE.Mesh(mergeGeometries(geos), new THREE.MeshStandardMaterial({
+        color: carBodyColors[cIdx], roughness: 0.32, metalness: 0.55,
+      })));
+    }
+  });
 
   const gTex = glowTexture();
   if (redBeaconPts.length) {
@@ -3170,7 +3185,6 @@ function buildRealisticCedarForest(
     mats.forEach((m, k) => mesh.setMatrixAt(k, m));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false;
-    mesh.castShadow = true;
     group.add(mesh);
   };
 

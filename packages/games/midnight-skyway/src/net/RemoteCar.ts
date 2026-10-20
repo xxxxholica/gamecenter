@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CarBase } from '../models/CarBase';
 import { DragonCarModel } from '../models/DragonCarModel';
 import type { CarSpec, CarState } from '../../../../shared/netProtocol';
@@ -10,10 +11,67 @@ export const STALE_MS = 1500;
 /** ドラゴン・カーの翼・尻尾の振幅を速度で変えるときの基準速度(m/s)。 */
 const DRAGON_REF_SPEED = 42;
 
-export function createCarModel(type: string): CarBase {
-  if (type === 'dragon_b') return new DragonCarModel('b');
-  if (type === 'dragon_c') return new DragonCarModel('c');
-  return new DragonCarModel('a');
+export function createCarModel(type: string, remote = false): CarBase {
+  if (type === 'dragon_b') return new DragonCarModel('b', { remote });
+  if (type === 'dragon_c') return new DragonCarModel('c', { remote });
+  return new DragonCarModel('a', { remote });
+}
+
+const DEFORM_ROOTS = new Set(['Dragon_Wings', 'Dragon_Tail', 'Dragon_Tail_R']);
+
+/**
+ * 相手車両の静止パーツ(Body_Chassis / Dragon_Horns / 後輪2本)を素材ごとに結合してドローコールを削減する。
+ * CarModelLoader の共有ジオメトリを壊さないよう、元メッシュの geometry.dispose() は呼ばない。
+ */
+function mergeRemoteStaticMeshes(car: CarBase): void {
+  const pivot = car.bodyPivot;
+  if (!pivot) return;
+  // 後輪2本はステアしないため bodyPivot 側へ移して車体・角と一体化する
+  while (car.wheels.length > 2) {
+    const rear = car.wheels.pop()!;
+    pivot.attach(rear);
+  }
+  pivot.updateWorldMatrix(true, true);
+  const invPivot = pivot.matrixWorld.clone().invert();
+  const byMat = new Map<THREE.Material, { geos: THREE.BufferGeometry[]; meshes: THREE.Mesh[] }>();
+
+  const collect = (o: THREE.Object3D): void => {
+    if (DEFORM_ROOTS.has(o.name)) return;
+    if (o instanceof THREE.Mesh && !Array.isArray(o.material) && !o.material.transparent && o.geometry?.attributes.position) {
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      for (const k of Object.keys(g.attributes)) {
+        if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+      }
+      g.clearGroups();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(invPivot, o.matrixWorld));
+      let entry = byMat.get(o.material);
+      if (!entry) {
+        entry = { geos: [], meshes: [] };
+        byMat.set(o.material, entry);
+      }
+      entry.geos.push(g);
+      entry.meshes.push(o);
+    }
+    for (const c of o.children) collect(c);
+  };
+  collect(pivot);
+
+  for (const [mat, entry] of byMat) {
+    if (entry.geos.length < 2) {
+      entry.geos.forEach((g) => g.dispose());
+      continue;
+    }
+    const merged = mergeGeometries(entry.geos, false);
+    entry.geos.forEach((g) => g.dispose());
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    for (const m of entry.meshes) m.parent?.remove(m);
+    pivot.add(mesh);
+  }
 }
 
 /** 他のプレイヤーの車。受信した姿勢を補間して表示する(物理は持たない)。 */
@@ -41,11 +99,19 @@ export class RemoteCar {
     this.id = id;
     this.name = name;
     this.color = spec.body;
-    this.car = createCarModel(spec.type);
+    this.car = createCarModel(spec.type, true);
     this.car.setBodyColor(spec.body);
     this.car.setRoofColor(spec.roof);
     this.car.initSuspension();
+    mergeRemoteStaticMeshes(this.car);
     this.car.setLights(true);
+    // 接地影(addContactShadow)はあるので、相手車両の40超のサブメッシュは 4096px 影マップから外す
+    this.car.group.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = false;
+        o.receiveShadow = false;
+      }
+    });
     this.car.group.visible = false;
     this.label = makeLabel(name, spec.body);
     this.car.group.add(this.label);
@@ -59,7 +125,7 @@ export class RemoteCar {
     return this.track.sinceLastRecv(performance.now()) > STALE_MS;
   }
 
-  public update(now = performance.now()): void {
+  public update(now = performance.now(), viewerPos?: THREE.Vector3, animateParts = true): void {
     if (!this.track.update(now)) return;
     const p = this.track.pose;
     this.pos.set(p.x, p.y, p.z);
@@ -78,15 +144,15 @@ export class RemoteCar {
     this.car.bodyPivot?.rotation.set(0, 0, p.roll);     // ボディのロール
     const steer = p.steer;
     const wheels = this.car.wheels;
-    if (wheels && wheels.length >= 4) {
+    if (wheels && wheels.length >= 2) {
       const base = this.car.wheelBaseYaw;
-      wheels.forEach((w, i) => {
-        w.rotation.x = 0;
-        w.rotation.y = (base[i] ?? 0) + (i < 2 ? steer : 0);
-      });
+      for (let i = 0; i < wheels.length; i++) {
+        wheels[i].rotation.x = 0;
+        wheels[i].rotation.y = (base[i] ?? 0) + (i < 2 ? steer : 0);
+      }
     }
-    // ドラゴン・カーの角・翼・尻尾(FK)
-    if (this.car instanceof DragonCarModel) {
+    // ドラゴン・カーの翼・尻尾(FK): 近くの相手だけ、フレームごとに1台ずつ順番に頂点変形・転送を回す
+    if (animateParts && this.car instanceof DragonCarModel && (!viewerPos || this.pos.distanceToSquared(viewerPos) <= 65 * 65)) {
       this.car.updateDragonParts(now / 1000, Math.abs(p.speed) / DRAGON_REF_SPEED);
     }
   }

@@ -83,7 +83,7 @@ let sharedPacer: RequestPacer | null = null;
 let gpuUploadWorker: Worker | null | undefined;
 let gpuUploadSeq = 0;
 /** チャンクの準備に1フレームで使ってよい時間(ms)。走行中は、描画の余裕に収まる程度。開始前のロード中は、止まっても見えないので大きく。 */
-const PREP_BUDGET_RACING_MS = 3;
+const PREP_BUDGET_RACING_MS = 1.5;
 const PREP_BUDGET_LOADING_MS = 12;
 /** step() は、チャンクの準備が終われば true、予算を使い切って続きがあれば false を返す。 */
 interface PrepJob {
@@ -348,7 +348,7 @@ export abstract class StreamedCityMap extends MapBase {
         mat.opacity = 0.5;
       }
       const m = new THREE.Mesh(cfg.geo, mat);
-      m.castShadow = true;
+      m.castShadow = false;
       m.receiveShadow = true;
       m.frustumCulled = false;
       holder.add(m);
@@ -538,7 +538,7 @@ export abstract class StreamedCityMap extends MapBase {
           this.group.add(scene);
           this.farObjects.set(key, scene);
           benchMark('far-added');
-          this.startFade(scene, this.fadeMs * 1.5, () => {});
+          if (scene.visible) this.startFade(scene, this.fadeMs * 1.5, () => {});
         } catch (err) {
           console.warn(`[${this.metadata.id}] far chunk failed`, c.file, err);
         }
@@ -552,7 +552,7 @@ export abstract class StreamedCityMap extends MapBase {
    * 素材の差し替えと法線の補いを、メッシュ1つずつ、shouldYield() が true になったら中断しながら進める。
    * 1チャンクで数十〜百以上のメッシュがあり、まとめて行うと、Firefox では 1 フレームに約 27ms かかる。
    */
-  private *prepareChunkSteps(root: THREE.Object3D, isFar: boolean, shouldYield: () => boolean): Generator<void, void, void> {
+  private *prepareChunkSteps(root: THREE.Object3D, _isFar: boolean, shouldYield: () => boolean): Generator<void, void, void> {
     const meshes: THREE.Mesh[] = [];
     root.traverse((o) => { if (o instanceof THREE.Mesh) meshes.push(o); });
     for (const o of meshes) {
@@ -562,7 +562,7 @@ export abstract class StreamedCityMap extends MapBase {
       // PLATEAU chunks ship with no normal attribute at all (fine for the old unlit material, but a lit one needs
       // N·L and renders solid black without it).
       if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
-      o.castShadow = !isFar;
+      o.castShadow = false;
       o.receiveShadow = true;
       if (shouldYield()) yield;
     }

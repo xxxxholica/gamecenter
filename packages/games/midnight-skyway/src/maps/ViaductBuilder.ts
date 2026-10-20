@@ -130,7 +130,6 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
     sweep([[[-gw, 0], [-gw, -D]], [[-gw, -D], [-gw + 1.4, -D - 0.5]], [[-gw + 1.4, -D - 0.5], [gw - 1.4, -D - 0.5]], [[gw - 1.4, -D - 0.5], [gw, -D]], [[gw, -D], [gw, 0]], [[-gw, 0], [-half, 0]], [[half, 0], [gw, 0]]]),
     new THREE.MeshStandardMaterial({ color: 0x8a8c8f, roughness: 0.95, side: THREE.DoubleSide })
   );
-  girder.castShadow = true;
   girder.receiveShadow = true;
   // parapets on both sides. Outer barrier: a low concrete kerb, an acrylic panel above it and a slim top rail (the city stays visible through it).
   const P = opts.parapetHeight, t = 0.45, C = 0.35, pl = half + 0.22, rl = 0.07;
@@ -148,9 +147,9 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
     new THREE.MeshStandardMaterial({ color: 0x9da1a6, roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide })
   );
   panel.renderOrder = 2;
-  kerb.castShadow = true; kerb.receiveShadow = true;
+  kerb.receiveShadow = true;
   panel.receiveShadow = true; // glass shadow-casting reads as an opaque dark stripe, so it only receives
-  rail.castShadow = true; rail.receiveShadow = true;
+  rail.receiveShadow = true;
   const parapets = new THREE.Group();
   parapets.add(kerb, panel, rail);
   group.add(surface, girder, parapets);
@@ -188,8 +187,8 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   });
   columns.instanceMatrix.needsUpdate = true; caps.instanceMatrix.needsUpdate = true;
   columns.frustumCulled = false; caps.frustumCulled = false;
-  columns.castShadow = true; columns.receiveShadow = true;
-  caps.castShadow = true; caps.receiveShadow = true;
+  columns.receiveShadow = true;
+  caps.receiveShadow = true;
   group.add(columns, caps);
   for (const m of [surface, girder, kerb, panel, rail]) m.frustumCulled = false;
   return group;

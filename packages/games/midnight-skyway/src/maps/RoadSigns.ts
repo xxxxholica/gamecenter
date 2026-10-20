@@ -317,7 +317,6 @@ export function buildRoadSigns(
 
   if (steelParts.length) {
     const steel = new THREE.Mesh(mergeGeometries(steelParts), new THREE.MeshLambertMaterial({ color: 0x9aa0a6 }));
-    steel.castShadow = true;
     steel.receiveShadow = true;
     group.add(steel);
     steelParts.forEach((g) => g.dispose());
@@ -381,7 +380,11 @@ export function buildCurveSigns(road: THREE.Vector3[], roadWidth: number, opts: 
   const back = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const g = c.getContext('2d', { willReadFrequently: true })!; g.fillStyle = '#7b8189'; g.fillRect(0, 0, 64, 48); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
   const BW = 1.5, BH = 1.12, POLE_H = 1.95, SPACING = opts.spacing ?? 10, COUNT = opts.count ?? 4;
   const poles: THREE.BufferGeometry[] = [];
+  const leftGeos: THREE.BufferGeometry[] = [];
+  const rightGeos: THREE.BufferGeometry[] = [];
+  const rearGeos: THREE.BufferGeometry[] = [];
   const cyl = new THREE.CylinderGeometry(0.045, 0.05, POLE_H, 10);
+  const plane = new THREE.PlaneGeometry(BW, BH);
 
   for (const run of runs) {
     let turn = 0, len = 0;
@@ -399,21 +402,35 @@ export function buildCurveSigns(road: THREE.Vector3[], roadWidth: number, opts: 
       const lat = side * (half + 0.5);
       const px = r.x + nx * lat, pz = r.z + nz * lat;
       const p = cyl.clone(); p.translate(px, r.y + POLE_H / 2, pz); poles.push(p);
-      const frontMat = new THREE.MeshBasicMaterial({ map: left ? tex.left : tex.right, alphaTest: 0.5 });
-      const front = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), frontMat);
-      front.position.set(px - tx * 0.06, r.y + POLE_H - BH / 2 + 0.05, pz - tz * 0.06);
-      front.rotation.y = yaw + Math.PI;
-      const rear = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), new THREE.MeshBasicMaterial({ map: back, alphaTest: 0.5 }));
-      rear.position.set(px - tx * 0.03, front.position.y, pz - tz * 0.03);
-      rear.rotation.y = yaw;
-      group.add(front, rear);
+      const fy = r.y + POLE_H - BH / 2 + 0.05;
+      const fg = plane.clone();
+      fg.rotateY(yaw + Math.PI);
+      fg.translate(px - tx * 0.06, fy, pz - tz * 0.06);
+      (left ? leftGeos : rightGeos).push(fg);
+      const rg = plane.clone();
+      rg.rotateY(yaw);
+      rg.translate(px - tx * 0.03, fy, pz - tz * 0.03);
+      rearGeos.push(rg);
     }
+  }
+  if (leftGeos.length) {
+    group.add(new THREE.Mesh(mergeGeometries(leftGeos), new THREE.MeshBasicMaterial({ map: tex.left, alphaTest: 0.5 })));
+    leftGeos.forEach((g) => g.dispose());
+  }
+  if (rightGeos.length) {
+    group.add(new THREE.Mesh(mergeGeometries(rightGeos), new THREE.MeshBasicMaterial({ map: tex.right, alphaTest: 0.5 })));
+    rightGeos.forEach((g) => g.dispose());
+  }
+  if (rearGeos.length) {
+    group.add(new THREE.Mesh(mergeGeometries(rearGeos), new THREE.MeshBasicMaterial({ map: back, alphaTest: 0.5 })));
+    rearGeos.forEach((g) => g.dispose());
   }
   if (poles.length) {
     const steel = new THREE.Mesh(mergeGeometries(poles), new THREE.MeshLambertMaterial({ color: 0x9aa0a6 }));
     group.add(steel);
     poles.forEach((g) => g.dispose());
   }
+  plane.dispose();
   cyl.dispose();
   return group;
 }

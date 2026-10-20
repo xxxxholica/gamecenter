@@ -425,9 +425,9 @@ html, body {
   pointer-events: auto;
 }
 
-/* Top Left: Minimap — 四隅のかぎ括弧(速いほど明るい)と、淡い背景 */
+/* Top Left: Minimap — 四隅のかぎ括弧と、淡い背景 */
 .hud-minimap-arcade {
-  --b: rgba(var(--hud-accent-rgb, 142, 201, 220), calc(0.4 + var(--fx-speed, 0) * 0.55));
+  --b: rgba(var(--hud-accent-rgb, 142, 201, 220), 0.78);
   position: absolute;
   top: 18px;
   left: 20px;
@@ -454,7 +454,7 @@ html, body {
   mask-image: radial-gradient(ellipse at 50% 70%, #000 52%, transparent 98%);
 }
 
-/* Under the minimap: Lap Timer — 枠なしの大きな数字と、速度で明るくなる下線 */
+/* Under the minimap: Lap Timer — 枠なしの大きな数字と下線 */
 .hud-timer-arcade {
   position: absolute;
   top: 296px;
@@ -477,9 +477,7 @@ html, body {
   height: 3px;
   background: linear-gradient(90deg, var(--hud-accent) 0%, var(--hud-accent) 70%, transparent);
   box-shadow: 0 0 12px var(--hud-accent);
-  opacity: calc(0.3 + var(--fx-speed, 0) * 0.7);
-  transform-origin: left;
-  transform: scaleX(calc(0.55 + var(--fx-speed, 0) * 0.45));
+  opacity: 0.85;
 }
 
 .hud-timer-icon {
@@ -487,7 +485,7 @@ html, body {
   width: 34px;
   height: 34px;
   color: var(--hud-accent);
-  filter: drop-shadow(0 0 calc(4px + var(--fx-speed, 0) * 8px) rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+  filter: drop-shadow(0 0 8px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
 
 .hud-time-main {
@@ -498,7 +496,7 @@ html, body {
   color: #ffffff;
   letter-spacing: 3px;
   text-align: left;
-  text-shadow: 0 0 calc(10px + var(--fx-speed, 0) * 16px) rgba(var(--hud-accent-rgb, 142, 201, 220), 0.8), 0 3px 10px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 0 18px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.8), 0 3px 10px rgba(0, 0, 0, 0.85);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -572,7 +570,7 @@ html, body {
 }
 /* 160km/h〜: レッドゾーン。赤の目盛りが点滅する */
 .hud-band.redline .sg-seg.lv2.on { animation: hudRedline 0.18s steps(2) infinite; }
-@keyframes hudRedline { 50% { filter: brightness(1.7) saturate(1.3); } }
+@keyframes hudRedline { 50% { opacity: 0.45; } }
 /* ブースト中: 数字が白く光る */
 .hud-band.boosting .speedo-num { color: #fff !important; text-shadow: 0 0 22px var(--hud-accent), 0 0 46px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85), 0 2px 8px rgba(0, 0, 0, 0.9) !important; }
 
@@ -900,7 +898,7 @@ html, body {
 .hud-drift-tag { font: 900 13px var(--hud-sans); letter-spacing: 0.3em; color: var(--hud-danger); text-shadow: 0 0 10px rgba(216, 96, 95, 0.6); }
 .hud-drift-tag.ready { color: var(--hud-accent); text-shadow: 0 0 12px var(--hud-accent), 0 0 24px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
 .hud-drift-chain { color: var(--hud-warn); font-size: 20px; font-weight: 900; font-style: italic; text-shadow: 0 0 10px rgba(226, 176, 94, 0.7); }
-@keyframes hudBoostPulse { from { filter: brightness(1); } to { filter: brightness(1.7); } }
+@keyframes hudBoostPulse { from { opacity: 0.65; } to { opacity: 1; } }
 
 /* ---------- Result: no panel. Big in the lower centre over a dark fade (like the stage loading screen); the view shifts up ---------- */
 .hud-result-modal.hud-result-side {
@@ -934,7 +932,7 @@ html, body {
 }
 .hud-result-side .arcade-modal-title { margin-bottom: 2px; font-size: clamp(22px, 4vh, 36px); }
 .hud-result-side .hud-result-time-big {
-  /* タイム: 太いフォントで、白→水色(ベストタイム更新は金)のグラデーション。光の筋が流れ続け、外側が脈打つように光る */
+  /* タイム: 太いフォントで、水色(ベストタイム更新は金)の発光。countUpText で毎フレーム文字列が変わる間もメインスレッドを止めないよう、合成のみで動く指定にする */
   font-family: 'Dela Gothic One', 'Hiragino Sans', sans-serif;
   font-weight: 400;                                   /* Dela Gothic One は太さが1種類(太字指定すると擬似太字になる) */
   font-size: clamp(44px, 11vh, 104px);
@@ -943,39 +941,25 @@ html, body {
   line-height: 1.15;
   margin: 0 0 clamp(6px, 1.4vh, 14px) 0;
   font-variant-numeric: tabular-nums;
-  color: transparent;
-  text-shadow: none;
-  background: linear-gradient(105deg, #ffffff 0%, #bff4ff 30%, #ffffff 44%, #ffffff 50%, #7fe3ff 56%, #e8fbff 75%, #ffffff 100%);
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.75)) drop-shadow(0 0 18px rgba(0, 170, 255, 0.45));
-  animation: timeShine 2.4s linear infinite, timeGlow 1.6s ease-in-out infinite alternate;
+  color: #e8fbff;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8), 0 0 22px rgba(0, 170, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.85);
+  will-change: transform, opacity;
 }
 .hud-result-side .hud-result-time-big.record {
-  background-image: linear-gradient(105deg, #fff4c8 0%, #ffd56a 30%, #fffbe8 44%, #ffffff 50%, #ffb92e 56%, #ffe9a8 75%, #fff4c8 100%);
-  filter: drop-shadow(0 0 6px rgba(255, 200, 80, 0.85)) drop-shadow(0 0 20px rgba(255, 150, 30, 0.5));
+  color: #fff4c8;
+  text-shadow: 0 0 8px rgba(255, 200, 80, 0.9), 0 0 24px rgba(255, 150, 30, 0.55), 0 2px 10px rgba(0, 0, 0, 0.85);
 }
-/* 出た瞬間: 大きく打ち込まれ、白く閃いてから落ち着く(そのあと光の筋と脈打つ光が続く) */
+/* 出た瞬間: 大きく打ち込まれてから落ち着く */
 .hud-result-side .hud-result-time-big.stamp {
-  animation: timeStamp 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both, timeShine 2.4s linear 0.5s infinite, timeGlow 1.6s ease-in-out 0.5s infinite alternate;
+  animation: timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
 }
 @keyframes timeStamp {
-  0% { transform: scale(1.9); opacity: 0; filter: brightness(3) blur(6px); }
-  55% { opacity: 1; filter: brightness(2.2) blur(0); }
-  100% { transform: scale(1); filter: brightness(1); }
-}
-@keyframes timeShine { from { background-position: 125% 0; } to { background-position: -125% 0; } }
-@keyframes timeGlow {
-  from { filter: drop-shadow(0 0 5px rgba(0, 240, 255, 0.6)) drop-shadow(0 0 14px rgba(0, 170, 255, 0.35)); }
-  to { filter: drop-shadow(0 0 9px rgba(0, 240, 255, 0.95)) drop-shadow(0 0 26px rgba(0, 170, 255, 0.6)); }
+  0% { transform: scale(1.85); opacity: 0; }
+  55% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 .hud-result-side .hud-result-time-big.record.stamp {
-  animation: timeStamp 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both, timeShine 2.4s linear 0.5s infinite, timeGlowGold 1.6s ease-in-out 0.5s infinite alternate;
-}
-@keyframes timeGlowGold {
-  from { filter: drop-shadow(0 0 5px rgba(255, 200, 80, 0.7)) drop-shadow(0 0 14px rgba(255, 150, 30, 0.35)); }
-  to { filter: drop-shadow(0 0 10px rgba(255, 210, 100, 1)) drop-shadow(0 0 28px rgba(255, 150, 30, 0.65)); }
+  animation: timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
 }
 /* メニューは全ゲーム共通の縦並び(arcadeResultMenu.ts の rm-col)のまま */
 .result-open .hud-minimap-arcade,
@@ -1028,11 +1012,11 @@ html, body {
 .hud-finish-stamp.record .fs-time { color: #fff3cc; text-shadow: 0 0 24px rgba(255, 210, 110, 0.9), 0 0 70px rgba(255, 170, 40, 0.6); }
 .hud-finish-stamp.auto-out { animation: fsOut 0.5s 2.4s ease-in forwards; }
 @keyframes fsStamp {
-  0% { transform: scale(2.6); opacity: 0; filter: blur(6px); }
-  60% { opacity: 1; filter: blur(0); }
+  0% { transform: scale(2.6); opacity: 0; }
+  60% { opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
-@keyframes fsLabelIn { from { opacity: 0; letter-spacing: 1.4em; } to { opacity: 1; letter-spacing: 0.6em; } }
+@keyframes fsLabelIn { from { opacity: 0; transform: scaleX(1.3); } to { opacity: 1; transform: scaleX(1); } }
 @keyframes fsTagIn { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
 @keyframes fsOut { to { opacity: 0; transform: translate(-50%, -60%); } }
 .finishing .hud-minimap-arcade,
@@ -1442,13 +1426,11 @@ html, body {
   inset: 0;
   pointer-events: none;
   z-index: 5;
-  mix-blend-mode: screen;
   opacity: 0;
+  will-change: opacity;
   background:
-    radial-gradient(ellipse at center, transparent 58%, rgba(var(--hud-accent-rgb, 0, 240, 255), calc(var(--fx-speed, 0) * 0.16 + var(--fx-boost, 0) * 0.42)) 100%),
-    radial-gradient(ellipse at center, transparent 62%, rgba(255, 255, 255, calc(var(--fx-slip, 0) * 0.22)) 100%);
+    radial-gradient(ellipse at center, transparent 58%, rgba(var(--hud-accent-rgb, 0, 240, 255), 0.45) 100%);
 }
-.hud-edge.on { opacity: 1; }
 
 /* ---------- 区間タイム(タイマーの下に、同じ幅で常時表示) ---------- */
 .hud-sectors { display: grid; grid-template-rows: repeat(3, 34px); gap: 3px; margin-top: 8px; }   /* 区間の箱は、常に同じ高さ・同じ幅 */

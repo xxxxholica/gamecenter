@@ -432,7 +432,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     driveHUD.showResultModal(result);
     driveHUD.setFinishing(false);                            // リザルトを出してから外す(走行中の表示が一瞬戻らないように)
     driveScene.setResultView(true);
-    if (result.totalTimeMs > 0 && !timeAttack.devNoSave) startScoreEntry(result);   // 検証用の途中からの走行は登録しない
+    if (result.totalTimeMs > 0 && !timeAttack.devNoSave && !benchAutoDrive && benchRivals === 0) startScoreEntry(result);   // 検証用・ベンチマーク自動走行中は登録モーダルを出さない
     if (benchAutoDrive) window.setTimeout(() => benchDone('goal'), FINISH_BENCH_TAIL_MS);   // ベンチ: ゴールの演出とウィニングランの頭まで測る
   };
 
@@ -570,6 +570,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   driveScene.callbacks.onPositionUpdate = (pos, rotY, fwdTraffic) => {
     driveHUD.updateCarPosition(pos, rotY, fwdTraffic);
   };
+  const remoteMarkersPool: { x: number; z: number; color: number }[] = [];
   driveScene.callbacks.onFxUpdate = (speed, boost, slipstream) => driveHUD.setFx(speed, boost, slipstream);
   driveScene.callbacks.onProgressUpdate = (fraction, speedKmH, dt) => {
     timeAttack.update(dt, fraction, speedKmH);
@@ -578,11 +579,25 @@ window.addEventListener('DOMContentLoaded', async () => {
     const race = activeRace();
     if (race && cc) {
       race.update(dt, cc, fraction, timeAttack.elapsedTimeMs);
-      if (benchRace && !benchRace.shown && [...race.remotes.values()].some((r) => r.valid)) {
+      let validCount = 0;
+      for (const r of race.remotes.values()) {
+        if (!r.valid) continue;
+        let m = remoteMarkersPool[validCount];
+        if (!m) {
+          m = { x: 0, z: 0, color: 0 };
+          remoteMarkersPool.push(m);
+        }
+        m.x = r.pos.x;
+        m.z = r.pos.z;
+        m.color = r.color;
+        validCount++;
+      }
+      remoteMarkersPool.length = validCount;
+      if (benchRace && !benchRace.shown && validCount > 0) {
         benchRace.shown = true;
         benchMark('rivals-shown');                           // 相手の車を初めて描くフレーム(スパイクの原因の手がかり)
       }
-      driveHUD.setRemoteMarkers([...race.remotes.values()].filter((r) => r.valid).map((r) => ({ x: r.pos.x, z: r.pos.z, color: r.color })));
+      driveHUD.setRemoteMarkers(remoteMarkersPool);
     }
   };
   const isPreviewMode = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
@@ -1104,21 +1119,12 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (isPreviewMode) { hudContainer.style.display = 'none'; previewPilot = null; }
       const raceGuide = guideRace(true);                 // 明転に合わせてフェードインさせる(それまでは見えない)
       restartRace();
-      await driveScene.warmupAsync();                  // 暗転中に、マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)。並列にコンパイルし終えてから描く
-      driveScene.start();
-      if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
-      stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
-      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; if (benchAutoDrive) benchReady('race-start'); }));   // ガイドも同じタイミングでフェードイン
+      let startBenchRivals: (() => void) | null = null;
       if (online) {
         online.race = new OnlineRace(net, driveScene, online.players, online.you, {
           onStandings: (rows) => onlineHUD.setStandings(rows),
           onToast: (t) => onlineHUD.toast(t),
         });
-        online.ready = true;
-        onlineHUD.show();
-        onlineHUD.showWaiting('他のプレイヤーを待っています…');
-        net.send({ t: 'loaded' });
-        tryStartOnlineCountdown();
       } else if (benchRivals > 0) {
         const route = currentMapInstance.getRoutePoints();
         if (route && route.length > 1) {
@@ -1129,14 +1135,30 @@ window.addEventListener('DOMContentLoaded', async () => {
             onToast: (t) => onlineHUD.toast(t),
           });
           benchRace = { race, net: rivalNet, shown: false };
-          onlineHUD.show();
-          // 本番で相手の車が出るのは、カウントダウンが始まって姿勢が届き始めてから(明転より後)。ベンチも「プレイ中」の区間で出す
-          setTimeout(() => {
-            if (benchRace?.race !== race) return;
-            race.begin();
-            rivalNet.start();
-          }, 1000);
+          startBenchRivals = () => {
+            onlineHUD.show();
+            // 本番で相手の車が出るのは、カウントダウンが始まって姿勢が届き始めてから(明転より後)。ベンチも「プレイ中」の区間で出す
+            setTimeout(() => {
+              if (benchRace?.race !== race) return;
+              race.begin();
+              rivalNet.start();
+            }, 1000);
+          };
         }
+      }
+      await driveScene.warmupAsync();                  // 暗転中に、マップ固有のシェーダーを事前コンパイル(街のチャンクは除く)。並列にコンパイルし終えてから描く
+      driveScene.start();
+      if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
+      stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
+      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; if (benchAutoDrive) benchReady('race-start'); }));   // ガイドも同じタイミングでフェードイン
+      if (online) {
+        online.ready = true;
+        onlineHUD.show();
+        onlineHUD.showWaiting('他のプレイヤーを待っています…');
+        net.send({ t: 'loaded' });
+        tryStartOnlineCountdown();
+      } else if (startBenchRivals) {
+        startBenchRivals();
       }
     },
     onRetryRace: () => {

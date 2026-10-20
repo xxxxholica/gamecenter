@@ -500,10 +500,12 @@ export class DragonCarModel extends CarBase {
   private glassMaterials: THREE.MeshStandardMaterial[] = [];
   private partGlow: PartGlowUniforms | null = null;
   private partGlowStrength = 0;
+  private readonly remote: boolean;
 
-  constructor(variant: DragonVariant) {
+  constructor(variant: DragonVariant, opts: { remote?: boolean } = {}) {
     super();
     this.variant = variant;
+    this.remote = !!opts.remote;
     const def = DRAGON_DEFS[variant];
     this.emissiveOn = def.emissive;
     this.specs = def.specs;
@@ -597,12 +599,13 @@ export class DragonCarModel extends CarBase {
       mirroredTailObj.scale.setScalar(tailScale);
     }
 
-    this.hornRig = createArticulatedChainRig(carRoot.getObjectByName('Dragon_Horns'), 16, true, 'horn');
+    // 相手車両(remote)では、遠目で見分けがつかない角の微細な呼吸FK(約5,000〜10,000頂点)と追加の加算シェーダー重ね描きを省く
+    this.hornRig = this.remote ? null : createArticulatedChainRig(carRoot.getObjectByName('Dragon_Horns'), 16, true, 'horn');
     this.wingRig = createArticulatedChainRig(carRoot.getObjectByName('Dragon_Wings'), 16, true, 'wing');
     this.tailRig = createArticulatedChainRig(tailObj, 32, false, 'tail', 1);
     this.tailRigMirror = createArticulatedChainRig(mirroredTailObj, 32, false, 'tail', -1);
 
-    if (def.partGlow > 0) {
+    if (def.partGlow > 0 && !this.remote) {
       const emissive = this.emissiveMaterials[0]?.emissive;
       this.partGlowStrength = def.partGlow;
       this.partGlow = {

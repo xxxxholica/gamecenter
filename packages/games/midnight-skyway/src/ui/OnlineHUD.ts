@@ -98,7 +98,8 @@ export class OnlineHUD {
     const i = rows.findIndex((r) => r.me);
     if (i < 0) return;
     const place = i + 1;
-    const changed = this.currentPlace !== 0 && this.currentPlace !== place;
+    if (place === this.currentPlace) return;
+    const changed = this.currentPlace !== 0;
     this.currentPlace = place;
     const num = Object.assign(document.createElement('span'), { className: 'num', textContent: String(place) });
     const suf = Object.assign(document.createElement('span'), { className: 'suf', textContent: ['st', 'nd', 'rd', 'th'][i] ?? 'th' });
