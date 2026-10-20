@@ -911,8 +911,8 @@ if (abs(vNightNor.y) < 0.4) {
     p.y = surfaceY + lift;
     car.groundPitch += (-Math.atan(pitchSlope * along) - car.groundPitch) * 0.15;
 
-    // Traffic obstacle collision check (Same-lane other cars)
-    if (this.traffic) {
+    // Traffic obstacle collision check (Same-lane other cars). 隠している間(ゴールした後)は当たらない
+    if (this.traffic?.group.visible) {
       const tCol = this.traffic.checkPlayerCollision(p, car.rotationY, car.speed);
       if (tCol.hit) {
         car.applyKnockback(tCol.pushX, tCol.pushZ, tCol.impact, tCol.isRearEnd, tCol.knockX, tCol.knockZ, tCol.fresh, tCol.turn);

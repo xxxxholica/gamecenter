@@ -17,6 +17,8 @@ export interface EntryFlowCallbacks {
   onName: (name: string) => Promise<unknown> | void;
   /** 名前入力が閉じたあと(止めを外した後) */
   onClosed?: () => void;
+  /** 順位の確認が終わったとき(上位に入れば順位、入らない・失敗なら null)。結果画面に順位を出す用 */
+  onRank?: (rank: number | null) => void;
 }
 
 /** 流れを始める。返す関数で取り消せる(結果画面を離れるとき用。予約した名前入力を出さず、止めとシールドを外す) */
@@ -38,6 +40,7 @@ export function runEntryFlow(deps: EntryFlowDeps, cb: EntryFlowCallbacks): () =>
   cb.setBlocked(true);
   void deps.check().then((check) => {
     if (released) return; // 確認中に取り消された
+    cb.onRank?.(check.isRankIn ? check.rank : null);
     if (!check.isRankIn) {
       release();
       return;

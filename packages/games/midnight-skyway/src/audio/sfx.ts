@@ -148,6 +148,27 @@ export class Sfx {
     for (const n of [84, 88, 91]) this.tone('sawtooth', midiHz(n), midiHz(n), t + 0.9, 1.3, 0.07);
   }
 
+  /** ゴールの瞬間(スローモーションに入る): 低い衝撃と、吸い込まれるような余韻 */
+  public finishImpact(): void {
+    const t = this.ctx.currentTime;
+    this.noiseHit(t, 0.7, 'lowpass', 5200, 180, 0.55, 0.002);
+    this.tone('sine', 110, 32, t, 0.9, 0.8);
+    this.tone('triangle', 880, 220, t + 0.02, 0.6, 0.06);
+  }
+
+  /** タイムの数字が画面中央に打ち込まれる音 */
+  public stamp(): void {
+    const t = this.ctx.currentTime;
+    this.tone('sine', 190, 70, t, 0.2, 0.55);
+    this.noiseHit(t, 0.12, 'bandpass', 2400, 900, 0.3, 0.001);
+  }
+
+  /** ランキング入り(リザルトに順位が出る) */
+  public rankIn(): void {
+    const t = this.ctx.currentTime;
+    [84, 88, 91, 96].forEach((n, i) => this.tone('triangle', midiHz(n), midiHz(n), t + i * 0.07, 0.4, 0.1));
+  }
+
   public timeUp(): void {
     const t = this.ctx.currentTime;
     [67, 64, 60, 55].forEach((n, i) => this.tone('sawtooth', midiHz(n), midiHz(n) * 0.97, t + i * 0.2, 0.34, 0.11));

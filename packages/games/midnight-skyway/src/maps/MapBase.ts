@@ -54,6 +54,15 @@ export abstract class MapBase {
   /** Shows / hides the goal hologram (maps without one ignore it). */
   public setGoalVisible(_on: boolean): void {}
 
+  /** ゴールの瞬間: ゴールのホログラムの旗が砕けて飛び散る。carVel は車の速度(m/s) */
+  public burstGoal(_carVel: THREE.Vector3): void {}
+
+  /** レースの準備: 砕けたゴールのホログラムを元に戻す */
+  public resetGoal(): void {}
+
+  /** 走行ルートの点 i の上に屋根(トンネル・洞門)があるか。ゴール後のカメラが上空へ上がってよいかの判断に使う */
+  public isRoofed(_i: number): boolean { return false; }
+
   /** Traffic system (Opposite + Same-lane obstacles) */
   public traffic: Traffic | null = null;
 

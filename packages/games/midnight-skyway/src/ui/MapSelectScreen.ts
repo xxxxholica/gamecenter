@@ -56,7 +56,7 @@ export class MapSelectScreen {
           </div>
 
           <div class="map-record-arcade">
-            <div class="rec-label">自己ベスト記録</div>
+            <div class="rec-label">ベストタイム</div>
             <div class="rec-time-digital" id="rec-time-${st.id}">--:--.---</div>
           </div>
         </div>`).join('')}
@@ -136,7 +136,7 @@ export class MapSelectScreen {
     setBtnLabel(back, 'マシン選択へ');
     const start = q('#ms-btn-start');
     if (start && !on) setBtnLabel(start, '決定');
-    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : '自己ベスト記録'; });
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : 'ベストタイム'; });
     if (on) {
       this.selectedMapId = '';                               // オフラインで選んでいたコースの強調を消す(希望なしの状態)
       this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.remove('active'));

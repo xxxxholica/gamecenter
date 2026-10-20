@@ -1098,6 +1098,8 @@ export interface HighScoreEntryFlowOptions {
   onName: (name: string) => Promise<unknown> | void;
   /** 名前入力が閉じたあと(操作の受付を戻した後)。決定ボタンの誤爆防止の待ちなどに使う */
   onClosed?: () => void;
+  /** 順位の確認が終わったとき(上位に入れば順位、入らない・失敗なら null) */
+  onRank?: (rank: number | null) => void;
 }
 
 /**
@@ -1110,13 +1112,13 @@ export interface HighScoreEntryFlowOptions {
  * 返す関数で、この流れを取り消せる(結果画面を離れるとき用。予約した名前入力を出さず、止めていた操作とシールドを戻す)。
  */
 export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): () => void {
-  const { slug, score, variantId, modal, setBlocked, onName, onClosed } = options;
+  const { slug, score, variantId, modal, setBlocked, onName, onClosed, onRank } = options;
   return runEntryFlow(
     {
       check: () => checkHighScore(slug, score, variantId),
       showShield: showInputShield,
       mountModal: ({ rank, onComplete }) => mountNameEntryModal({ ...modal, rankDisplay: `第${rank}位`, onComplete }),
     },
-    { setBlocked, onName, onClosed },
+    { setBlocked, onName, onClosed, onRank },
   );
 }

@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { untrackedRandom as rand } from '../../../../shared/arcadeReplay';
+
+/** 砕けた旗の破片が消えるまで(秒) */
+const SHARD_LIFE = 2.6;
 
 /** Black and white chequered texture (crisp squares), `cols` x `rows` cells. */
 function chequer(cols: number, rows: number): THREE.CanvasTexture {
@@ -65,6 +69,7 @@ function noEntry(aspect: number): THREE.CanvasTexture {
  * chequered strip on the deck. The flag ripples a little. It fades in / out (setVisible) so it is not there at the start.
  * The flag is single-sided. Seen from behind (the far side of the gate, where the car cannot cross back) there is a solid
  * "no entry" board instead; it and the frame are always there, only the flag and the strip fade in.
+ * At the goal the flag shatters (burst): one shard per chequer cell flies off along the car's way and shrinks away.
  */
 export class GoalHologram {
   public readonly group = new THREE.Group();
@@ -74,9 +79,15 @@ export class GoalHologram {
   private readonly flagRest: Float32Array;
   private readonly flag: THREE.Mesh;
   private readonly strip: THREE.Mesh;
+  private readonly board: THREE.Mesh;
   private alpha = 0;
   private target = 0;
   private t = 0;
+  /** 旗の破片: マスごとに1枚。出ていない間は大きさ0で置いておく(シェーダは最初から用意される) */
+  private readonly shards: THREE.InstancedMesh;
+  private readonly shardState: { home: THREE.Vector3; p: THREE.Vector3; v: THREE.Vector3; rot: THREE.Euler; spin: THREE.Vector3 }[] = [];
+  private shardAge = -1;
+  private readonly dummy = new THREE.Object3D();
 
   /**
    * @param pos     centre of the road at the gate
@@ -116,17 +127,92 @@ export class GoalHologram {
     // far side: solid no-entry board, a little behind the flag's ripple
     const boardTex = noEntry(width / H);
     this.textures.push(boardTex);
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(width, H), make(new THREE.MeshBasicMaterial({ map: boardTex, transparent: true, fog: false, side: THREE.FrontSide }), 0.92, false, false));
+    const board = this.board = new THREE.Mesh(new THREE.PlaneGeometry(width, H), make(new THREE.MeshBasicMaterial({ map: boardTex, transparent: true, fog: false, side: THREE.FrontSide }), 0.92, false, false));
     board.position.set(0, H / 2 + 0.1, 0.6);
     this.group.add(flag, bar, strip, board);
+
+    // shards: the flag's cells, white and black
+    const cellW = width / cols, cellH = H / rows;
+    this.shards = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(cellW * 0.92, cellH * 0.92),
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false, toneMapped: false }),
+      cols * rows,
+    );
+    const white = new THREE.Color(0.95, 0.95, 0.95), dark = new THREE.Color(0.04, 0.05, 0.07);   // 白を光らせると、たくさん舞ったときに画面が白く霞む
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const k = y * cols + x;
+      this.shards.setColorAt(k, (x + y) % 2 === 0 ? white : dark);
+      this.shardState.push({
+        home: new THREE.Vector3(-width / 2 + (x + 0.5) * cellW, H + 0.1 - (y + 0.5) * cellH, 0),
+        p: new THREE.Vector3(), v: new THREE.Vector3(), rot: new THREE.Euler(), spin: new THREE.Vector3(),
+      });
+    }
+    this.hideShards();
+    this.shards.frustumCulled = false;
+    this.group.add(this.shards);
 
     this.group.position.copy(pos);
     this.group.rotation.y = heading;                          // local +Z = direction of travel
   }
 
-  public setVisible(on: boolean): void { this.target = on ? 1 : 0; }
+  public setVisible(on: boolean): void {
+    this.target = on ? 1 : 0;
+  }
+
+  /** レースの準備: 砕けた旗の破片を片付け、逆走止めの看板を戻す */
+  public reset(): void {
+    this.hideShards();
+    this.board.visible = true;
+  }
+
+  /** ゴール: 旗が砕けて、車の進む向きへ飛び散る。carVel は車の速度(m/s、ワールド) */
+  public burst(carVel: THREE.Vector3): void {
+    const local = carVel.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, -this.group.rotation.y);   // ゲートの向き(+Z が進行方向)へ
+    for (const s of this.shardState) {
+      s.p.copy(s.home);
+      // 前へは控えめに(ゴールのカメラはゲートの少し先にいる。破片が画面を覆わないよう)、上と横へ大きく散る
+      s.v.set(
+        local.x * 0.2 + s.home.x * 1.1 + (rand() - 0.5) * 6,
+        3 + rand() * 7,
+        local.z * 0.15 + 1 + rand() * 4,
+      );
+      s.rot.set(0, 0, 0);
+      s.spin.set((rand() - 0.5) * 12, (rand() - 0.5) * 12, (rand() - 0.5) * 12);
+    }
+    this.shardAge = 0;
+    this.alpha = 0;                                          // 旗はその瞬間に消える(破片に変わる)
+    this.flag.visible = this.strip.visible = false;
+    this.board.visible = false;                              // 逆走止めの「立入禁止」も、レースが終われば要らない(ウィニングランの画に映り込む)
+  }
+
+  private hideShards(): void {
+    this.shardAge = -1;
+    this.dummy.scale.setScalar(0);
+    this.dummy.updateMatrix();
+    for (let k = 0; k < this.shardState.length; k++) this.shards.setMatrixAt(k, this.dummy.matrix);
+    this.shards.instanceMatrix.needsUpdate = true;
+  }
+
+  private updateShards(dt: number): void {
+    this.shardAge += dt;
+    if (this.shardAge >= SHARD_LIFE) { this.hideShards(); return; }
+    const shrink = Math.min(1, Math.max(0, (SHARD_LIFE - this.shardAge) / (SHARD_LIFE * 0.45)));
+    this.shardState.forEach((s, k) => {
+      s.v.y -= 9.8 * dt;
+      s.v.multiplyScalar(Math.exp(-0.6 * dt));               // 空気の抵抗: ひらひらと遅くなる
+      s.p.addScaledVector(s.v, dt);
+      s.rot.x += s.spin.x * dt; s.rot.y += s.spin.y * dt; s.rot.z += s.spin.z * dt;
+      this.dummy.position.copy(s.p);
+      this.dummy.rotation.copy(s.rot);
+      this.dummy.scale.setScalar(shrink);
+      this.dummy.updateMatrix();
+      this.shards.setMatrixAt(k, this.dummy.matrix);
+    });
+    this.shards.instanceMatrix.needsUpdate = true;
+  }
 
   public update(dt: number): void {
+    if (this.shardAge >= 0) this.updateShards(dt);
     this.alpha += (this.target - this.alpha) * Math.min(1, 3 * dt);
     this.t += dt;
     const shown = this.alpha > 0.01;
@@ -147,5 +233,7 @@ export class GoalHologram {
   public dispose(): void {
     this.textures.forEach((t) => t.dispose());
     this.flagGeo.dispose();
+    this.shards.geometry.dispose();
+    (this.shards.material as THREE.Material).dispose();
   }
 }

@@ -9,7 +9,7 @@ import { AutoPilot } from './AutoPilot';
 import { GhostCar, GhostPlayer, GhostRecorder, buildPaceBot, type GhostTrace } from './Ghost';
 import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 
-/** コース(ルート)の署名。点数・開始点・長さが変わったら別のコースとみなす(端末に保存した自己ベストの無効化に使う) */
+/** コース(ルート)の署名。点数・開始点・長さが変わったら別のコースとみなす(端末に保存したベストタイムの無効化に使う) */
 function routeSignature(route: THREE.Vector3[]): string {
   let len = 0;
   for (let i = 1; i < route.length; i++) len += Math.hypot(route[i].x - route[i - 1].x, route[i].z - route[i - 1].z);
@@ -54,6 +54,7 @@ export class RaceDirector {
     this.active = map.competitive;
     this.map = map;
     map.setGoalVisible(false);                                  // not there at the start
+    map.resetGoal();                                            // 前のレースのゴールで砕けた旗を元に戻す
     this.carName = car.specs.name;
     this.hud.setRaceMode(this.active);
     const cc = this.scene.carController;

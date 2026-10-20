@@ -14,11 +14,11 @@ export class Lightning {
     this.timer = firstDelay;
   }
 
-  /** 進める。新しく光った瞬間だけ true(雷鳴を鳴らす合図)。 */
-  public update(dt: number): boolean {
+  /** 進める。新しく光った瞬間だけ true(雷鳴を鳴らす合図)。spontaneous=false: ひとりでには光らない(strike の減衰だけ) */
+  public update(dt: number, spontaneous = true): boolean {
     let struck = false;
-    this.timer -= dt;
-    if (this.timer <= 0) {
+    if (spontaneous) this.timer -= dt;
+    if (spontaneous && this.timer <= 0) {
       this.timer = this.minGap + untrackedRandom() * (this.maxGap - this.minGap);
       this.level = 1;
       this.pulses = [0.12 + untrackedRandom() * 0.08, 0.3 + untrackedRandom() * 0.1];
@@ -31,6 +31,12 @@ export class Lightning {
     this.level *= Math.exp(-this.decay * dt);
     if (this.level < 0.01) this.level = 0;
     return struck;
+  }
+
+  /** いま落とす(ゴールの演出の落雷)。2回ほど瞬いて消える */
+  public strike(): void {
+    this.level = 0.45;
+    this.pulses = [0.1, 0.24];
   }
 
   public reset(): void {

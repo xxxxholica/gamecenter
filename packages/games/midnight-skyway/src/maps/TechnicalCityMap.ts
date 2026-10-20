@@ -128,6 +128,8 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
   }
 
   public override setGoalVisible(on: boolean): void { this.goal?.setVisible(on); }
+  public override burstGoal(carVel: THREE.Vector3): void { this.goal?.burst(carVel); }
+  public override resetGoal(): void { this.goal?.reset(); }
 
   public override update(dt: number, carPosition: THREE.Vector3): void {
     super.update(dt, carPosition);

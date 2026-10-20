@@ -53,7 +53,7 @@ export class TireSmokeSystem {
     this.smoke = new BillboardPool(320, smokeTex, this.geometry, { additive: false });
     this.sparks = new BillboardPool(120, sparkTex, this.geometry, { additive: true });
     this.glints = new BillboardPool(260, glintTex, this.geometry, { additive: true });
-    this.arcs = new BillboardPool(260, arcTex, this.geometry, { additive: true, fog: false });
+    this.arcs = new BillboardPool(420, arcTex, this.geometry, { additive: true, fog: false });   // 電撃とゴールの落雷
     this.flames = new BillboardPool(280, flameTex, this.geometry, { additive: true, fog: false });
     this.drops = new BillboardPool(900, dropTex, this.geometry, { additive: true, fog: false, color: 0x8fb0e0 });
     for (const pool of [this.smoke, this.sparks, this.glints, this.arcs, this.flames, this.drops]) this.group.add(pool.mesh);
@@ -199,6 +199,54 @@ export class TireSmokeSystem {
         this.boltA.copy(this.boltB);
       }
     }
+  }
+
+  /**
+   * 空からの落雷(ゴールの演出・Azure): 上空 height m から target へ、ジグザグの太い稲妻と2本の枝。
+   * 寿命が短いので、光っている間は毎フレーム出し直す(形が変わって、またたいて見える)。
+   */
+  public emitSkyBolt(target: THREE.Vector3, height: number, theme: BoostTheme = this.theme): void {
+    const color = this.tmpColor.copy(theme.primary).lerp(this.white, 0.7);
+    const seg = 18;
+    const topX = target.x + (rand() - 0.5) * 10, topZ = target.z + (rand() - 0.5) * 10;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= seg; i++) {
+      const u = i / seg, j = i === 0 || i === seg ? 0 : (height / seg) * 0.9;
+      pts.push(new THREE.Vector3(
+        topX + (target.x - topX) * u + (rand() - 0.5) * j,
+        target.y + height * (1 - u),
+        topZ + (target.z - topZ) * u + (rand() - 0.5) * j,
+      ));
+    }
+    for (let i = 1; i <= seg; i++) this.arcSegment(pts[i - 1], pts[i], 0.18 + rand() * 0.08, color);
+    // 枝: 途中から斜め下へ、細く短く
+    for (let b = 0; b < 2; b++) {
+      this.boltA.copy(pts[3 + Math.floor(rand() * (seg - 8))]);
+      const dx = (rand() - 0.5) * 10, dz = (rand() - 0.5) * 10, dy = -(4 + rand() * 6);
+      for (let i = 1; i <= 5; i++) {
+        this.boltB.set(this.boltA.x + dx / 5 + (rand() - 0.5) * 1.2, this.boltA.y + dy / 5, this.boltA.z + dz / 5 + (rand() - 0.5) * 1.2);
+        this.arcSegment(this.boltA, this.boltB, 0.09, color);
+        this.boltA.copy(this.boltB);
+      }
+    }
+  }
+
+  /** 稲妻の1区間(画面上で a→b の向きに伸ばした細長い光) */
+  private arcSegment(a: THREE.Vector3, b: THREE.Vector3, thick: number, color: THREE.Color): void {
+    const p = this.arcs.spawn();
+    if (!p) return;
+    this.tmpV.subVectors(b, a);
+    const worldLen = this.tmpV.length();
+    this.tmpV.applyQuaternion(this.camInv);
+    p.angle = Math.atan2(this.tmpV.y, this.tmpV.x);
+    p.sx = Math.hypot(this.tmpV.x, this.tmpV.y) * 1.15 + thick * 2;
+    p.sy = thick;
+    p.maxAge = 0.07;
+    p.alpha = 1;
+    p.pos.addVectors(a, b).multiplyScalar(0.5);
+    p.vel.set(0, 0, 0);
+    p.r = color.r; p.g = color.g; p.b = color.b;
+    p.o0 = worldLen;
   }
 
   public setTheme(theme: BoostTheme): void { this.theme = theme; }

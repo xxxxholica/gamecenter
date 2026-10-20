@@ -10,7 +10,8 @@ import { CarBase } from '../models/CarBase';
 import { DragonCarModel } from '../models/DragonCarModel';
 import { CarController, CameraMode } from './CarController';
 import { TireSmokeSystem } from './TireSmokeSystem';
-import { BOOST_THEMES, boostThemeFor, type BoostTheme } from './BoostTheme';
+import { BOOST_THEMES, boostThemeFor, type BoostTheme, type BoostKind } from './BoostTheme';
+import { FinishCamera } from './FinishCamera';
 import { SpeedStreaks } from './SpeedStreaks';
 import { RoadVfx } from './RoadVfx';
 import { RainSystem } from './RainSystem';
@@ -25,6 +26,8 @@ export interface DriveSceneCallbacks {
   /** 毎フレーム: 速度(0〜1)・ブースト(0〜1)・スリップストリーム(0〜1)。HUDの縁の光などに使う。 */
   onFxUpdate?: (speed: number, boost: number, slipstream: number) => void;
   onBeforeConstrain?: (car: CarController, dt: number) => void;
+  /** ゴールの演出の決めの瞬間が終わった(スローモーションが明ける頃)。リザルトを出す合図 */
+  onFinishReveal?: () => void;
 }
 
 /**
@@ -36,6 +39,15 @@ const SHADOW_HALF_EXTENT = 60;
 
 /** 雨粒の量(0〜1。表示する粒の割合)。1で全部、小さいほど少ない */
 const RAIN_INTENSITY = 0.4;
+
+/** ゴールのスローモーションの速さ(1 = 通常) */
+const FINISH_SLOW = 0.22;
+/** スローモーションを続ける長さ(実時間の秒) */
+const FINISH_SLOW_SEC = 1.0;
+/** ゴールからリザルトを出すまで(実時間の秒): スローモーションが明けたところ */
+const FINISH_REVEAL_SEC = 1.5;
+/** 車ごとの決めの演出の長さ(シミュレーションの秒。スローモーションの間はゆっくり進む) */
+const FINISHER_SEC = 2.2;
 
 export class DriveScene {
   public scene: THREE.Scene;
@@ -123,8 +135,19 @@ export class DriveScene {
   private hemiBase = 1.0;
   private readonly lightning = new Lightning(12);
 
+  // ゴールの演出: スローモーション(t は実時間の秒)、車ごとの決めの演出(t はシミュレーションの秒)、専用のカメラ
+  private finish: { t: number; slowMo: boolean; revealed: boolean } | null = null;
+  private finisher: { t: number; kind: BoostKind; strikes: number } | null = null;
+  private finishCam: FinishCamera | null = null;
+  /** このフレームの実時間の秒。光(閃光・稲光)の減衰はスローモーションでも実時間で進める(遅くすると画面が白く飛んだままになる) */
+  private realDt = 0;
+  /** シミュレーションの進む速さ(スローモーションで 1 未満)。1フレームごとに出す粒を、この割合に間引く */
+  private simRate = 1;
+
   /** Frozen (pause menu): nothing moves, the last frame stays on screen. */
   public paused: boolean = false;
+  /** 検証用: 走行ルートのこの割合(0〜1)の地点から始める(null ならスタートライン) */
+  public devStartProgress: number | null = null;
   /** スタート位置のずらし(オンライン対戦のグリッド): lateral=+で進行方向の右、back=後ろへ(m)。 */
   public gridOffset: { lateral: number; back: number } | null = null;
   private headSpot!: THREE.SpotLight;
@@ -489,27 +512,35 @@ export class DriveScene {
     this.accelSm = 0;
     this.slipstream = 0;
     const startPos = this.currentMap.startPosition.clone();
+    let startRot = this.currentMap.startRotationY;
+    const route = this.currentMap.getRoutePoints();
+    if (this.devStartProgress !== null && route) {
+      const i = Math.floor(route.length * this.devStartProgress) % route.length, j = (i + 3) % route.length;
+      startPos.copy(route[i]);
+      startRot = Math.atan2(route[j].x - route[i].x, route[j].z - route[i].z);
+    }
     // Slightly lift to prevent ground clipping
     startPos.y += 0.05;
     if (this.gridOffset) {
-      const r = this.currentMap.startRotationY;
+      const r = startRot;
       startPos.x += Math.cos(r) * this.gridOffset.lateral - Math.sin(r) * this.gridOffset.back;
       startPos.z += -Math.sin(r) * this.gridOffset.lateral - Math.cos(r) * this.gridOffset.back;
     }
-    this.carController.resetPosition(startPos, this.currentMap.startRotationY);
+    this.carController.resetPosition(startPos, startRot);
     this.currentMap.onRespawn(this.carController);              // grounded on the road before the countdown starts
     const carPos = this.carController.position;
 
     // Reset the chase camera behind the car
-    this.chaseHeading = this.currentMap.startRotationY;
+    this.chaseHeading = startRot;
     this.chaseDist = 4.4;
     this.chaseHeight = 2.9;
     this.resultView = false;
     this.resultBlend = 0;
+    this.clearFinish();
     this.fxPrimed = false;
     this.boostLevel = this.fovKick = this.distKick = this.flash = this.camLean = 0;
-    const forwardX = Math.sin(this.currentMap.startRotationY);
-    const forwardZ = Math.cos(this.currentMap.startRotationY);
+    const forwardX = Math.sin(startRot);
+    const forwardZ = Math.cos(startRot);
     this.currentCameraPos.set(
       carPos.x - forwardX * 5.0,
       carPos.y + 2.4,
@@ -519,10 +550,130 @@ export class DriveScene {
     this.camera.lookAt(carPos.x, carPos.y + 0.8, carPos.z);
   }
 
-  /** ゴール後のリザルト用の視点(車の前から映す)を入り切りする。 */
+  /** ゴール後のリザルト用の視点を入り切りする。ゴールの演出のカメラがあれば、ウィニングランのカット割りで映す(無ければ車の前から) */
   public setResultView(on: boolean): void {
     this.resultView = on;
     if (!on) this.resultBlend = 0;
+    if (on && this.finishCam && this.carController) this.finishCam.startCinematic(this.carController);
+  }
+
+  /**
+   * ゴールの演出を始める: 閃光・衝撃波・ゲートの旗が砕ける・車ごとの決めの演出(Crimson は炎の輪、Azure は落雷、Gold は金の粉)。
+   * cinematic=true(ひとりのレース): さらにスローモーションと、ゲートの先の路肩からの画。スローモーションが明けたら onFinishReveal を呼ぶ。
+   * ゴールしたら一般車はいなくなる(次のレースの準備で戻る)。
+   * オンライン対戦では、時間をそろえるためスローモーションにしない(cinematic=false)。
+   */
+  public playFinish(cinematic: boolean): void {
+    const cc = this.carController;
+    if (!cc) return;
+    this.finish = { t: 0, slowMo: cinematic, revealed: !cinematic };
+    this.finisher = { t: 0, kind: this.boostTheme.kind, strikes: 0 };
+    this.flash = Math.max(this.flash, 0.7);
+    this.addCameraTrauma(0.35);
+    this.roadVfx.fireShockwave(cc.position, 30, this.boostTheme);
+    this.currentMap?.burstGoal(this.carVel);
+    if (this.currentMap?.traffic) this.currentMap.traffic.group.visible = false;   // ゴールしたら一般車はいなくなる(見えない間は当たらない)
+    audio.sfx.finishImpact();
+    const route = this.currentMap?.getRoutePoints();
+    const width = this.currentMap?.getRoadWidth();
+    if (cinematic && route && width) {
+      const map = this.currentMap!;
+      this.finishCam = new FinishCamera(route, width / 2, (i) => map.isRoofed(i));
+      this.finishCam.startGate(cc);
+    }
+    this.finisherBurst(cc);
+  }
+
+  private clearFinish(): void {
+    if (this.currentMap?.traffic) this.currentMap.traffic.group.visible = true;   // 一般車を戻す
+    this.finish = null;
+    this.endFinisher();
+    this.finishCam = null;
+  }
+
+  private endFinisher(): void {
+    if (this.finisher && !this.rainy) {                       // 晴れ: 落雷の光を残さない(雨のときは稲光の処理が続けて減衰させる)
+      this.lightning.reset();
+      this.postFx.setLightning(0);
+    }
+    this.finisher = null;
+  }
+
+  /** ゴールのスローモーション: 実時間の dt から、シミュレーションを進める dt を返す。リザルトの合図もここで出す */
+  private advanceFinish(dt: number): number {
+    const f = this.finish;
+    if (!f) return dt;
+    f.t += dt;
+    if (!f.revealed && f.t >= FINISH_REVEAL_SEC) {
+      f.revealed = true;
+      this.callbacks.onFinishReveal?.();
+    }
+    if (!f.slowMo) return dt;
+    let s = 1;
+    if (f.t < 0.12) s = THREE.MathUtils.lerp(1, FINISH_SLOW, f.t / 0.12);           // 一瞬で落とす
+    else if (f.t < FINISH_SLOW_SEC) s = FINISH_SLOW;
+    else if (f.t < FINISH_REVEAL_SEC) { const u = (f.t - FINISH_SLOW_SEC) / (FINISH_REVEAL_SEC - FINISH_SLOW_SEC); s = THREE.MathUtils.lerp(FINISH_SLOW, 1, u * u * (3 - 2 * u)); }
+    return dt * s;
+  }
+
+  /** 車ごとの決めの演出の、最初の一発 */
+  private finisherBurst(cc: CarController): void {
+    this.updateExhaust(cc);
+    switch (this.boostTheme.kind) {
+      case 'fire':      // 炎の輪が車の周りに燃え上がる
+        this.flameRing(cc, 2.4);
+        for (const pos of [this.exhaustL, this.exhaustR]) for (let i = 0; i < 16; i++) this.tireSmoke.emitEmber(pos, this.carVel, 1.6);
+        break;
+      case 'storm':     // 空から車へ落雷。画面ごと光り、雷鳴が轟く
+        this.lightning.strike();
+        audio.sfx.thunder();
+        this.tireSmoke.emitBolts(16, cc.position, cc.rotationY, this.carVel);
+        break;
+      case 'radiant':   // 金の粉が噴き上がる
+        for (let i = 0; i < 60; i++) this.tireSmoke.emitMote(cc.position, this.carVel, 2.4);
+        break;
+      default:
+        for (let i = 0; i < 24; i++) this.tireSmoke.emitSpark(cc.position, this.carVel, i % 2 ? 1 : -1, 1.6, false);
+    }
+  }
+
+  /** 車の周りに、半径 r の炎の輪 */
+  private flameRing(cc: CarController, r: number): void {
+    for (let k = 0; k < 18; k++) {
+      const a = (k / 18) * Math.PI * 2;
+      this.scratch.set(cc.position.x + Math.sin(a) * r, cc.position.y + 0.3, cc.position.z + Math.cos(a) * r);
+      this.tireSmoke.emitFlame(this.scratch, this.carVel, 1.5);
+    }
+  }
+
+  /** 車ごとの決めの演出の続き(FINISHER_SEC の間、毎フレーム)。dt はシミュレーションの秒 */
+  private updateFinisher(dt: number, cc: CarController): void {
+    const f = this.finisher;
+    if (!f) return;
+    f.t += dt;
+    if (f.t > FINISHER_SEC) { this.endFinisher(); return; }
+    const fade = 1 - f.t / FINISHER_SEC;
+    // 粒はシミュレーションの1秒あたりの数で出す(1フレームあたりで出すと、スローモーションでフレームが増える分だけ溜まって白く霞む)
+    const rate = Math.min(1, dt * 60);
+    this.updateExhaust(cc);
+    switch (f.kind) {
+      case 'fire':
+        for (const pos of [this.exhaustL, this.exhaustR]) {
+          if (untrackedRandom() < rate) this.tireSmoke.emitFlame(pos, this.carVel, 1.6 * fade);
+          if (untrackedRandom() < fade * rate) this.tireSmoke.emitEmber(pos, this.carVel, 1.4);
+        }
+        if (f.strikes === 0 && f.t > 0.35) { f.strikes = 1; this.flameRing(cc, 3.4); }   // 2つ目の輪が広がる
+        break;
+      case 'storm':
+        // 光っている間は、形を変えながら出し直す(またたいて見える)
+        if (f.t < 0.3 && untrackedRandom() < rate) this.tireSmoke.emitSkyBolt(cc.position, 60);
+        if (untrackedRandom() < 0.6 * fade * rate) this.tireSmoke.emitBolts(2, cc.position, cc.rotationY, this.carVel);
+        break;
+      case 'radiant':
+        for (let i = 0; i < 8 * fade * rate; i++) this.tireSmoke.emitMote(cc.position, this.carVel, 2.2);
+        if (f.strikes === 0 && f.t > 0.4) { f.strikes = 1; this.roadVfx.fireShockwave(cc.position, 20, this.boostTheme); }
+        break;
+    }
   }
 
   public setCameraMode(mode: CameraMode): void {
@@ -621,6 +772,7 @@ export class DriveScene {
     audio.sfx.stopRain();
     this.resultView = false;
     this.resultBlend = 0;
+    this.clearFinish();
     if (this.viewOffsetOn) { this.camera.clearViewOffset(); this.viewOffsetOn = false; }
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
@@ -641,7 +793,13 @@ export class DriveScene {
     this.camera.updateProjectionMatrix();
   }
 
-  private updateCamera(dt: number): void {
+  /** ゴールの演出のカメラが画を決めているか(ゲートの先の画、またはリザルト中のウィニングランのカット) */
+  private get finishCamOn(): boolean {
+    return !!this.finishCam && (!this.finishCam.cinematic || this.resultView);
+  }
+
+  /** dt: シミュレーションの秒(スローモーションで遅くなる) / realDt: 実時間の秒(ゴールの演出のカット割り) */
+  private updateCamera(dt: number, realDt: number): void {
     if (!this.carController || !this.currentCar) return;
 
     const carPos = this.carController.position;
@@ -663,7 +821,10 @@ export class DriveScene {
     const e = this.resultBlend * this.resultBlend * (3 - 2 * this.resultBlend);
     const front = Math.max(this.frontActive ? 1 : 0, e);
 
-    if (mode === 'chase') {
+    if (this.finishCamOn) {
+      this.controls.enabled = false;
+      this.finishCam!.update(realDt, this.carController, this.camera);
+    } else if (mode === 'chase') {
       this.controls.enabled = false;
       const speedFactor = Math.min(1.0, Math.abs(this.carController.speed) / this.carController.maxSpeed);
       // Frame-rate independent exponential smoothing. Only the distance / height / heading are smoothed, never the
@@ -709,10 +870,10 @@ export class DriveScene {
       this.controls.update();
     }
 
-    // リザルト中は、画面全体を右へずらして、左側をリザルトに空ける
+    // リザルト中は、画面全体を上へずらして、下をリザルト(中央下部に大きく出る)に空ける
     if (e > 0.002) {
       const w = this.renderer.domElement.clientWidth, h = this.renderer.domElement.clientHeight;
-      this.camera.setViewOffset(w, h, -e * 0.2 * w, 0, w, h);
+      this.camera.setViewOffset(w, h, 0, e * 0.22 * h, w, h);
       this.viewOffsetOn = true;
     } else if (this.viewOffsetOn) {
       this.camera.clearViewOffset();
@@ -720,7 +881,7 @@ export class DriveScene {
     }
 
     // 高速走行・ブースト中の微振動(なめらかな揺れ)
-    if (mode === 'chase' && this.carController) {
+    if (mode === 'chase' && this.carController && !this.finishCamOn) {
       const sf = Math.min(1, Math.abs(this.carController.speed) / this.carController.maxSpeed);
       const amp = (Math.max(0, sf - 0.35) * 0.02 + this.boostLevel * 0.055) * this.motionScale;
       if (amp > 0.0005) {
@@ -763,9 +924,15 @@ export class DriveScene {
     this.exhaustR.copy(this.tires.rearRight).lerp(cc.position, 0.35).add(back);
   }
 
+  /** 走っている一般車(ゴールした後は隠すので null: すれ違い・ニアミスの演出やミニマップの点も出さない) */
+  private get liveTraffic(): MapBase['traffic'] {
+    const t = this.currentMap?.traffic;
+    return t && t.group.visible ? t : null;
+  }
+
   /** 交通車まわりの演出: すれ違いの風切り音とスリップストリーム(前の車の真後ろでは空気の筋が集まる。速さは変えない)。 */
   private updateTrafficFx(dt: number, cc: CarController): void {
-    const traffic = this.currentMap?.traffic;
+    const traffic = this.liveTraffic;
     let slip = 0;
     if (traffic) {
       const fx = Math.sin(cc.rotationY), fz = Math.cos(cc.rotationY);
@@ -860,12 +1027,12 @@ export class DriveScene {
     this.boostLevel += ((boosting ? 1 : 0) - this.boostLevel) * k(boosting ? 8 : 3);
     this.fovKick *= Math.exp(-5 * dt);
     this.distKick *= Math.exp(-3 * dt);
-    this.flash *= Math.exp(-6 * dt);
+    this.flash *= Math.exp(-6 * this.realDt);
 
     // FOV: 速度で広がり、ブーストでさらに広がる
     const fovTarget = 54 + (Math.pow(sf, 1.5) * 14 + this.boostLevel * 11 + this.fovKick + this.slipstream * 3) * m;
     const fov = this.frontActive || this.resultView ? 54 : fovTarget;
-    if (Math.abs(this.camera.fov - fov) > 0.05) {
+    if (!this.finishCamOn && Math.abs(this.camera.fov - fov) > 0.05) {   // ゴールの演出のカメラは、画角も自分で決める
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, 8 * dt);
       this.camera.updateProjectionMatrix();
     }
@@ -883,7 +1050,7 @@ export class DriveScene {
 
     // ニアミス: 走行中の車の脇をかすめた瞬間に、小さなパンチと風切り音
     this.nearMissCooldown = Math.max(0, this.nearMissCooldown - dt);
-    const traffic = this.currentMap?.traffic;
+    const traffic = this.liveTraffic;
     if (traffic && this.nearMissCooldown <= 0 && cc.speed > 16) {
       const px = cc.position.x, pz = cc.position.z;
       for (const n of traffic.cars) {
@@ -910,8 +1077,8 @@ export class DriveScene {
     // 雨: 雨粒・稲光・水しぶき
     if (this.rainy) {
       this.rainSystem.update(dt, cc.position, cc.rotationY, this.carVel);
-      this.updateLightning(dt);
-      if (cc.speedKmH > 45) {
+      this.updateLightning(this.realDt);
+      if (cc.speedKmH > 45 && this.emitThisFrame()) {
         const spray = Math.min(1.0, 0.35 + (cc.speedKmH - 45) / 90);
         const tr = this.tires;
         for (const w of [tr.rearLeft, tr.rearRight]) this.tireSmoke.emitSmoke(w, this.carVel, spray);
@@ -932,7 +1099,7 @@ export class DriveScene {
     this.speedStreaks.update(dt, cc.position, cc.velocityHeading, Math.abs(cc.speed), Math.max(Math.max(0, (sf - 0.4) / 0.6), this.slipstream * 0.9) * m, this.boostLevel * m, this.boostTheme.streak);
 
     // ブースト中は排気口から、車の主色の炎。車ごとに、さらに固有の演出が加わる
-    if (this.boostLevel > 0.15) {
+    if (this.boostLevel > 0.15 && this.emitThisFrame()) {
       this.updateExhaust(cc);
       const lv = this.boostLevel;
       const th = this.boostTheme;
@@ -979,6 +1146,14 @@ export class DriveScene {
     }
   }
 
+  /**
+   * 1フレームごとに出す粒(煙・火花・水しぶき・炎)を、このフレームに出すか。スローモーションではフレームが増えるので、
+   * 遅くした割合に間引く(間引かないと粒が溜まって白く霞む)。通常の速さでは乱数を引かず、いつも出す
+   */
+  private emitThisFrame(): boolean {
+    return this.simRate >= 1 || untrackedRandom() < this.simRate;
+  }
+
   private addCameraTrauma(amount: number): void {
     this.cameraTrauma = Math.min(1.0, this.cameraTrauma + amount);
   }
@@ -990,12 +1165,15 @@ export class DriveScene {
   };
 
   /** Advance simulation + camera by dt seconds and render one frame. */
-  public step(dt: number, render: boolean = true): void {
+  public step(realDt: number, render: boolean = true): void {
     if (this.paused) {                                          // frozen: keep showing the last frame
       audio.bgm.setDrive(null);
       if (render) this.renderScene();
       return;
     }
+    this.realDt = realDt;
+    const dt = this.advanceFinish(realDt);                      // ゴールのスローモーション: シミュレーションだけ遅くする
+    this.simRate = realDt > 0 ? Math.min(1, dt / realDt) : 1;
     // 1. Update car physics & mechanics
     if (this.carController) {
       this.carController.update(dt);
@@ -1052,7 +1230,7 @@ export class DriveScene {
         this.callbacks.onProgressUpdate(frac, this.carController.speedKmH, dt);
       }
       if (this.callbacks.onPositionUpdate) {
-        const fwdTraffic = this.currentMap?.traffic?.getForwardCarPositions() ?? [];
+        const fwdTraffic = this.liveTraffic?.getForwardCarPositions() ?? [];
         this.callbacks.onPositionUpdate(
           this.carController.position,
           this.carController.rotationY,
@@ -1061,7 +1239,7 @@ export class DriveScene {
       }
 
       // Tire visual effects: Sparks during drift, Smoke during high-speed redline
-      if (this.tireSmoke && this.carController) {
+      if (this.tireSmoke && this.carController && this.emitThisFrame()) {
         const tires = this.tires;
         const moveVector = this.carVel;
         const speedKmH = this.carController.speedKmH;
@@ -1105,11 +1283,17 @@ export class DriveScene {
       if (this.currentCar instanceof DragonCarModel) {
         this.dragonTime += dt;
         const cc = this.carController;
-        this.currentCar.updateDragonParts(this.dragonTime, Math.abs(cc.speed) / Math.max(1, cc.maxSpeed));
+        // ゴールの決めの演出の間は、翼と尻尾を最高速のときの大きさで振る
+        this.currentCar.updateDragonParts(this.dragonTime, this.finisher ? 1 : Math.abs(cc.speed) / Math.max(1, cc.maxSpeed));
       }
       this.updateSpeedFx(dt);
+      this.updateFinisher(dt, this.carController);
+      if (!this.rainy && this.finisher) {                       // 晴れでも、ゴールの落雷は画面を光らせる(ひとりでには光らない)
+        this.lightning.update(realDt, false);
+        this.postFx.setLightning(this.lightning.level);
+      }
     }
-    this.updateCamera(dt);
+    this.updateCamera(dt, realDt);
 
     // 2b. Update tire smoke billboards with updated camera
     if (this.tireSmoke) {

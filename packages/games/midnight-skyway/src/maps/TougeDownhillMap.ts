@@ -191,6 +191,20 @@ export class TougeDownhillMap extends StreamedCityMap {
     this.goal?.setVisible(on);
   }
 
+  public override burstGoal(carVel: THREE.Vector3): void {
+    this.goal?.burst(carVel);
+  }
+
+  public override resetGoal(): void {
+    this.goal?.reset();
+  }
+
+  /** 洞門(Zone 3)とトンネル(Zone 5)には屋根がある */
+  public override isRoofed(i: number): boolean {
+    const z = this.zones[i];
+    return z === 3 || z === 5;
+  }
+
   public override update(dt: number, carPosition: THREE.Vector3): void {
     super.update(dt, carPosition);
     this.goal?.update(dt);

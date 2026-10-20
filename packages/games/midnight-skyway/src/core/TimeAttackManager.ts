@@ -4,6 +4,8 @@ export interface SectorInfo {
   index: number;
   timeMs: number;
   deltaMs: number; // vs best sector (negative = faster)
+  /** 比べる相手(ライバル・ベストタイム)の区間タイムがあったか(無ければ deltaMs は 0) */
+  hasRef?: boolean;
 }
 
 export interface TimeAttackResult {
@@ -13,6 +15,8 @@ export interface TimeAttackResult {
   topSpeedKmH: number;
   isNewRecord: boolean;
   bestTimeMs: number;
+  /** この走行の前のベストタイム(初めての完走なら undefined) */
+  prevBestMs?: number;
   carName: string;
   /** The time limit ran out before the goal (no record is saved). */
   timedOut?: boolean;
@@ -92,6 +96,8 @@ export class TimeAttackManager {
   private lastProgress = 0;
   /** Set by the caller (drift score of the run) so it can be put in the result. */
   public driftScoreProvider: (() => number) | null = null;
+  /** 検証用: 途中から始めた走行。ベストタイムを保存しない */
+  public devNoSave = false;
 
   public callbacks: TimeAttackCallbacks = {};
 
@@ -114,6 +120,7 @@ export class TimeAttackManager {
   }
 
   public reset(): void {
+    this.devNoSave = false;
     this.remainingMs = this.rules?.initialMs ?? 0;
     this.nextGate = 0;
     this.state = 'READY';
@@ -242,6 +249,7 @@ export class TimeAttackManager {
               index: this.nextCheckIdx + 1,
               timeMs: secTime,
               deltaMs,
+              hasRef: bestSec !== undefined,
             };
 
             this.callbacks.onSectorPassed?.(sectorInfo);
@@ -272,10 +280,11 @@ export class TimeAttackManager {
         index: i + 1,
         timeMs: t,
         deltaMs: bestSec !== undefined ? t - bestSec : 0,
+        hasRef: bestSec !== undefined,
       };
     });
 
-    if (isNewRecord) {
+    if (isNewRecord && !this.devNoSave) {
       this.saveBestRecord({
         bestTimeMs: this.elapsedTimeMs,
         bestSectors: [...this.sectorTimes],
@@ -292,12 +301,27 @@ export class TimeAttackManager {
       topSpeedKmH: this.topSpeedKmH,
       isNewRecord,
       bestTimeMs: isNewRecord ? this.elapsedTimeMs : (bestRecord?.bestTimeMs ?? this.elapsedTimeMs),
+      prevBestMs: bestRecord?.bestTimeMs,
       carName: this.carName,
       driftScore: this.driftScoreProvider?.(),
     };
 
     this.callbacks.onStateChange?.(this.state);
     this.callbacks.onGoal?.(result);
+  }
+
+  /**
+   * 検証用: コースの途中(progress)から始める。それより前の区間は通過済みとし、区間タイムは sectorMs の仮の値、
+   * タイマーはその合計から始める(カウントダウンを始めた後に呼ぶ)。ベストタイムは保存しない。
+   */
+  public devStartAt(progress: number, sectorMs: number): void {
+    this.devNoSave = true;
+    while (this.nextCheckIdx < this.sectorCount - 1 && this.checkFractions[this.nextCheckIdx] < progress) {
+      this.sectorTimes.push(sectorMs);
+      this.nextCheckIdx++;
+    }
+    this.lastSectorStartMs = this.sectorTimes.reduce((a, b) => a + b, 0);
+    this.elapsedTimeMs = this.lastSectorStartMs + sectorMs * 0.9;   // 最後の区間もほぼ走り終えたところ
   }
 
   /** オンライン: サーバーが対戦を打ち切った。結果(記録)を出さずに、走行の判定だけを止める。 */

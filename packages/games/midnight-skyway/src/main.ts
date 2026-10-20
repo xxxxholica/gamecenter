@@ -15,7 +15,7 @@ import { TougeDownhillMap } from './maps/TougeDownhillMap';
 import { STAGES } from './ui/stages';
 import { benchParam, benchReady, benchDone, benchMark, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { RaceDirector } from './core/RaceDirector';
-import { TimeAttackManager } from './core/TimeAttackManager';
+import { TimeAttackManager, type TimeAttackResult } from './core/TimeAttackManager';
 
 import { GameFlowManager } from './ui/GameFlowManager';
 import { TitleScreen } from './ui/TitleScreen';
@@ -42,6 +42,18 @@ import { OnlineHUD } from './ui/OnlineHUD';
 import { fetchSkywayStatus } from './net/skywayNet';
 import type { CarSpec, PublicStatus, RacerInfo, ServerMsg } from '../../../shared/netProtocol';
 import { CAR_TYPES, type CarType } from '../../../shared/carPalette';
+
+/** ベンチ: ゴールの演出のあと、ウィニングランの頭まで測ってから終える(ミリ秒) */
+const FINISH_BENCH_TAIL_MS = 3000;
+
+/**
+ * 検証用: ひとりのレースを、走行ルートのこの割合(0〜1)の地点から始める(ゴールは 0.98。例: 0.95 でゴールの約80m手前)。null で通常のスタート。
+ * 区間1・2は通過済み(仮のタイム)になり、ベストタイムの保存とランキングへの登録はしない。オンライン対戦・ベンチ・撮影では効かない。
+ * 本番では必ず null にしておく。
+ */
+const DEV_START_PROGRESS: number | null = null;
+/** 検証用に通過済みにした区間の、仮の区間タイム(ms) */
+const DEV_SECTOR_MS = 35000;
 
 const { bgm, sfx } = audio;
 
@@ -302,6 +314,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
 
   const restartRace = (changeBgm = false) => {
+    pendingFinish = null;
+    driveHUD.hideFinishStamp();
     driveHUD.hideResultModal();
     driveHUD.hidePauseModal();
     lastWarnSec = -1;
@@ -310,6 +324,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     bgm.duck(1);
     sfx.startEngine();
+    const devStart = !online && !benchParam('scene') && !isPreviewMode ? DEV_START_PROGRESS : null;
+    driveScene.devStartProgress = devStart;
     driveScene.respawnCar();
     if (driveScene.carController) {
       driveScene.carController.canDrive = false;
@@ -327,6 +343,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     syncBestTimeDisplay();
     if (online) return;                                      // オンライン: 全員のロードが揃って go が来てから始める
     timeAttack.startCountdown();
+    if (devStart !== null) timeAttack.devStartAt(devStart, DEV_SECTOR_MS);
   };
 
   /** go を受け取り、かつ自分のロードも終わっていれば、全員のGOが揃うカウントダウンを始める。 */
@@ -382,8 +399,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  /** ゴールの演出の決めの瞬間が終わるまで(onFinishReveal)預かっておく、ひとりのレースの完走の結果 */
+  let pendingFinish: TimeAttackResult | null = null;
+
+  /** 完走の記録: 上位に入るか確かめ、入れば名前を入力してランキングへ(この走行をゴーストとして一緒に送る) */
+  const startScoreEntry = (result: TimeAttackResult) => {
+    const trace = raceDirector.lastTrace;
+    runHighScoreEntryFlow({
+      slug: 'midnight-skyway',
+      score: result.totalTimeMs,
+      variantId: currentMapId,
+      modal: { title: '走行記録', scoreDisplay: result.formattedTime, themeClass: 'theme-skyway', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+      setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
+      onClosed: () => driveHUD.armResultModal(),
+      onRank: (rank) => {
+        if (rank === null) return;
+        driveHUD.setResultRank(rank);
+        sfx.rankIn();
+      },
+      onName: async (name) => {
+        await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
+        syncBestTimeDisplay();
+      },
+    });
+  };
+
+  // ゴールのスローモーションが明けた: リザルトを出し、ウィニングランのカット割りへ
+  driveScene.callbacks.onFinishReveal = () => {
+    const result = pendingFinish;
+    pendingFinish = null;
+    if (!result) return;
+    driveHUD.showResultModal(result);
+    driveHUD.setFinishing(false);                            // リザルトを出してから外す(走行中の表示が一瞬戻らないように)
+    driveScene.setResultView(true);
+    if (result.totalTimeMs > 0 && !timeAttack.devNoSave) startScoreEntry(result);   // 検証用の途中からの走行は登録しない
+    if (benchAutoDrive) window.setTimeout(() => benchDone('goal'), FINISH_BENCH_TAIL_MS);   // ベンチ: ゴールの演出とウィニングランの頭まで測る
+  };
+
   timeAttack.callbacks.onGoal = (result) => {
-    if (benchAutoDrive) benchDone(result.timedOut ? 'goal-timeout' : 'goal');
+    if (benchAutoDrive && result.timedOut) benchDone('goal-timeout');
     driveHUD.finishSectors(result.sectors);
     reportDeepAnalytics('progression_update', {
       result: result.timedOut ? 'gameover' : 'clear',
@@ -401,30 +455,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       net.send({ t: 'finish', timeMs: elapsed });
       bgm.duck(0.3);
       sfx.goal();
+      // オンライン: 時間をそろえるためスローモーションにはせず、閃光・旗が砕ける・車ごとの決めの演出と、中央のタイムだけ
+      driveScene.playFinish(false);
+      driveHUD.showFinishStamp(result.formattedTime, null);
+      sfx.stamp();
       return;
     }
-    driveHUD.showResultModal(result);
-    if (!result.timedOut) driveScene.setResultView(true);   // 走り続ける車を前から映し、リザルトは左に出す
     bgm.duck(0.3);
-    if (result.timedOut) sfx.timeUp();
-    else sfx.goal();
-    syncBestTimeDisplay();
-
-    if (!result.timedOut && result.totalTimeMs > 0) {
-      const trace = raceDirector.lastTrace;   // 登録のときに、この走行をゴーストとして一緒に送る
-      runHighScoreEntryFlow({
-        slug: 'midnight-skyway',
-        score: result.totalTimeMs,
-        variantId: currentMapId,
-        modal: { title: '走行記録', scoreDisplay: result.formattedTime, themeClass: 'theme-skyway', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
-        setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
-        onClosed: () => driveHUD.armResultModal(),
-        onName: async (name) => {
-          await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
-          syncBestTimeDisplay();
-        },
-      });
+    if (result.timedOut) {
+      driveHUD.showResultModal(result);
+      sfx.timeUp();
+      syncBestTimeDisplay();
+      return;
     }
+    // 完走: ゴールのスローモーションを3つの位置から映す(タイムは出さない)。リザルトは onFinishReveal で出る
+    pendingFinish = result;
+    driveScene.playFinish(true);
+    driveHUD.setFinishing(true);
+    sfx.goal();
+    syncBestTimeDisplay();
   };
 
   const teardownOnlineRace = () => {
@@ -450,6 +499,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Safe helper to move player car back to garage turntable
   const returnCarToGarage = () => {
+    pendingFinish = null;
+    driveHUD.hideFinishStamp();
     sfx.stopEngine();
     bgm.duck(1);
     if (driveScene.active) {

@@ -71,16 +71,16 @@ export class DriveHUD {
   private countdownEl!: HTMLElement;
   private resultModalEl!: HTMLElement;
   private resTotalTimeEl!: HTMLElement;
-  private resTopSpeedEl!: HTMLElement;
-  private resCarNameEl!: HTMLElement;
-  private resSec1El!: HTMLElement;
-  private resSec2El!: HTMLElement;
-  private resSec3El!: HTMLElement;
-  private resTitleEl!: HTMLElement;
-  private resProgressLineEl!: HTMLElement;
+  private resSecEls: HTMLElement[] = [];
+  private resSectorsEl!: HTMLElement;
+  private resSubEl!: HTMLElement;
+  private resRankEl!: HTMLElement;
   private resProgressEl!: HTMLElement;
-  private resDriftLineEl!: HTMLElement;
-  private resDriftEl!: HTMLElement;
+  private resTitleEl!: HTMLElement;
+  // ゴールの瞬間に画面の中央へ打ち込むタイム
+  private finishStampEl!: HTMLElement;
+  private fsTimeEl!: HTMLElement;
+  private fsTagEl!: HTMLElement;
 
   // Competitive race widgets
   private raceTopEl: HTMLElement | null = null;
@@ -181,20 +181,29 @@ export class DriveHUD {
         </div>
       </div>
 
+      <!-- ゴールの瞬間: 画面の中央に打ち込むタイム(リザルトが出ると、そのタイムの欄へ縮んで収まる) -->
+      <div id="hud-finish-stamp" class="hud-finish-stamp" aria-hidden="true">
+        <div class="fs-label">FINISH</div>
+        <div class="fs-time" id="fs-time">00:00.000</div>
+        <div class="fs-tag" id="fs-tag"></div>
+      </div>
+
       <!-- Time Attack Result Modal -->
       <div id="hud-result-modal" class="hud-result-modal hud-result-side" style="display: none;">
         <div class="hud-arcade-modal-box">
-          <div class="arcade-modal-title gold" id="res-title">ゴール！</div>
+          <div class="arcade-modal-title gold" id="res-title">ゴール</div>
           <div class="hud-result-time-big" id="res-total-time">00:00.000</div>
-          
-          <div class="hud-result-stats-table">
-            <div class="stat-line"><span>使用マシン</span> <span class="val" id="res-car-name">--</span></div>
-            <div class="stat-line"><span>最高速度</span> <span class="val" id="res-top-speed">0 km/h</span></div>
-            <div class="stat-line" id="res-progress-line" style="display: none;"><span>到達地点</span> <span class="val" id="res-progress">--</span></div>
-            <div class="stat-line" id="res-drift-line" style="display: none;"><span>ドリフトポイント</span> <span class="val" id="res-drift">0</span></div>
-            <div class="stat-line"><span>区間 1</span> <span class="val" id="res-sec-1">--</span></div>
-            <div class="stat-line"><span>区間 2</span> <span class="val" id="res-sec-2">--</span></div>
-            <div class="stat-line"><span>区間 3</span> <span class="val" id="res-sec-3">--</span></div>
+          <div class="res-badges">
+            <div class="res-sub" id="res-sub"></div>
+            <div class="res-rank" id="res-rank" style="display: none;"></div>
+          </div>
+          <div class="res-progress" id="res-progress" style="display: none;"></div>
+
+          <!-- 区間ごとの、ライバルとの差(区間ごとに枠で囲んで3つ並べる) -->
+          <div class="res-sectors" id="res-sectors">
+            <div class="rs-box"><span class="rs-head">区間1</span><span class="rs-val" id="res-sec-1">--</span></div>
+            <div class="rs-box"><span class="rs-head">区間2</span><span class="rs-val" id="res-sec-2">--</span></div>
+            <div class="rs-box"><span class="rs-head">区間3</span><span class="rs-val" id="res-sec-3">--</span></div>
           </div>
 
           <div class="hud-arcade-result-buttons">
@@ -227,16 +236,15 @@ export class DriveHUD {
     this.countdownEl = document.getElementById('hud-countdown')!;
     this.resultModalEl = document.getElementById('hud-result-modal')!;
     this.resTotalTimeEl = document.getElementById('res-total-time')!;
-    this.resTopSpeedEl = document.getElementById('res-top-speed')!;
-    this.resCarNameEl = document.getElementById('res-car-name')!;
-    this.resSec1El = document.getElementById('res-sec-1')!;
-    this.resSec2El = document.getElementById('res-sec-2')!;
-    this.resSec3El = document.getElementById('res-sec-3')!;
-    this.resTitleEl = document.getElementById('res-title')!;
-    this.resProgressLineEl = document.getElementById('res-progress-line')!;
+    this.resSecEls = [1, 2, 3].map((k) => document.getElementById(`res-sec-${k}`)!);
+    this.resSectorsEl = document.getElementById('res-sectors')!;
+    this.resSubEl = document.getElementById('res-sub')!;
+    this.resRankEl = document.getElementById('res-rank')!;
     this.resProgressEl = document.getElementById('res-progress')!;
-    this.resDriftLineEl = document.getElementById('res-drift-line')!;
-    this.resDriftEl = document.getElementById('res-drift')!;
+    this.resTitleEl = document.getElementById('res-title')!;
+    this.finishStampEl = document.getElementById('hud-finish-stamp')!;
+    this.fsTimeEl = document.getElementById('fs-time')!;
+    this.fsTagEl = document.getElementById('fs-tag')!;
     this.raceTopEl = document.getElementById('hud-race-top');
     this.remainingEl = document.getElementById('hud-remaining');
     this.remainingNumEl = document.getElementById('hud-remaining-num');
@@ -448,7 +456,7 @@ export class DriveHUD {
     if (r && ms > 0) setText(r.time, DriveHUD.fmtSec(ms));
   }
 
-  /** 区間を通過した: 確定タイムと、基準(ゴースト・自己ベスト)との差を出し、次の区間を「今の区間」にする。 */
+  /** 区間を通過した: 確定タイムと、基準(ゴースト・ベストタイム)との差を出し、次の区間を「今の区間」にする。 */
   public setSector(sector: SectorInfo): void {
     const i = sector.index - 1;
     const r = this.sectorRows[i];
@@ -469,7 +477,7 @@ export class DriveHUD {
 
   private fillSector(r: { row: HTMLElement; time: HTMLElement; delta: HTMLElement }, sector: SectorInfo): void {
     r.time.textContent = DriveHUD.fmtSec(sector.timeMs);
-    const hasRef = sector.deltaMs !== 0;
+    const hasRef = sector.hasRef ?? sector.deltaMs !== 0;
     r.delta.textContent = hasRef ? `${sector.deltaMs < 0 ? '-' : '+'}${DriveHUD.fmtSec(Math.abs(sector.deltaMs))}` : '';
     r.row.className = 'sec-row done' + (hasRef ? (sector.deltaMs < 0 ? ' fast' : ' slow') : '');
   }
@@ -562,26 +570,84 @@ export class DriveHUD {
     }
   }
 
+  /**
+   * リザルトを出す: タイム(太い字で、打ち込まれて光が流れる)・ベストタイムとの差・(上位なら)順位・区間ごとのライバルとの差。
+   * 見出しはタイムアップのときだけ出し、区間の代わりに到達地点を出す。
+   */
   public showResultModal(result: TimeAttackResult): void {
-    this.resTitleEl.textContent = result.timedOut ? 'タイムアップ！' : 'ゴール！';
-    this.resTitleEl.classList.toggle('gold', !result.timedOut);
-    this.resProgressLineEl.style.display = result.timedOut ? 'flex' : 'none';
-    this.resProgressEl.textContent = `${Math.round((result.progress ?? 0) * 100)} %`;
-    this.resDriftLineEl.style.display = result.driftScore === undefined ? 'none' : 'flex';
-    this.resDriftEl.textContent = String(result.driftScore ?? 0);
-    countUpText(this.resTotalTimeEl, result.formattedTime);
-    this.resTopSpeedEl.textContent = `${result.topSpeedKmH} km/h`;
-    this.resCarNameEl.textContent = result.carName;
+    const timedOut = !!result.timedOut;
+    this.resTitleEl.textContent = 'タイムアップ';
+    this.resTitleEl.style.display = timedOut ? '' : 'none';
+    const timeEl = this.resTotalTimeEl;
+    timeEl.classList.remove('stamp');
+    timeEl.classList.toggle('record', !timedOut && result.isNewRecord && result.prevBestMs !== undefined);   // ベストタイム更新は金色
+    void timeEl.offsetWidth;                            // 打ち込みのアニメーションを最初から
+    timeEl.classList.add('stamp');
+    countUpText(timeEl, result.formattedTime);
 
-    const fmtSec = (ms?: number) => (ms !== undefined ? `${(ms / 1000).toFixed(3)}s` : '--');
-    this.resSec1El.textContent = fmtSec(result.sectors[0]?.timeMs);
-    this.resSec2El.textContent = fmtSec(result.sectors[1]?.timeMs);
-    this.resSec3El.textContent = fmtSec(result.sectors[2]?.timeMs);
+    // ベストタイムとの差: 更新したら帯で、届かなければ控えめに(初めての完走では出さない)
+    let sub = '', subCls = '';
+    if (!timedOut && result.prevBestMs !== undefined) {
+      const diff = (result.totalTimeMs - result.prevBestMs) / 1000;
+      if (result.isNewRecord) { sub = `ベストタイム更新  −${Math.abs(diff).toFixed(3)}`; subCls = 'record'; }
+      else { sub = `ベストタイムまで  +${diff.toFixed(3)}`; subCls = 'slow'; }
+    }
+    this.resSubEl.textContent = sub;
+    this.resSubEl.className = `res-sub ${subCls}`;
+    this.resRankEl.style.display = 'none';
+
+    this.resProgressEl.style.display = timedOut ? 'block' : 'none';
+    this.resProgressEl.textContent = `到達地点  ${Math.round((result.progress ?? 0) * 100)}%`;
+
+    // 区間: ライバルとの差(速ければ緑、遅ければ赤。枠の線も同じ色)。比べる相手がいなければ区間のタイム
+    this.resSectorsEl.style.display = timedOut ? 'none' : '';
+    this.resSecEls.forEach((el, i) => {
+      const sec = result.sectors[i];
+      const ref = !!sec && (sec.hasRef ?? sec.deltaMs !== 0);
+      el.textContent = !sec ? '--' : ref ? `${sec.deltaMs < 0 ? '−' : '+'}${DriveHUD.fmtSec(Math.abs(sec.deltaMs))}` : DriveHUD.fmtSec(sec.timeMs);
+      el.parentElement!.className = 'rs-box' + (ref ? (sec.deltaMs < 0 ? ' fast' : ' slow') : '');
+    });
 
     this.resultModalEl.style.display = 'flex';
     this.container.classList.add('result-open');    // the result sits beside the car (winning run): clear the other widgets
     this.modalArmTime = performance.now() + 600; // 走行中の連打で誤決定しない
     this.syncPadMenu(0); // 再挑戦がデフォルト
+  }
+
+  /** ランキングの順位が分かった(上位に入った): リザルトに順位を出す */
+  public setResultRank(rank: number): void {
+    this.resRankEl.textContent = `ランキング ${rank}位`;
+    this.resRankEl.classList.toggle('top', rank === 1);
+    this.resRankEl.style.display = 'inline-block';
+    this.resRankEl.classList.remove('pop');
+    void this.resRankEl.offsetWidth;
+    this.resRankEl.classList.add('pop');
+  }
+
+  /**
+   * オンライン対戦のゴール: 画面の中央に自分のタイムを打ち込み、しばらくして消す(結果はサーバーの順位表で出る)。
+   * tag は「NEW RECORD」など(無ければ null)
+   */
+  public showFinishStamp(time: string, tag: string | null): void {
+    this.fsTimeEl.getAnimations().forEach((a) => a.cancel());
+    this.fsTimeEl.textContent = time;
+    this.fsTagEl.textContent = tag ?? '';
+    const el = this.finishStampEl;
+    el.className = 'hud-finish-stamp';
+    void el.offsetWidth;                                // アニメーションを最初から
+    el.classList.add('on', 'auto-out');
+    el.classList.toggle('record', !!tag);
+  }
+
+  /** ゴールのスローモーションの間: 走行中の表示(速度計・ミニマップ)を消して、映像だけを見せる */
+  public setFinishing(on: boolean): void {
+    this.container.classList.toggle('finishing', on);
+  }
+
+  public hideFinishStamp(): void {
+    this.fsTimeEl.getAnimations().forEach((a) => a.cancel());
+    this.finishStampEl.className = 'hud-finish-stamp';
+    this.container.classList.remove('finishing');
   }
 
   /** 名前登録が閉じた直後は、決定ボタンの押下がメニューの決定として入らないよう、しばらく受け付けない */
