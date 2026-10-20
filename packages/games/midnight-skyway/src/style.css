@@ -889,24 +889,73 @@ html, body {
 .hud-ghost-gap { font-size: 16px; font-weight: 900; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; }
 .hud-ghost-gap.ahead { color: #00ff88; }
 .hud-ghost-gap.behind { color: #ff5577; }
-.hud-drift { position: absolute; inset: 0; pointer-events: none; }
-.sg-boost-rail, .sg-boost-fill { fill: none; stroke-width: 5; stroke-linecap: butt; }
-.sg-boost-rail { stroke: rgba(159, 178, 208, 0.22); }
-.sg-boost-fill { stroke: #e2b05e; }
-.hud-drift.boosting .sg-boost-fill { stroke: #fff; filter: drop-shadow(0 0 6px var(--hud-accent)); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
-.hud-drift-line { min-height: 24px; font: 900 18px var(--hud-sans); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
-.hud-drift-tag { font: 900 13px var(--hud-sans); letter-spacing: 0.3em; color: var(--hud-danger); text-shadow: 0 0 10px rgba(216, 96, 95, 0.6); }
-.hud-drift-tag.ready { color: var(--hud-accent); text-shadow: 0 0 12px var(--hud-accent), 0 0 24px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.85); animation: hudBoostPulse 0.4s ease-in-out infinite alternate; }
-.hud-drift-chain { color: var(--hud-warn); font-size: 20px; font-weight: 900; font-style: italic; text-shadow: 0 0 10px rgba(226, 176, 94, 0.7); }
+/* ---------- ドリフト / ブーストのバー: 画面の中央下(最下部の少し上)。ドリフトした時だけ控えめに(半透明で)出て、
+   リザルトのタイムと同じ、車の色の波模様(--hud-wave-bg)が流れながら溜まる ---------- */
+.hud-drift-bar {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(28px, 5.5vh, 60px);
+  width: min(720px, 38vw);
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: stretch;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+.hud-drift-bar.show { opacity: 0.6; transition-duration: 0.1s; }   /* 主張しすぎないよう、半透明で出す */
+/* 出た瞬間: タイムと同じく、大きく打ち込まれてから落ち着く */
+.hud-drift-bar.pop .hdb-track { animation: hdbStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+@keyframes hdbStamp {
+  0% { transform: skewX(-14deg) scale(1.4); opacity: 0; }
+  55% { opacity: 1; }
+  100% { transform: skewX(-14deg) scale(1); opacity: 1; }
+}
+.hdb-track {
+  position: relative;
+  height: clamp(18px, 3.2vh, 30px);
+  transform: skewX(-14deg);
+  background: rgba(5, 9, 20, 0.62);
+  border: 2px solid rgba(var(--hud-accent-rgb, 142, 201, 220), 0.9);   /* 枠は車の色(プライマリ) */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.85), 0 0 14px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.4);
+  overflow: hidden;
+}
+.hdb-fill {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 calc(100% - var(--p, 0%)) 0 0);
+  transition: clip-path 0.12s linear;
+  background-image: var(--hud-wave-bg, linear-gradient(180deg, #d8f8ff 0%, #52d9ff 48%, #0e5888 100%));
+  background-size: 190px 100%;
+  background-repeat: repeat-x;
+  animation: timeColorWave 1.4s linear infinite;
+}
+/* 満タン・ブースト中: 枠が車の色で強く光る */
+.hud-drift-bar.boosting .hdb-track {
+  border-color: var(--hud-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.85), 0 0 18px var(--hud-accent), 0 0 34px rgba(var(--hud-accent-rgb, 142, 201, 220), 0.75);
+}
+/* 満タン: 波模様が明滅する(枠のアニメーションは「打ち込み」に使うので、塗りの方で) */
+.hud-drift-bar.ready .hdb-fill { animation: timeColorWave 1.4s linear infinite, hudBoostPulse 0.4s ease-in-out infinite alternate; }
 @keyframes hudBoostPulse { from { opacity: 0.65; } to { opacity: 1; } }
 
 /* ---------- Result: no panel. Big in the lower centre over a dark fade (like the stage loading screen); the view shifts up ---------- */
 .hud-result-modal.hud-result-side {
-  background: linear-gradient(to top, rgba(2, 4, 10, 0.88) 0%, rgba(2, 4, 10, 0.6) 22%, rgba(2, 4, 10, 0.18) 40%, transparent 52%);
+  --res-rgb: var(--hud-accent-rgb, 0, 240, 255);
+  background:
+    linear-gradient(to top, rgba(2, 4, 10, 0.92) 0%, rgba(2, 4, 10, 0.68) 20%, rgba(2, 4, 10, 0.22) 36%, transparent 48%),
+    radial-gradient(ellipse at center, transparent 52%, rgba(var(--res-rgb), 0.28) 100%);
   backdrop-filter: none;
   align-items: flex-end;
   justify-content: center;
   pointer-events: none;
+}
+.hud-result-modal.hud-result-side.is-record {
+  --res-rgb: 255, 200, 60;
+}
+.hud-result-modal.hud-result-side.is-timeout {
+  --res-rgb: 216, 96, 95;
 }
 .hud-result-side .hud-arcade-modal-box {
   pointer-events: auto;
@@ -918,7 +967,7 @@ html, body {
   min-width: 0;
   max-height: none;
   overflow: visible;
-  margin-bottom: 5vh;
+  margin-bottom: 3.4vh;
   padding: 0;
   background: none;
   border: none;
@@ -930,42 +979,97 @@ html, body {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: none; }
 }
+/* 上部の見出し(コース名 + FINISH / NEW RECORD / タイムアップ): ロード画面と同じ前傾姿勢と黒縁取り */
+.res-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 0 2px;
+  transform: skewX(-9deg);
+}
+.res-kicker .rk-stage {
+  font: 900 clamp(14px, 2.2vh, 20px) var(--hud-sans);
+  letter-spacing: 0.14em;
+  color: #e2e8f0;
+  -webkit-text-stroke: 4px rgba(0, 0, 0, 0.85);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+.res-kicker .rk-tag {
+  display: inline-block;
+  padding: 2px 12px;
+  font: 900 clamp(12px, 1.9vh, 17px) var(--hud-sans);
+  letter-spacing: 0.22em;
+  color: #05070c;
+  background: rgb(var(--res-rgb));
+  box-shadow: 0 0 14px rgba(var(--res-rgb), 0.85);
+}
+.res-kicker .rk-tag.record {
+  background: linear-gradient(90deg, #e2b05e, #fff1c2);
+  box-shadow: 0 0 16px rgba(255, 204, 60, 0.9);
+}
+.res-kicker .rk-tag.timeout {
+  color: #fff;
+  background: #d8605f;
+  box-shadow: 0 0 16px rgba(216, 96, 95, 0.85);
+}
 .hud-result-side .arcade-modal-title { margin-bottom: 2px; font-size: clamp(22px, 4vh, 36px); }
 .hud-result-side .hud-result-time-big {
-  /* タイム: 太いフォントで、水色(ベストタイム更新は金)の発光。countUpText で毎フレーム文字列が変わる間もメインスレッドを止めないよう、合成のみで動く指定にする */
+  /* タイム: 選んだ車のプライマリカラーで作られた3層のサイン波(var(--hud-wave-bg))が文字の中をうねりながら流れる */
   font-family: 'Dela Gothic One', 'Hiragino Sans', sans-serif;
   font-weight: 400;                                   /* Dela Gothic One は太さが1種類(太字指定すると擬似太字になる) */
-  font-size: clamp(44px, 11vh, 104px);
-  letter-spacing: 0.01em;
+  font-size: clamp(44px, 10vh, 96px);
+  letter-spacing: 0.03em;
   white-space: nowrap;
-  line-height: 1.15;
-  margin: 0 0 clamp(6px, 1.4vh, 14px) 0;
+  line-height: 1.08;
+  margin: 0 0 clamp(6px, 1.3vh, 12px) 0;
+  padding: 0 0.08em;
   font-variant-numeric: tabular-nums;
-  color: #e8fbff;
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8), 0 0 22px rgba(0, 170, 255, 0.5), 0 2px 10px rgba(0, 0, 0, 0.85);
-  will-change: transform, opacity;
+  background-image: var(
+    --hud-wave-bg,
+    linear-gradient(180deg, #d8f8ff 0%, #52d9ff 48%, #0e5888 100%)
+  );
+  background-size: 190px 100%;
+  background-repeat: repeat-x;
+  background-position: 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 2.5px rgba(255, 255, 255, 0.95);
+  text-shadow: none;
+  transform: skewX(-9deg);
+  filter:
+    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.88))
+    drop-shadow(0 0 18px rgba(var(--hud-accent-rgb, 82, 217, 255), 0.55));
+  animation: timeColorWave 2.2s linear infinite;
+  will-change: transform, opacity, background-position;
 }
-.hud-result-side .hud-result-time-big.record {
-  color: #fff4c8;
-  text-shadow: 0 0 8px rgba(255, 200, 80, 0.9), 0 0 24px rgba(255, 150, 30, 0.55), 0 2px 10px rgba(0, 0, 0, 0.85);
+@keyframes timeColorWave {
+  from { background-position: 0 0; }
+  to { background-position: -190px 0; }
 }
-/* 出た瞬間: 大きく打ち込まれてから落ち着く */
+/* 出た瞬間: 大きく打ち込まれてから落ち着く(前傾姿勢と波打ちアニメを保つ) */
 .hud-result-side .hud-result-time-big.stamp {
-  animation: timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  animation:
+    timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both,
+    timeColorWave 2.4s linear infinite;
 }
 @keyframes timeStamp {
-  0% { transform: scale(1.85); opacity: 0; }
+  0% { transform: skewX(-9deg) scale(1.85); opacity: 0; }
   55% { opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  100% { transform: skewX(-9deg) scale(1); opacity: 1; }
 }
 .hud-result-side .hud-result-time-big.record.stamp {
-  animation: timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  animation:
+    timeStamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both,
+    timeColorWave 2.4s linear infinite;
 }
-/* メニューは全ゲーム共通の縦並び(arcadeResultMenu.ts の rm-col)のまま */
 .result-open .hud-minimap-arcade,
 .result-open .hud-timer-arcade,
 .result-open .hud-race-top,
 .result-open .hud-band,
+.result-open .hud-drift-bar,
 .result-open .hud-edge { opacity: 0; transition: opacity 0.3s; }
 
 /* ---------- Goal (online race): the own time is stamped in the centre, then fades out ---------- */
@@ -1023,54 +1127,150 @@ html, body {
 .finishing .hud-timer-arcade,
 .finishing .hud-race-top,
 .finishing .hud-band,
+.finishing .hud-drift-bar,
 .finishing .hud-edge { opacity: 0; transition: opacity 0.3s; }
 
-/* ---------- Result: headline, time, best-time gap, ranking, and the sector gaps to the rival in three boxes ---------- */
-.res-badges { display: flex; gap: 10px; justify-content: center; align-items: center; margin: 0 0 clamp(8px, 1.8vh, 16px); }
-.res-badges:not(:has(> :not(:empty))) { display: none; }
-.res-sub { font: 800 15px var(--hud-sans); letter-spacing: 0.06em; color: #cbd5e1; white-space: pre; font-variant-numeric: tabular-nums; }
-.res-sub:empty { display: none; }
-.res-sub.slow { padding: 3px 12px; color: #cbd5e1; background: rgba(6, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.2); transform: skewX(-8deg); }
-.res-sub.record {                           /* ベストタイム更新: 金の帯 */
-  display: inline-block;
-  padding: 3px 12px;
-  color: #05070c;
-  background: linear-gradient(90deg, #e2b05e, #fff1c2);
-  transform: skewX(-8deg);
-}
-.res-rank {
-  display: inline-block;
-  padding: 3px 12px;
-  font: 900 15px var(--hud-sans);
-  letter-spacing: 0.12em;
-  color: #05070c;
-  background: linear-gradient(90deg, #8fd3ff, #d6f3ff);
-  transform: skewX(-8deg);
-}
-.res-rank.top { background: linear-gradient(90deg, #e2b05e, #fff1c2); }
-.res-rank.pop { animation: rankPop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
-@keyframes rankPop {
-  from { transform: skewX(-8deg) scale(1.8); opacity: 0; }
-  to { transform: skewX(-8deg) scale(1); opacity: 1; }
-}
-.res-progress { font: 800 20px var(--hud-sans); color: #cbd5e1; margin: 0 0 clamp(10px, 2vh, 18px); white-space: pre; }
-.res-sectors { display: grid; grid-template-columns: repeat(3, 9em); gap: 10px; justify-content: center; margin: 0 0 clamp(12px, 2.4vh, 22px); }
-.rs-box {
+/* ---------- Result 3行目: 枠なし・太アイコン(トロフィー/時計)＋区間1〜3の黒縁取りテレメトリ1行 ---------- */
+.res-row3 {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
-  padding: 6px 2px 5px;
-  background: rgba(6, 12, 24, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 3px;
+  justify-content: center;
+  gap: 18px;
+  margin: 0 0 clamp(12px, 2.2vh, 20px);
+  white-space: nowrap;
+  transform: skewX(-9deg);
 }
-.rs-box .rs-head { font: 800 14px var(--hud-sans); color: #cbd5e1; }
-.rs-box .rs-val { font: 800 26px ui-monospace, monospace; color: #ffffff; font-variant-numeric: tabular-nums; }
-.rs-box.fast { border-color: rgba(0, 255, 136, 0.55); }
-.rs-box.fast .rs-val { color: #00ff88; }
-.rs-box.slow { border-color: rgba(216, 96, 95, 0.6); }
-.rs-box.slow .rs-val { color: var(--hud-danger); }
+.ri-ico {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: inline-block;
+  overflow: visible;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.92));
+}
+.res-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+}
+.res-badges:not(:has(> :not(:empty))) { display: none; }
+.res-badges::after {
+  content: '/';
+  font: 900 19px ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.48);
+  -webkit-text-stroke: 3.5px rgba(0, 0, 0, 0.88);
+  paint-order: stroke fill;
+}
+.is-timeout .res-badges::after { display: none; }
+.res-rank,
+.res-sub,
+.res-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 900 18px var(--hud-sans);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.res-sub:empty { display: none; }
+.res-rank .ri-txt,
+.res-sub .ri-txt,
+.res-progress .ri-txt,
+.rs-box .rs-val {
+  font-family: ui-monospace, monospace;
+  font-weight: 900;
+  font-size: 20px;
+  -webkit-text-stroke: 4px rgba(0, 0, 0, 0.92);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.85));
+}
+.res-rank .ri-txt { font-family: var(--hud-sans); font-size: 19px; }
+
+/* トロフィー＆順位の色分け: 1位=金、2位=銀、3位=銅、4位〜=水色、圏外=点線スレート */
+.res-rank.rank-1 { color: #ffd54a; }
+.res-rank.rank-1 .ri-trophy { filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 10px rgba(255, 213, 74, 0.65)); }
+.res-rank.rank-2 { color: #e2e8f0; }
+.res-rank.rank-2 .ri-trophy { filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 8px rgba(226, 232, 240, 0.5)); }
+.res-rank.rank-3 { color: #f59e56; }
+.res-rank.rank-3 .ri-trophy { filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 8px rgba(245, 158, 86, 0.5)); }
+.res-rank.rank-other { color: #7dd3fc; }
+.res-rank.rank-none { color: #94a3b8; }
+.res-rank.rank-none .ri-txt { color: rgba(203, 213, 225, 0.78); }
+
+/* ベストタイム差(時計アイコン＋秒数): 記録更新=金、遅れ=シルバー白、初回記録なし=点線スレート */
+.res-sub.record { color: #ffd54a; }
+.res-sub.record .ri-timer { filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 10px rgba(255, 213, 74, 0.65)); }
+.res-sub.slow { color: #e2e8f0; }
+.res-sub.empty { color: #94a3b8; }
+.res-sub.empty .ri-txt { color: rgba(203, 213, 225, 0.78); }
+
+/* 区間1〜3: 番号チップ(1/2/3) + 秒数 */
+.res-sectors {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+}
+.rs-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rs-box .rs-head {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  font: 900 13px ui-monospace, monospace;
+  line-height: 1;
+  color: #05070c;
+  background: #94a3b8;
+  border-radius: 3px;
+  border: 1.5px solid rgba(0, 0, 0, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+.rs-box .rs-val {
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+.rs-box.fast .rs-head { background: #00ff88; color: #04120b; }
+.rs-box.fast .rs-val { color: #00ff88; text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
+.rs-box.slow .rs-head { background: #ff5566; color: #fff; }
+.rs-box.slow .rs-val { color: #ff6b6b; text-shadow: 0 0 10px rgba(255, 85, 102, 0.45); }
+
+/* リザルト下部のボタン列: ロード画面と同じく縦幅を抑えて背景の車を広く見せるため、斜体の横1列バーにする */
+body .hud-result-side .hud-arcade-result-buttons.rm-col {
+  flex-direction: row !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  width: auto !important;
+  max-width: 94vw !important;
+  gap: clamp(8px, 1.2vw, 14px) !important;
+}
+body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn {
+  width: auto !important;
+  min-width: clamp(148px, 16vw, 210px) !important;
+  padding: clamp(8px, 1.3vh, 12px) clamp(16px, 2vw, 26px) !important;
+  font-size: clamp(14px, 2.1vh, 18px) !important;
+  font-weight: 800 !important;
+  background: linear-gradient(135deg, rgba(10, 16, 28, 0.92), rgba(20, 30, 48, 0.94)) !important;
+  color: #cbd5e1 !important;
+  border: 2px solid rgba(140, 165, 200, 0.42) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.8) !important;
+  transform: skewX(-12deg) !important;
+}
+body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn.rm-active,
+body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn:hover {
+  background: var(--rm-color, #ffe600) !important;
+  color: #05070c !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 20px var(--rm-color, #ffe600), 0 6px 16px rgba(0, 0, 0, 0.85) !important;
+  font-weight: 900 !important;
+}
 
 /* ---------- Car select: machine buttons in a row at the bottom centre, so the whole car stays visible ---------- */
 #screen-car-select .car-select-bottom { pointer-events: auto; }
@@ -1277,6 +1477,11 @@ html, body {
 }
 /* 特性の文は2行まで。1行の車も、2行ぶんの高さにそろえて、カードの下端をそろえる */
 .car-spec-arcade .spec-main-digital { font-size: 1.04em; min-height: 2.6em; }
+/* 特性の文の頭のアイコン: 枠の左の線と同じ、マシンごとの色 */
+.car-spec-arcade .spec-main-digital { display: flex; align-items: center; gap: 0.4em; }
+.car-spec-arcade .spec-main-digital .ri-ico { width: 1.3em; height: 1.3em; color: #00f0ff; }
+.car-card-arcade[data-car="dragon_a"] .spec-main-digital .ri-ico { color: #ff3355; }
+.car-card-arcade[data-car="dragon_c"] .spec-main-digital .ri-ico { color: #ffcc00; }
 
 #screen-car-select .arcade-action-bar { max-width: 96vw; width: 100%; gap: 1.2em; margin-bottom: 0; justify-content: center; }
 #screen-car-select .arcade-btn-back { padding: 0.9em 2.2em; font-size: 1.1em; }
@@ -1286,6 +1491,18 @@ html, body {
 #screen-car-select .color-chip-preview { width: 2em; height: 2em; }
 #screen-car-select .color-name-arcade { font-size: 1.15em; }
 #screen-car-select .color-sub-hint { font-size: 0.85em; }
+
+/* Course select: a scene of the course (rendered in the game) at the top of each card */
+.map-photo {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+.map-card-arcade.active .map-photo { border-color: rgba(0, 240, 255, 0.45); }
 
 /* Course select: the course layout inside each card */
 .map-outline {
@@ -1489,7 +1706,7 @@ body #screen-map-select .map-cards-container-arcade {
 }
 body #screen-map-select .map-card-arcade { flex: 1 1 0; width: auto; min-width: 0; max-width: none; }
 /* 画像の枠 */
-body :is(#screen-car-select, #screen-map-select) :is(.car-outline, .map-outline),
+body :is(#screen-car-select, #screen-map-select) :is(.car-outline, .map-photo),
 body .msel.msel-arcade .msel-card .art {
   flex: none;
   box-sizing: border-box;
@@ -1500,7 +1717,13 @@ body .msel.msel-arcade .msel-card .art {
 /* マシンの絵は、翼・尻尾まで入れて横長に描いてあるので、コースの絵より少し高くする */
 body #screen-car-select .car-outline { height: calc(190 * var(--u)); }
 /* コースの絵: カードが2枚で横に広いので、カードの空きの高さまで使って大きく見せる */
-body #screen-map-select .map-outline { height: calc(250 * var(--u)); }
+body #screen-map-select .map-photo { height: calc(250 * var(--u)); }
+/* コース図: 絵の下の残り(タイトル〜ベストタイムの段)の右に、カードの下端までの高さで大きく並べる */
+body #screen-map-select .map-info-row { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; gap: calc(16 * var(--u)); }
+body #screen-map-select .map-info-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+body #screen-map-select .map-info-row .map-outline { flex: none; width: calc(240 * var(--u)); height: auto; min-height: 0; margin: calc(4 * var(--u)) 0 0; box-sizing: border-box; }
+/* ベストタイム: 枠は付けず、タイトル列の下端に文字だけ置く */
+body #screen-map-select .map-info-row .map-record-arcade { height: auto; margin: auto 0 0; padding: 0; background: none; border: 0; box-shadow: none; }
 /* タイトル / サブ: 折り返してよい(省略しない) */
 body :is(#screen-car-select, #screen-map-select) :is(.car-card-title-arcade, .map-card-title-arcade),
 body .msel.msel-arcade .msel-card .t {
@@ -1540,21 +1763,31 @@ body .msel.msel-arcade .msel-card .d {
   justify-content: center;
   overflow: hidden;
 }
+/* 下段は枠を付けない(行頭のアイコンで区切りがわかる)。文字はカードのタイトルと左端をそろえる。
+   枠が無いので、箱の高さの中央には置かず、上の項目(ゲージ / サブ)のすぐ下から一定の間隔で並べる */
+body :is(#screen-car-select, #screen-map-select) .car-spec-arcade,
 body .msel.msel-arcade .msel-card .d {
-  /* マシンの特性ボックスと同じ見た目(枠・太字の斜体・白・影) */
-  background: linear-gradient(135deg, rgba(8, 14, 26, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-left: 3px solid var(--msel-accent);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
+  justify-content: flex-start;
+  overflow: visible;
+}
+body :is(#screen-car-select, #screen-map-select) .car-spec-arcade { margin: calc(18 * var(--u)) 0 0; }
+body #screen-car-select .car-spec-arcade .spec-main-digital { min-height: 0; margin: 0; line-height: 1.35; }
+body .msel.msel-arcade .msel-card .d { margin: calc(22 * var(--u)) 0 0; gap: calc(14 * var(--u)); }
+body .msel.msel-arcade .msel-card .d .msel-pt { line-height: 1.35; }
+body .msel.msel-arcade .msel-card .d {
+  /* マシンの特性と同じ文字(太字の斜体・白・影) */
   font-weight: 900;
   font-style: italic;
   letter-spacing: 0.02em;
   color: #ffffff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
   font-size: max(11px, calc(25 * var(--u)));
-  line-height: 1.8;
-  height: calc(270 * var(--u));     /* モードの説明は、サブタイトルのすぐ下まで伸ばす(他の画面の下段より高い) */
   white-space: pre-line;            /* 説明文の改行(・で始まる行)をそのまま出す */
 }
 /* 画像とサブの間の行(ゲージ / タグ) */
@@ -1570,6 +1803,11 @@ body #screen-car-select .g-blocks span { height: 0.62em; }
 body #screen-car-select .spec-main-digital { font-size: 1.1em; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip; letter-spacing: 0.02em; }
 body #screen-map-select .rec-label { font-size: 0.85em; }
 body #screen-map-select .rec-time-digital { font-size: 1.9em; line-height: 1.2; }
+/* ベストタイム(オンラインでは希望の人数): 文字の見出しの代わりにアイコンを置き、横に白い数値を並べる */
+body #screen-map-select .map-info-row .map-record-arcade { flex-direction: row; align-items: center; justify-content: flex-start; gap: 0.35em; }
+body #screen-map-select .map-info-row .rec-label { display: flex; font-size: 1.9em; line-height: 1; color: #00f0ff; letter-spacing: 0; }
+body #screen-map-select .map-info-row .rec-label .ri-ico { width: 1em; height: 1em; }
+body #screen-map-select .map-info-row .rec-time-digital { color: #ffffff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); }
 body #screen-map-select .meta-tag { font-size: 0.95em; padding: 0.25em 0.7em; white-space: nowrap; }
 
 /* 下のボタンの帯: カード列と同じ幅にする(左下のガイドと重なってよい)。半分の画面でも、ボタンがはみ出さない */

@@ -1,4 +1,5 @@
 import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
+import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
 import type { FinishEntry } from '../../../../shared/netProtocol';
 import type { StandingRow } from '../net/OnlineRace';
 
@@ -25,15 +26,41 @@ const css = `
 @keyframes ohudIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .ohud-wait { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 16px 30px; border-radius: 12px; background: rgba(4,8,18,.82); border: 1px solid #00e5ff; font-size: 1.2rem; font-weight: 700; display: none; }
 .ohud-result { display: none; }
-.ohud-result .hud-arcade-modal-box { box-sizing: border-box; max-height: 94vh; overflow-y: auto; }
-.ohud-result .stat-line.me { color: #00f0ff; font-weight: 900; }
-.ohud-result .stat-line { display: flex; align-items: center; justify-content: space-between; font-size: 14px; padding: 4px 0; }
-.ohud-result .online-res-left { display: flex; align-items: center; gap: 8px; }
-.ohud-result .online-res-rk { font-family: Impact, 'Arial Black', sans-serif; font-style: italic; font-size: 17px; color: #ffd54a; width: 1.8em; }
-.ohud-result .online-res-dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; flex: none; }
-.ohud-result .online-res-name { max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ohud-result .online-res-time { font-variant-numeric: tabular-nums; font-family: Impact, 'Arial Black', sans-serif; letter-spacing: 1px; }
-.ohud-note { text-align: center; font-size: .85rem; color: #9fb0cc; margin: 10px 0 4px; font-variant-numeric: tabular-nums; }
+.ohud-result .hud-arcade-modal-box { box-sizing: border-box; max-height: 94vh; overflow-y: visible; }
+.ohud-stand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(230px, 340px));
+  gap: 8px 14px;
+  justify-content: center;
+  margin: 0 0 clamp(10px, 2vh, 18px);
+}
+.ohud-pbox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 14px 7px 12px;
+  background: linear-gradient(135deg, rgba(6, 11, 22, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-left: 4px solid rgba(142, 201, 220, 0.75);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.75);
+  transform: skewX(-12deg);
+}
+.ohud-pbox.me {
+  border-color: rgba(0, 240, 255, 0.65);
+  border-left-color: #00f0ff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.85), 0 0 18px rgba(0, 240, 255, 0.3);
+}
+.ohud-pbox.p1 {
+  border-left-color: #ffd54a;
+}
+.ohud-result .online-res-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ohud-result .online-res-rk { font-family: Impact, 'Arial Black', sans-serif; font-style: italic; font-size: 18px; color: #ffd54a; width: 1.9em; flex: none; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9); }
+.ohud-result .online-res-dot { width: 11px; height: 11px; border-radius: 2px; border: 1.5px solid #fff; flex: none; transform: skewX(-6deg); }
+.ohud-result .online-res-name { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; font-size: 14px; color: #e2e8f0; }
+.ohud-pbox.me .online-res-name { color: #00f0ff; font-weight: 900; }
+.ohud-result .online-res-time { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; font-weight: 900; font-size: 16px; color: #fff; letter-spacing: 0.5px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9); }
+.ohud-note { text-align: center; font-size: .88rem; font-weight: 800; color: #cbd5e1; margin: 0 0 10px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; transform: skewX(-9deg); }
 `;
 
 const fmt = (ms: number): string => {
@@ -48,6 +75,7 @@ const esc = (str: string): string => str.replace(/&/g, '&amp;').replace(/</g, '&
 /** オンライン対戦中の表示: 順位表・通知・待機表示・最終結果。 */
 export class OnlineHUD {
   public onLeave: () => void = () => {};
+  public courseName = '';
   private readonly root: HTMLElement;
   private readonly stand: HTMLElement;
   private readonly toasts: HTMLElement;
@@ -133,20 +161,24 @@ export class OnlineHUD {
     const myEntry = entries.find((e) => e.id === you);
     const myRankIdx = entries.findIndex((e) => e.id === you);
     const myPlace = myRankIdx >= 0 ? myRankIdx + 1 : 1;
+    const isTimeout = !!(done && myEntry && myEntry.timeMs === null);
+    const isTop = !isTimeout && myPlace === 1 && myEntry?.timeMs !== null;
 
-    let titleText = 'ゴール';
+    let titleText = 'FINISH';
     if (done) {
-      if (myEntry && myEntry.timeMs === null) titleText = 'タイムアップ';
-      else titleText = myPlace === 1 ? '優勝' : `${myPlace}位`;
+      if (isTimeout) titleText = 'タイムアップ';
+      else titleText = myPlace === 1 ? '優勝  1st' : `${myPlace}位`;
+    } else {
+      titleText = `${myPlace}位  FINISH`;
     }
-    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? fmt(myEntry.timeMs) : '記録なし';
+    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? fmt(myEntry.timeMs) : '--:--.---';
 
     const tableRows = entries.map((e, i) => {
       const isMe = e.id === you;
       const rankStr = e.timeMs !== null ? (['1st', '2nd', '3rd', '4th'][i] ?? `${i + 1}th`) : '-';
       const timeStr = e.timeMs !== null ? fmt(e.timeMs) : (done ? '記録なし' : '走行中');
       return `
-        <div class="stat-line ${isMe ? 'me' : ''}">
+        <div class="ohud-pbox ${isMe ? 'me' : ''} ${i === 0 && e.timeMs !== null ? 'p1' : ''}">
           <span class="online-res-left">
             <span class="online-res-rk">${rankStr}</span>
             <span class="online-res-dot" style="background: ${hex(colors.get(e.id) ?? 0xffffff)};"></span>
@@ -157,17 +189,32 @@ export class OnlineHUD {
       `;
     }).join('');
 
+    const wasOpen = this.result.style.display === 'flex';
+    this.result.classList.toggle('is-record', isTop);
+    this.result.classList.toggle('is-timeout', isTimeout);
     this.result.innerHTML = `
       <div class="hud-arcade-modal-box">
-        <div class="arcade-modal-title gold">${titleText}</div>
-        <div class="hud-result-time-big">${myTime}</div>
-        <div class="hud-result-stats-table">${tableRows}</div>
+        <div class="res-kicker">
+          <span class="rk-stage">${esc(this.courseName || 'ONLINE RACE')}</span>
+          <span class="rk-tag ${isTop ? 'record' : isTimeout ? 'timeout' : ''}">${titleText}</span>
+        </div>
+        <div class="hud-result-time-big ${isTop ? 'record' : ''} ${wasOpen ? '' : 'stamp'}">${myTime}</div>
+        <div class="ohud-stand-grid">${tableRows}</div>
         ${done ? '' : '<div class="ohud-note ohud-countdown"></div>'}
         <div class="hud-arcade-result-buttons">
-          <button class="arcade-btn-primary pad-focus" id="online-result-leave-btn">タイトルへ戻る</button>
+          <button id="online-result-leave-btn">タイトルへ戻る</button>
         </div>
       </div>
     `;
+
+    const btnWrap = this.result.querySelector<HTMLElement>('.hud-arcade-result-buttons');
+    const btn = this.result.querySelector<HTMLButtonElement>('#online-result-leave-btn');
+    if (btnWrap && btn) {
+      const items = [{ button: btn, color: '#00f0ff' }];
+      setupResultMenu(btnWrap, items);
+      applyResultMenuFocus(items, 0);
+      btn.addEventListener('click', () => this.onLeave());
+    }
 
     // 終了までのカウントダウン(最初のゴールから30秒)
     if (this.countdownTimer) clearInterval(this.countdownTimer);
@@ -182,14 +229,9 @@ export class OnlineHUD {
       if (endsInMs !== undefined) this.countdownTimer = setInterval(tick, 250);
     }
 
-    const btn = this.result.querySelector('#online-result-leave-btn');
-    if (btn) {
-      btn.addEventListener('click', () => this.onLeave());
-    }
-
-    const wasOpen = this.result.style.display === 'flex';
     this.result.style.display = 'flex';
     this.stand.style.display = 'none';
+    document.getElementById('drive-hud-container')?.classList.add('result-open');
 
     if (!wasOpen) {
       this.stopPad = startPadLoop(this.padEdge, (p) => {
@@ -208,6 +250,7 @@ export class OnlineHUD {
     this.countdownTimer = null;
     this.result.style.display = 'none';
     this.stand.style.display = '';
+    document.getElementById('drive-hud-container')?.classList.remove('result-open');
     this.stopPad?.();
     this.stopPad = null;
     if (this.keyHandler) {

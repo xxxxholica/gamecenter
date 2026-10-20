@@ -413,9 +413,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       setBlocked: (blocked) => { driveHUD.isNameEntryOpen = blocked; },
       onClosed: () => driveHUD.armResultModal(),
       onRank: (rank) => {
-        if (rank === null) return;
         driveHUD.setResultRank(rank);
-        sfx.rankIn();
+        if (rank !== null) sfx.rankIn();
       },
       onName: async (name) => {
         await saveLeaderboardScore('midnight-skyway', result.totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
@@ -859,6 +858,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       sfx.timeUp();
     }
     const colors = new Map<number, number>(online.players.map((p) => [p.id, p.car.body]));
+    driveHUD.hideFinishStamp();
+    driveScene.setResultView(true);
     onlineHUD.showResults(m.entries, online.you, m.done, colors, m.endsInMs);
     if (m.done) {
       const mine = m.entries.findIndex((e) => e.id === online!.you);
@@ -1066,6 +1067,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       // Show stage loading screen with course attribution
       const stage = STAGES.find((st) => st.id === currentMapId);
       const courseName = stage?.title ?? currentMapInstance.metadata.name;
+      onlineHUD.courseName = courseName;
       stageLoadingScreen.show(courseName, currentMapInstance.metadata.attribution);
       sfx.startEngine();                               // ロード中のエンジン音(メーターに合わせて大きくなる。onLevel で更新)
       raceLoading = true;
@@ -1195,6 +1197,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (import.meta.env.DEV) {
     (window as unknown as { __game: unknown }).__game = {
       driveScene,
+      driveHUD,
       garage,
       flow,
       timeAttack,

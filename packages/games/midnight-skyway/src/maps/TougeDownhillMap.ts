@@ -75,6 +75,8 @@ export class TougeDownhillMap extends StreamedCityMap {
   };
 
   public override readonly competitive = true;
+  /** 峠は道沿いの灯りが多い(街灯・灯籠など)ので、反射板・鋲はまばらにする(約24mおき) */
+  public override readonly roadsideStep = 12;
   public readonly startPosition: THREE.Vector3;
   public readonly startRotationY: number;
 

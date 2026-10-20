@@ -123,6 +123,13 @@ export function buildPaceBot(route: THREE.Vector3[], carLift: number, grade = 0.
   return { v: 1, timeMs: g.timeAt(SECTOR_FRACTIONS[SECTOR_FRACTIONS.length - 1]) ?? total * 1000, carName: 'PACE BOT', date: '', kind: 'bot', s };
 }
 
+/**
+ * 描く順番(不透明の物の中で、小さい方から描く。景色は 0)。ゴーストは景色の後・自車の前に描き、自車が上から描き直す:
+ * ゴーストと自車が重なった所では、ゴーストが手前にいても自車の下に埋もれる。
+ */
+const GHOST_ORDER = 1;
+const PLAYER_ORDER = 2;
+
 /** The ghost's body: a see-through copy of the player's car (no lights, no shadows), tinted. */
 export class GhostCar {
   public readonly group: THREE.Group;
@@ -140,7 +147,16 @@ export class GhostCar {
       let c = ghostMats.get(m);
       if (!c) {
         const g = m.clone() as THREE.MeshStandardMaterial;
-        g.transparent = true;
+        // 半透明の物は不透明の物の後に描かれ、自車の上に重なってしまう。どの部品も不透明の物として(同じ混ぜ方で)描いて、
+        // 描く順番で自車より先にする(GHOST_ORDER)。加算で光る部品(角・翼の発光)は、加算のまま
+        g.transparent = false;
+        if (g.blending === THREE.NormalBlending) {
+          g.blending = THREE.CustomBlending;
+          g.blendSrc = THREE.SrcAlphaFactor;
+          g.blendDst = THREE.OneMinusSrcAlphaFactor;
+          g.blendSrcAlpha = THREE.OneFactor;
+          g.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+        }
         g.opacity = 0.42;
         g.depthWrite = false;
         g.side = THREE.FrontSide;           // 半透明の両面素材は2回描かれる。ゴーストの内側は見えなくてよいので片面にする
@@ -168,7 +184,14 @@ export class GhostCar {
         o.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
         if (sphere.radius * Math.max(scale.x, scale.y, scale.z) < 0.05) { tiny.push(o); return; }
         o.material = Array.isArray(o.material) ? o.material.map(ghostOf) : ghostOf(o.material);
+        o.renderOrder = GHOST_ORDER;
       }
+    });
+    // 自車の不透明な部品は、ゴーストの後に描く(半透明の部品は、もとから不透明の物の後に描かれる)
+    source.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const mats: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
+      if (mats.every((m) => !m.transparent)) o.renderOrder = PLAYER_ORDER;
     });
     lights.forEach((l) => l.parent?.remove(l));
     tiny.forEach((o) => o.parent?.remove(o));

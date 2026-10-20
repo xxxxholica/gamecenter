@@ -3,6 +3,7 @@ import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import { StoredRecord } from '../core/TimeAttackManager';
 import { courseOutlineSvg } from './courseOutline';
 import { STAGES } from './stages';
+import { PEOPLE_SOLID_SVG, TIMER_SOLID_SVG } from './icons';
 
 export interface MapSelectEvents {
   onSelectMap: (mapId: string) => void;
@@ -45,19 +46,26 @@ export class MapSelectScreen {
       <div class="map-cards-container-arcade">
         ${STAGES.map((st, i) => `
         <div class="map-card-arcade${i === 0 ? ' active' : ''}" data-map="${st.id}">
-          ${courseOutlineSvg(st.id)}
-          <div class="map-card-title-arcade">${st.title}</div>
-          <div class="map-card-sub-arcade">${st.sub}</div>
+          <img class="map-photo" src="./ui/course_${st.id}.webp" alt="" draggable="false">
 
-          <div class="map-meta-row">
-            <span class="meta-tag">${st.length}</span>
-            <span class="meta-tag stars">${st.stars}</span>
-            <span class="meta-tag highlight">${st.tag}</span>
-          </div>
+          <!-- タイトル・サブ・タグ・ベストタイムの右に、コース図を並べる -->
+          <div class="map-info-row">
+            <div class="map-info-text">
+              <div class="map-card-title-arcade">${st.title}</div>
+              <div class="map-card-sub-arcade">${st.sub}</div>
 
-          <div class="map-record-arcade">
-            <div class="rec-label">ベストタイム</div>
-            <div class="rec-time-digital" id="rec-time-${st.id}">--:--.---</div>
+              <div class="map-meta-row">
+                <span class="meta-tag">${st.length}</span>
+                <span class="meta-tag stars">${st.stars}</span>
+                <span class="meta-tag highlight">${st.tag}</span>
+              </div>
+
+              <div class="map-record-arcade">
+                <div class="rec-label" aria-label="ベストタイム">${TIMER_SOLID_SVG}</div>
+                <div class="rec-time-digital" id="rec-time-${st.id}">--:--.---</div>
+              </div>
+            </div>
+            ${courseOutlineSvg(st.id)}
           </div>
         </div>`).join('')}
       </div>
@@ -136,7 +144,10 @@ export class MapSelectScreen {
     setBtnLabel(back, 'マシン選択へ');
     const start = q('#ms-btn-start');
     if (start && !on) setBtnLabel(start, '決定');
-    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : 'ベストタイム'; });
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => {
+      l.innerHTML = on ? PEOPLE_SOLID_SVG : TIMER_SOLID_SVG;  // ベストタイム / 希望している人数
+      l.setAttribute('aria-label', on ? '希望している人' : 'ベストタイム');
+    });
     if (on) {
       this.selectedMapId = '';                               // オフラインで選んでいたコースの強調を消す(希望なしの状態)
       this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.remove('active'));

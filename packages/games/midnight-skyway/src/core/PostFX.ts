@@ -14,7 +14,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
 // 夜: 青緑の影と暖色の明かり。ネオンと窓の光をにじませる
 const NIGHT_PRESET = {
-  bloomStrength: 0.28, bloomRadius: 0.35, bloomThreshold: 0.95,
+  bloomStrength: 0.2, bloomRadius: 0.35, bloomThreshold: 0.95,
   contrast: 1.08, saturation: 1.1,
   shadowTint: [-0.012, 0.02, 0.038] as [number, number, number],
   highlightTint: [0.035, 0.014, -0.018] as [number, number, number],
@@ -176,9 +176,9 @@ const WetShader = {
       vec3 sky = vec3(0.025, 0.04, 0.09) * (0.5 + 0.5 * max(0.0, (mat3(uViewInv) * R).y));
       refl = mix(sky, refl, conf);
 
-      // 濡れると地面が暗くなり、その上に反射が乗る
-      vec3 base = col * mix(1.0, 0.55, wet);
-      gl_FragColor = vec4(base + refl * fres * wet * 1.15, 1.0);
+      // 濡れると地面が暗くなり、その上に反射が乗る(どちらも控えめ: 路面の映り込みが景色より目立たないように)
+      vec3 base = col * mix(1.0, 0.8, wet);
+      gl_FragColor = vec4(base + refl * fres * wet * 0.4, 1.0);
     }
   `,
 };
@@ -397,6 +397,7 @@ export class PostFX {
   private readonly anamorphic: ShaderPass;
   private motion = 0;
   private rain = 0;
+  private wetRoad = 0;
   private readonly grade: ShaderPass;
   private readonly clock = new THREE.Clock();
   private width = 0;
@@ -443,19 +444,20 @@ export class PostFX {
     this.enabled = new URLSearchParams(location.search).get('fx') !== '0';
   }
 
-  /** 雨(0〜1)。路面の反射を有効にし、明かりのにじみを強める。 */
-  public setRain(amount: number, lens = 1): void {
+  /** 雨(0〜1)。明かりのにじみを強める。wet: 路面の濡れ(反射・水たまり。0〜1)。雨が止んでいても、路面は濡れたままにできる */
+  public setRain(amount: number, lens = 1, wet = amount): void {
     this.rain = amount;
+    this.wetRoad = wet;
     this.grade.uniforms.uLens.value = amount * lens;
-    this.wet.enabled = amount > 0.01 || this.motion > 0.001;
-    this.wet.uniforms.uWet.value = amount;
+    this.wet.enabled = wet > 0.01 || this.motion > 0.001;
+    this.wet.uniforms.uWet.value = wet;
   }
 
   /** モーションブラーの強さ(0で無効)と、自車の位置(自車の周りはぼかさない) */
   public setMotion(strength: number, car?: THREE.Vector3): void {
     this.motion = strength;
     this.wet.uniforms.uMotion.value = strength;
-    this.wet.enabled = this.rain > 0.01 || strength > 0.001;
+    this.wet.enabled = this.wetRoad > 0.01 || strength > 0.001;
     if (car) this.wet.carWorld.copy(car);
   }
 
@@ -478,20 +480,20 @@ export class PostFX {
     const fastLevel = Math.max(0, (speed - 0.35) / 0.65);          // 最高速に近づくほど強い
     const u = this.grade.uniforms;
     (u.uSpeedFx.value as THREE.Vector4).set(
-      (fastLevel * 0.6 + boost * 1.0) * scale,                    // 放射ブラー
+      (fastLevel * 0.2 + boost * 0.35) * scale,                    // 放射ブラー(控えめ: 周りの景色が流れすぎないように)
       (fastLevel * 0.35 + boost * 0.9 + flash * 1.2 + shake * 0.5) * scale,   // 色収差
       Math.min(1, fastLevel * 0.7 + boost * 0.9) * scale,         // 速度線
       flash * scale                                                 // 閃光
     );
     u.uBoost.value = boost;
-    const flare = (1 + this.rain * 0.4 + boost * 0.8 + flash * 0.6) * scale;
+    const flare = (0.6 + this.rain * 0.2 + boost * 0.8 + flash * 0.6) * scale;   // 明かりの横の光の筋は控えめに
     this.anamorphic.uniforms.uStrength.value = flare;
     this.anamorphic.enabled = flare > 0.02;
     this.anamorphic.uniforms.uThreshold.value = 1.0;
     this.anamorphic.uniforms.uTint.value.copy(this.flareBase).lerp(this.boostFlare, Math.min(1, boost * 1.5));
     (u.uMood.value as THREE.Vector2).set(finale * scale, drift * scale);
     const p = NIGHT_PRESET;
-    this.bloom.strength = p.bloomStrength + boost * 0.45 + flash * 0.4 + finale * 0.12 + this.rain * 0.12;
+    this.bloom.strength = p.bloomStrength + boost * 0.45 + flash * 0.4 + finale * 0.12 + this.rain * 0.06;
     this.bloom.radius = p.bloomRadius + this.rain * 0.15;
     this.bloom.threshold = p.bloomThreshold - this.rain * 0.05;
     this.bloom.enabled = this.bloom.strength >= 0.1;

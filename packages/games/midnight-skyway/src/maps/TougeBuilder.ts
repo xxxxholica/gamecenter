@@ -2018,7 +2018,7 @@ function buildRedArchBridgeAndOnsenTown(
     ),
     new THREE.Mesh(mergeGeometries(roofs), new THREE.MeshLambertMaterial({ color: 0x364252, emissive: 0x121822 })),
     new THREE.Mesh(mergeGeometries(eaveGlows), new THREE.MeshBasicMaterial({ color: 0xffbb55, fog: false })),
-    new THREE.Mesh(mergeGeometries(litWindows), new THREE.MeshBasicMaterial({ map: ryokanTex, color: 0xffcc66, fog: false })),
+    new THREE.Mesh(mergeGeometries(litWindows), new THREE.MeshBasicMaterial({ map: ryokanTex, color: 0xd9ad57, fog: false })),
   );
 
   const gTex = glowTexture();

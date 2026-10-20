@@ -39,6 +39,9 @@ export abstract class MapBase {
   /** 欄干の間の路面の幅(m)。走行ルートに沿った演出(反射板・鋲)に使う。分からなければ null。 */
   public getRoadWidth(): number | null { return null; }
 
+  /** 道沿いの反射板・鋲の間隔(走行ルートのサンプル数。1サンプル約2m)。 */
+  public readonly roadsideStep: number = 4;
+
   /** How much the road gradient works on the car (0 = not at all): the rival bot drives with the same physics. */
   public getGradeEffect(): number { return 0; }
 

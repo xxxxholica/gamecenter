@@ -2,6 +2,7 @@ import { buttonIconHtml } from '../../../../shared/arcadeGuide';
 import { CarSpecs } from '../models/CarBase';
 import { CAR_PALETTES, type CarType, type ColorPreset } from '../../../../shared/carPalette';
 import { btnHtml, setBtnLabel } from './btnGuide';
+import { BALANCE_SOLID_SVG, BOLT_SOLID_SVG, SHIELD_SOLID_SVG } from './icons';
 import { PadEdge, startPadLoop, type PadPress } from '../../../../shared/arcadePad';
 
 export interface CarSelectEvents {
@@ -31,6 +32,8 @@ interface CarCardData {
   sub: string;
   gauges: GaugeData[];
   specMain: string;
+  /** 特性の文の頭に付けるアイコン */
+  specIcon: string;
 }
 
 const CAR_CARDS: CarCardData[] = [
@@ -44,7 +47,8 @@ const CAR_CARDS: CarCardData[] = [
       { label: '旋回力', value: 4, colorClass: 'cyan' },
       { label: '耐久力', value: 3, colorClass: 'cyan' },
     ],
-    specMain: '加速とコーナリングのバランス型',
+    specMain: '加速とコーナリングの<wbr>バランス型',   // 2行になる時は「の」で折る
+    specIcon: BALANCE_SOLID_SVG,
   },
   {
     id: 'dragon_b',
@@ -57,6 +61,7 @@ const CAR_CARDS: CarCardData[] = [
       { label: '耐久力', value: 2, colorClass: 'cyan' },
     ],
     specMain: '軽量・最高速特化',
+    specIcon: BOLT_SOLID_SVG,
   },
   {
     id: 'dragon_c',
@@ -69,6 +74,7 @@ const CAR_CARDS: CarCardData[] = [
       { label: '耐久力', value: 5, colorClass: 'gold' },
     ],
     specMain: '重装甲・高耐久の突破力',
+    specIcon: SHIELD_SOLID_SVG,
   },
 ];
 
@@ -132,7 +138,7 @@ export class CarSelectScreen {
                 <div class="spec-header-row">
                   <span class="spec-badge">特性</span>
                 </div>
-                <div class="spec-main-digital">${c.specMain}</div>
+                <div class="spec-main-digital">${c.specIcon}<span>${c.specMain}</span></div>
               </div>
             </div>`).join('')}
           </div>

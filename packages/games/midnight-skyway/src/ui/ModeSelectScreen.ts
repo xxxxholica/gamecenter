@@ -1,5 +1,6 @@
 import { ModeSelect } from '../../../../shared/online/ModeSelect';
 import { CAR, VS } from './modeArt';
+import { GHOST_SOLID_SVG, PEOPLE_SOLID_SVG, PIN_SOLID_SVG, TIMER_SOLID_SVG } from './icons';
 import type { PublicStatus } from '../../../../shared/netProtocol';
 
 export type PlayMode = 'offline' | 'online';
@@ -27,8 +28,15 @@ export class ModeSelectScreen {
     const full = online !== null && online.players >= online.max;
     const sub = !online ? '現在は開催されていません' : online.phase !== 'lobby' ? 'レース中' : full ? '満員' : `参加中 ${online.players}/${online.max}`;
     this.select.show([
-      { id: 'offline', art: CAR, title: 'オフライン走行', sub: 'ひとりでタイムアタック', desc: '・好きなコースを選ぶ\n・ベストタイムを記録できる\n・1位のゴーストと勝負' },
-      { id: 'online', art: VS, title: 'オンライン対戦', sub, desc: '・最大4人で同時にスタート\n・待機中にコースの希望を出せる', disabled: !online || full },
+      { id: 'offline', art: CAR, title: 'オフライン走行', sub: 'ひとりでタイムアタック', points: [
+        { icon: PIN_SOLID_SVG, text: '好きなコースを選ぶ' },
+        { icon: TIMER_SOLID_SVG, text: 'ベストタイムを記録できる' },
+        { icon: GHOST_SOLID_SVG, text: '1位のゴーストと勝負' },
+      ] },
+      { id: 'online', art: VS, title: 'オンライン対戦', sub, points: [
+        { icon: PEOPLE_SOLID_SVG, text: '最大4人で同時にスタート' },
+        { icon: PIN_SOLID_SVG, text: '待機中に\u200bコースの希望を出せる' },   // 狭い画面では「に」で折る
+      ], disabled: !online || full },
     ]);
   }
 

@@ -245,7 +245,7 @@ export class CarController {
     const isBraking = inp.backward || inp.handbrake;
     const steerIntent = inp.left ? 1 : (inp.right ? -1 : 0);
 
-    if (!this.isDrifting && this.speed > 7.5 && steerIntent !== 0 && isBraking && Math.abs(this.currentSteerAngle) > 0.05) {
+    if (!this.isDrifting && this.speed > 7.5 && steerIntent !== 0 && isBraking && Math.abs(this.currentSteerAngle) > 0.02) {
       this.isDrifting = true;
       this.driftDirection = steerIntent;
       this.velocityHeading = this.rotationY;
@@ -266,13 +266,13 @@ export class CarController {
 
     // Smooth drift transition factor (0 = grip, 1 = full drift)
     const targetDriftFactor = this.isDrifting ? 1.0 : 0.0;
-    this.driftFactor = THREE.MathUtils.lerp(this.driftFactor, targetDriftFactor, Math.min(1, (this.isDrifting ? 10.0 : 9.0) * dt));
+    this.driftFactor = THREE.MathUtils.lerp(this.driftFactor, targetDriftFactor, Math.min(1, (this.isDrifting ? 16.0 : 9.0) * dt));   // ドリフトに入るのは素早く
 
     // 1. Steering with speed sensitivity & drift allowance
     const v = Math.abs(this.speed);
     const normalMaxSteer = Math.min(this.maxSteerAngle, Math.atan((2.45 * 14) / Math.max(v * v, 1)));
-    // Restrain max drift steer so the car doesn't turn in too sharply
-    const driftMaxSteer = Math.min(this.maxSteerAngle * 0.85, normalMaxSteer * 1.25);
+    // ドリフト中は、通常より大きく切れる(ただし、切れ角の上限の95%まで)
+    const driftMaxSteer = Math.min(this.maxSteerAngle * 0.95, normalMaxSteer * 1.5);
     const effectiveMaxSteer = THREE.MathUtils.lerp(normalMaxSteer, driftMaxSteer, this.driftFactor);
 
     let targetSteer = 0;
@@ -344,8 +344,8 @@ export class CarController {
     let turnAngularVel = (this.speed / wheelbase) * Math.sin(this.currentSteerAngle);
 
     if (this.driftFactor > 0.01) {
-      // Modest oversteer: tail rotates outward gently without snapping into a tight turn
-      const oversteerMultiplier = 1.0 + 0.35 * this.driftFactor;
+      // ドリフト中は向きが変わりやすい(オーバーステア)。曲がりやすさを強めにする
+      const oversteerMultiplier = 1.0 + 0.7 * this.driftFactor;
       turnAngularVel *= oversteerMultiplier;
 
       // Responsive counter-steering to easily straighten out
@@ -355,8 +355,9 @@ export class CarController {
       }
     }
 
-    // Clamp turn angular velocity to prevent sudden aggressive spinning
-    turnAngularVel = THREE.MathUtils.clamp(turnAngularVel, -1.25, 1.25);
+    // Clamp turn angular velocity to prevent sudden aggressive spinning (ドリフト中は上限を少し上げて、小さく回り込めるようにする)
+    const maxTurn = THREE.MathUtils.lerp(1.25, 1.6, this.driftFactor);
+    turnAngularVel = THREE.MathUtils.clamp(turnAngularVel, -maxTurn, maxTurn);
 
     this.rotationY += turnAngularVel * dt;
 
@@ -418,7 +419,7 @@ export class CarController {
       const combo = 1 + Math.min(2, this.driftChainTime * 0.5);          // x1 -> x3 over four seconds
       this.driftChain += Math.abs(this.speed) * Math.abs(this.slipAngle) * 20 * combo * dt;
     } else if (this.driftChainTime > 0) {
-      if (this.driftChainTime >= 0.6 && this.driftChain >= 25 && this.speed > 8) {
+      if (this.driftChainTime >= 0.35 && this.driftChain >= 15 && this.speed > 8) {   // 短いドリフトでも、早めにポイントとして認める
         const points = Math.round(this.driftChain);
         const boostSec = Math.min(3.0, Math.max(0.9, 0.8 + this.driftChainTime * 0.6));
         this.driftScore += points;
@@ -471,18 +472,28 @@ export class CarController {
   }
 
   /**
-   * Wheels do NOT spin (by design). The front pair (indices 0 and 1) turns with the steering, always relative to the yaw
-   * each wheel was built with (outer face outward). The rear wheels keep their built orientation.
+   * Wheels spin with the speed (capped: faster than ~4 turns a second the spokes would strobe and seem to stand still or
+   * turn backwards; the garage spins them at the same rate). The front pair (indices 0 and 1) also turns with the steering,
+   * always relative to the yaw each wheel was built with (outer face outward); the rear wheels keep their built orientation.
    */
-  private animateWheels(_dt: number): void {
+  private animateWheels(dt: number): void {
     const wheels = this.car.wheels;
     if (!wheels || wheels.length < 4) return;
+    const spin = THREE.MathUtils.clamp(this.speed / CarController.WHEEL_RADIUS, -CarController.WHEEL_SPIN_MAX, CarController.WHEEL_SPIN_MAX);
+    this.wheelAngle = (this.wheelAngle + spin * dt) % (Math.PI * 2);
     const base = this.car.wheelBaseYaw;
     wheels.forEach((w, i) => {
-      w.rotation.x = 0;
+      // 左側のタイヤは向きが反転して作られている(wheelBaseYaw が π)ので、回転の向きも逆にする
+      const flipped = Math.abs(Math.abs(base[i] ?? 0) - Math.PI) < 0.1;
+      w.rotation.x = flipped ? -this.wheelAngle : this.wheelAngle;
       w.rotation.y = (base[i] ?? 0) + (i < 2 ? this.currentSteerAngle : 0);
     });
   }
+
+  /** タイヤの半径(m)と、見た目の回転の上限(rad/s。ガレージの WHEEL_SPIN と同じ) */
+  private static readonly WHEEL_RADIUS = 0.36;
+  private static readonly WHEEL_SPIN_MAX = 26;
+  private wheelAngle = 0;
 
   /**
    * Speed in km/h for UI display

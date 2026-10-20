@@ -1,5 +1,7 @@
 import { MINIMAP_SIZE, tracePolylineNear } from './minimapTrace';
-import { speedGaugeSvg, boostArcSvg, angleOf, SPEED_MAX, SPEED_RED, SPEED_WARN, SEG_COUNT } from './dials';
+import { speedGaugeSvg, angleOf, SPEED_MAX, SPEED_RED, SPEED_WARN, SEG_COUNT } from './dials';
+import { STAGES } from './stages';
+import { TIMER_SOLID_SVG } from './icons';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
 import { returnToHub } from '../../../../shared/homeReturn';
@@ -41,6 +43,27 @@ const SPEED_COLORS: ReadonlyArray<readonly [string, string, string]> = [
   ['#d8605f', 'rgba(216, 96, 95, 0.85)', 'rgba(216, 96, 95, 0.45)'],
 ];
 
+const TROPHY_SOLID_SVG =
+  '<svg class="ri-ico ri-trophy" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M5 2.5H19V5.2H22.2V9.5C22.2 12.3 20.4 14.3 17.8 14.8C16.7 16.5 15 17.7 13.3 18.1V19.8H17.5V22.2H6.5V19.8H10.7V18.1C9 17.7 7.3 16.5 6.2 14.8C3.6 14.3 1.8 12.3 1.8 9.5V5.2H5V2.5Z" fill="currentColor" stroke="rgba(0,0,0,0.92)" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke fill"/>' +
+  '<path d="M3.7 7.2H5.3V11.8C4.3 11.4 3.7 10.5 3.7 9.4V7.2ZM20.3 7.2H18.7V11.8C19.7 11.4 20.3 10.5 20.3 9.4V7.2Z" fill="#05070c"/>' +
+  '</svg>';
+const TROPHY_EMPTY_SVG =
+  '<svg class="ri-ico ri-trophy-empty" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<path d="M5.5 3H18.5V6H21.5V9.5C21.5 11.9 19.9 13.7 17.6 14.2C16.6 15.8 15 17 13 17.4V19.8H16.8V21.5H7.2V19.8H11V17.4C9 17 7.4 15.8 6.4 14.2C4.1 13.7 2.5 11.9 2.5 9.5V6H5.5V3Z" fill="rgba(5,9,20,0.72)" stroke="rgba(0,0,0,0.9)" stroke-width="4.2" stroke-linejoin="round"/>' +
+  '<path d="M5.5 3H18.5V6H21.5V9.5C21.5 11.9 19.9 13.7 17.6 14.2C16.6 15.8 15 17 13 17.4V19.8H16.8V21.5H7.2V19.8H11V17.4C9 17 7.4 15.8 6.4 14.2C4.1 13.7 2.5 11.9 2.5 9.5V6H5.5V3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3.2 2.4" stroke-linejoin="round"/>' +
+  '</svg>';
+const TIMER_EMPTY_SVG =
+  '<svg class="ri-ico ri-timer-empty" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<circle cx="12" cy="13.6" r="8.2" fill="rgba(5,9,20,0.72)" stroke="rgba(0,0,0,0.9)" stroke-width="4.2"/>' +
+  '<circle cx="12" cy="13.6" r="8.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3.2 2.4"/>' +
+  '<path d="M9.2 2H14.8M12 9.5V13.6L14.8 15.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '</svg>';
+const FLAG_SVG =
+  '<svg class="ri-ico" viewBox="0 0 20 22" aria-hidden="true">' +
+  '<path d="M3 2H5.5V4H17.5L14.5 9L17.5 14H5.5V20H3V2Z" fill="currentColor" stroke="rgba(0,0,0,0.92)" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke fill"/>' +
+  '</svg>';
+
 export class DriveHUD {
   private container: HTMLElement;
   private accent = '#8ec9dc';
@@ -77,6 +100,10 @@ export class DriveHUD {
   private resRankEl!: HTMLElement;
   private resProgressEl!: HTMLElement;
   private resTitleEl!: HTMLElement;
+  private resStageEl!: HTMLElement;
+  private resTagEl!: HTMLElement;
+  private courseName = '';
+  private stopCountUp: (() => void) | null = null;
   // ゴールの瞬間に画面の中央へ打ち込むタイム
   private finishStampEl!: HTMLElement;
   private fsTimeEl!: HTMLElement;
@@ -89,9 +116,10 @@ export class DriveHUD {
   private gateBonusEl: HTMLElement | null = null;
   private ghostGapEl: HTMLElement | null = null;
   private driftEl!: HTMLElement;
-  private driftTagEl: HTMLElement | null = null;
-  private driftChainEl!: HTMLElement;
-  private boostFillEl!: SVGElement;
+  private driftFillEl!: HTMLElement;
+  /** バーの状態(idle=隠れている / charge=溜めている / ready=満タン / boost=ブースト中)と、塗りの長さ(%)。変わった時だけ書き換える */
+  private driftState: 'idle' | 'charge' | 'ready' | 'boost' = 'idle';
+  private driftPct = -1;
   private gateTimeout: number | null = null;
 
   // Pause Modal DOM
@@ -150,14 +178,16 @@ export class DriveHUD {
       <!-- 画面の縁: 速度・ブーストに合わせて光る -->
       <div class="hud-edge" id="hud-edge"></div>
 
-      <!-- Bottom: 1/4 円の速度メーター(隅に速度の数字)。ドリフト・ブーストは外側の弧 -->
+      <!-- Drift / Boost: 競争コースだけ。画面の中央下に、ドリフトした時だけ出るバー(車の色の波模様で溜まる) -->
+      <div class="hud-drift-bar" id="hud-drift" style="display: none;">
+        <div class="hdb-track"><div class="hdb-fill" id="hud-drift-fill"></div></div>
+      </div>
+
+      <!-- Bottom: 1/4 円の速度メーター(隅に速度の数字) -->
       <div class="hud-band" id="hud-band">
         <div class="speed-gauge">
           ${speedGaugeSvg()}
-          <!-- Drift / Boost: 競争コースだけ。速度メーターの外側に弧を被せる -->
-          <div class="hud-drift" id="hud-drift" style="display: none;">${boostArcSvg()}</div>
           <div class="sg-readout">
-            <div class="hud-drift-line"><span class="hud-drift-tag" id="hud-drift-tag"></span><span class="hud-drift-chain" id="hud-drift-chain"></span></div>
             <span class="speedo-num" id="hud-speed">0</span>
             <span class="sg-unit">km/h</span>
           </div>
@@ -188,22 +218,26 @@ export class DriveHUD {
         <div class="fs-tag" id="fs-tag"></div>
       </div>
 
-      <!-- Time Attack Result Modal -->
-      <div id="hud-result-modal" class="hud-result-modal hud-result-side" style="display: none;">
+      <!-- Time Attack Result Modal: 1行目=コース名 / 2行目=タイム(車の主色) / 3行目=順位・ベスト差・区間1〜3 / 4行目=ボタン -->
+      <div id="hud-result-modal" class="hud-result-modal hud-result-side res-variant-3" style="display: none;">
         <div class="hud-arcade-modal-box">
-          <div class="arcade-modal-title gold" id="res-title">ゴール</div>
-          <div class="hud-result-time-big" id="res-total-time">00:00.000</div>
-          <div class="res-badges">
-            <div class="res-sub" id="res-sub"></div>
-            <div class="res-rank" id="res-rank" style="display: none;"></div>
+          <div class="res-kicker" id="res-title">
+            <span class="rk-stage" id="res-stage"></span>
+            <span class="rk-tag" id="res-tag" style="display: none;"></span>
           </div>
-          <div class="res-progress" id="res-progress" style="display: none;"></div>
+          <div class="hud-result-time-big" id="res-total-time">00:00.000</div>
 
-          <!-- 区間ごとの、ライバルとの差(区間ごとに枠で囲んで3つ並べる) -->
-          <div class="res-sectors" id="res-sectors">
-            <div class="rs-box"><span class="rs-head">区間1</span><span class="rs-val" id="res-sec-1">--</span></div>
-            <div class="rs-box"><span class="rs-head">区間2</span><span class="rs-val" id="res-sec-2">--</span></div>
-            <div class="rs-box"><span class="rs-head">区間3</span><span class="rs-val" id="res-sec-3">--</span></div>
+          <div class="res-row3" id="res-row3">
+            <div class="res-badges">
+              <div class="res-rank" id="res-rank" style="display: none;"></div>
+              <div class="res-sub" id="res-sub"></div>
+            </div>
+            <div class="res-progress" id="res-progress" style="display: none;"></div>
+            <div class="res-sectors" id="res-sectors">
+              <div class="rs-box"><span class="rs-head">1</span><span class="rs-val" id="res-sec-1">--</span></div>
+              <div class="rs-box"><span class="rs-head">2</span><span class="rs-val" id="res-sec-2">--</span></div>
+              <div class="rs-box"><span class="rs-head">3</span><span class="rs-val" id="res-sec-3">--</span></div>
+            </div>
           </div>
 
           <div class="hud-arcade-result-buttons">
@@ -242,6 +276,8 @@ export class DriveHUD {
     this.resRankEl = document.getElementById('res-rank')!;
     this.resProgressEl = document.getElementById('res-progress')!;
     this.resTitleEl = document.getElementById('res-title')!;
+    this.resStageEl = document.getElementById('res-stage')!;
+    this.resTagEl = document.getElementById('res-tag')!;
     this.finishStampEl = document.getElementById('hud-finish-stamp')!;
     this.fsTimeEl = document.getElementById('fs-time')!;
     this.fsTagEl = document.getElementById('fs-tag')!;
@@ -251,9 +287,7 @@ export class DriveHUD {
     this.gateBonusEl = document.getElementById('hud-gate-bonus');
     this.ghostGapEl = document.getElementById('hud-ghost-gap');
     this.driftEl = document.getElementById('hud-drift')!;
-    this.driftTagEl = document.getElementById('hud-drift-tag');
-    this.driftChainEl = document.getElementById('hud-drift-chain')!;
-    this.boostFillEl = document.getElementById('hud-boost-fill') as unknown as SVGElement;
+    this.driftFillEl = document.getElementById('hud-drift-fill')!;
 
     // Pause elements
     this.pauseModalEl = document.getElementById('hud-pause-modal')!;
@@ -318,9 +352,12 @@ export class DriveHUD {
       const items = buttons.map((button, i) => ({ button, color: modal === this.resultModalEl ? (colors[i] ?? colors[0]) : colors[0] }));
       setupResultMenu(buttons[0]?.parentElement ?? null, items);
     }
+    this.setAccent(this.accent);
   }
 
   public setMap(map: MapBase): void {
+    const st = STAGES.find((s) => s.id === map.metadata?.id);
+    this.courseName = st?.title ?? map.metadata?.name ?? '';
     const attr = map.metadata?.attribution;
     if (attr) {
       this.attributionEl.textContent = attr;
@@ -373,16 +410,61 @@ export class DriveHUD {
   }
 
   /**
-   * 走行中の HUD の主色(選んだ車の色)。CSS の --hud-accent / --hud-accent-rgb を書き換え、
-   * 速度の数字(通常時)とミニマップの自車も、この色にする。警戒(黄)・レッド(赤)は意味のある色なので変えない。
+   * 走行中の HUD の主色(選んだ車の色)。CSS の --hud-accent / --hud-accent-rgb と、
+   * リザルトのタイム文字の中を流れる波模様(--hud-wave-bg)を書き換える。
    */
   public setAccent(hex: string): void {
     const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
     this.accent = hex;
-    this.accentRgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+    this.accentRgb = `${r}, ${g}, ${b}`;
+    // HUD用のパステル寄りの色(r,g,b)から色相(H)を取り出し、彩度100%・深みのある高コントラストな3層波カラーに変換する
+    const rf = r / 255, gf = g / 255, bf = b / 255;
+    const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
+    let h = 0;
+    if (max !== min) {
+      const d = max - min;
+      if (max === rf) h = ((gf - bf) / d + (gf < bf ? 6 : 0)) * 60;
+      else if (max === gf) h = ((bf - rf) / d + 2) * 60;
+      else h = ((rf - gf) / d + 4) * 60;
+    }
+    // 紅蓮(h≈17°)は鮮やかな深紅(8°)へ寄せ、暖色は深い琥珀・真紅へ、寒色は深いコバルト・群青へ色相を深める
+    const hBase = h < 28 ? 8 : h;
+    const shift = hBase < 80 ? -10 : 14;
+    const hsl = (deg: number, s: number, l: number): string => `hsl(${((deg % 360) + 360) % 360}, ${s}%, ${l}%)`;
+    const cCrest = hsl(hBase - shift * 0.4, 100, 68);
+    const cTop = hsl(hBase, 98, 49);
+    const cMain = hsl(hBase + shift, 98, 39);
+    const cRich = hsl(hBase + shift * 1.8, 96, 27);
+    const cDeep = hsl(hBase + shift * 2.3, 95, 15);
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" preserveAspectRatio="none">` +
+      `<defs>` +
+      `<linearGradient id="g0" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0%" stop-color="${cTop}"/>` +
+      `<stop offset="100%" stop-color="${cMain}"/>` +
+      `</linearGradient>` +
+      `<linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0%" stop-color="${cMain}"/>` +
+      `<stop offset="100%" stop-color="${cRich}"/>` +
+      `</linearGradient>` +
+      `<linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0%" stop-color="${cRich}"/>` +
+      `<stop offset="100%" stop-color="${cDeep}"/>` +
+      `</linearGradient>` +
+      `</defs>` +
+      `<rect width="200" height="120" fill="url(#g0)"/>` +
+      `<path d="M0,44 C32,10 68,78 100,44 C132,10 168,78 200,44 L200,120 L0,120 Z" fill="url(#g1)"/>` +
+      `<path d="M0,44 C32,10 68,78 100,44 C132,10 168,78 200,44" fill="none" stroke="${cCrest}" stroke-width="6"/>` +
+      `<path d="M0,78 C32,110 68,46 100,78 C132,110 168,46 200,78 L200,120 L0,120 Z" fill="url(#g2)"/>` +
+      `<path d="M0,78 C32,110 68,46 100,78 C132,110 168,46 200,78" fill="none" stroke="${cTop}" stroke-width="4.5" stroke-opacity="0.9"/>` +
+      `</svg>`;
     const st = this.container.style;
     st.setProperty('--hud-accent', this.accent);
     st.setProperty('--hud-accent-rgb', this.accentRgb);
+    st.setProperty('--hud-wave-bg', `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
     this.updateNumberColor(this.numberLevel);
   }
 
@@ -530,53 +612,42 @@ export class DriveHUD {
     if (this.ghostGapEl.className !== cls) this.ghostGapEl.className = cls;
   }
 
-  /** 外側の弧の長さ(0〜100%) */
-  private setBoostArc(pct: number): void {
-    this.boostFillEl.setAttribute('stroke-dasharray', `${pct} 100`);
-  }
-
+  /**
+   * ドリフト / ブーストのバー(文字は出さない)。ドリフトを始めると出て(打ち込まれるように)、溜まるほど車の色の波模様が伸び、
+   * 満タンで明滅する。ブースト中は減っていき、使い切ると消える。
+   */
   public updateDrift(_score: number, chain: number, chainTime: number, boostLeft: number, boostMax: number): void {
     const isMax = chainTime >= 3.6 || boostLeft >= 4.4;
-
+    let state: 'idle' | 'charge' | 'ready' | 'boost';
+    let pct: number;
     if (isMax) {
-      // 溜まった時: READYのみ、ゲージ100%
-      if (this.driftTagEl) {
-        this.driftTagEl.textContent = 'READY';
-        this.driftTagEl.style.display = 'inline-block';
-        this.driftTagEl.classList.add('ready');
-      }
-      setText(this.driftChainEl, '');
-      this.setBoostArc(100);
-      this.driftEl.classList.add('boosting');
+      state = 'ready';
+      pct = 100;
     } else if (chain > 0) {
-      // 貯めている時: 数字のみ、ゲージも溜まっていく
-      if (this.driftTagEl) {
-        this.driftTagEl.style.display = 'none';
-        this.driftTagEl.classList.remove('ready');
-      }
-      setText(this.driftChainEl, `+${Math.round(chain)}`);
-      const chargePct = Math.round(Math.min(1, chainTime / 3.6) * 100);
-      this.setBoostArc(chargePct);
-      this.driftEl.classList.remove('boosting');
+      state = 'charge';
+      pct = Math.round(Math.min(1, chainTime / 3.6) * 100);
     } else if (boostLeft > 0) {
-      // ブースト中: 文字なし、ゲージが減っていく
-      if (this.driftTagEl) {
-        this.driftTagEl.style.display = 'none';          // 「BOOST」の文字は出さない
-        this.driftTagEl.classList.remove('ready');
-      }
-      setText(this.driftChainEl, '');
-      this.setBoostArc(Math.round(Math.min(1, boostLeft / Math.max(0.1, boostMax)) * 100));
-      this.driftEl.classList.add('boosting');
+      state = 'boost';
+      pct = Math.round(Math.min(1, boostLeft / Math.max(0.1, boostMax)) * 100);
     } else {
-      // 何もしていない時: 文字なし、ゲージ0%
-      if (this.driftTagEl) {
-        this.driftTagEl.style.display = 'none';          // 「DRIFT」の文字は出さない
-        this.driftTagEl.classList.remove('ready');
-      }
-      setText(this.driftChainEl, '');
-      this.setBoostArc(0);
-      this.driftEl.classList.remove('boosting');
+      state = 'idle';
+      pct = 0;
     }
+    if (pct !== this.driftPct) {
+      this.driftPct = pct;
+      this.driftFillEl.style.setProperty('--p', `${pct}%`);
+    }
+    if (state === this.driftState) return;
+    const el = this.driftEl;
+    if (this.driftState === 'idle' && state !== 'idle') {
+      el.classList.remove('pop');                    // 出るたびに、打ち込みのアニメーションをやり直す
+      void el.offsetWidth;
+      el.classList.add('pop');
+    }
+    el.classList.toggle('show', state !== 'idle');
+    el.classList.toggle('ready', state === 'ready');
+    el.classList.toggle('boosting', state === 'boost' || state === 'ready');
+    this.driftState = state;
   }
 
   /**
@@ -585,28 +656,50 @@ export class DriveHUD {
    */
   public showResultModal(result: TimeAttackResult): void {
     const timedOut = !!result.timedOut;
-    this.resTitleEl.textContent = 'タイムアップ';
-    this.resTitleEl.style.display = timedOut ? '' : 'none';
+    const isRecord = !timedOut && result.isNewRecord && result.prevBestMs !== undefined;
+    this.resultModalEl.classList.toggle('is-record', isRecord);
+    this.resultModalEl.classList.toggle('is-timeout', timedOut);
+    this.resTitleEl.style.display = 'flex';
+    this.resStageEl.textContent = this.courseName;
+    this.resStageEl.style.display = this.courseName ? '' : 'none';
+    // FINISH などのラベルは出さず、タイムアップのときだけ見出し横に添える
+    this.resTagEl.textContent = timedOut ? 'タイムアップ' : '';
+    this.resTagEl.style.display = timedOut ? 'inline-block' : 'none';
+    this.resTagEl.className = 'rk-tag' + (timedOut ? ' timeout' : '');
     const timeEl = this.resTotalTimeEl;
-    timeEl.classList.toggle('record', !timedOut && result.isNewRecord && result.prevBestMs !== undefined);   // ベストタイム更新は金色
+    timeEl.classList.toggle('record', isRecord);
     timeEl.classList.add('stamp');
-    countUpText(timeEl, result.formattedTime);
+    this.stopCountUp?.();
+    this.stopCountUp = countUpText(timeEl, result.formattedTime);
 
-    // ベストタイムとの差: 更新したら帯で、届かなければ控えめに(初めての完走では出さない)
-    let sub = '', subCls = '';
-    if (!timedOut && result.prevBestMs !== undefined) {
-      const diff = (result.totalTimeMs - result.prevBestMs) / 1000;
-      if (result.isNewRecord) { sub = `ベストタイム更新  −${Math.abs(diff).toFixed(3)}`; subCls = 'record'; }
-      else { sub = `ベストタイムまで  +${diff.toFixed(3)}`; subCls = 'slow'; }
+    // ベストタイムとの差: 太い時計アイコン + 差分の秒数(初回完走で記録がない時は点線アイコン + ---)
+    if (timedOut) {
+      this.resSubEl.innerHTML = '';
+      this.resSubEl.className = 'res-sub';
+      this.resRankEl.style.display = 'none';
+    } else {
+      if (result.prevBestMs !== undefined) {
+        const diff = (result.totalTimeMs - result.prevBestMs) / 1000;
+        const sign = result.isNewRecord ? '−' : '+';
+        const val = `${sign}${Math.abs(diff).toFixed(3)}`;
+        this.resSubEl.innerHTML = `${TIMER_SOLID_SVG}<span class="ri-txt">${val}</span>`;
+        this.resSubEl.className = `res-sub ${result.isNewRecord ? 'record' : 'slow'}`;
+      } else {
+        this.resSubEl.innerHTML = `${TIMER_EMPTY_SVG}<span class="ri-txt">---</span>`;
+        this.resSubEl.className = 'res-sub empty';
+      }
+      // 順位が確定するまでは点線の空トロフィー + --位 を出しておく(圏外のままでも空スロットであることが分かる)
+      this.resRankEl.innerHTML = `${TROPHY_EMPTY_SVG}<span class="ri-txt">--位</span>`;
+      this.resRankEl.className = 'res-rank rank-none';
+      this.resRankEl.style.display = 'inline-flex';
     }
-    this.resSubEl.textContent = sub;
-    this.resSubEl.className = `res-sub ${subCls}`;
-    this.resRankEl.style.display = 'none';
 
-    this.resProgressEl.style.display = timedOut ? 'block' : 'none';
-    this.resProgressEl.textContent = `到達地点  ${Math.round((result.progress ?? 0) * 100)}%`;
+    this.resProgressEl.style.display = timedOut ? 'inline-flex' : 'none';
+    if (timedOut) {
+      this.resProgressEl.innerHTML = `${FLAG_SVG}<span class="ri-txt">${Math.round((result.progress ?? 0) * 100)}%</span>`;
+    }
 
-    // 区間: ライバルとの差(速ければ緑、遅ければ赤。枠の線も同じ色)。比べる相手がいなければ区間のタイム
+    // 区間: ライバルとの差(速ければ緑、遅ければ赤)。番号チップ(1/2/3) + 数値のみ
     this.resSectorsEl.style.display = timedOut ? 'none' : '';
     this.resSecEls.forEach((el, i) => {
       const sec = result.sectors[i];
@@ -621,11 +714,18 @@ export class DriveHUD {
     this.syncPadMenu(0); // 再挑戦がデフォルト
   }
 
-  /** ランキングの順位が分かった(上位に入った): リザルトに順位を出す */
-  public setResultRank(rank: number): void {
-    this.resRankEl.textContent = `ランキング ${rank}位`;
-    this.resRankEl.classList.toggle('top', rank === 1);
-    this.resRankEl.style.display = 'inline-block';
+  /** ランキングの順位が分かった(1位=金、2位=銀、3位=銅、4位〜=水色のトロフィー。null=圏外は点線トロフィー) */
+  public setResultRank(rank: number | null): void {
+    if (rank === null) {
+      this.resRankEl.innerHTML = `${TROPHY_EMPTY_SVG}<span class="ri-txt">--位</span>`;
+      this.resRankEl.className = 'res-rank rank-none';
+      this.resRankEl.style.display = 'inline-flex';
+      return;
+    }
+    const tier = rank === 1 ? 'rank-1 top' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+    this.resRankEl.innerHTML = `${TROPHY_SOLID_SVG}<span class="ri-txt">${rank}位</span>`;
+    this.resRankEl.className = `res-rank ${tier}`;
+    this.resRankEl.style.display = 'inline-flex';
     this.resRankEl.classList.remove('pop');
     void this.resRankEl.offsetWidth;
     this.resRankEl.classList.add('pop');
@@ -663,6 +763,8 @@ export class DriveHUD {
   }
 
   public hideResultModal(): void {
+    this.stopCountUp?.();
+    this.stopCountUp = null;
     this.resTotalTimeEl.classList.remove('stamp');
     this.resultModalEl.style.display = 'none';
     this.container.classList.remove('result-open');

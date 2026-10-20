@@ -295,7 +295,7 @@ interface DragonDef {
   cockpitEye: [number, number, number];
   /** 発光リム・LED(Mat_Emissive)の強さ */
   emissive: number;
-  /** 角・翼に重ねる発光エフェクトの強さ。0 なら無し(Azure はモデル自体に発光ジオメトリがある) */
+  /** 角・翼に重ねる発光エフェクトの強さ。0 なら無し */
   partGlow: number;
   /** 尻尾にも発光エフェクトを重ねるか(partGlow > 0 のとき) */
   tailGlow: boolean;
@@ -335,8 +335,8 @@ const DRAGON_DEFS: Record<DragonVariant, DragonDef> = {
     shadow: [2.2, 6.2, -0.45],
     cockpitEye: [-0.28, 0.80, 0.10],
     emissive: 0.9,   // 翼のブレードが面で光るので、Crimson より抑える
-    partGlow: 0,
-    tailGlow: false,
+    partGlow: 1.4,   // 角・翼・尻尾の骨組みは暗い青なので、縁と先端を光らせて形を見せる(ブレードは Mat_Emissive なので重ねない)
+    tailGlow: true,
   },
   c: {
     specs: {
@@ -543,7 +543,7 @@ export class DragonCarModel extends CarBase {
         m.envMapIntensity = 1.48;
         if (isMat(name, 'Mat_CarPaint') || isMat(name, 'Mat_Scales') || isMat(name, 'Mat_Armor')
           || isMat(name, 'Mat_Horn') || isMat(name, 'Mat_Emissive')) {
-          m.userData = { ...m.userData, skyEnv: 1.7, skyEnvNight: 1.48 };
+          m.userData = { ...m.userData, skyEnv: 1.7, skyEnvNight: 0.9 };   // 走行中の映り込みは控えめに(景色より車体が光りすぎないように)
         }
         if (isMat(name, 'Mat_CarPaint')) {
           this.paintMaterials.push(m);
@@ -564,7 +564,7 @@ export class DragonCarModel extends CarBase {
           m.depthWrite = false;
           m.side = THREE.DoubleSide;
           m.envMapIntensity = 1.80;
-          m.userData = { ...m.userData, skyEnv: 1.8, skyEnvNight: 1.5 };
+          m.userData = { ...m.userData, skyEnv: 1.8, skyEnvNight: 0.9 };
           this.glassMaterials.push(m);
           this.glassMaterial = m;
         }

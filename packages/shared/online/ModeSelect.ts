@@ -7,6 +7,8 @@ export interface ModeItem {
   title: string;
   sub?: string;
   desc?: string;
+  /** 説明を、行ごとにアイコンを付けて出す(desc の代わり)。icon はインラインSVGのHTML(呼び出し側が持つ固定の文字列だけを渡すこと) */
+  points?: { icon: string; text: string }[];
   /** カード上部の小さな見出し(例: OFFLINE / ONLINE) */
   badge?: string;
   /** カードの絵(インラインSVGのHTML。呼び出し側が持つ固定の文字列だけを渡すこと) */
@@ -56,6 +58,9 @@ const css = `
 .msel-card .t { font-size: 1.7em; font-weight: 900; margin: 4px 0 2px; }
 .msel-card .s { font-size: .95em; font-weight: 800; color: #ffcc00; margin-bottom: .5em; min-height: 1.3em; }
 .msel-card .d { font-size: 1em; line-height: 1.7; color: #d8e2f0; margin-top: .4em; }
+.msel-card .d .msel-pt { display: flex; align-items: center; gap: .4em; }
+.msel-card .d .msel-pt span { word-break: keep-all; overflow-wrap: anywhere; }   /* 語の途中では折らない(折ってよい位置は、文にゼロ幅スペースを入れて示す) */
+.msel-card .d .msel-pt svg { flex: none; width: 1.1em; height: 1.1em; color: var(--msel-accent); overflow: visible; }
 .msel-card.disabled { opacity: .38; filter: grayscale(1); cursor: not-allowed; }
 .msel-card.disabled:hover { transform: skewX(-6deg); box-shadow: none; }
 .msel-bar { display: flex; gap: 24px; width: 100%; max-width: 82em; justify-content: space-between; align-items: center; }
@@ -201,7 +206,12 @@ export class ModeSelect {
         if (it.art) art.innerHTML = it.art;                      // 呼び出し側の固定のSVG(ユーザー入力は入れない)
         const t = Object.assign(document.createElement('div'), { className: 't', textContent: it.title });
         const s = Object.assign(document.createElement('div'), { className: 's', textContent: it.sub ?? '' });
-        const d = Object.assign(document.createElement('div'), { className: 'd', textContent: it.desc ?? '' });
+        const d = Object.assign(document.createElement('div'), { className: 'd', textContent: it.points ? '' : it.desc ?? '' });
+        for (const pt of it.points ?? []) {
+          const row = Object.assign(document.createElement('div'), { className: 'msel-pt', innerHTML: pt.icon });   // 呼び出し側の固定のSVG
+          row.append(Object.assign(document.createElement('span'), { textContent: pt.text }));
+          d.append(row);
+        }
         c.append(badge, art, t, s, d);
         c.onclick = () => {
           if (it.disabled) return;

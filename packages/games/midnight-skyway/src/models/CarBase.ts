@@ -248,8 +248,8 @@ export abstract class CarBase {
       this.wetBackup = new Map();
       for (const m of mats) {
         this.wetBackup.set(m, { roughness: m.roughness, envMapIntensity: m.envMapIntensity });
-        m.roughness = Math.max(0.04, m.roughness * 0.5);
-        m.envMapIntensity = m.envMapIntensity * 1.7;
+        m.roughness = Math.max(0.04, m.roughness * 0.75);   // 濡れてつやは出るが、鏡のようにはしない
+        m.envMapIntensity = m.envMapIntensity * 1.25;
       }
     } else {
       this.wetBackup?.forEach((v, m) => { m.roughness = v.roughness; m.envMapIntensity = v.envMapIntensity; });

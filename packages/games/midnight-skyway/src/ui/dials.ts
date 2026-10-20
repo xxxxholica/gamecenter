@@ -64,12 +64,3 @@ export function speedGaugeSvg(): string {
     </svg>`;
 }
 
-/** ドリフト・ブーストの弧(速度メーターの外側に被せる)。伸びる部分は `#hud-boost-fill`(pathLength 100 の stroke-dasharray で長さを決める) */
-export function boostArcSvg(): string {
-  const d = arcPath(-SWEEP + 0.4, -0.4, R + 15);
-  return `
-    <svg class="sg-svg" viewBox="0 0 200 200" aria-hidden="true">
-      <path class="sg-boost-rail" d="${d}"/>
-      <path class="sg-boost-fill" id="hud-boost-fill" d="${d}" pathLength="100" stroke-dasharray="0 100"/>
-    </svg>`;
-}

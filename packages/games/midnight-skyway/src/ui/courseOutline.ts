@@ -19,7 +19,7 @@ export function courseOutlineSvg(mapId: string): string {
   const all = o.drive;
   const minX = Math.min(...all.map((p) => p[0])), maxX = Math.max(...all.map((p) => p[0]));
   const minZ = Math.min(...all.map((p) => p[1])), maxZ = Math.max(...all.map((p) => p[1]));
-  const W = 200, H = 120, PAD = 6;
+  const W = 200, H = 200, PAD = 6;   // the course select shows it in a box about as tall as it is wide
   const k = Math.min((W - 2 * PAD) / (maxX - minX || 1), (H - 2 * PAD) / (maxZ - minZ || 1));
   const ox = (W - (maxX - minX) * k) / 2, oz = (H - (maxZ - minZ) * k) / 2;
   const P = (p: Pt): string => `${((p[0] - minX) * k + ox).toFixed(1)},${((p[1] - minZ) * k + oz).toFixed(1)}`;

@@ -189,6 +189,7 @@ export class GarageScene {
     envTex.mapping = THREE.EquirectangularReflectionMapping;
     envTex.colorSpace = THREE.SRGBColorSpace;
     this.scene.environment = pmrem.fromEquirectangular(envTex).texture;
+    this.scene.environmentIntensity = 0.6;   // 車体の映り込みは控えめに(素材ごとの envMapIntensity は、scene.environment には効かない)
     pmrem.dispose();
     envTex.dispose();
   }

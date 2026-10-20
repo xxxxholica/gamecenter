@@ -7,8 +7,8 @@ import * as THREE from 'three';
  * 位置はルートの番号に結びつけてあるので、車が進んでも動かず、後ろへ流れて見える。
  */
 const POOL = 36;                 // 左右それぞれ、同時に置く反射板の数
-const STEP = 4;                  // 反射板の間隔(ルートのサンプル数。約8m)
-const BIG_EVERY = 4;             // 何本ごとに大きな反射板にするか(約32m)
+const STEP = 4;                  // 反射板の間隔の既定(ルートのサンプル数。約8m)。コースごとに変えられる(setRoute)
+const BEACON = 16;               // 大きな反射板の間隔の目安(ルートのサンプル数。約32m)
 const BEHIND = 12;               // 車の後ろ(サンプル数)
 const AHEAD = 100;               // 車の前(サンプル数。約200m)
 
@@ -19,6 +19,9 @@ export class RoadsideRhythm {
 
   private route: THREE.Vector3[] | null = null;
   private half = 5.7;
+  private step = STEP;
+  /** 何本ごとに大きな反射板にするか(間隔が広いコースでも、1本おきは小さな反射板にして、明るくしすぎない) */
+  private bigEvery = BEACON / STEP;
   private lastIdx = -1;
   private readonly plates: THREE.InstancedMesh;
   private readonly studs: THREE.InstancedMesh;
@@ -49,10 +52,12 @@ export class RoadsideRhythm {
     this.group.visible = false;
   }
 
-  /** route: 走行ルートのサンプル(約2mおき、閉じた周回) / roadWidth: 欄干の間の幅(m)。null なら出さない */
-  public setRoute(route: THREE.Vector3[] | null, roadWidth: number | null): void {
+  /** route: 走行ルートのサンプル(約2mおき、閉じた周回) / roadWidth: 欄干の間の幅(m)。null なら出さない / step: 反射板・鋲の間隔(サンプル数) */
+  public setRoute(route: THREE.Vector3[] | null, roadWidth: number | null, step = STEP): void {
     this.route = route && roadWidth ? route : null;
     this.half = (roadWidth ?? 0) / 2;
+    this.step = step;
+    this.bigEvery = Math.max(2, Math.round(BEACON / step));
     this.lastIdx = -1;
     this.group.visible = this.route !== null;
   }
@@ -82,21 +87,22 @@ export class RoadsideRhythm {
     if (this.lastIdx >= 0 && this.onBeaconPass) {
       const fwd = (best - this.lastIdx + n) % n;
       if (fwd > 0 && fwd < 30) {
-        for (let k = 1; k <= fwd; k++) if ((this.lastIdx + k) % (STEP * BIG_EVERY) === 0) { this.onBeaconPass(); break; }
+        for (let k = 1; k <= fwd; k++) if ((this.lastIdx + k) % (this.step * this.bigEvery) === 0) { this.onBeaconPass(); break; }
       }
     }
     this.lastIdx = best;
 
     // 置き直す
     let slot = 0;
-    const start = best - BEHIND - ((best - BEHIND) % STEP + STEP) % STEP;
+    const step = this.step, bigEvery = this.bigEvery;
+    const start = best - BEHIND - ((best - BEHIND) % step + step) % step;
     this.plates.count = POOL * 2;
-    for (let j = start; j <= best + AHEAD && slot < POOL; j += STEP, slot++) {
+    for (let j = start; j <= best + AHEAD && slot < POOL; j += step, slot++) {
       const i = ((j % n) + n) % n;
       const a = route[(i - 1 + n) % n], b = route[(i + 1) % n], r = route[i];
       const yaw = Math.atan2(b.x - a.x, b.z - a.z);
       const nx = -Math.cos(yaw), nz = Math.sin(yaw);            // 横(+ = 進行方向の右)
-      const big = ((j / STEP) % BIG_EVERY + BIG_EVERY) % BIG_EVERY === 0;
+      const big = ((j / step) % bigEvery + bigEvery) % bigEvery === 0;
       this.q.setFromAxisAngle(this.UP, yaw);
       const s = big ? 1.5 : 1;
       for (const side of [-1, 1]) {

@@ -38,7 +38,7 @@ const SHADOW_MAP_SIZE = 4096;
 const SHADOW_HALF_EXTENT = 60;
 
 /** 雨粒の量(0〜1。表示する粒の割合)。1で全部、小さいほど少ない */
-const RAIN_INTENSITY = 0.4;
+const RAIN_INTENSITY = 0.15;
 
 /** ゴールのスローモーションの速さ(1 = 通常) */
 const FINISH_SLOW = 0.22;
@@ -129,8 +129,8 @@ export class DriveScene {
   private readonly passPrev = new WeakMap<object, number>();
 
   // 天気(雨): 濡れた路面の反射・雨粒・水しぶき・霧・稲光・雨音
-  /** 天候は雨のみ。確認用に URL の ?rain=0 で晴れにできる。 */
-  private readonly rainy = new URLSearchParams(location.search).get('rain') !== '0';
+  /** 走行中は雨を降らせない(雨はタイトル〜ロードのガレージだけ。路面は濡れたまま)。確認用に URL の ?rain=1 で雨にできる。 */
+  private readonly rainy = new URLSearchParams(location.search).get('rain') === '1';
   private mapFogDensity = 0.0035;
   private hemiBase = 1.0;
   private readonly lightning = new Lightning(12);
@@ -249,14 +249,14 @@ export class DriveScene {
     this.scene.add(this.ambientLight);
 
     // Headlights of the car: one spot light that follows the car
-    this.headSpot = new THREE.SpotLight(0xfff0d0, 700, 110, 0.5, 0.7, 2);
+    this.headSpot = new THREE.SpotLight(0xfff0d0, 500, 110, 0.5, 0.7, 2);
     this.scene.add(this.headSpot, this.headSpot.target);
   }
 
   /** 天気を画面・音に反映する: 反射・雨粒・霧の濃さ・雨音。 */
   private applyWeather(): void {
     const rain = this.rainy;
-    this.postFx.setRain(rain ? 1 : 0, 0.6);
+    this.postFx.setRain(rain ? 1 : 0, 0.3, 1);                     // 画面に付く水滴は控えめに。路面は雨が止んでも濡れたまま(反射・水たまり)
     this.tireSmoke.wet = rain;
     this.currentCar?.setWet(rain);
     this.rainSystem.intensity = rain ? RAIN_INTENSITY : 0;
@@ -437,7 +437,7 @@ export class DriveScene {
     map.attachRenderer(this.renderer);
     this.scene.add(map.group);
     this.applyPaintEnvironment();                                  // NPC車の塗装にも環境マップを持たせる
-    this.rhythm.setRoute(map.getRoutePoints(), map.getRoadWidth());
+    this.rhythm.setRoute(map.getRoutePoints(), map.getRoadWidth(), map.roadsideStep);
     this.mapFogDensity = map.fogDensity ?? 0.0035;
     this.applyWeather();
     this.camera.far = map.viewDistance ?? 2000;
@@ -891,7 +891,7 @@ export class DriveScene {
     // リザルト中は、画面全体を上へずらして、下をリザルト(中央下部に大きく出る)に空ける
     if (e > 0.002) {
       const w = this.viewWidth, h = this.viewHeight;
-      this.camera.setViewOffset(w, h, 0, e * 0.22 * h, w, h);
+      this.camera.setViewOffset(w, h, 0, e * 0.14 * h, w, h);
       this.viewOffsetOn = true;
     } else if (this.viewOffsetOn) {
       this.camera.clearViewOffset();
@@ -1089,7 +1089,7 @@ export class DriveScene {
     audio.bgm.setDrive(sf, this.boostLevel, map?.competitive ? map.getProgressFraction() : null);                    // 音源のBGMも速度・ブーストに合わせて抜けが変わる
     // ゴール前(進行度80%〜)は色が鮮やかになり、縁が暖色にゆっくり脈打つ
     const finale = map?.competitive ? Math.min(1, Math.max(0, (map.getProgressFraction() - 0.8) / 0.2)) : 0;
-    this.postFx.setMotion(0.55 * m, cc.position);
+    this.postFx.setMotion(0.2 * m, cc.position);                 // モーションブラーは控えめに(景色がぶれすぎないように)
     this.postFx.setSpeedState(sf, this.boostLevel, this.flash, Math.min(1, this.cameraTrauma), m, finale, cc.driftFactor);
 
     // 雨: 雨粒・稲光・水しぶき
