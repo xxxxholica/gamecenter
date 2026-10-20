@@ -9,7 +9,7 @@ import { installHomeReturn } from '../../../shared/homeReturn.ts';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
-watchResultAutoReturn(['title-fail-btn', 'title-success-btn']);
+watchResultAutoReturn(['retry-success-btn', 'title-fail-btn', 'title-success-btn']);
 
 window.addEventListener('DOMContentLoaded', () => {
   console.log('[TANI RUNNER 124] Initializing Arcade Engine...');

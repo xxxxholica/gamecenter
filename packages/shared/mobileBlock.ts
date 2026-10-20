@@ -63,7 +63,7 @@ function injectBannerStyles(): void {
       -webkit-backdrop-filter: blur(10px);
       padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
       color: #ffffff;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Sans', sans-serif;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
       box-sizing: border-box;
       user-select: none;
       -webkit-user-select: none;

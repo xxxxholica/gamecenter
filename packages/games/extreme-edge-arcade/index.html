@@ -22,7 +22,7 @@
       overflow: hidden;
       background: #000000;
       color: #ffffff;
-      font-family: Impact, "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
     }
 
     #canvas-container {
@@ -360,7 +360,8 @@
       border-radius: 0px;
       background: #ff1a1a;
       color: #ffffff;
-      font-family: Impact, "Arial Black", sans-serif;
+      font-family: inherit;
+      font-weight: 900;
       font-size: 38px;
       padding: 14px 64px;
       cursor: pointer;
@@ -562,9 +563,9 @@
       .judgment-label, .judgment-retry, .judgment-score, .intro-headline, #rank-val { font-size: 64px; }
     }
 
-    /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+    /* 日本語の文字を太めのゴシックにそろえる */
     .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
-      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
     }
     .agc-label, .ats-tagline { font-weight: 800 !important; }
   </style>

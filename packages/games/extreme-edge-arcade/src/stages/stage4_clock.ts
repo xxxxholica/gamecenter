@@ -250,7 +250,7 @@ export class Stage4Clock implements Stage {
       const nx = cx + Math.cos(angle) * (r - 60);
       const ny = cy + Math.sin(angle) * (r - 60);
 
-      ctx.font = 'bold 44px Impact, Arial Black, sans-serif';
+      ctx.font = "900 44px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = (i >= 10 || i === 12) ? '#d90429' : '#111111';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

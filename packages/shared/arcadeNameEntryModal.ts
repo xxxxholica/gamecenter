@@ -430,7 +430,6 @@ function injectStyles() {
       --ane-accent: #ffe600;
       --ane-glow: rgba(255, 230, 0, 0.55);
       border: 2px solid #ffe600;
-      font-family: 'Impact', 'Arial Black', sans-serif;
     }
     .theme-street .ane-rank-badge {
       background: #00f0ff;
@@ -448,7 +447,6 @@ function injectStyles() {
       --ane-accent: #ffcc00;
       --ane-glow: rgba(255, 204, 0, 0.5);
       border: 2px solid #ff3b30;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
     }
     .theme-ennichi .ane-rank-badge {
       background: #ff3b30;
@@ -467,7 +465,6 @@ function injectStyles() {
       --ane-accent: #ff2b4d;
       --ane-glow: rgba(255, 43, 77, 0.6);
       border: 2px solid #ff2b4d;
-      font-family: 'Impact', 'Arial Black', monospace;
     }
     .theme-extreme .ane-rank-badge {
       background: #ffff00;
@@ -487,7 +484,6 @@ function injectStyles() {
       --ane-glow: rgba(0, 230, 118, 0.5);
       border: 2px solid #3d6a54;
       background: #0f1c15;
-      font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif;
     }
     .theme-tani .ane-rank-badge {
       background: #3d6a54;
@@ -506,7 +502,6 @@ function injectStyles() {
       --ane-accent: #00f0ff;
       --ane-glow: rgba(0, 240, 255, 0.55);
       border: 2px solid #00f0ff;
-      font-family: 'Impact', 'Segoe UI', monospace;
       font-style: italic;
     }
     .theme-skyway .ane-rank-badge {
@@ -525,7 +520,6 @@ function injectStyles() {
       --ane-accent: #ffb100;
       --ane-glow: rgba(255, 177, 0, 0.55);
       border: 2px solid #ffb100;
-      font-family: 'Impact', system-ui, sans-serif;
     }
     .theme-corridor .ane-rank-badge {
       background: #ffb100;
@@ -577,7 +571,7 @@ function injectStyles() {
        Windows 7(Aero)風。全ゲーム共通で、各テーマの色は使わずここで上書きする
        ======================================================== */
     .ane-overlay {
-      --w-pop: 'Meiryo UI', Meiryo, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Noto Sans JP', sans-serif;
+      --w-pop: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
       --w-btn: linear-gradient(#f2f2f2 0 49%, #ebebeb 50% 51%, #dddddd 52%, #cfcfcf);
       --w-btn-hover: linear-gradient(#eaf6fd 0 49%, #d9f0fc 50% 51%, #bee6fd 52%, #a7d9f5);
       --w-btn-sel: linear-gradient(#e5f4fc 0 49%, #c4e5f6 50% 51%, #98d1ef 52%, #68b3db);

@@ -197,16 +197,11 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'tani-runner-124': {
     slug: 'tani-runner-124',
     hasScore: true,
-    maxScore: 10_000_000,
+    maxScore: 30_000_000,
     minRunMs: 10_000,
     scoreOrder: 'desc',
     unit: '単位',
     formatScore: (score) => (score > 0 ? `${Math.floor(score)} 単位` : '0 単位'),
-    variants: [
-      { id: 'elementary', label: '小学生レベル' },
-      { id: 'middle', label: '中学生レベル' },
-      { id: 'kosen', label: '高専生レベル' },
-    ],
   },
   'midnight-skyway': {
     slug: 'midnight-skyway',

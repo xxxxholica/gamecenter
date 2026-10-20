@@ -62,7 +62,11 @@ export class InputManager {
     const kJumpPressed = this.keysJustPressed.has('Space');
     const kJumpReleased = this.keysJustReleased.has('Space');
 
-    const kSpinPressed = this.keysJustPressed.has('KeyX') || this.keysJustPressed.has('KeyK');
+    const kSpinPressed =
+      this.keysJustPressed.has('KeyJ') ||
+      this.keysJustPressed.has('KeyK') ||
+      this.keysJustPressed.has('KeyX') ||
+      this.keysJustPressed.has('Enter');
     
     const kStartPressed = this.keysJustPressed.has('Enter') || this.keysJustPressed.has('Space');
 
@@ -94,7 +98,12 @@ export class InputManager {
 
       // Buttons (D-Pad & Face buttons)
       const bJump = gp.buttons[0]?.pressed || false; // Button 0 (A/Cross)
-      const bSpin = gp.buttons[1]?.pressed || gp.buttons[2]?.pressed || false; // Button 1 (B/Circle) / Button 2 (X/Square)
+      const bSpin =
+        gp.buttons[1]?.pressed ||
+        gp.buttons[2]?.pressed ||
+        gp.buttons[3]?.pressed ||
+        gp.buttons[5]?.pressed ||
+        false; // Button 1 (B) / Button 2 (X) / Button 3 (Y) / Button 5 (RB)
       const bStart = gp.buttons[9]?.pressed || false; // Start / Menu button
 
       // D-Pad buttons
@@ -107,7 +116,12 @@ export class InputManager {
       if (gp.buttons[15]?.pressed) padNavX = 1;
 
       const prevJump = this.prevGamepadButtons[0] || false;
-      const prevSpin = this.prevGamepadButtons[1] || false;
+      const prevSpin =
+        this.prevGamepadButtons[1] ||
+        this.prevGamepadButtons[2] ||
+        this.prevGamepadButtons[3] ||
+        this.prevGamepadButtons[5] ||
+        false;
       const prevStart = this.prevGamepadButtons[9] || false;
 
       gJump = bJump;

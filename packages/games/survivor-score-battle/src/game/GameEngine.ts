@@ -136,7 +136,7 @@ export class GameEngine {
   /** ポーズ(Backspace / SELECT。P と Start でも開く): 止めて、やり直せる */
   private readonly pauseUi = new ArcadePause({
     accent: '#00f0ff',
-    isPlaying: () => this.state === 'PLAYING' && this.dyingTimer <= 0,
+    isPlaying: () => (this.state === 'PLAYING' || this.state === 'LEVEL_UP') && this.dyingTimer <= 0,
     onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
     onClose: () => this.countdown?.resume(),
     onRestart: () => this.beginMatch(),
@@ -1185,7 +1185,7 @@ export class GameEngine {
     if (this.state === 'PAUSED') {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(0, 0, width, height);
-      ctx.font = '900 64px Impact, sans-serif';
+      ctx.font = "900 64px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#00f0ff';
       ctx.textAlign = 'center';
       ctx.fillText('ポーズ中', width / 2, height / 2 - 20);

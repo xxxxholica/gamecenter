@@ -102,7 +102,7 @@ function makeLabel(text: string, color: number): THREE.Sprite {
   c.width = 384;
   c.height = 64;
   const g = c.getContext('2d')!;
-  g.font = 'bold 28px system-ui, "Hiragino Kaku Gothic ProN", sans-serif';
+  g.font = '900 28px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineWidth = 8;

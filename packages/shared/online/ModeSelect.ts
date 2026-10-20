@@ -36,7 +36,7 @@ export interface ModeSelectOptions {
 const css = `
 .msel { --msel-accent: #00f0ff; --msel-accent-end: color-mix(in srgb, var(--msel-accent) 65%, #0080ff); position: fixed; inset: 0; z-index: 9990; display: none; flex-direction: column; justify-content: space-between; align-items: center; box-sizing: border-box;
   font-size: clamp(9px, min(1.15vw, 2.1vh), 18px); padding: 1.8em 2.6em; color: #fff; user-select: none; pointer-events: none;
-  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic Bold', 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   background: transparent; animation: mselFade .2s ease-out; }   /* 背景(屋台)を暗くしない: midnight-skyway の時間帯選択と同じ */
 @keyframes mselFade { from { opacity: 0; transform: scale(.99); } to { opacity: 1; transform: scale(1); } }
 .msel-title, .msel-cards, .msel-bar { pointer-events: auto; }
@@ -77,7 +77,7 @@ const css = `
 @keyframes mselBarIn { from { opacity: 0; transform: translateY(calc(30 * var(--u))); } to { opacity: 1; transform: none; } }
 .msel.msel-arcade .msel-title { align-self: flex-start; margin: 0; transform: none; animation: mselLabelIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s both; }
 .msel.msel-arcade .msel-title::before { content: 'GAME MODE'; display: block; color: #bbb9d6; font-size: max(11px, calc(19 * var(--u))); letter-spacing: 0.36em; }
-.msel.msel-arcade .msel-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.03em;
+.msel.msel-arcade .msel-title-main { font: 900 max(24px, calc(76 * var(--u)))/1 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: -0.03em;
   padding: calc(10 * var(--u)) 0 0; border: 0; background: none; box-shadow: none; text-shadow: none; color: #fff; }
 .msel.msel-arcade .msel-title-main::after { content: ''; display: block; width: calc(130 * var(--u)); height: calc(7 * var(--u)); margin-top: calc(16 * var(--u)); background: var(--msel-accent); transform: skewX(-20deg); }
 .msel.msel-arcade .msel-cards { flex-wrap: nowrap; gap: calc(22 * var(--u)); width: min(calc(1500 * var(--u)), 100%); align-self: center; margin: auto 0 0; justify-content: center;
@@ -89,16 +89,16 @@ const css = `
 .msel.msel-arcade .msel-card.active { background: linear-gradient(150deg, color-mix(in srgb, var(--msel-accent) 16%, #12131c), color-mix(in srgb, var(--msel-accent) 7%, #0a0a10)); border-color: var(--msel-accent); transform: skewX(-3deg) translateY(-6px);
   box-shadow: 0 0 28px color-mix(in srgb, var(--msel-accent) 55%, transparent); }
 .msel.msel-arcade .msel-card.disabled:hover { transform: skewX(-3deg); border-color: #334466; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
-.msel.msel-arcade .msel-card .badge { font: 900 max(11px, calc(22 * var(--u))) Arial, sans-serif; letter-spacing: 0.08em; color: #67687f; text-shadow: none; }
+.msel.msel-arcade .msel-card .badge { font: 900 max(11px, calc(22 * var(--u))) inherit; letter-spacing: 0.08em; color: #67687f; text-shadow: none; }
 .msel.msel-arcade .msel-card.active .badge { color: var(--msel-accent); }
 .msel.msel-arcade .msel-card .art { height: calc(170 * var(--u)); margin: calc(8 * var(--u)) 0 calc(14 * var(--u)); background: radial-gradient(circle, #ffffff12, transparent); border: 0; border-radius: 0; }
-.msel.msel-arcade .msel-card .t { font: 900 max(15px, calc(40 * var(--u)))/1.1 Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: -0.02em; margin: calc(4 * var(--u)) 0; color: #fff; }
+.msel.msel-arcade .msel-card .t { font: 900 max(15px, calc(40 * var(--u)))/1.1 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: -0.02em; margin: calc(4 * var(--u)) 0; color: #fff; }
 .msel.msel-arcade .msel-card .s { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; color: var(--msel-accent); min-height: 1.3em; margin-bottom: calc(10 * var(--u)); }
 .msel.msel-arcade .msel-card .d { font-size: max(10px, calc(17 * var(--u))); line-height: 1.6; color: #a6a8b9; margin-top: 0; }
 .msel.msel-arcade .msel-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); gap: calc(18 * var(--u)); max-width: none;
   animation: mselBarIn 0.5s ease-out 0.35s both; }
 .msel.msel-arcade .msel-bar button { width: auto; min-width: calc(340 * var(--u)); height: auto; padding: calc(20 * var(--u)) calc(52 * var(--u));
-  font: 900 max(14px, calc(24 * var(--u))) Arial, 'Hiragino Kaku Gothic ProN', sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; }
+  font: 900 max(14px, calc(24 * var(--u))) 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: 0.04em; transform: none; border-radius: 0; }
 .msel.msel-arcade .msel-go { color: #111; background: var(--msel-accent); box-shadow: 6px 6px color-mix(in srgb, var(--msel-accent) 42%, #000); animation: none; border: 0; }
 .msel.msel-arcade .msel-go:hover { transform: scale(1.04); }
 .msel.msel-arcade .msel-back { color: #fff; background: #292738; border: 1px solid #69647c; box-shadow: 6px 6px #12101c; }
@@ -243,6 +243,7 @@ export class ModeSelect {
     this.focusedId = null;
     this.render();
     this.visible = true;
+    const armAt = performance.now() + 150;
     this.root.style.display = 'flex';
     this.stopPad?.();
     this.stopPad = startPadLoop(this.padEdge, (p) => {
@@ -254,11 +255,11 @@ export class ModeSelect {
     });
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.visible) return;
-        if (e.code === 'KeyA' || e.code === 'KeyW') { e.preventDefault(); this.step(-1); }
-        else if (e.code === 'KeyD' || e.code === 'KeyS') { e.preventDefault(); this.step(1); }
-        else if (e.code === 'Enter') { e.preventDefault(); this.confirm(); }
-        else if (e.code === 'Backspace') { e.preventDefault(); this.onBack(); }
+        if (!this.visible || performance.now() < armAt) return;
+        if (e.code === 'KeyA' || e.code === 'KeyW') { e.preventDefault(); e.stopImmediatePropagation(); this.step(-1); }
+        else if (e.code === 'KeyD' || e.code === 'KeyS') { e.preventDefault(); e.stopImmediatePropagation(); this.step(1); }
+        else if (e.code === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); this.confirm(); }
+        else if (e.code === 'Backspace' && !e.repeat) { e.preventDefault(); e.stopImmediatePropagation(); this.onBack(); }
       };
       window.addEventListener('keydown', this.keyHandler);
     }

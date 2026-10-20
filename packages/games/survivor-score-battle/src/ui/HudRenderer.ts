@@ -11,8 +11,10 @@ const SPECIAL_BUTTONS_KBD = ['Space'];
 
 /** スペシャルの名前。ためている間は左から色で埋まり、満タンで虹色になる */
 const SPECIAL_NAME = 'SWORD STORM';
+/** 統一太字ゴシックフォント */
+const UI_FONT = "'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
 /** スペシャル表示の文字 */
-const SPECIAL_TEXT_FONT = "900 38px Impact, 'Arial Black', sans-serif";
+const SPECIAL_TEXT_FONT = `900 38px ${UI_FONT}`;
 const SPECIAL_TEXT_SPACING = '4px';
 
 /** HPバーの真上に置くスペシャル表示(準備中 / 発動)の高さ */
@@ -58,8 +60,8 @@ export class HudRenderer {
   private drawButtonBadge(ctx: CanvasRenderingContext2D, label: string, left: number, cy: number, isKey: boolean = false, tint?: string | CanvasGradient): number {
     ctx.save();
     ctx.font = isKey
-      ? "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
-      : "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+      ? `800 16px ${UI_FONT}`
+      : `900 17px ${UI_FONT}`;
     const widthKey = `${isKey}|${label}`;
     let w = this.badgeWidths.get(widthKey);
     if (w === undefined) {
@@ -117,8 +119,8 @@ export class HudRenderer {
     let metrics = this.specialRowMetrics.get(metricsKey);
     if (!metrics) {
       ctx.font = isPad
-        ? "900 17px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif"
-        : "800 16px system-ui, 'Hiragino Kaku Gothic ProN', sans-serif";
+        ? `900 17px ${UI_FONT}`
+        : `800 16px ${UI_FONT}`;
       const widths = buttons.map((b) => Math.max(30, ctx.measureText(b).width + (isPad ? 18 : 22)));
       ctx.font = SPECIAL_TEXT_FONT;
       ctx.letterSpacing = SPECIAL_TEXT_SPACING;
@@ -219,7 +221,7 @@ export class HudRenderer {
 
       // Boss Name
       ctx.shadowBlur = 0;
-      ctx.font = '900 18px Impact, sans-serif';
+      ctx.font = `900 18px ${UI_FONT}`;
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       drawFilledText(ctx, `${activeBoss.bossName}  ${Math.round(hpPct * 100)}%`, width / 2, barY + 4);
@@ -245,7 +247,7 @@ export class HudRenderer {
       ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
       ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
 
-      ctx.font = '900 36px Impact, sans-serif';
+      ctx.font = `900 36px ${UI_FONT}`;
       ctx.fillStyle = ctx.strokeStyle;
       drawFilledText(ctx, this.rankChangeText, width / 2, boxY);
       ctx.restore();
@@ -268,7 +270,7 @@ export class HudRenderer {
       ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
       ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
 
-      ctx.font = '900 32px Impact, sans-serif';
+      ctx.font = `900 32px ${UI_FONT}`;
       ctx.fillStyle = '#ffffff';
       drawFilledText(ctx, warningBanner, width / 2, boxY);
       ctx.restore();
@@ -306,11 +308,11 @@ export class HudRenderer {
     const barY = height - 58;
     // 左端はHPラベル、右端はHP数値(3桁想定)の端に合わせ、その幅を3等分して列にする
     ctx.save();
-    ctx.font = '900 20px Impact, sans-serif';
+    ctx.font = `900 20px ${UI_FONT}`;
     const spanL = barX - 12 - ctx.measureText('HP').width;
     const spanR = barX + barW + 12 + ctx.measureText('000').width;
     // 最も幅を取る値(6桁スコア、時刻、READY)が列に収まる最大サイズを求める
-    ctx.font = '900 60px Impact, sans-serif';
+    ctx.font = `900 60px ${UI_FONT}`;
     const refW = Math.max(...['999,999', '00:00', 'READY'].map((t) => ctx.measureText(t).width));
     ctx.restore();
     const colW = (spanR - spanL) / 3;
@@ -378,10 +380,10 @@ export class HudRenderer {
     ctx.lineWidth = 4;
     for (const col of cols) {
       ctx.textAlign = col.align;
-      ctx.font = `900 ${labelSize}px Impact, sans-serif`;
+      ctx.font = `900 ${labelSize}px ${UI_FONT}`;
       ctx.fillStyle = '#8899aa';
       drawOutlinedText(ctx, col.label, col.x, topLabelY);
-      ctx.font = `900 ${valueSize}px Impact, sans-serif`;
+      ctx.font = `900 ${valueSize}px ${UI_FONT}`;
       ctx.fillStyle = col.color;
       drawOutlinedText(ctx, col.value, col.x, topValueY);
     }
@@ -431,7 +433,7 @@ export class HudRenderer {
     color: string
   ) {
     ctx.save();
-    ctx.font = '900 20px Impact, sans-serif';
+    ctx.font = `900 20px ${UI_FONT}`;
     ctx.textAlign = align;
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 4;

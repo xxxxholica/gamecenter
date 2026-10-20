@@ -3,7 +3,6 @@
 // ===========================================================
 import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の記録・再生の差し替え(ゲームのコードより先に)
 import * as THREE from 'three';
-import '@fontsource/m-plus-rounded-1c/800.css'; // 分割配信なので、使う文字を含む分だけ読み込まれる
 import { Game, GOAL_DEPTH, MAX_AIR, START_LIVES, type ClearBonus } from './game/game.ts';
 import { View, BLOCK_COLORS, STRATA, strataProgress } from './render/view.ts';
 import { difficulty, W } from './game/world.ts';
@@ -263,7 +262,7 @@ const fxQueue: { t: number; fn: () => void }[] = [];
 function previewInput(now: number): FrameInput {
   const t = now / 1000;
   const s = Math.sin(t * 0.9);
-  return { dx: s > 0.35 ? 1 : s < -0.35 ? -1 : 0, dy: -1, dig: true, digPressed: Math.floor(t * 8) % 2 === 0, start: false, anyPressed: false, padDx: 0, padDy: 0 };
+  return { dx: s > 0.35 ? 1 : s < -0.35 ? -1 : 0, dy: -1, dig: true, digPressed: Math.floor(t * 8) % 2 === 0, start: false, cancel: false, anyPressed: false, padDx: 0, padDy: 0 };
 }
 
 let hitstop = 0;
@@ -623,7 +622,7 @@ new ArcadePause({
 });
 
 // ---------------- リザルト (共通メニュー + 共通ランキング) ----------------
-function openResult(cleared: boolean, isNew: boolean, bonus: ClearBonus | null) {
+function openResult(cleared: boolean, _isNew: boolean, bonus: ClearBonus | null) {
   resultOpen = true;
   resultFocus = 0;
   resultArmUntil = performance.now() + 600;
@@ -646,8 +645,8 @@ function openResult(cleared: boolean, isNew: boolean, bonus: ClearBonus | null) 
     }),
   );
 
-  ui.resultRecord.textContent = isNew ? '自己ベスト更新' : '';
-  ui.resultRecord.classList.toggle('new', isNew);
+  ui.resultRecord.textContent = '';
+  ui.resultRecord.classList.remove('new');
   ui.resultModal.classList.add('show');
   stopCountUp = countUpText(ui.resultScore, game.score.toLocaleString());
   guideMenu();
@@ -717,6 +716,9 @@ function updateResult(inp: FrameInput, now: number) {
   if (inp.start) {
     sound.menuSelect();
     resultActions[resultFocus]();
+  } else if (inp.cancel) {
+    sound.menuSelect();
+    showTitle();
   }
 }
 
@@ -731,7 +733,7 @@ function frame(now: number) {
   const inp: FrameInput = PREVIEW
     ? previewInput(now)
     : BENCH && game.phase !== 'title'
-      ? { ...benchBot(game, now), start: false, anyPressed: false, padDx: 0, padDy: 0 }
+      ? { ...benchBot(game, now), start: false, cancel: false, anyPressed: false, padDx: 0, padDy: 0 }
       : input.poll();
   // スローモーション中は、ゲームも演出も、遅い時間で進める(入力と音は実時間のまま)
   const dt = rawDt * timeScale();

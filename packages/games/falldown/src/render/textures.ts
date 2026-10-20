@@ -694,7 +694,7 @@ export function rulerNumberTexture(text: string, bold: boolean) {
   c.height = 64;
   g.clearRect(0, 0, 128, 64);
   g.fillStyle = '#1c1c22';
-  g.font = `${bold ? 'bold 46px' : '34px'} "Arial Black", Impact, sans-serif`;
+  g.font = `${bold ? '900 46px' : '700 34px'} "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif`;
   g.textAlign = 'left';
   g.textBaseline = 'middle';
   g.fillText(text, 6, 34);

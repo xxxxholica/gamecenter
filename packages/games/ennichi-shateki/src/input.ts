@@ -9,6 +9,7 @@ export interface InputState {
   shootNormalJustPressed: boolean;
   shootExplosiveJustPressed: boolean;
   startJustPressed: boolean;
+  cancelJustPressed: boolean;
   hasAnyInput: boolean;
   left: boolean;
   right: boolean;
@@ -32,6 +33,7 @@ export class ArcadeInput {
   private prevNormalKey: boolean = false;
   private prevExplosiveKey: boolean = false;
   private prevStartKey: boolean = false;
+  private prevCancelKey: boolean = false;
 
   // Gamepad
   private prevPadNormal: boolean = false;
@@ -281,10 +283,13 @@ export class ArcadeInput {
       (isKeyNormal && !this.prevStartKey) ||
       (startPressed && !this.prevPadStart && !this.prevMouseLeft) ||
       this.touchJustTapped;
+    const isKeyCancel = this.keyboard.isDown('Backspace');
+    const cancelJustPressed = isKeyCancel && !this.prevCancelKey;
 
     this.prevNormalKey = isKeyNormal;
     this.prevExplosiveKey = isKeyExplosive;
     this.prevStartKey = isKeyNormal;
+    this.prevCancelKey = isKeyCancel;
     this.prevPadNormal = normalPressed;
     this.prevPadExplosive = explosivePressed;
     this.prevPadStart = startPressed;
@@ -299,6 +304,7 @@ export class ArcadeInput {
       shootNormalJustPressed,
       shootExplosiveJustPressed,
       startJustPressed,
+      cancelJustPressed,
       hasAnyInput,
       left: rawMoveX + padMoveX < -0.3,
       right: rawMoveX + padMoveX > 0.3,
@@ -320,6 +326,7 @@ export class ArcadeInput {
     this.prevNormalKey = false;
     this.prevExplosiveKey = false;
     this.prevStartKey = false;
+    this.prevCancelKey = false;
     this.prevPadNormal = false;
     this.prevPadExplosive = false;
     this.prevPadStart = false;

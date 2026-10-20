@@ -85,7 +85,7 @@ class Game {
   /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ffd23f',
-    isPlaying: () => this.state === GameState.PLAYING && !this.isPreChase,
+    isPlaying: () => this.state === GameState.PLAYING,
     onRestart: () => this.startWithCountdown(),
   });
   private lastDeathCause = ''; // 分析用: 直近の死因(ぶつかった障害物の種類)
@@ -2268,7 +2268,7 @@ class Game {
     this.soundSystem.stopBgm();
     this.fpArms.group.visible = false;
 
-    const score = this.scoreData.score;
+    const score = Math.floor(this.scoreData.score);
     let grade = 'C';
     if (score >= 900000) {
       grade = 'SSS';

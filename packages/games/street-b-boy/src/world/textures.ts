@@ -56,7 +56,7 @@ export class TextureGenerator {
     ctx.fill();
 
     // Graffiti text
-    ctx.font = 'bold 76px Impact, sans-serif';
+    ctx.font = "900 76px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -121,7 +121,7 @@ export class TextureGenerator {
     });
 
     // Question Mark '?'
-    ctx.font = 'bold 150px Impact, sans-serif';
+    ctx.font = "900 150px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#000000';
@@ -267,7 +267,7 @@ export class TextureGenerator {
     ctx.fill();
 
     // Text on label
-    ctx.font = 'bold 22px Impact, sans-serif';
+    ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
     ctx.fillText('STREET B-BOY', 256, 240);
@@ -321,7 +321,7 @@ export class TextureGenerator {
     ctx.fill();
 
     // Cassette text
-    ctx.font = 'bold 20px Impact, sans-serif';
+    ctx.font = "900 20px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.fillStyle = '#000000';
     ctx.fillText(isGold ? 'GOLD CYPHER' : 'B-BOY MIX 94', 128, 44);
@@ -428,7 +428,7 @@ export class TextureGenerator {
     ctx.fillRect(0, 76, 512, 4);
 
     // Subway tag
-    ctx.font = 'bold 64px Impact, sans-serif';
+    ctx.font = "900 64px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#000000';
     ctx.fillText('42 ST SUBWAY', 64, 72);
 
@@ -494,7 +494,7 @@ export class TextureGenerator {
     ctx.strokeRect(16, 16, 480, 224);
 
     // Neon text
-    ctx.font = 'bold 58px Impact, sans-serif';
+    ctx.font = "900 58px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -541,13 +541,13 @@ export class TextureGenerator {
     ctx.fill();
 
     // Stencil text
-    ctx.font = 'bold 44px Impact, sans-serif';
+    ctx.font = "900 44px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#00f0ff';
     ctx.fillText('B-BOY', 128, 115);
 
-    ctx.font = 'bold 52px Impact, sans-serif';
+    ctx.font = "900 52px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#ffffff';
     ctx.fillText('94', 128, 160);
 
@@ -587,7 +587,7 @@ export class TextureGenerator {
     }
 
     // Center text
-    ctx.font = 'bold 24px Impact, sans-serif';
+    ctx.font = "900 24px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#555560';

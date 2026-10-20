@@ -109,14 +109,14 @@ export class DamageNumbers {
       ctx.globalAlpha = alpha;
 
       if (item.subText) {
-        ctx.font = `900 12px Impact, sans-serif`;
+        ctx.font = "900 12px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
         ctx.fillStyle = '#ff2255';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
         drawOutlinedText(ctx, item.subText, 0, -item.size * 0.7);
       }
 
-      ctx.font = `900 ${item.size}px Impact, sans-serif`;
+      ctx.font = `900 ${item.size}px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif`;
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 4;
       ctx.fillStyle = item.color;

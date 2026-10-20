@@ -406,7 +406,7 @@ export class Enemy extends Entity {
 
       // Overhead badge
       ctx.rotate(-angle);
-      ctx.font = '900 11px Impact, sans-serif';
+      ctx.font = "900 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#ff0033';
       ctx.textAlign = 'center';
       drawFilledText(ctx, '突撃兵', 0, -this.radius - 16);
@@ -449,7 +449,7 @@ export class Enemy extends Entity {
 
       // Overhead badge
       ctx.rotate(-angle);
-      ctx.font = '900 11px Impact, sans-serif';
+      ctx.font = "900 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = this.weaponMode === 'LASER' ? '#e000ff' : '#ffaa00';
       ctx.textAlign = 'center';
       drawFilledText(ctx, this.weaponMode === 'LASER' ? '重レーザー' : '追尾ミサイル', 0, -this.radius - 16);

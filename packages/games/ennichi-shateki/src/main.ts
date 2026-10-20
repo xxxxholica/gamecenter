@@ -118,6 +118,7 @@ class ArcadeCorkShooter {
 
   // Title & state timers
   private arcadeTitleScreen: ArcadeTitleScreen | null = null;
+  private renderingReady: boolean = false;
   private stateTimer: number = 0;
   private titleOrbitAngle: number = 0;
   private lastTickInt: number = 30;
@@ -237,7 +238,11 @@ class ArcadeCorkShooter {
    */
   private async startRendering(): Promise<void> {
     await compileInParallel(this.renderer, this.scene, this.camera, null);
+    this.renderingReady = true;
     this.animate(0);
+    if (this.state === 'title') {
+      this.arcadeTitleScreen?.show();
+    }
     if (benchParam('scene') === 'title') {
       await waitFramesSettled();
       benchReady('title');
@@ -379,7 +384,9 @@ class ArcadeCorkShooter {
         },
       });
     }
-    this.arcadeTitleScreen.show();
+    if (this.renderingReady) {
+      this.arcadeTitleScreen.show();
+    }
   }
 
   private onStartPressed() {
@@ -865,6 +872,8 @@ class ArcadeCorkShooter {
         } else {
           returnToHub();
         }
+      } else if (inputState.cancelJustPressed) {
+        this.enterTitle();
       } else if (inputState.shootExplosiveJustPressed) {
         returnToHub();
       }

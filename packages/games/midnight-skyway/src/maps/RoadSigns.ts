@@ -35,13 +35,13 @@ export interface SignStyle {
 
 export const JP_STYLE: SignStyle = {
   background: '#0a6b45', border: '#ffffff',
-  fontFamily: '"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP","Meiryo",sans-serif',
-  subFontFamily: '"Helvetica Neue",Arial,sans-serif',
+  fontFamily: '"Hiragino Kaku Gothic StdN","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif',
+  subFontFamily: '"Hiragino Kaku Gothic StdN","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif',
 };
 export const FI_STYLE: SignStyle = {
   background: '#0f4c9a', border: '#ffffff',
-  fontFamily: '"Helvetica Neue",Arial,sans-serif',
-  subFontFamily: '"Helvetica Neue",Arial,sans-serif',
+  fontFamily: '"Hiragino Kaku Gothic StdN","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif',
+  subFontFamily: '"Hiragino Kaku Gothic StdN","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif',
 };
 
 const PX_PER_M = 200;

@@ -56,7 +56,7 @@ export class MapSelectScreen {
           </div>
 
           <div class="map-record-arcade">
-            <div class="rec-label">自己ベスト記録</div>
+            <div class="rec-label">ベストタイム</div>
             <div class="rec-time-digital" id="rec-time-${st.id}">--:--.---</div>
           </div>
         </div>`).join('')}
@@ -136,7 +136,7 @@ export class MapSelectScreen {
     setBtnLabel(back, 'マシン選択へ');
     const start = q('#ms-btn-start');
     if (start && !on) setBtnLabel(start, '決定');
-    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : '自己ベスト記録'; });
+    this.container.querySelectorAll<HTMLElement>('.map-card-arcade:not(.any-card) .rec-label').forEach((l) => { l.textContent = on ? '希望している人' : 'ベストタイム'; });
     if (on) {
       this.selectedMapId = '';                               // オフラインで選んでいたコースの強調を消す(希望なしの状態)
       this.container.querySelectorAll<HTMLElement>('.map-card-arcade').forEach((c) => c.classList.remove('active'));
@@ -180,6 +180,7 @@ export class MapSelectScreen {
       this.updateRecords(records);
     }
     this.isVisible = true;
+    const armAt = performance.now() + 150;
     this.container.style.display = 'flex';
 
     this.stopPad?.();
@@ -194,20 +195,25 @@ export class MapSelectScreen {
 
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.isVisible) return;
+        if (!this.isVisible || performance.now() < armAt) return;
         if (e.code === 'Enter') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.confirm();
-        } else if (e.code === 'Backspace' && !(this.onlineMode && !this.locked && this.selectedMapId)) {
+        } else if (e.code === 'Backspace' && !e.repeat && !(this.onlineMode && !this.locked && this.selectedMapId)) {
           // 戻る。オンラインでは、コースを希望している間は先に希望の取り消しになり(下)、希望がなければ戻る
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.events.onBack();
         } else if (e.code === 'KeyA') {
+          e.stopImmediatePropagation();
           this.stepMap(-1);
-        } else if (e.code === 'Backspace' && this.onlineMode) {
+        } else if (e.code === 'Backspace' && !e.repeat && this.onlineMode) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.clearPick();
         } else if (e.code === 'KeyD') {
+          e.stopImmediatePropagation();
           this.stepMap(1);
         } else if (e.code.startsWith('Digit') && !this.locked && this.order()[Number(e.code.slice(5)) - 1]) {
           this.setSelectedMap(this.order()[Number(e.code.slice(5)) - 1]);

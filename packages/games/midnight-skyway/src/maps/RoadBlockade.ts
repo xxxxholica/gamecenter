@@ -204,7 +204,7 @@ export class RoadBlockade {
     ctx.strokeRect(bx, by, badgeW, badgeH);
 
     ctx.fillStyle = '#d63031';
-    ctx.font = '900 46px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+    ctx.font = '900 46px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 256, 80);
@@ -386,13 +386,13 @@ export class RoadBlockade {
     sctx.strokeRect(6, 6, 500, 116);
 
     sctx.fillStyle = '#ffffff';
-    sctx.font = '900 48px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+    sctx.font = '900 48px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
     sctx.textAlign = 'center';
     sctx.textBaseline = 'middle';
     const arrowSymbol = arrowDir === 'left' ? '◀◀ ' : ' ▶▶';
     sctx.fillText(arrowDir === 'left' ? `${arrowSymbol}この先 通行止` : `この先 通行止${arrowSymbol}`, 256, 48);
 
-    sctx.font = '700 24px "Helvetica Neue", Arial, sans-serif';
+    sctx.font = '700 24px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
     sctx.fillText('ROAD CLOSED / DETOUR', 256, 92);
 
     const signTex = new THREE.CanvasTexture(signCanvas);

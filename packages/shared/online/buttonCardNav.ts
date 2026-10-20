@@ -65,11 +65,13 @@ export class ButtonCardNav {
       else if (p.any(1)) this.opts.onBack();
     });
     // キーボード: WASD でボタンを選ぶ / Enter で決定 / Backspace で戻る
+    const armAt = performance.now() + 150;
     this.keyHandler = (e: KeyboardEvent) => {
-      if (!this.opts.isActive()) return;
+      if (!this.opts.isActive() || performance.now() < armAt) return;
       const b = this.buttons();
       const move = (d: number) => {
         e.preventDefault();
+        e.stopImmediatePropagation();
         if (b.length === 0) return;
         this.focus = (this.focus + d + b.length) % b.length;
         this.apply();
@@ -78,11 +80,13 @@ export class ButtonCardNav {
       else if (e.code === 'KeyD' || e.code === 'KeyS') move(1);
       else if (e.code === 'Enter') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         // フォーカス中のボタンが標準動作でも反応して二重に押されないように
         (document.activeElement as HTMLElement | null)?.blur();
         b[this.focus]?.click();
-      } else if (e.code === 'Backspace') {
+      } else if (e.code === 'Backspace' && !e.repeat) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.opts.onBack();
       }
     };

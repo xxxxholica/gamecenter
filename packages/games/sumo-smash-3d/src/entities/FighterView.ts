@@ -14,7 +14,7 @@ import {
 } from '../../../../shared/sumoSim/SimFighter';
 
 /** 頭上マーカーの文字。「あなた」を出すので、日本語の太字が使えるフォントにする */
-const MARKER_FONT = '900 72px "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Impact", sans-serif';
+const MARKER_FONT = '900 72px "Hiragino Kaku Gothic StdN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif';
 
 /** 頭上マーカーの配色(1P=青・2P=赤・3P=緑・4P=金) */
 const MARKER_PALETTE = [

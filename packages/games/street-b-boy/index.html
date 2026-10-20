@@ -19,7 +19,8 @@
       height: 100%;
       overflow: hidden;
       background-color: #000000;
-      font-family: Impact, 'Arial Black', 'Trebuchet MS', sans-serif;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+      font-weight: 900;
       color: #ffffff;
     }
     #game-canvas {
@@ -497,9 +498,9 @@
       100% { transform: translate(-50%, -50%) rotate(0deg); }
     }
 
-    /* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+    /* 日本語の文字を太めのゴシックにそろえる */
     .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
-      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
     }
     .agc-label, .ats-tagline { font-weight: 800 !important; }
   </style>

@@ -27,7 +27,7 @@ const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
   buttons: [
     { indices: [0], label: 'ジャンプ', keyLabel: 'Space' },
-    { indices: [1, 2], label: 'スピン攻撃', keyLabel: 'X / K' },
+    { indices: [1, 2, 3], label: 'スピン攻撃', keyLabel: 'J / K / X / Enter' },
   ],
   showHomeHint: true,
   backLabel: 'ポーズ',
@@ -177,6 +177,7 @@ class StreetBBoyGame {
       if (e.code !== 'Backspace' || e.repeat) return;
       if ((this.state === 'game_over' || this.state === 'clear') && !this.hud.isNameEntryOpen && performance.now() >= this.resultArmTime) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.setupTitleScene();
       }
     });

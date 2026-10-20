@@ -9,7 +9,7 @@
   padding: 0;
   user-select: none;
   -webkit-user-select: none;
-  font-family: "Impact", "Arial Black", "Hiragino Kaku Gothic StdN", sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   border-radius: 0;
 }
 
@@ -72,12 +72,19 @@ html, body {
   width: 100%;
 }
 
-/* 画面隅: 「要件 124」 */
+/* 画面隅: 「要件 124」 / 「1/3 小学校」 */
 .hud-corner-box {
   background: #000000;
   border: 4px solid #ff1744;
   padding: 8px 16px;
+  min-width: 150px;
+  text-align: center;
   box-shadow: 0 0 16px rgba(255, 23, 68, 0.5);
+}
+
+.hud-stage-box {
+  border-color: #00e676;
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.5);
 }
 
 .hud-corner-text {
@@ -85,6 +92,7 @@ html, body {
   font-weight: 900;
   color: #ffffff;
   letter-spacing: 2px;
+  white-space: nowrap;
   text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
 }
 
@@ -92,21 +100,85 @@ html, body {
   width: 140px;
 }
 
+/* ラウンド開始前・ステージ突破バナー (極限ギリギリ選手権と同じ構成) */
+.round-intro-banner {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.round-intro-banner.stage-clear-mode {
+  top: 45%;
+}
+
+.round-intro-banner.hidden {
+  display: none !important;
+}
+
+/* 見出し・カウントダウンの間、後ろのステージをうっすら暗くする暗幕(カウントダウンに合わせて晴れる) */
+.round-intro-banner::before {
+  content: '';
+  position: fixed;
+  left: -100vw;
+  top: -100vh;
+  width: 300vw;
+  height: 300vh;
+  background: rgba(0, 0, 0, calc(0.82 * var(--dim, 1)));
+  z-index: -1;
+  pointer-events: none;
+}
+
+.intro-headline {
+  font-size: min(100px, 9.5vw);
+  font-weight: 900;
+  letter-spacing: 4px;
+  white-space: nowrap;
+  color: #ffffff;
+  text-shadow: 6px 6px 0 #000, -6px -6px 0 #000, 6px -6px 0 #000, -6px 6px 0 #000;
+}
+
+.round-intro-banner.stage-clear-mode .intro-headline {
+  color: #ffea00;
+}
+
+.intro-sub {
+  font-size: min(52px, 5.2vw);
+  font-weight: 900;
+  letter-spacing: 3px;
+  white-space: nowrap;
+  color: #39ff88;
+  text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000;
+}
+
+.intro-sub.hidden {
+  display: none !important;
+}
+
 /* 画面中央上: 「単位」 ＋ 数字 */
 .hud-center-box {
   background: #000000;
   border: 6px solid #00f0ff;
   box-shadow: 0 0 30px rgba(0, 240, 255, 0.7);
-  padding: 8px 36px;
+  padding: 8px clamp(16px, 2.5vw, 36px);
+  max-width: calc(100vw - 380px);
   display: flex;
   align-items: baseline;
-  gap: 16px;
+  justify-content: center;
+  gap: clamp(8px, 1.2vw, 16px);
   transform: scale(1);
   transition: transform 0.08s ease, border-color 0.08s ease;
 }
 
 .hud-center-box.pulse {
-  transform: scale(1.3);
+  transform: scale(1.2);
   border-color: #ffe600;
   box-shadow: 0 0 45px #ffe600;
 }
@@ -118,17 +190,19 @@ html, body {
 }
 
 .hud-center-label {
-  font-size: 38px;
+  font-size: clamp(22px, 3vw, 38px);
   font-weight: 900;
   color: #ffea00;
+  white-space: nowrap;
   text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
 }
 
 .hud-center-num {
-  font-size: 72px;
+  font-size: clamp(36px, 5.2vw, 72px);
   font-weight: 900;
   line-height: 1;
   color: #ffffff;
+  white-space: nowrap;
   text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
 }
 
@@ -202,12 +276,13 @@ html, body {
 
 /* 結果カード: 取得単位を主役に、「卒業」「留年」はハンコのように斜めに押す */
 .result-card {
-  max-width: 720px;
+  max-width: min(92vw, 760px);
 }
 
 .result-stage {
   position: relative;
   display: inline-block;
+  max-width: 100%;
   padding: 0 clamp(8px, 2vw, 24px);
 }
 
@@ -297,15 +372,16 @@ html, body {
   display: flex;
   align-items: baseline;
   justify-content: center;
+  max-width: 100%;
   gap: clamp(8px, 1.5vh, 16px);
   margin-bottom: clamp(6px, 2vh, 16px);
 }
 
 .final-score-text {
-  font-size: clamp(64px, 20vh, 160px);
+  font-size: clamp(44px, min(17vh, 11vw), 140px);
   font-weight: 900;
   color: #ffea00;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   line-height: 1.05;
   text-shadow: 4px 4px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000;
   -webkit-text-stroke: 3px #000;
@@ -314,22 +390,25 @@ html, body {
 }
 
 .final-score-unit {
-  font-size: clamp(24px, 7vh, 56px);
+  font-size: clamp(20px, min(6vh, 4.5vw), 52px);
   font-weight: 900;
   color: #ffea00;
   letter-spacing: 4px;
+  white-space: nowrap;
   text-shadow: 2px 2px 0 #000;
 }
 
 .final-details {
   display: flex;
   justify-content: center;
+  align-items: center;
   flex-wrap: wrap;
+  row-gap: 6px;
   margin-bottom: clamp(10px, 3vh, 28px);
-  font-size: clamp(16px, 3.8vh, 30px);
+  font-size: clamp(14px, min(3.2vh, 2.4vw), 26px);
   font-weight: 900;
   color: #ffffff;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   text-shadow: 2px 2px 0 #000;
 }
 .final-details > span + span {
@@ -466,7 +545,7 @@ html, body {
 
 /* 共通アケコンガイドのスタイル保護 */
 .agc-root, .agc-root *, .agc-inline, .agc-inline * {
-  font-family: system-ui, 'Hiragino Kaku Gothic ProN', sans-serif !important;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
   letter-spacing: normal !important;
   text-shadow: none !important;
   -webkit-text-stroke: 0 !important;
@@ -600,8 +679,8 @@ body .msel.msel-arcade .msel-card .d {
 body .msel.msel-arcade .msel-bar button { gap: 0.6em; }
 .msel-guide { display: inline-flex; align-items: center; flex: none; }
 
-/* 日本語の文字を太めのゴシックにそろえる(共通部品の system-ui は細いので、ヒラギノ角ゴ W8 などを先に探す) */
+/* 日本語の文字を太めのゴシックにそろえる */
 .agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif !important;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
 }
 .agc-label, .ats-tagline { font-weight: 800 !important; }

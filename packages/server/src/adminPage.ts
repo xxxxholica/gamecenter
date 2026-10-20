@@ -55,6 +55,7 @@ export const ADMIN_HTML = `<!doctype html>
           <option value="extreme-edge-arcade">極限ギリギリ選手権</option>
           <option value="tani-runner-124">単位増殖ラン</option>
           <option value="tower-stack">タワースタック</option>
+          <option value="falldown">無限降下ドリル</option>
         </select>
       </div>
       <div id="game-filter-status" class="game-filter-badge" style="display:none;"></div>
@@ -170,12 +171,6 @@ export const LOGIN_HTML = (showError: boolean): string => `<!doctype html>
 <meta name="robots" content="noindex, nofollow">
 <title>ゲームセンター 管理 — ログイン</title>
 <style>
-@font-face {
-  font-family: 'Yusei Magic';
-  src: url('/fonts/YuseiMagic-Regular.woff2') format('woff2');
-  font-weight: 100 900;
-  font-display: swap;
-}
 html { font-size: clamp(14px, 1.2vw + 9px, 20px); }
 body {
   margin: 0;
@@ -190,7 +185,7 @@ body {
     linear-gradient(to bottom, rgba(148, 163, 184, 0.22) 1px, transparent 1px);
   background-size: 800px 800px, 24px 24px, 24px 24px;
   color: #1e293b;
-  font-family: 'Yusei Magic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
 }
 form {
   width: min(24rem, calc(100vw - 32px));
@@ -248,13 +243,6 @@ button:active { transform: translateY(1px); }
 `;
 
 export const ADMIN_CSS = `
-@font-face {
-  font-family: 'Yusei Magic';
-  src: url('/fonts/YuseiMagic-Regular.woff2') format('woff2');
-  font-weight: 100 900;
-  font-display: swap;
-}
-
 html { font-size: clamp(14px, 1.2vw + 9px, 19px); }
 body {
   margin: 0;
@@ -265,7 +253,7 @@ body {
     linear-gradient(to bottom, rgba(148, 163, 184, 0.22) 1px, transparent 1px);
   background-size: 800px 800px, 24px 24px, 24px 24px;
   color: #1e293b;
-  font-family: 'Yusei Magic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 main { max-width: 58rem; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box; }
@@ -388,8 +376,8 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
 .stat .v {
   white-space: nowrap;
   font-size: 1.55rem;
-  font-weight: 800;
-  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-weight: 900;
+  font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   color: #0f172a;
@@ -696,7 +684,7 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
   border-bottom: 1px dashed #e2e8f0;
 }
 .ranking-item .label { font-weight: 700; color: #334155; }
-.ranking-item .count { font-family: 'Impact', sans-serif; font-size: .95rem; color: #0284c7; }
+.ranking-item .count { font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; font-weight: 900; font-size: .95rem; color: #0284c7; }
 
 /* テーブルラッパー & スクロール制御 */
 .table-wrap, #analytics-table-wrap, #performance-table-wrap {
@@ -759,7 +747,7 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
 }
 .analytics-table tr:nth-child(even) td { background: #fafaf9; }
 .analytics-table tr:hover td { background: #f0f9ff; }
-.analytics-table td.num { font-family: 'Impact', 'Arial Black', sans-serif; font-size: .95rem; }
+.analytics-table td.num { font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; font-weight: 900; font-size: .95rem; }
 
 /* エラーボックス */
 .error-list {
@@ -777,7 +765,7 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
   gap: 4px;
 }
 .error-msg { font-size: .88rem; font-weight: 800; color: #b91c1c; }
-.error-meta { font-size: .75rem; color: #991b1b; font-family: monospace; }
+.error-meta { font-size: .75rem; color: #991b1b; font-family: inherit; }
 
 /* 生ログテーブル: ブロックの幅に収め、長いデータは折り返す(はみ出す場合は枠の中だけ横スクロール) */
 .raw-log-note { font-size: .78rem; font-weight: 700; color: #64748b; }
@@ -819,7 +807,7 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
 .raw-log-table tr:last-child td { border-bottom: none; }
 .raw-log-table tr:nth-child(even) td { background: #fafaf9; }
 .raw-log-table td.log-time { white-space: nowrap; color: #475569; font-variant-numeric: tabular-nums; }
-.raw-log-table td.log-data { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: .74rem; color: #334155; }
+.raw-log-table td.log-data { font-family: inherit; font-size: .74rem; color: #334155; }
 .log-type-chip {
   display: inline-block;
   max-width: 100%;
@@ -955,7 +943,7 @@ button:disabled { opacity: .5; cursor: default; transform: none; filter: none; }
   border: 1.5px solid #e2e8f0;
   font-size: .92rem;
 }
-.entry .pos { font-weight: 800; font-family: 'Impact', 'Arial Black', sans-serif; color: #0284c7; min-width: 2.4em; }
+.entry .pos { font-weight: 900; font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; color: #0284c7; min-width: 2.4em; }
 .entry .who { font-weight: 800; color: #0f172a; }
 .entry .score { font-variant-numeric: tabular-nums; font-weight: 800; color: #d97706; }
 .entry .meta { color: #64748b; font-size: .78rem; font-weight: 700; }
@@ -1015,7 +1003,8 @@ export const ADMIN_JS = `
     'tani-runner-124': '単位増殖ラン',
     'midnight-skyway': 'ミッドナイト・スカイウェイ',
     'sumo-smash-3d': '剛体大相撲',
-    'tower-stack': 'タワースタック'
+    'tower-stack': 'タワースタック',
+    'falldown': '無限降下ドリル'
   };
   var boardsEl = document.getElementById('boards');
   var openBoards = {};
@@ -1055,6 +1044,10 @@ export const ADMIN_JS = `
     var h = Math.floor(m / 60);
     m = m % 60;
     return h + '時間' + (m > 0 ? m + '分' : '');
+  }
+
+  function fmtNum(v) {
+    return typeof v === 'number' && isFinite(v) ? String(Math.round(v * 1000) / 1000) : '-';
   }
 
   function renderShareList(container, title, map, limit) {
@@ -1210,7 +1203,8 @@ export const ADMIN_JS = `
     'ennichi-shateki': { name: 'えんにち射的' },
     'extreme-edge-arcade': { name: '極限ギリギリ選手権' },
     'tani-runner-124': { name: '単位増殖ラン' },
-    'tower-stack': { name: 'タワースタック' }
+    'tower-stack': { name: 'タワースタック' },
+    'falldown': { name: '無限降下ドリル' }
   };
 
   function updateFilterUI() {
@@ -1274,8 +1268,8 @@ export const ADMIN_JS = `
       var resText = p.completed ? '完走/クリア' : (p.endedAt ? 'リタイア' : '終了未受信');
       var resPill = el('span', { className: resPillClass, text: resText });
 
-      var scoreText = p.formattedScore || (p.score !== undefined ? String(p.score) : '-');
-      var fpsText = p.performance ? (p.performance.avgFps + 'fps') : '-';
+      var scoreText = p.formattedScore || (p.score !== undefined ? fmtNum(p.score) : '-');
+      var fpsText = p.performance && p.performance.avgFps !== undefined ? (fmtNum(p.performance.avgFps) + 'fps') : '-';
       var customText = '-';
       if (p.progression) {
         var parts = [];
@@ -1500,7 +1494,7 @@ export const ADMIN_JS = `
           ctx.setLineDash([6, 6]); line(1, 'rgba(250,204,21,.7)'); ctx.setLineDash([]);   // 中央線
           var st = P(geo.road[0][0], geo.road[0][1]);
           ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.arc(st[0], st[1], 6, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#e2e8f0'; ctx.font = '700 12px system-ui'; ctx.fillText('START / GOAL', st[0] + 9, st[1] - 8);
+          ctx.fillStyle = '#e2e8f0'; ctx.font = "700 12px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText('START / GOAL', st[0] + 9, st[1] - 8);
         },
       };
     }
@@ -1533,7 +1527,7 @@ export const ADMIN_JS = `
           geo.checkpoints.forEach(function (c) { var a = P(c[0], c[1]), b = P(c[0], c[1] + 3); ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.fillStyle = '#22c55e'; ctx.fillRect(b[0], b[1], 7, 5); });
           geo.enemies.forEach(function (e) { var q = P(e[0], e[1] + 0.7); ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(2.5, 0.6 * s), 0, Math.PI * 2); ctx.stroke(); });
           var g1 = P(geo.goal[0], geo.goal[1]); ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(g1[0], g1[1] - 6, 6, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#fde68a'; ctx.font = '700 11px system-ui'; ctx.fillText('GOAL', g1[0] - 14, g1[1] - 16);
+          ctx.fillStyle = '#fde68a'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText('GOAL', g1[0] - 14, g1[1] - 16);
         },
         legend: [['#334155', '地面・足場'], ['#64748b', 'すり抜け足場'], ['#38bdf8', '動く足場'], ['#f59e0b', '崩れる足場'], ['#ef4444', 'レーザー・消火栓'], ['#fb923c', '敵(○)'], ['#22c55e', 'チェックポイント']],
       };
@@ -1546,7 +1540,7 @@ export const ADMIN_JS = `
             var next = i + 1 < geo.strata.length ? geo.strata[i + 1].depth : geo.goalDepth;
             var a = P(0, layer.depth), b = P(geo.width, next);
             ctx.fillStyle = layer.back; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
-            ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '700 11px system-ui'; ctx.fillText(layer.name + ' ' + layer.depth + 'm', a[0] + 4, a[1] + 13);
+            ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText(layer.name + ' ' + layer.depth + 'm', a[0] + 4, a[1] + 13);
           });
           var g = P(0, geo.goalDepth), g2 = P(geo.width, geo.goalDepth + 10);
           ctx.fillStyle = '#ca8a04'; ctx.fillRect(g[0], g[1], g2[0] - g[0], g2[1] - g[1]);
@@ -1575,7 +1569,7 @@ export const ADMIN_JS = `
           ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
           for (var i = 0; i < geo.lanes.length - 1; i++) { var m = (geo.lanes[i] + geo.lanes[i + 1]) / 2, q1 = P(0, m), q2 = P(len, m); ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke(); }
           ctx.setLineDash([]);
-          ctx.fillStyle = '#1c1917'; ctx.font = '700 11px system-ui';
+          ctx.fillStyle = '#1c1917'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
           for (var d = 100; d < len; d += 100) { var q = P(d, hw); ctx.fillText(d + 'm', q[0] + 2, q[1] - 3); }
           var w1 = P(2, -hw - 0.8); ctx.fillStyle = '#e0f2fe'; ctx.fillText('窓', w1[0], w1[1] - 3);
         },
@@ -1591,7 +1585,7 @@ export const ADMIN_JS = `
           ctx.strokeStyle = 'rgba(148,163,184,.5)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 1;
           [-geo.moveLimit, geo.moveLimit].forEach(function (x) { var p = P(x, geo.killY), q = P(x, top); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); });   // ブロックを動かせる範囲
           ctx.setLineDash([]);
-          ctx.fillStyle = 'rgba(226,232,240,.6)'; ctx.font = '700 11px system-ui';
+          ctx.fillStyle = 'rgba(226,232,240,.6)'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
           for (var h = 5; h < top; h += 5) { var q = P(geo.moveLimit + 0.3, h); ctx.fillText(h + 'm', q[0], q[1] + 4); var l1 = P(-geo.moveLimit, h), l2 = P(geo.moveLimit, h); ctx.strokeStyle = 'rgba(148,163,184,.12)'; ctx.beginPath(); ctx.moveTo(l1[0], l1[1]); ctx.lineTo(l2[0], l2[1]); ctx.stroke(); }
         },
         legend: [['#7a5236', '土台'], ['#94a3b8', 'ブロックを動かせる範囲(点線)']],
@@ -1609,11 +1603,11 @@ export const ADMIN_JS = `
           geo.zones.forEach(function (z, i) {                                                     // 壁の先の倍率ゾーン
             var p = P(z[0], -half - 2), q = P(z[1], half + 2);
             ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(p[0], p[1], q[0] - p[0], q[1] - p[1]);
-            ctx.fillStyle = '#fff'; ctx.font = '700 10px system-ui'; ctx.fillText(z[2], p[0] + 2, (p[1] + q[1]) / 2 + 3);
+            ctx.fillStyle = '#fff'; ctx.font = "700 10px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText(z[2], p[0] + 2, (p[1] + q[1]) / 2 + 3);
           });
           var w1 = P(geo.wallDist, -half - 2), w2 = P(geo.wallDist, half + 2);
           ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w1[0], w1[1]); ctx.lineTo(w2[0], w2[1]); ctx.stroke();
-          ctx.fillStyle = '#f8fafc'; ctx.font = '700 11px system-ui'; ctx.fillText('卒業要件の壁 ' + geo.wallDist + 'm', w1[0] - 120, w1[1] - 2);
+          ctx.fillStyle = '#f8fafc'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText('卒業要件の壁 ' + geo.wallDist + 'm', w1[0] - 120, w1[1] - 2);
           ctx.fillStyle = 'rgba(255,255,255,.7)';
           for (var d = 50; d < geo.wallDist; d += 50) { var q2 = P(d, half); ctx.fillText(d + 'm', q2[0] + 2, q2[1] + 12); }
         },
@@ -1693,7 +1687,7 @@ export const ADMIN_JS = `
     var maps = DEATH_MAP_GEOMETRY[gid];
     if (!maps) return null;
     var deaths = (sp && sp.deaths) || [];
-    var causeCount = {};
+    var causeCount = Object.create(null);
     deaths.forEach(function (d) { var k = d.cause || '不明'; causeCount[k] = (causeCount[k] || 0) + 1; });
     var causes = Object.keys(causeCount).sort(function (a, b) { return causeCount[b] - causeCount[a]; });
     var card = el('div', { className: 'sub-card deathmap' });
@@ -1824,7 +1818,7 @@ export const ADMIN_JS = `
 
   function renderAnalytics(data) {
     cachedAnalyticsData = data;
-    var allKeys = Object.keys(data.games || {});
+    var allKeys = Object.keys(data.games || {}).filter(function (gid) { return Object.prototype.hasOwnProperty.call(GAME_META, gid); });
     var activeKeys = selectedGame === 'all' ? allKeys : (data.games[selectedGame] ? [selectedGame] : []);
 
     // 1. サマリータブ
@@ -1838,8 +1832,8 @@ export const ADMIN_JS = `
       setStats(document.getElementById('analytics-summary'), [
         ['総訪問セッション', String(data.totalSessions)],
         ['アクティブ訪問中', String(data.activeSessionsNow), '人', data.activeSessionsNow > 0],
-        ['総ゲームプレイ数', String(data.totalPlays), '回'],
-        ['総プレイ時間', formatDuration(data.totalPlayTimeSec)],
+        ['総ゲームプレイ数', String(data.totalPlays)],
+        ['総プレイ時間', ((data.totalPlayTimeSec || 0) / 3600).toFixed(1), 'h'],
         ['全体平均FPS', String(data.avgFpsOverall || 60), 'fps'],
         ['パッド利用率', String(Math.round(data.gamepadUserRate * 100)) + '%'],
         ['エラー発生件数', String(data.totalErrors || 0), '件', (data.totalErrors || 0) > 0 ? 'warn' : false],
@@ -1856,7 +1850,8 @@ export const ADMIN_JS = `
             el('th', { text: 'ゲーム' }),
             el('th', { text: 'プレイ数' }),
             el('th', { text: '食いつき度 リピート・滞在' }),
-            el('th', { text: 'クリア/完走率' }),
+            el('th', { text: 'クリア' }),
+            el('th', { text: '完走率' }),
             el('th', { text: '平均時間' }),
             el('th', { text: 'ハイスコア' }),
             el('th', { text: '平均FPS' }),
@@ -1867,8 +1862,7 @@ export const ADMIN_JS = `
         allKeys.forEach(function (gid) {
           var g = data.games[gid];
           var name = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || TITLES[gid] || gid;
-          var clearText = g.completeCount + '回 ' + Math.round(g.clearRate * 100) + '%';
-          var bestText = g.bestScore !== undefined ? String(g.bestScore) : '-';
+          var bestText = g.bestScore !== undefined ? fmtNum(g.bestScore) : '-';
           var rep = g.repeatRate !== undefined ? Number(g.repeatRate.toFixed(1)) : 1;
           var engSec = g.engagementScore || g.avgPlayTimeSec || 0;
           var badgeType = (rep >= 2.0 || engSec >= 300) ? 'hot' : ((rep >= 1.3 || engSec >= 120) ? 'good' : 'normal');
@@ -1879,12 +1873,13 @@ export const ADMIN_JS = `
           ]);
           tbody.appendChild(el('tr', null, [
             el('td', { text: name }),
-            el('td', { className: 'num', text: String(g.launchCount) + '回' }),
+            el('td', { className: 'num', text: String(g.launchCount) }),
             el('td', null, [engCell]),
-            el('td', { text: clearText }),
+            el('td', { className: 'num', text: String(g.completeCount) }),
+            el('td', { className: 'num', text: Math.round(g.clearRate * 100) + '%' }),
             el('td', { text: formatDuration(g.avgPlayTimeSec) }),
             el('td', { className: 'num', text: bestText }),
-            el('td', { className: 'num', text: g.avgFps ? String(g.avgFps) + 'fps' : '-' }),
+            el('td', { className: 'num', text: g.avgFps ? fmtNum(g.avgFps) + 'fps' : '-' }),
             el('td', { text: g.errorCount > 0 ? g.errorCount + '件' : '0' }),
           ]));
         });
@@ -1934,15 +1929,16 @@ export const ADMIN_JS = `
       }
 
       setStats(document.getElementById('game-stats'), [
-        ['総プレイ回数', String(g.launchCount), '回'],
+        ['プレイ数', String(g.launchCount)],
         ['遊んだ人数', String(g.uniquePlayers || 1), '人'],
         ['食いつき度 リピート', (g.repeatRate ? g.repeatRate.toFixed(1) : '1.0') + '回/人', (g.repeatRate >= 2.0 || (g.engagementScore || 0) >= 300) ? '超没入' : ((g.repeatRate >= 1.3 || (g.engagementScore || 0) >= 120) ? '好評' : '通常'), (g.repeatRate >= 1.3)],
         ['1人あたり滞在時間', formatDuration(g.engagementScore || g.avgPlayTimeSec)],
-        ['完走/クリア率', String(Math.round(g.clearRate * 100)) + '%', g.completeCount + '回', g.completeCount > 0],
+        ['クリア', String(g.completeCount), '', g.completeCount > 0],
+        ['完走率', String(Math.round(g.clearRate * 100)) + '%', '', g.completeCount > 0],
         ['1プレイ平均時間', formatDuration(g.avgPlayTimeSec)],
-        ['ハイスコア', g.bestScore !== undefined ? String(g.bestScore) : '-', g.avgScore ? '平均 ' + Math.round(g.avgScore) : ''],
-        ['平均FPS', g.avgFps ? String(g.avgFps) : '-', 'fps'],
-        ['最低FPS 1% Low', g.minFps ? String(g.minFps) : '-', 'fps'],
+        ['ハイスコア', g.bestScore !== undefined ? fmtNum(g.bestScore) : '-', g.avgScore ? '平均 ' + Math.round(g.avgScore) : ''],
+        ['平均FPS', g.avgFps ? fmtNum(g.avgFps) : '-', 'fps'],
+        ['最低FPS 1% Low', g.minFps ? fmtNum(g.minFps) : '-', 'fps'],
         ['平均ロード時間', g.avgLoadMs ? (g.avgLoadMs / 1000).toFixed(1) : '-', '秒'],
         ['ゲームパッド利用', String(g.gamepadCount || 0), '回'],
         ['エラー発生件数', String(g.errorCount || 0), '件', (g.errorCount || 0) > 0 ? 'warn' : false],
@@ -2095,7 +2091,7 @@ export const ADMIN_JS = `
     var wrap = document.getElementById('raw-logs-wrap');
     return call('GET', '/admin/api/analytics/export?type=events' + q).then(function (res) {
       wrap.textContent = '';
-      var events = (res.events || []).slice(-100).reverse();
+      var events = (res.events || []).filter(function (ev) { return !ev.gameId || Object.prototype.hasOwnProperty.call(GAME_META, ev.gameId); }).slice(-100).reverse();
       if (events.length === 0) {
         wrap.appendChild(el('div', { className: 'empty', text: '対象のイベントログはまだありません。' }));
         return;

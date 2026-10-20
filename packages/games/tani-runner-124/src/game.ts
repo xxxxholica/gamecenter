@@ -40,6 +40,7 @@ export type GameState =
   | 'WALL_CRASH'
   | 'BONUS_LAUNCH'
   | 'BONUS_FLIGHT'
+  | 'STAGE_CLEAR'
   | 'GAME_CLEAR'
   | 'GAME_OVER';
 
@@ -74,8 +75,14 @@ export class Game {
   // ボーナス飛行の操作: 加速は3回まで、リング成功ごとに取得単位 +10%
   private flightTotal: number = 0;
 
-  /** 選んでいるレベル(小学生・中学生・高専生)。前回の選択を覚えている */
+  /** 現在のステージ番号(0: 小学生 → 1: 中学生 → 2: 高専生)とレベル */
+  public stageIndex: number = 0;
   public level: LevelId = loadLevel();
+  /** 通しプレイでこれまで卒業した学校の合計取得単位と内訳 */
+  public totalScore: number = 0;
+  public stageScores: { level: LevelId; score: number }[] = [];
+  private countdownElapsed: number = 0;
+
   private readonly benchScene = benchParam('scene');
   private benchClock = 0;
   private benchNextBoost = 0;
@@ -85,6 +92,10 @@ export class Game {
   public ringsHit: number = 0;
   private pickupsCollected = 0;
   private reqTextElem: HTMLElement | null = null;
+  private stageTextElem: HTMLElement | null = null;
+  private roundIntroBanner: HTMLElement | null = null;
+  private roundIntroHeadline: HTMLElement | null = null;
+  private roundIntroSub: HTMLElement | null = null;
   private launchCursorElem: HTMLElement | null = null;
   private bonusHintElem: HTMLElement | null = null;
   public lastDingMultiplier: number = 1.0;
@@ -107,6 +118,7 @@ export class Game {
   private arcadeTitleScreen: ArcadeTitleScreen | null = null;
   private levelSelectScreen: HTMLElement | null = null;
   private failScreen: HTMLElement | null = null;
+  private failScoreElem: HTMLElement | null = null;
   private successScreen: HTMLElement | null = null;
   private finalMultElem: HTMLElement | null = null;
   private finalScoreElem: HTMLElement | null = null;
@@ -149,6 +161,7 @@ export class Game {
       if (guideElem) (guideElem as HTMLElement).style.display = 'none';
       this.startGame();
       this.countdown?.cancel();
+      this.hideRoundIntroBanner();
       this.state = 'RUNNING';
       this.currentCredits = 36;
       this.crowd.reset(36);
@@ -198,11 +211,16 @@ export class Game {
 
     this.levelSelectScreen = document.getElementById('level-select-screen');
     this.failScreen = document.getElementById('fail-screen');
+    this.failScoreElem = document.getElementById('fail-score-display');
     this.successScreen = document.getElementById('success-screen');
     this.finalMultElem = document.getElementById('final-multiplier-display');
     this.finalScoreElem = document.getElementById('final-score-display');
     this.finalRingElem = document.getElementById('final-ring-display');
     this.reqTextElem = document.getElementById('req-text');
+    this.stageTextElem = document.getElementById('stage-text');
+    this.roundIntroBanner = document.getElementById('round-intro-banner');
+    this.roundIntroHeadline = document.getElementById('round-intro-headline');
+    this.roundIntroSub = document.getElementById('round-intro-sub');
     this.bonusHintElem = document.getElementById('bonus-hint');
   }
 
@@ -218,15 +236,24 @@ export class Game {
     });
 
 
-    // 再挑戦ボタン
-    for (const id of ['retry-fail-btn', 'retry-success-btn']) {
-      const btn = document.getElementById(id);
-      if (btn) {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
+    // 再挑戦 / 次の学校へ進むボタン
+    const retryFailBtn = document.getElementById('retry-fail-btn');
+    if (retryFailBtn) {
+      retryFailBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.startGame();
+      });
+    }
+    const retrySuccessBtn = document.getElementById('retry-success-btn');
+    if (retrySuccessBtn) {
+      retrySuccessBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.state === 'STAGE_CLEAR') {
+          this.startStage(this.stageIndex + 1);
+        } else {
           this.startGame();
-        });
-      }
+        }
+      });
     }
 
     // タイトルに戻るボタン
@@ -256,18 +283,18 @@ export class Game {
     this.arcadeTitleScreen = new ArcadeTitleScreen({
       slug: 'tani-runner-124',
       accentColor: '#00e676',
-      tagline: '124単位集めて 留年の壁を打ち破れ！',
+      tagline: '小学校・中学校・高専を卒業して 留年の壁を打ち破れ！',
       startButtonLabel: 'スタート',
       promptLabel: 'PRESS START / ENTER / 画面クリック',
       onStart: () => {
-        this.openLevelSelect();
+        this.startGame();
       },
     });
 
     this.arcadeTitleScreen.show();
   }
 
-  /** 難易度選択画面を開く（深夜首都高のように「開始」の後に遷移） */
+  /** 難易度選択画面を開く（ベンチマーク・デバッグ用） */
   public openLevelSelect(): void {
     this.state = 'LEVEL_SELECT';
     this.resultMenu.close();
@@ -290,6 +317,7 @@ export class Game {
   /** タイトル画面に戻る */
   public showTitleScreen(): void {
     this.countdown?.cancel();
+    this.hideRoundIntroBanner();
     this.state = 'TITLE';
     this.resultMenu.close();
     this.levelSelect.hide();
@@ -298,6 +326,13 @@ export class Game {
     if (this.hudElem) this.hudElem.style.display = 'none';
     this.arcadeTitleScreen?.show();
     this.showTitleGuide();
+  }
+
+  private hideRoundIntroBanner(): void {
+    this.roundIntroBanner?.classList.add('hidden');
+    this.roundIntroBanner?.classList.remove('stage-clear-mode');
+    this.roundIntroBanner?.style.removeProperty('--dim');
+    this.roundIntroSub?.classList.add('hidden');
   }
 
   private showTitleGuide(): void {
@@ -325,7 +360,24 @@ export class Game {
     });
   }
 
+  /** 小学生 → 中学生 → 高専生 の3ステージ通しプレイを最初から始める */
   public startGame(): void {
+    this.totalScore = 0;
+    this.stageScores = [];
+    const startIdx = this.benchScene === 'run' ? Math.max(0, LEVEL_ORDER.indexOf(this.level)) : 0;
+
+    sound.init();
+    sound.playCoin();
+
+    this.startStage(startIdx);
+  }
+
+  /** 指定ステージ(0: 小学校 / 1: 中学校 / 2: 高専)を開始する */
+  public startStage(stageIndex: number): void {
+    this.stageIndex = stageIndex;
+    this.level = LEVEL_ORDER[stageIndex] ?? 'elementary';
+    saveLevel(this.level);
+
     this.arcadeTitleScreen?.hide();
     this.levelSelect.hide();
     this.resultMenu.close();
@@ -336,16 +388,24 @@ export class Game {
     this.showRunGuide(false);
     if (this.hudElem) this.hudElem.style.display = 'block';
 
-    sound.init();
-    sound.playCoin();
     sound.playStartJingle();
 
-    // 開始前に 3・2・1・GO! を挟む(レベル選択の決定直後にいきなり走り出さない)
+    // 極限ギリギリ選手権のように「小学校を卒業せよ」等の大見出しと 3・2・1・GO! を出してラウンドを始める
+    this.roundIntroBanner?.classList.remove('hidden', 'stage-clear-mode');
+    this.roundIntroBanner?.style.setProperty('--dim', '1');
+    if (this.roundIntroHeadline) {
+      this.roundIntroHeadline.textContent = LEVELS[this.level].headline;
+    }
+    this.roundIntroSub?.classList.add('hidden');
+
     this.state = 'COUNTDOWN';
+    this.countdownElapsed = 0;
     this.countdown?.cancel();
     this.countdown = startArcadeCountdown({
-      accentColor: '#00e676',
+      accentColor: '#ffea00',
+      offsetY: '16vh',
       onGo: () => {
+        this.hideRoundIntroBanner();
         this.state = 'RUNNING';
         this.showRunGuide();
         sound.startRunningBgm();
@@ -375,11 +435,12 @@ export class Game {
     this.pickupsCollected = 0;
     reportDeepAnalytics('progression_update', {
       difficulty: LEVELS[this.level].label,
-      extraStats: { requirement: this.graduationRequirement },
+      extraStats: { stage: this.stageIndex + 1, requirement: this.graduationRequirement },
     });
-    reportRoundStart({ difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
+    reportRoundStart({ stage: this.stageIndex + 1, difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
     this.effects.clearAll();
     if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
+    if (this.stageTextElem) this.stageTextElem.textContent = LEVELS[this.level].schoolName;
 
     this.updateHUD();
   }
@@ -390,6 +451,7 @@ export class Game {
 
     if (this.taniCounterElem) {
       this.taniCounterElem.textContent = this.currentCredits.toString();
+      this.fitCreditText(this.taniCounterElem, this.currentCredits);
     }
 
     if (this.creditsBoxElem) {
@@ -419,13 +481,47 @@ export class Game {
   private updateHUD(): void {
     if (this.taniCounterElem) {
       this.taniCounterElem.textContent = this.currentCredits.toString();
+      this.fitCreditText(this.taniCounterElem, this.currentCredits);
+    }
+  }
+
+  /** 桁数が増えても枠からはみ出さないように HUD の単位数字サイズを自動調整 */
+  private fitCreditText(el: HTMLElement, value: number): void {
+    const digits = String(Math.abs(Math.floor(value))).length;
+    if (digits <= 4) {
+      el.style.fontSize = '';
+    } else if (digits === 5) {
+      el.style.fontSize = 'clamp(30px, 4.4vw, 58px)';
+    } else if (digits === 6) {
+      el.style.fontSize = 'clamp(26px, 3.8vw, 48px)';
+    } else {
+      el.style.fontSize = 'clamp(22px, 3.2vw, 40px)';
+    }
+  }
+
+  /** リザルト画面の大きな単位数字も桁数に応じて収まるサイズに調整 */
+  private fitResultScoreText(el: HTMLElement, value: number): void {
+    const digits = String(Math.abs(Math.floor(value))).length;
+    if (digits <= 4) {
+      el.style.fontSize = '';
+    } else if (digits === 5) {
+      el.style.fontSize = 'clamp(38px, min(14vh, 9.5vw), 115px)';
+    } else if (digits === 6) {
+      el.style.fontSize = 'clamp(32px, min(12vh, 8vw), 96px)';
+    } else {
+      el.style.fontSize = 'clamp(26px, min(10vh, 6.8vw), 80px)';
     }
   }
 
   /** ポーズ(Backspace / SELECT): 走行中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#00e676',
-    isPlaying: () => this.state === 'COUNTDOWN' || this.state === 'RUNNING' || this.state === 'WALL_CRASH' || this.state === 'BONUS_LAUNCH' || this.state === 'BONUS_FLIGHT',
+    isPlaying: () =>
+      this.state === 'COUNTDOWN' ||
+      this.state === 'RUNNING' ||
+      this.state === 'WALL_CRASH' ||
+      this.state === 'BONUS_LAUNCH' ||
+      this.state === 'BONUS_FLIGHT',
     onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
     onClose: () => this.countdown?.resume(),
     onRestart: () => this.startGame(),
@@ -445,6 +541,9 @@ export class Game {
     // State machine(ポーズ中は進めない)
     switch (this.pause.isOpen ? 'PAUSED' : this.state) {
       case 'COUNTDOWN':
+        // カウントダウンの経過に合わせて暗幕をなめらかに晴らす
+        this.countdownElapsed += dt;
+        this.roundIntroBanner?.style.setProperty('--dim', String(Math.max(0, 1 - this.countdownElapsed / 2.4)));
         // 走り出す前の待機。群衆を足踏みさせるだけで、前進・ゲート判定はしない
         this.crowd.updateRunning(dt, 0);
         break;
@@ -888,34 +987,139 @@ export class Game {
 
     // When all students have stopped sliding
     if (allStopped) {
-      this.triggerGameClear();
+      this.onStageFlightComplete();
     }
   }
 
-  // Game Over: 「留年」 (Red bold text)
+  /** ボーナス飛行終了時: 小学校・中学校は「次の学校に進む」ボタン付きのリザルト画面を出し、高専まで卒業したら最終リザルトへ */
+  private onStageFlightComplete(): void {
+    // 取得単位 = 壁に着いた人数 × 到達倍率。余った人数が多いほど、遠くまで飛ぶほど増える
+    const prevTotal = this.totalScore;
+    const stageScore = Math.round(this.creditsAtWall * this.maxAchievedMultiplier * (1 + 0.1 * this.ringsHit));
+    this.totalScore += stageScore;
+    this.stageScores.push({ level: this.level, score: stageScore });
+
+    reportDeepAnalytics('progression_update', {
+      result: 'clear',
+      difficulty: LEVELS[this.level].label,
+      score: stageScore,
+      itemsCollected: this.pickupsCollected,
+      extraStats: {
+        stage: this.stageIndex + 1,
+        totalScore: this.totalScore,
+        requirement: this.graduationRequirement,
+        creditsAtWall: this.creditsAtWall,
+        maxMultiplier: this.maxAchievedMultiplier,
+        ringsHit: this.ringsHit,
+        ringsTotal: this.world.rings.length,
+      },
+    });
+
+    // ベンチマーク(?bench=1&scene=run)では指定レベル1本だけで完了させる
+    if (this.benchScene === 'run' || this.stageIndex >= LEVEL_ORDER.length - 1) {
+      this.triggerGameClear(this.totalScore, prevTotal);
+      return;
+    }
+
+    this.triggerStageClear(prevTotal);
+  }
+
+  /** 小学校・中学校の卒業リザルト: 最終リザルトと同じ見た目で、「中学校に進む / 高専に進む」ボタンを初期選択にする */
+  private triggerStageClear(startScore: number = 0): void {
+    this.state = 'STAGE_CLEAR';
+    this.hideRoundIntroBanner();
+    sound.stopBgm();
+    sound.playVictoryFanfare();
+
+    if (this.finalMultElem) {
+      this.finalMultElem.textContent = `倍率 ×${this.maxAchievedMultiplier.toFixed(1)}`;
+    }
+    const levelEl = document.getElementById('final-level-display');
+    if (levelEl) {
+      levelEl.textContent = LEVELS[this.level].schoolName;
+    }
+    if (this.finalRingElem) {
+      this.finalRingElem.textContent = `リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
+    }
+    if (this.finalScoreElem) {
+      this.fitResultScoreText(this.finalScoreElem, this.totalScore);
+      countUpText(this.finalScoreElem, `${this.totalScore}`, { startValue: startScore });
+    }
+
+    const nextLevel = LEVEL_ORDER[this.stageIndex + 1];
+    const primaryBtn = document.getElementById('retry-success-btn');
+    const titleBtn = document.getElementById('title-success-btn');
+    if (primaryBtn && nextLevel) {
+      primaryBtn.textContent = `${LEVELS[nextLevel].schoolName}に進む`;
+      primaryBtn.dataset.autoSeconds = '5';
+      delete primaryBtn.dataset.autoDisabled;
+    }
+    if (titleBtn) {
+      titleBtn.dataset.autoDisabled = '1';
+    }
+
+    this.bonusHudElem?.classList.add('hidden');
+    this.successScreen?.classList.remove('hidden');
+    this.stampResult(this.successScreen, 1700);
+    this.openResultMenu(['retry-success-btn', 'title-success-btn', 'exit-success-btn']);
+  }
+
+  // Game Over: 「留年」 (その時点で留年し、それまでに卒業した学校の合計単位を記録)
   private triggerGameOver(): void {
     this.state = 'GAME_OVER';
+    this.hideRoundIntroBanner();
+    this.bonusHudElem?.classList.add('hidden');
+    this.showLaunchTiming(false);
     if (this.benchScene === 'run') benchDone('game-over');
     reportDeepAnalytics('progression_update', {
       result: 'gameover',
       deathReason: '卒業要件に届かず留年',
       difficulty: LEVELS[this.level].label,
+      score: this.totalScore,
       itemsCollected: this.pickupsCollected,
-      extraStats: { requirement: this.graduationRequirement, credits: this.currentCredits, maxMultiplier: this.maxAchievedMultiplier },
+      extraStats: {
+        stage: this.stageIndex + 1,
+        totalScore: this.totalScore,
+        requirement: this.graduationRequirement,
+        credits: this.currentCredits,
+        maxMultiplier: this.maxAchievedMultiplier,
+      },
     });
     sound.stopBgm();
     sound.playGameOverJingle();
 
+    if (this.failScoreElem) {
+      this.fitResultScoreText(this.failScoreElem, this.totalScore);
+      if (this.totalScore > 0) {
+        countUpText(this.failScoreElem, `${this.totalScore}`);
+      } else {
+        this.failScoreElem.textContent = '0';
+      }
+    }
     const failLevelEl = document.getElementById('fail-level-display');
-    if (failLevelEl) failLevelEl.textContent = LEVELS[this.level].label;
+    if (failLevelEl) {
+      failLevelEl.textContent = `${LEVELS[this.level].schoolName}で留年`;
+    }
     this.failScreen?.classList.remove('hidden');
-    this.stampResult(this.failScreen, 700);
+    this.stampResult(this.failScreen, this.totalScore > 0 ? 1500 : 700);
     this.openResultMenu(['retry-fail-btn', 'title-fail-btn', 'exit-fail-btn']);
+
+    if (this.totalScore > 0) {
+      const score = this.totalScore;
+      runHighScoreEntryFlow({
+        slug: 'tani-runner-124',
+        score,
+        modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
+        setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
+        onName: (name) => RankingStore.add(score, name, false),
+      });
+    }
   }
 
-  // Game Clear: 「卒業」 (Yellow bold text) + Final Multiplier
-  private triggerGameClear(): void {
+  // Game Clear: 「卒業」 (Yellow bold text) + 3学校の合計取得単位
+  private triggerGameClear(score: number = this.totalScore, startScore: number = 0): void {
     this.state = 'GAME_CLEAR';
+    this.hideRoundIntroBanner();
     if (this.benchScene === 'run') benchDone('clear');
     sound.stopBgm();
     sound.playVictoryFanfare();
@@ -924,22 +1128,27 @@ export class Game {
       this.finalMultElem.textContent = `倍率 ×${this.maxAchievedMultiplier.toFixed(1)}`;
     }
 
-    // 取得単位 = 壁に着いた人数 × 到達倍率。余った人数が多いほど、遠くまで飛ぶほど増える
-    const score = Math.round(this.creditsAtWall * this.maxAchievedMultiplier * (1 + 0.1 * this.ringsHit));
-    reportDeepAnalytics('progression_update', {
-      result: 'clear',
-      difficulty: LEVELS[this.level].label,
-      score,
-      itemsCollected: this.pickupsCollected,
-      extraStats: { requirement: this.graduationRequirement, creditsAtWall: this.creditsAtWall, maxMultiplier: this.maxAchievedMultiplier, ringsHit: this.ringsHit, ringsTotal: this.world.rings.length },
-    });
     const levelEl = document.getElementById('final-level-display');
-    if (levelEl) levelEl.textContent = LEVELS[this.level].label;
+    if (levelEl) {
+      levelEl.textContent = LEVELS[this.level].schoolName;
+    }
     if (this.finalRingElem) {
       this.finalRingElem.textContent = `リング ${this.ringsHit}/${this.world.rings.length}${this.ringsHit > 0 ? `  +${this.ringsHit * 10}%` : ''}`;
     }
     if (this.finalScoreElem) {
-      countUpText(this.finalScoreElem, `${score}`);
+      this.fitResultScoreText(this.finalScoreElem, score);
+      countUpText(this.finalScoreElem, `${score}`, { startValue: startScore });
+    }
+
+    const primaryBtn = document.getElementById('retry-success-btn');
+    const titleBtn = document.getElementById('title-success-btn');
+    if (primaryBtn) {
+      primaryBtn.textContent = '再挑戦';
+      primaryBtn.dataset.autoDisabled = '1';
+      delete primaryBtn.dataset.autoSeconds;
+    }
+    if (titleBtn) {
+      delete titleBtn.dataset.autoDisabled;
     }
 
     this.bonusHudElem?.classList.add('hidden');
@@ -951,10 +1160,9 @@ export class Game {
     runHighScoreEntryFlow({
       slug: 'tani-runner-124',
       score,
-      variantId: this.level,
       modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
-      onName: (name) => RankingStore.add(score, this.level, name),
+      onName: (name) => RankingStore.add(score, name, true),
     });
   }
 

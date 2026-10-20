@@ -263,7 +263,7 @@ export class Player extends Entity {
     ctx.translate(this.x, this.y);
 
     // 1. Distinctive "YOU" Overhead Indicator
-    ctx.font = '900 22px Impact, sans-serif';
+    ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
 

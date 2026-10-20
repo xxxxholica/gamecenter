@@ -228,14 +228,14 @@ export class LevelUpScreen {
     const subY = top + titleH + subH / 2;
     const cardsCY = top + titleH + subH + gapTitleCards + cardH / 2;
 
-    ctx.font = '900 72px Impact, sans-serif';
+    ctx.font = "900 72px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#ffd700';
     ctx.shadowColor = '#ffd700';
     ctx.shadowBlur = 25;
     ctx.fillText('LEVEL UP', width / 2, titleY);
     ctx.shadowBlur = 0;
 
-    ctx.font = '900 28px Impact, sans-serif';
+    ctx.font = "900 28px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
     ctx.fillStyle = '#00f0ff';
     ctx.fillText(`LV ${playerLevel}`, width / 2, subY);
 
@@ -288,7 +288,7 @@ export class LevelUpScreen {
       drawIcon(ctx, card.weaponType ?? card.statType, 0, y0 + (hasBadge ? 104 : 120), 96, accent);
 
       // 新しい武器は、技名の上に、NEW / LV を塗りつぶしのブロックで囲んで出す
-      ctx.font = '900 26px Impact, sans-serif';
+      ctx.font = "900 26px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#ffffff';
       this.wrapText(ctx, card.title, 0, y0 + (hasBadge ? 224 : 216), cardW - 40, 34);
       if (badge) {
@@ -301,12 +301,12 @@ export class LevelUpScreen {
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
         ctx.strokeRect(bx, by, bw, bh);
-        ctx.font = '900 22px Impact, sans-serif';
+        ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
         ctx.fillStyle = '#000000';
         ctx.fillText(badge.text, 0, by + bh / 2 + 1);
       }
 
-      ctx.font = '700 20px sans-serif';
+      ctx.font = "700 20px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
       ctx.fillStyle = '#aaccdd';
       this.wrapText(ctx, card.description, 0, y0 + 292, cardW - 56, 30);
 

@@ -59,26 +59,27 @@ export function watchResultAutoReturn(titleButtonIds: string[], seconds = 30): v
     window.addEventListener(ev, touch, { passive: true });
   }
 
-  let wasShown = false;
+  let wasShown: HTMLElement | null = null;
   // 結果画面が出ていない間(ほとんどの時間)はゆっくり、出ている間は250msごとに見る
   const IDLE_CHECK_MS = 500;
   const SHOWN_CHECK_MS = 250;
   const check = (): number => {
     if (document.hidden) return IDLE_CHECK_MS;
     const buttons = titleButtonIds.map((id) => document.getElementById(id));
-    const shown = buttons.find((el): el is HTMLElement => !!el && isShown(el)) ?? null;
+    const shown = buttons.find((el): el is HTMLElement => !!el && isShown(el) && el.dataset.autoDisabled !== '1') ?? null;
     // 画面に出ていないボタンに残った表示は消す
     for (const el of buttons) if (el && el !== shown) setButtonSuffix(el, '');
     if (!shown) {
-      wasShown = false;
+      wasShown = null;
       return IDLE_CHECK_MS;
     }
-    // リザルトが出た時点から数える(出る前の最後の操作から数えると、出た時にもう残りが少ないことがある)
-    if (!wasShown) touch();
-    wasShown = true;
+    // リザルトが出た時点(または対象ボタンが変わった時点)から数える
+    if (wasShown !== shown) touch();
+    wasShown = shown;
     if (document.querySelector('.ane-overlay, .ane-shield') || padActive()) touch();
 
-    const remain = seconds - (performance.now() - last) / 1000;
+    const targetSeconds = Number(shown.dataset.autoSeconds) || seconds;
+    const remain = targetSeconds - (performance.now() - last) / 1000;
     if (remain <= 0) {
       setButtonSuffix(shown, '');
       shown.click();

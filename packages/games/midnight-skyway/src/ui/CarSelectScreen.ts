@@ -286,33 +286,41 @@ export class CarSelectScreen {
 
   public show(): void {
     this.isVisible = true;
+    const armAt = performance.now() + 150;
     this.container.style.display = 'flex';
     this.applyCurrentColor();
 
     if (!this.keyHandler) {
       this.keyHandler = (e: KeyboardEvent) => {
-        if (!this.isVisible) return;
+        if (!this.isVisible || performance.now() < armAt) return;
         if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;     // 名前の入力中にマシン操作へ誤爆しない
         if (e.code === 'KeyS') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.selectNextCar();
         } else if (e.code === 'KeyW') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.selectPrevCar();
         } else if (e.code === 'KeyD') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.selectNextCar();
         } else if (e.code === 'KeyA') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.selectPrevCar();
         } else if (e.code === 'KeyC') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.cycleColor();
         } else if (e.code === 'Enter') {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.events.onNext();
-        } else if (e.code === 'Backspace') {
+        } else if (e.code === 'Backspace' && !e.repeat) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           this.events.onBack();
         } else if (e.code === 'Digit1') {
           this.setCarType('dragon_a');
