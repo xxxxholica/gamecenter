@@ -43,7 +43,7 @@ export class StageLoadingScreen {
     this.container.innerHTML = `
       <div class="stage-loading-wrap" id="stage-loading-wrap">
         <h2 class="stage-loading-title" id="stage-loading-title">
-          <span class="stage-name-block">東京 丸の内スカイウェイ</span>
+          <span class="stage-name-block"></span>
         </h2>
         <div class="ld-speed">
           <div class="ld-meter">

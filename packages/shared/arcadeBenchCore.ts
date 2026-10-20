@@ -25,7 +25,7 @@ export function isBenchEnabled(): boolean {
 
 /**
  * 計測の対象になる「場面」ひとつ分。各ゲームが declareBenchTargets() で申告し、bench-all.mjs が全部を順に開く。
- * 例: 「ヘルシンキ × dragon_b × 夜のレース」。
+ * 例: 「峠ダウンヒル × dragon_b × 夜のレース」。
  */
 export interface BenchTarget {
   /** 結果のキー(ゲーム内で一意。ファイル名にもなるので英数字と - _ だけ) */

@@ -12,12 +12,6 @@ export interface ViaductOptions {
   pillarSpacing: number;
   /** Repeat length of the road texture along the route. */
   textureRepeat: number;
-  /** Closed loop (default) or an open stretch such as a branch. */
-  closed?: boolean;
-  /** Stretches (per sample) where the parapet on one side is left out: where another road forks off or joins. */
-  parapetGaps?: { left: boolean[]; right: boolean[] };
-  /** Branch decks: cut the asphalt where it lies on the road it forks from / joins, so only the widening sliver remains. */
-  trimAgainst?: { road: THREE.Vector3[]; halfWidth: number };
 }
 
 /** [lateral, height] pairs describing a straight cross-section segment. */
@@ -65,8 +59,7 @@ export function makeHighwayTexture(roadWidth: number, repeatMetres: number): THR
  */
 export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: ViaductOptions): THREE.Group {
   const n = road.length;
-  const closed = opts.closed ?? true;
-  const at = (i: number): THREE.Vector3 => (closed ? road[(i + n) % n] : road[Math.min(n - 1, Math.max(0, i))]);
+  const at = (i: number): THREE.Vector3 => road[(i + n) % n];
   const half = opts.roadWidth / 2;
 
   // frames along the route: heading + lateral normal
@@ -78,20 +71,19 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   }
 
   /** Sweeps every cross-section segment along the closed route; each segment gets its own vertices (hard edges). */
-  const sweep = (segments: Segment[], withUv = false, hscale?: (i: number, seg: number) => number): THREE.BufferGeometry => {
+  const sweep = (segments: Segment[], withUv = false): THREE.BufferGeometry => {
     const pos: number[] = [], uv: number[] = [], idx: number[] = [];
     let arc = 0;
     const arcs: number[] = [0];
-    const cnt = closed ? n + 1 : n;
+    const cnt = n + 1;
     for (let i = 1; i < cnt; i++) { const a = road[i - 1], b = road[i % n]; arc += Math.hypot(b.x - a.x, b.z - a.z); arcs.push(arc); }
-    segments.forEach(([[l0, h0], [l1, h1]], segIdx) => {
+    segments.forEach(([[l0, h0], [l1, h1]]) => {
       const base = pos.length / 3;
-      for (let i = 0; i < cnt; i++) { // closed: the last vertex row repeats the first frame to close the loop (with its own uv)
+      for (let i = 0; i < cnt; i++) { // the last vertex row repeats the first frame to close the loop (with its own uv)
         const k = i % n, r = road[k];
-        const f = hscale ? hscale(k, segIdx) : 1;
-        pos.push(r.x + nx[k] * l0, r.y + h0 * f, r.z + nz[k] * l0, r.x + nx[k] * l1, r.y + h1 * f, r.z + nz[k] * l1);
+        pos.push(r.x + nx[k] * l0, r.y + h0, r.z + nz[k] * l0, r.x + nx[k] * l1, r.y + h1, r.z + nz[k] * l1);
         if (withUv) { const v = arcs[i] / opts.textureRepeat; uv.push(0, v, 1, v); }
-        if (i < cnt - 1 && !(hscale && hscale(i % n, segIdx) === 0 && hscale((i + 1) % n, segIdx) === 0)) { const q = base + i * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+        if (i < cnt - 1) { const q = base + i * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
       }
     });
     const g = new THREE.BufferGeometry();
@@ -107,52 +99,18 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   const gw = half + 0.9; // girder half width (sticks out beyond the parapets)
 
   // asphalt surface (lit: receives cast shadows from the car, traffic and buildings)
-  // Lateral extent per frame: the full deck, except on a branch where it lies on the road it forks from / joins:
-  // there only the sliver outside the other deck is drawn, so the two roads read as one widening carriageway.
-  const latL = new Float32Array(n).fill(-half), latR = new Float32Array(n).fill(half);
-  if (opts.trimAgainst) {
-    const mr = opts.trimAgainst.road, mh = opts.trimAgainst.halfWidth, M = mr.length;
-    // main deck edge polylines (left / right of its travel direction) near a point
-    const mnx = new Float32Array(M), mnz = new Float32Array(M);
-    for (let j = 0; j < M; j++) { const a = mr[(j - 1 + M) % M], b = mr[(j + 1) % M], tl = Math.hypot(b.x - a.x, b.z - a.z) || 1; mnx[j] = -(b.z - a.z) / tl; mnz[j] = (b.x - a.x) / tl; }
-    for (let k = 0; k < n; k++) {
-      const P = road[k];
-      let bi = 0, bd = Infinity;
-      for (let j = 0; j < M; j++) { const d = (mr[j].x - P.x) ** 2 + (mr[j].z - P.z) ** 2; if (d < bd) { bd = d; bi = j; } }
-      const dM = (P.x - mr[bi].x) * mnx[bi] + (P.z - mr[bi].z) * mnz[bi];   // + : this deck is on the main deck's right
-      if (Math.abs(dM) > 2 * half + 4) continue;                              // far away: nothing to trim
-      // Cast a ray from this deck's centre across (towards the main deck) and find where it meets the main deck's near edge.
-      const dir = dM < 0 ? 1 : -1, sgn = dM < 0 ? -1 : 1;                     // main is on our right (dir +1) or left; its edge facing us
-      const rx = nx[k] * dir, rz = nz[k] * dir;
-      let hit = NaN, best = Infinity;
-      for (let j = bi - 40; j < bi + 40; j++) {
-        const j0 = ((j % M) + M) % M, j1 = (j0 + 1) % M;
-        const ax = mr[j0].x + mnx[j0] * mh * sgn, az = mr[j0].z + mnz[j0] * mh * sgn, bx = mr[j1].x + mnx[j1] * mh * sgn, bz = mr[j1].z + mnz[j1] * mh * sgn;
-        const ex = bx - ax, ez = bz - az, den = rx * ez - rz * ex;
-        if (Math.abs(den) < 1e-9) continue;
-        const t = ((ax - P.x) * ez - (az - P.z) * ex) / den, u = ((ax - P.x) * rz - (az - P.z) * rx) / den;
-        if (u < 0 || u > 1) continue;
-        const guess = Math.abs(dM) - mh;
-        if (Math.abs(t - guess) < best) { best = Math.abs(t - guess); hit = t; }
-      }
-      if (Number.isNaN(hit)) continue;
-      const lap = 0.75;                                                          // slightly over the main deck's edge: hides its edge line
-      if (dM < 0) latR[k] = Math.min(half, Math.max(-half, hit + lap)); else latL[k] = Math.max(-half, Math.min(half, -(hit + lap)));
-    }
-  }
   const surfGeo = ((): THREE.BufferGeometry => {
     const pos: number[] = [], uv: number[] = [], idx: number[] = [];
-    const cnt = closed ? n + 1 : n;
+    const cnt = n + 1;
     let arc = 0;
     for (let i = 0; i < cnt; i++) {
       const k = i % n, r = road[k];
       if (i > 0) arc += Math.hypot(road[k].x - road[(i - 1) % n].x, road[k].z - road[(i - 1) % n].z);
-      const yy = r.y + (opts.trimAgainst ? 0.036 : 0.03);
-      pos.push(r.x + nx[k] * latL[k], yy, r.z + nz[k] * latL[k], r.x + nx[k] * latR[k], yy, r.z + nz[k] * latR[k]);
+      const yy = r.y + 0.03;
+      pos.push(r.x - nx[k] * half, yy, r.z - nz[k] * half, r.x + nx[k] * half, yy, r.z + nz[k] * half);
       const v = arc / opts.textureRepeat;
-      uv.push((latL[k] + half) / (2 * half), v, (latR[k] + half) / (2 * half), v);
-      const k2 = (i + 1) % n;
-      if (i < cnt - 1 && (latR[k] - latL[k] > 0.02 || latR[k2] - latL[k2] > 0.02)) { const q = i * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+      uv.push(0, v, 1, v);
+      if (i < cnt - 1) { const q = i * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -163,41 +121,30 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   })();
   const surface = new THREE.Mesh(
     surfGeo,
-    new THREE.MeshStandardMaterial({ map: makeHighwayTexture(opts.roadWidth, opts.textureRepeat), roughness: 0.88, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: opts.trimAgainst ? -4 : -2, polygonOffsetUnits: opts.trimAgainst ? -4 : -2 })
+    new THREE.MeshStandardMaterial({ map: makeHighwayTexture(opts.roadWidth, opts.textureRepeat), roughness: 0.88, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
   );
   surface.receiveShadow = true;
   // box girder: outer walls, underside and the deck edge
   const D = opts.girderDepth;
   const girder = new THREE.Mesh(
-    sweep([[[-gw, 0], [-gw, -D]], [[-gw, -D], [-gw + 1.4, -D - 0.5]], [[-gw + 1.4, -D - 0.5], [gw - 1.4, -D - 0.5]], [[gw - 1.4, -D - 0.5], [gw, -D]], [[gw, -D], [gw, 0]], [[-gw, 0], [-half, 0]], [[half, 0], [gw, 0]]], false,
-      // where another deck lies against this one the flat girder shoulder on that side goes too (it would show as a frame)
-      (i, seg) => (seg === 5 ? (opts.parapetGaps?.left[i] ? 0 : 1) : seg === 6 ? (opts.parapetGaps?.right[i] ? 0 : 1) : 1)),
+    sweep([[[-gw, 0], [-gw, -D]], [[-gw, -D], [-gw + 1.4, -D - 0.5]], [[-gw + 1.4, -D - 0.5], [gw - 1.4, -D - 0.5]], [[gw - 1.4, -D - 0.5], [gw, -D]], [[gw, -D], [gw, 0]], [[-gw, 0], [-half, 0]], [[half, 0], [gw, 0]]]),
     new THREE.MeshStandardMaterial({ color: 0x8a8c8f, roughness: 0.95, side: THREE.DoubleSide })
   );
   girder.castShadow = true;
   girder.receiveShadow = true;
-  // parapets on both sides; at a gap they stop at the nose of the gore with an end post
-  const ramp = (gap: boolean[] | undefined): Float32Array => {
-    // no taper: the barrier runs right up to the nose where the decks meet and stops there with an end post
-    const f = new Float32Array(n).fill(1);
-    if (gap) for (let i = 0; i < n; i++) if (gap[i]) f[i] = 0;
-    return f;
-  };
-  const fLeft = ramp(opts.parapetGaps?.left), fRight = ramp(opts.parapetGaps?.right);
-  // Outer barrier: a low concrete kerb, an acrylic panel above it and a slim top rail (the city stays visible through it).
+  // parapets on both sides. Outer barrier: a low concrete kerb, an acrylic panel above it and a slim top rail (the city stays visible through it).
   const P = opts.parapetHeight, t = 0.45, C = 0.35, pl = half + 0.22, rl = 0.07;
   const both = (per: (l: number, sgn: number) => Segment[]): Segment[] => [...per(-1, -1), ...per(1, 1)];
-  const sideOf = (perSide: number) => (i: number, seg: number): number => (seg < perSide ? fLeft : fRight)[i];
   const kerb = new THREE.Mesh(
-    sweep(both((_, g) => [[[g * half, 0], [g * half, C]], [[g * half, C], [g * (half + t), C]], [[g * (half + t), C], [g * (half + t), 0]]]), false, sideOf(3)),
+    sweep(both((_, g) => [[[g * half, 0], [g * half, C]], [[g * half, C], [g * (half + t), C]], [[g * (half + t), C], [g * (half + t), 0]]])),
     new THREE.MeshStandardMaterial({ color: 0xb7b9bc, roughness: 0.9, side: THREE.DoubleSide })
   );
   const panel = new THREE.Mesh(
-    sweep(both((_, g) => [[[g * pl, C], [g * pl, P]]]), false, sideOf(1)),
+    sweep(both((_, g) => [[[g * pl, C], [g * pl, P]]])),
     new THREE.MeshStandardMaterial({ color: 0xbfe3f5, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })
   );
   const rail = new THREE.Mesh(
-    sweep(both((_, g) => [[[g * (pl - rl), P - 0.1], [g * (pl - rl), P]], [[g * (pl - rl), P], [g * (pl + rl), P]], [[g * (pl + rl), P], [g * (pl + rl), P - 0.1]]]), false, sideOf(3)),
+    sweep(both((_, g) => [[[g * (pl - rl), P - 0.1], [g * (pl - rl), P]], [[g * (pl - rl), P], [g * (pl + rl), P]], [[g * (pl + rl), P], [g * (pl + rl), P - 0.1]]])),
     new THREE.MeshStandardMaterial({ color: 0x9da1a6, roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide })
   );
   panel.renderOrder = 2;
@@ -206,25 +153,6 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   rail.castShadow = true; rail.receiveShadow = true;
   const parapets = new THREE.Group();
   parapets.add(kerb, panel, rail);
-  // end posts where a barrier stops at a gap (nose of the gore)
-  const posts: THREE.Matrix4[] = [];
-  for (const [gap, sgn] of [[opts.parapetGaps?.left, -1], [opts.parapetGaps?.right, 1]] as const) {
-    if (!gap) continue;
-    for (let i = 0; i < n; i++) {
-      const prev = closed ? gap[(i - 1 + n) % n] : (i > 0 ? gap[i - 1] : false), next = closed ? gap[(i + 1) % n] : (i < n - 1 ? gap[i + 1] : false);
-      const edgeIdx = !gap[i] && next ? i : !gap[i] && prev ? i : -1;                // last barrier sample next to the gap
-      if (edgeIdx < 0) continue;
-      const r = road[i], l = sgn * (half + 0.22);
-      posts.push(new THREE.Matrix4().compose(new THREE.Vector3(r.x + nx[i] * l, r.y + P / 2, r.z + nz[i] * l), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw[i]), new THREE.Vector3(0.7, P, 0.7)));
-    }
-  }
-  if (posts.length) {
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xb7b9bc, roughness: 0.9 }), posts.length);
-    posts.forEach((mtx, k) => inst.setMatrixAt(k, mtx));
-    inst.instanceMatrix.needsUpdate = true; inst.frustumCulled = false;
-    inst.castShadow = true; inst.receiveShadow = true;
-    parapets.add(inst);
-  }
   group.add(surface, girder, parapets);
 
   // pillars + cap beams every `pillarSpacing` metres
@@ -232,7 +160,7 @@ export function buildViaduct(road: THREE.Vector3[], ground: number[], opts: Viad
   let acc = opts.pillarSpacing / 2;
   for (let i = 1; i < n; i++) {
     acc += Math.hypot(road[i].x - road[i - 1].x, road[i].z - road[i - 1].z);
-    if (acc >= opts.pillarSpacing) { if (closed || (i > 15 && i < n - 15)) spots.push(i); acc = 0; }
+    if (acc >= opts.pillarSpacing) { spots.push(i); acc = 0; }
   }
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   const concrete = new THREE.MeshStandardMaterial({ color: 0x8f9194, roughness: 0.95 });

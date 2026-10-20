@@ -293,6 +293,8 @@ interface DragonDef {
   /** 接地影の幅 / 長さ / 中心Z */
   shadow: [number, number, number];
   cockpitEye: [number, number, number];
+  /** 発光リム・LED(Mat_Emissive)の強さ */
+  emissive: number;
   /** 角・翼に重ねる発光エフェクトの強さ。0 なら無し(Azure はモデル自体に発光ジオメトリがある) */
   partGlow: number;
   /** 尻尾にも発光エフェクトを重ねるか(partGlow > 0 のとき) */
@@ -314,6 +316,7 @@ const DRAGON_DEFS: Record<DragonVariant, DragonDef> = {
     },
     shadow: [2.5, 5.4, -0.35],
     cockpitEye: [-0.30, 0.82, 0.05],
+    emissive: 1.7,
     partGlow: 2.2,
     tailGlow: true,
   },
@@ -331,6 +334,7 @@ const DRAGON_DEFS: Record<DragonVariant, DragonDef> = {
     },
     shadow: [2.2, 6.2, -0.45],
     cockpitEye: [-0.28, 0.80, 0.10],
+    emissive: 0.9,   // 翼のブレードが面で光るので、Crimson より抑える
     partGlow: 0,
     tailGlow: false,
   },
@@ -348,15 +352,14 @@ const DRAGON_DEFS: Record<DragonVariant, DragonDef> = {
     },
     shadow: [2.8, 5.0, -0.2],
     cockpitEye: [-0.34, 1.02, 0.00],
-    partGlow: 2.2,
+    emissive: 0.9,   // 金の装甲の反射と重なって眩しいので、Crimson より抑える
+    partGlow: 1.0,
     tailGlow: false,
   },
 };
 
-/** 発光リム・LEDの強さ。ブルームで白飛びしないよう、リファレンス(2.65)より控えめにする。 */
-const EMISSIVE_ON = 1.7;
-/** 消灯時(ガレージのライトOFF)の角・翼の発光の残り。setLights の emissiveIntensity 0.12/1.7 と同じ比率。 */
-const PART_GLOW_OFF = 0.07;
+/** 消灯時(ガレージのライトOFF)に残す発光の割合(発光リム・LED、角・翼とも)。 */
+const GLOW_OFF = 0.07;
 
 const isMat = (name: string, prefix: string): boolean => name.startsWith(prefix);
 
@@ -492,6 +495,8 @@ export class DragonCarModel extends CarBase {
   private paintMaterials: THREE.MeshStandardMaterial[] = [];
   private armorMaterials: THREE.MeshStandardMaterial[] = [];
   private emissiveMaterials: THREE.MeshStandardMaterial[] = [];
+  /** 発光リム・LED の点灯時の強さ(DragonDef.emissive) */
+  private emissiveOn = 0;
   private glassMaterials: THREE.MeshStandardMaterial[] = [];
   private partGlow: PartGlowUniforms | null = null;
   private partGlowStrength = 0;
@@ -500,6 +505,7 @@ export class DragonCarModel extends CarBase {
     super();
     this.variant = variant;
     const def = DRAGON_DEFS[variant];
+    this.emissiveOn = def.emissive;
     this.specs = def.specs;
     this.skipMeshMerge = true;
     this.cockpitEyeOffset = new THREE.Vector3(...def.cockpitEye);
@@ -544,7 +550,7 @@ export class DragonCarModel extends CarBase {
           this.armorMaterials.push(m);
           this.roofMaterial = m;
         } else if (isMat(name, 'Mat_Emissive')) {
-          m.emissiveIntensity = EMISSIVE_ON;
+          m.emissiveIntensity = def.emissive;
           this.emissiveMaterials.push(m);
         } else if (isMat(name, 'Mat_Glass')) {
           // transmission>0 だと three.js が全不透明物をもう1回描き直して重くなるため、透け感は opacity で出す
@@ -646,7 +652,7 @@ export class DragonCarModel extends CarBase {
 
   public override setLights(enabled: boolean): void {
     this.lightsEnabled = enabled;
-    for (const m of this.emissiveMaterials) m.emissiveIntensity = enabled ? EMISSIVE_ON : 0.12;
-    if (this.partGlow) this.partGlow.uStrength.value = this.partGlowStrength * (enabled ? 1 : PART_GLOW_OFF);
+    for (const m of this.emissiveMaterials) m.emissiveIntensity = this.emissiveOn * (enabled ? 1 : GLOW_OFF);
+    if (this.partGlow) this.partGlow.uStrength.value = this.partGlowStrength * (enabled ? 1 : GLOW_OFF);
   }
 }

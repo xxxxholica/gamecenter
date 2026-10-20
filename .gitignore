@@ -4,3 +4,4 @@ dist
 *.log
 .aider*
 bench-results
+edge-audit-results

@@ -1452,7 +1452,7 @@ export const ADMIN_JS = `
   var DEATHMAP_ORDER = ['street-b-boy', 'falldown', 'school-corridor-runner', 'tower-stack', 'tani-runner-124', 'midnight-skyway'];
   /** 地点の呼び方(skyway は死亡ではなく、ぶつかった・時間切れになった場所) */
   var POINT_LABEL = { 'midnight-skyway': '衝突・タイムアップ地点' };
-  var SKYWAY_COURSE_NAMES = { tokyo_skyway: '首都高速(東京)', helsinki_technical: 'ヘルシンキ・テクニカル', tokyo_climb: '東京クライム' };
+  var SKYWAY_COURSE_NAMES = { tsukikage_touge: '月影・湯元 峠ダウンヒル', tokyo_climb: '東京クライム' };
   var DEATHMAP_NOTE = '赤いバツが地点です。バツに合わせると、死因と日時が出ます。';
 
   // バツに合わせた時に、カーソルの横に出す小さな説明(1つを使い回す)

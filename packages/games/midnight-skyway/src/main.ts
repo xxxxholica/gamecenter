@@ -10,9 +10,8 @@ import { boostThemeFor } from './core/BoostTheme';
 import { DriveScene } from './core/DriveScene';
 import { DriveHUD } from './ui/DriveHUD';
 import { MapBase } from './maps/MapBase';
-import { TokyoMap } from './maps/TokyoMap';
-import { HelsinkiTechnicalMap } from './maps/HelsinkiTechnicalMap';
 import { TokyoClimbMap } from './maps/TokyoClimbMap';
+import { TougeDownhillMap } from './maps/TougeDownhillMap';
 import { STAGES } from './ui/stages';
 import { benchParam, benchReady, benchDone, benchMark, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { RaceDirector } from './core/RaceDirector';
@@ -231,15 +230,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Map registry
   const mapFactories: Record<string, () => MapBase> = {
-    tokyo_skyway: () => new TokyoMap(),
-    helsinki_technical: () => new HelsinkiTechnicalMap(),
+    tsukikage_touge: () => new TougeDownhillMap(),
     tokyo_climb: () => new TokyoClimbMap(),
   };
 
   let lightsBeforeRace = true;   // the garage's own headlight setting, restored when the car goes back
   const benchStage = benchParam('stage');
-  let currentMapId = benchStage && benchStage in mapFactories ? benchStage : 'tokyo_skyway';
-  const bootMapId = currentMapId;   // 起動時に作っておくマップ(通常は東京。ベンチでは指定のステージ)
+  let currentMapId = benchStage && benchStage in mapFactories ? benchStage : STAGES[0].id;
+  const bootMapId = currentMapId;   // 起動時に作っておくマップ(通常は先頭のステージ。ベンチでは指定のステージ)
   let currentMapInstance: MapBase = mapFactories[currentMapId]();
   let bootMapUnused = true;
   await yieldFrame();

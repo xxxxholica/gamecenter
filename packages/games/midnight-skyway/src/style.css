@@ -1167,7 +1167,6 @@ html, body {
 }
 .map-outline .ol-route { fill: none; stroke: #00f0ff; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
 .map-outline .ol-route-glow { fill: none; stroke: rgba(0, 240, 255, 0.35); stroke-width: 6; stroke-linejoin: round; filter: blur(1.5px); }
-.map-outline .ol-closed { fill: none; stroke: rgba(148, 163, 184, 0.55); stroke-width: 1.6; stroke-dasharray: 3 3; }
 .map-outline .ol-arrow { fill: #ffffff; }
 .map-outline .ol-start { fill: #00ff66; stroke: #05070c; stroke-width: 1.2; }
 .map-card-arcade.active .map-outline { border-color: rgba(0, 240, 255, 0.45); }
@@ -1370,6 +1369,8 @@ body .msel.msel-arcade .msel-card .art {
 }
 /* マシンの絵は、翼・尻尾まで入れて横長に描いてあるので、コースの絵より少し高くする */
 body #screen-car-select .car-outline { height: calc(190 * var(--u)); }
+/* コースの絵: カードが2枚で横に広いので、カードの空きの高さまで使って大きく見せる */
+body #screen-map-select .map-outline { height: calc(250 * var(--u)); }
 /* タイトル / サブ: 折り返してよい(省略しない) */
 body :is(#screen-car-select, #screen-map-select) :is(.car-card-title-arcade, .map-card-title-arcade),
 body .msel.msel-arcade .msel-card .t {

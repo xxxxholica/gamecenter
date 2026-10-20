@@ -23,7 +23,7 @@ export interface LeaderboardEntry {
 }
 
 export interface LeaderboardVariant {
-  id: string;        // 例: "tokyo_skyway", "elementary"
+  id: string;        // 例: "tsukikage_touge", "elementary"
   label: string;     // 表示名 例: "STAGE01", "小学生"
   /**
    * コース(ステージ)の版。コースを作り直して今までのタイム・ゴーストが無意味になったら、1つ上げる。
@@ -216,8 +216,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     formatScore: (score) => formatTimeMs(score),
     // minScore は shared/netProtocol.ts の MIN_FINISH_MS(コースごとの物理的な最短タイム)と同じ値
     variants: [
-      { id: 'tokyo_skyway', label: '東京 丸の内スカイウェイ', revision: 2, minScore: 30000 },
-      { id: 'helsinki_technical', label: 'ヘルシンキ ハーバーリッジ', revision: 2, minScore: 28000 },
+      { id: 'tsukikage_touge', label: '月影・湯元 峠ダウンヒル', revision: 1, minScore: 50000 },
       { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 2, minScore: 58000 },
     ],
   },

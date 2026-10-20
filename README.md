@@ -48,7 +48,7 @@ npm test               # テスト(CI でも実行)
 ```bash
 npm run bench:all -- --list                                   # 場面の一覧
 npm run bench:all -- --fullscreen --hz 60 --repeat-failed 3   # 合否の判定(全場面。時間がかかる)
-npm run bench:all -- --games midnight-skyway --targets 'race-helsinki.*night'   # 絞り込み
+npm run bench:all -- --games midnight-skyway --targets 'race-tsukikage_touge'   # 絞り込み
 ```
 
 - 既定は Chrome だけ(本番は Windows の Chrome)。Firefox・Safari は推奨外のブラウザで、最低限の確認をするときだけ `--browsers chromium,firefox,safari` のように足す。

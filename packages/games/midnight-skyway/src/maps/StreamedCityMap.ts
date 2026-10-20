@@ -911,18 +911,6 @@ if (abs(vNightNor.y) < 0.4) {
     p.y = surfaceY + lift;
     car.groundPitch += (-Math.atan(pitchSlope * along) - car.groundPitch) * 0.15;
 
-    // RoadBlockade collision check (Wangan Midnight style barricades)
-    if (this.blockade) {
-      const col = this.blockade.checkCarCollision(p, 1.2);
-      if (col.hit) {
-        p.x += col.pushX;
-        p.z += col.pushZ;
-        car.speed *= Math.max(0.15, 1.0 - col.impact * 0.75);
-        audio.sfx.crash(col.impact);
-        this.reportCrash(car, p, col.impact, 'バリケード');
-      }
-    }
-
     // Traffic obstacle collision check (Same-lane other cars)
     if (this.traffic) {
       const tCol = this.traffic.checkPlayerCollision(p, car.rotationY, car.speed);
@@ -994,7 +982,6 @@ if (abs(vNightNor.y) < 0.4) {
 
   public override update(dt: number, carPosition: THREE.Vector3): void {
     this.traffic?.update(dt, carPosition);
-    this.blockade?.update(dt);
   }
 
   public override getProgressFraction(): number {

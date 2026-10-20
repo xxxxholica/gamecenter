@@ -107,7 +107,6 @@ export class DriveHUD {
 
   private minimapPoints: THREE.Vector2[] = [];
   private extraRoutes: { points: THREE.Vector2[]; drivable: boolean }[] = [];
-  private blockadePoints: THREE.Vector2[] = [];
   /** オンライン対戦: ミニマップに出す他プレイヤー。 */
   private remoteMarkers: { x: number; z: number; color: number }[] = [];
 
@@ -316,7 +315,6 @@ export class DriveHUD {
 
     this.minimapPoints = [];
     this.extraRoutes = map.overviewRoutes;
-    this.blockadePoints = map.blockadePositions;
 
     if (!map.roadSpline) return;
     // 拡大して見せるので、折れ線が角ばらないよう細かく取る
@@ -795,24 +793,7 @@ export class DriveHUD {
     ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9);
     ctx.restore();
 
-    // 4. Blockade Icons (Red X)
-    for (const bp of this.blockadePoints) {
-      const [bx, by] = toCanvas(bp.x, bp.y);
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-      ctx.shadowBlur = 5;
-      ctx.strokeStyle = '#ff2244';
-      ctx.lineWidth = 2.8;
-      ctx.beginPath();
-      ctx.moveTo(bx - 4.5, by - 4.5);
-      ctx.lineTo(bx + 4.5, by + 4.5);
-      ctx.moveTo(bx + 4.5, by - 4.5);
-      ctx.lineTo(bx - 4.5, by + 4.5);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 5. Forward Traffic Obstacle Cars (Yellow dots with shadow)
+    // 4. Forward Traffic Obstacle Cars (Yellow dots with shadow)
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
     ctx.shadowBlur = 4;
@@ -843,7 +824,7 @@ export class DriveHUD {
 
     ctx.restore();
 
-    // 6. Player Car (Glowing Cyan Arrow): いつも画面の同じ場所で、上(進行方向)を向く
+    // 5. Player Car (Glowing Cyan Arrow): いつも画面の同じ場所で、上(進行方向)を向く
     ctx.save();
     ctx.translate(w / 2, h * MINIMAP_CAR_Y);
     ctx.fillStyle = this.accent;

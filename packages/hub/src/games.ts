@@ -124,7 +124,7 @@ const allGames: GameEntry[] = [
     title: 'ミッドナイト・スカイウェイ',
     englishTitle: 'MIDNIGHT SKYWAY: TIME ATTACK',
     description:
-      '夜の高架高速を走るタイムアタック。PLATEAUの3D都市モデルで作ったヘルシンキと東京・丸の内を、好きなマシンで駆け抜けよう。オンラインなら最大4人でレース！',
+      '夜の峠と高架を走るタイムアタック。温泉街の渓谷へ駆け下りる峠道と、PLATEAUの3D都市モデルで作った東京の超高層を、好きなマシンで駆け抜けよう。オンラインなら最大4人でレース！',
     thumbnail: 'thumbnails/midnight-skyway.webp',
     logo: 'logos/midnight-skyway.webp',
     accent: '#00e5ff',

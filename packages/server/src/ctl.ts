@@ -1,13 +1,13 @@
 // 使い方: npm run ctl -w packages/server -- <コマンド>
 //   status                                  … 全ゲームの状態
 //   open <ゲーム> [分] [キー=値 ...]         … 開放し、指定の分後に自動で閉鎖する(分を省略すると180分。0 で手動閉鎖まで開放し続ける)
-//       例: open skyway 180 map=helsinki_technical
+//       例: open skyway 180 map=tsukikage_touge
 //       分・各設定には random も指定できる(skyway の map=random は参加者の希望で決定、
 //       分=random は 1/2/3/6 時間から開放時に1回選ぶ)。設定を省略すると前回の設定。
 //   close <ゲーム|all>                      … 閉鎖して参加者を全員切断(all で全ゲームを緊急停止)
 //   kick <ゲーム> <参加者id>                 … 参加者を追い出す(id は status の参加者一覧)
 //   clear-board <枠>                        … ランキングの枠の記録(とゴースト)をすべて消す。枠は <ゲームid> か <ゲームid>:<コース/難易度>
-//       例: clear-board street-b-boy / clear-board midnight-skyway:tokyo_skyway
+//       例: clear-board street-b-boy / clear-board midnight-skyway:tsukikage_touge
 //   mark-dev <枠> <順位> [off]              … 枠の<順位>位の記録に、開発者の印を付ける(名前が「開発者」になり、ホームで強調される)。off で外す
 //   set-role <枠> <順位> <名前> <ロール>     … 枠の<順位>位に「好きな名前（ロール）」を設定する(ロールは 開発者 または テスター)
 //   clear-role <枠> <順位>                  … 枠の<順位>位のロール設定を解除し、元の名前に戻す

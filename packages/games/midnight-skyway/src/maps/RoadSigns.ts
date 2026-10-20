@@ -38,11 +38,6 @@ export const JP_STYLE: SignStyle = {
   fontFamily: '"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP","Meiryo",sans-serif',
   subFontFamily: '"Helvetica Neue",Arial,sans-serif',
 };
-export const FI_STYLE: SignStyle = {
-  background: '#0f4c9a', border: '#ffffff',
-  fontFamily: '"Helvetica Neue",Arial,sans-serif',
-  subFontFamily: '"Helvetica Neue",Arial,sans-serif',
-};
 
 const PX_PER_M = 200;
 const ROW_H = 1.25;      // one destination row (main + sub line)

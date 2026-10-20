@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { MapMetadata } from './MapBase';
 import { StreamedCityMap } from './StreamedCityMap';
-import { buildStreetNetwork, buildStreetGlow } from './StreetNetwork';
 import { buildViaduct } from './ViaductBuilder';
 import { spreadSigns, routeLength } from './RoadNetwork';
 import { buildRoadSigns, buildCurveSigns, SignSpec, SignStyle } from './RoadSigns';
@@ -28,8 +27,6 @@ export interface TechnicalCityConfig {
   signs: SignSpec[];
   signStyle: SignStyle;
   kmText: (metres: number) => string;
-  /** Draw the asphalt of the city's streets under the course (Helsinki has its street network baked in). */
-  streetNetwork: boolean;
   /** Flat plane under everything (sea / dark ground) where no city chunk covers. */
   ground: { color: number; y: number };
   loadRadius: number;
@@ -43,8 +40,6 @@ export interface TechnicalCityConfig {
   pillarSpacing?: number;
   /** Lit windows of the buildings at night (see StreamedCityMap.nightLook): colour, share lit, window cell size in metres. */
   nightLook?: { color: [number, number, number]; density: number; floorH: number; winW: number };
-  /** Street lamps glowing along the streets of the city at night (Helsinki: the street network is drawn by the map). */
-  streetGlow?: boolean;
 }
 
 /**
@@ -66,8 +61,6 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
   public override getRoadWidth(): number | null { return this.roadWidth; }
   private goal: GoalHologram | null = null;
   private lights: StreetLights | null = null;
-  private streets: THREE.Group | null = null;
-  private streetGlow: THREE.Points | null = null;
   private baseMat: THREE.MeshBasicMaterial | null = null;
 
   constructor(private readonly cfg: TechnicalCityConfig) {
@@ -105,17 +98,6 @@ export abstract class TechnicalCityMap extends StreamedCityMap {
     this.roadSpline = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
     this.checkpoints = pts.filter((_, i) => i % 10 === 0);
 
-    if (c.streetNetwork) {
-      this.streets = buildStreetNetwork();
-      this.streets.traverse((o) => {
-        if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setScalar(0.4);
-      });
-      this.group.add(this.streets);
-      if (c.streetGlow) {
-        this.streetGlow = buildStreetGlow();
-        this.group.add(this.streetGlow);
-      }
-    }
     this.group.add(buildViaduct(this.road, this.support, { roadWidth: W, girderDepth: c.girderDepth ?? 1.5, parapetHeight: 1.0, pillarSpacing: c.pillarSpacing ?? 22, textureRepeat: 16 }));
 
     const signs = spreadSigns(c.signs, routeLength(this.road), c.kmText, 2);

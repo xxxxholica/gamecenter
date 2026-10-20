@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { CarController } from '../core/CarController';
-import type { RoadBlockade } from './RoadBlockade';
 import type { Traffic } from '../core/Traffic';
 
 export interface MapMetadata {
@@ -30,11 +29,6 @@ export abstract class MapBase {
   public fogDensity?: number;
   /** Camera far plane for this map (default 2000). */
   public viewDistance?: number;
-
-  /** Wangan Midnight style barricades & collisions */
-  public blockade: RoadBlockade | null = null;
-  /** Minimap coordinates of blockades [x, z] */
-  public blockadePositions: THREE.Vector2[] = [];
 
   /** Race rules on: ghost / pace-bot rival, time-limit checkpoints, drift points and boost. Off = plain time attack. */
   public readonly competitive: boolean = false;

@@ -9,12 +9,10 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "data:helsinki": "node scripts/helsinki_route.mjs && node scripts/helsinki_plan.mjs 120 && node scripts/helsinki_download.mjs 19 && node scripts/helsinki_lod.mjs 100000 100000 && node scripts/helsinki_osm.mjs && node scripts/helsinki_convert.mjs",
-    "check:textures": "node scripts/check_glb_textures.js public/models/helsinki",
+    "check:textures": "node scripts/check_glb_textures.js public/models/tokyo",
     "data:tokyo": "node scripts/tokyo_tiles.mjs && node scripts/tokyo_download.mjs 1300 && node scripts/tokyo_design_route.mjs && node scripts/tokyo_convert.mjs",
-    "data:helsinki-skyway": "node scripts/helsinki_skyway_design.mjs auto && node scripts/helsinki_convert.mjs",
-    "data:helsinki-far": "node scripts/helsinki_download.mjs 17 && node scripts/helsinki_far_convert.mjs",
     "data:tokyo-far": "FAR=1 node scripts/tokyo_convert.mjs",
+    "audit:touge": "node scripts/touge_edge_audit.mjs",
     "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {

@@ -10,8 +10,7 @@ export interface StageInfo {
 }
 
 export const STAGES: StageInfo[] = [
-  { id: 'tokyo_skyway', title: '東京 丸の内スカイウェイ', sub: '神田橋・八重洲バイパス経由', length: '2.40 km', stars: '★★☆☆☆', tag: '初心者向け' },
-  { id: 'helsinki_technical', title: 'ヘルシンキ ハーバーリッジ', sub: 'テクニカル・アップダウン', length: '2.1 km', stars: '★★★★☆', tag: '急カーブ&起伏' },
+  { id: 'tsukikage_touge', title: '月影・湯元 峠ダウンヒル', sub: '複合つづら折り・温泉街渓谷', length: '2.7 km', stars: '★★★★★', tag: '側溝走り&連続S字' },
   { id: 'tokyo_climb', title: '東京 スカイクライム', sub: '超高層を駆け上がる', length: '4.4 km', stars: '★★★★★', tag: '超高層まで登る' },
 ];
 
