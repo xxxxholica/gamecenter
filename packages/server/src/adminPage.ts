@@ -199,7 +199,6 @@ form {
   gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.badge { background: #ffedd5; color: #ea580c; border: 1.5px solid #fed7aa; padding: .15em .6em; border-radius: 999px; font-size: .75rem; font-weight: 800; }
 h1 { margin: 0; font-size: 1.3rem; font-weight: 800; color: #0f172a; }
 label { font-size: .85rem; font-weight: 700; color: #475569; display: flex; flex-direction: column; gap: 6px; }
 input, button {
@@ -630,11 +629,6 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
 .replay-btn:active {
   transform: translateY(1px);
 }
-.replay-btn.sm {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 6px;
-}
 .game-badge {
   display: inline-block;
   font-size: 12px;
@@ -655,6 +649,7 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
   white-space: nowrap;
 }
 .status-pill.clear { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.status-pill.perfect { background: #fdf2f8; color: #be185d; border: 1px solid #f472b6; }
 .status-pill.retire { background: #fef3c7; color: #b45309; border: 1px solid #fde047; }
 .status-pill.unknown { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 
@@ -957,6 +952,24 @@ button:disabled { opacity: .5; cursor: default; transform: none; filter: none; }
   border: 1px solid #fcd34d;
   color: #b45309;
 }
+.entry .mark.perfect,
+.replay-star-mark.perfect {
+  background: linear-gradient(135deg, #fdf2f8, #f3e8ff);
+  border: 1px solid #f472b6;
+  color: #be185d;
+}
+.replay-star-mark {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: .72rem;
+  font-weight: 800;
+  padding: .1em .5em;
+  border-radius: 999px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #b45309;
+  vertical-align: 1px;
+}
 .entry .mark.dev { background: #fce7f3; border-color: #fbcfe8; color: #db2777; }
 .entry .mark.tester { background: #dcfce7; border-color: #bbf7d0; color: #16a34a; }
 .entry .acts { margin-left: auto; display: flex; gap: 6px; }
@@ -1002,6 +1015,7 @@ export const ADMIN_JS = `
     'extreme-edge-arcade': '極限ギリギリ選手権',
     'tani-runner-124': '単位増殖ラン',
     'midnight-skyway': 'ミッドナイト・スカイウェイ',
+    'cyber-2d-fighter-3d': 'サイバー２Dファイター３D',
     'sumo-smash-3d': '剛体大相撲',
     'tower-stack': 'タワースタック',
     'falldown': '無限降下ドリル'
@@ -1264,8 +1278,8 @@ export const ADMIN_JS = `
       var timeStr = p.startedAt ? new Date(p.startedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
       var durStr = p.durationSec ? formatDuration(p.durationSec) : '-';
       
-      var resPillClass = p.completed ? 'status-pill clear' : (p.endedAt ? 'status-pill retire' : 'status-pill unknown');
-      var resText = p.completed ? '完走/クリア' : (p.endedAt ? 'リタイア' : '終了未受信');
+      var resPillClass = p.perfect ? 'status-pill perfect' : (p.completed ? 'status-pill clear' : (p.endedAt ? 'status-pill retire' : 'status-pill unknown'));
+      var resText = p.perfect ? '★ 完全制覇' : (p.completed ? '完走/クリア' : (p.endedAt ? 'リタイア' : '終了未受信'));
       var resPill = el('span', { className: resPillClass, text: resText });
 
       var scoreText = p.formattedScore || (p.score !== undefined ? fmtNum(p.score) : '-');
@@ -1788,12 +1802,19 @@ export const ADMIN_JS = `
         var tbody = el('tbody');
         rows.forEach(function (x) {
           var gname = (GAME_META[x.b.slug] && GAME_META[x.b.slug].name) || BOARD_TITLES[x.b.slug] || x.b.slug;
+          var nameCell = el('td');
+          nameCell.appendChild(el('span', { text: x.e.name }));
+          if (x.e.perfect) {
+            nameCell.appendChild(el('span', { className: 'replay-star-mark perfect', text: '★ 完全制覇' }));
+          } else if (x.e.cleared) {
+            nameCell.appendChild(el('span', { className: 'replay-star-mark', text: '★ クリア' }));
+          }
           tbody.appendChild(el('tr', null, [
             el('td', null, [replayButton(x.b.slug, x.e.replay.id, x.e.replay.seek)]),
             el('td', { text: gname }),
             el('td', { text: x.b.variantLabel || '-' }),
             el('td', { className: 'num', text: x.e.rank + '位' }),
-            el('td', { text: x.e.name }),
+            nameCell,
             el('td', { className: 'num', text: x.e.formattedScore }),
             el('td', { text: x.e.date }),
           ]));
@@ -2153,7 +2174,11 @@ export const ADMIN_JS = `
       el('span', { className: 'who', text: e.name }),
       el('span', { className: 'score', text: e.formattedScore }),
     ];
-    if (e.cleared) kids.push(el('span', { className: 'mark', text: 'クリア' }));
+    if (e.perfect) {
+      kids.push(el('span', { className: 'mark perfect', text: '★ 完全制覇スター' }));
+    } else if (e.cleared) {
+      kids.push(el('span', { className: 'mark', text: '★ クリアスター' }));
+    }
     if (e.role) {
       kids.push(el('span', { className: 'mark ' + (e.role === '開発者' ? 'dev' : 'tester'), text: e.role }));
     } else if (e.dev) {

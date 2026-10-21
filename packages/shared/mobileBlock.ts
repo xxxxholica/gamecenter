@@ -1,21 +1,10 @@
 // ============================================================
 // モバイル端末（スマホ・タブレット）アクセス制限モジュール
 // PC（キーボード / アケコン）専用ゲームセンターのため、
-// スマホでのアクセス時は画面上部に固定の警告バナーを表示し、
-// 背景や一覧はそのまま見せつつゲームの起動をブロックする。
+// 非対応デバイスでのアクセス時は通常と同じ背景の全画面オーバーレイを中央表示する。
 // ============================================================
 
-function returnToHubFromBlocker(): void {
-  if (typeof window !== 'undefined') {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'gamecenter:close-game' }, window.location.origin);
-    } else {
-      window.location.href = '../../';
-    }
-  }
-}
-
-/** モバイルデバイス（スマートフォン・タブレット・タッチ主体の小画面）か判定 */
+/** モバイルデバイス（スマートフォン・タブレット・PC版サイト表示要求時も含む）か判定 */
 export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false;
 
@@ -23,19 +12,32 @@ export function isMobileDevice(): boolean {
   if (window.location.search.includes('mobile=1')) return true;
   if (window.location.search.includes('mobile=0')) return false;
 
-  // 1. User Agent 判定
-  const ua = navigator.userAgent;
-  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  if (isMobileUA) return true;
+  // 1. User Agent / Client Hints 判定
+  const ua = navigator.userAgent || '';
+  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return true;
+  if ((navigator as any).userAgentData?.mobile === true) return true;
 
-  // 2. iPadOS (デスクトップモード偽装)
-  const isIPad = navigator.maxTouchPoints > 1 && /Macintosh/.test(ua);
-  if (isIPad) return true;
-
-  // 3. タッチデバイスかつ画面幅がスマホ・タブレットサイズ (<= 840px)
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const isSmallScreen = window.innerWidth <= 840;
-  if (hasTouch && isSmallScreen) return true;
+
+  // 2. iOS / iPadOS の「デスクトップ用Webサイトを表示」(UAがMacintoshに偽装されるがタッチ点数が複数ある)
+  if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) return true;
+
+  // 3. Android の「PC版サイト」(UAがX11; Linux x86_64に偽装されるが platform が Linux armv8l / aarch64 等)
+  const platform = navigator.platform || '';
+  if (hasTouch && /Linux armv|Linux aarch64|Android/i.test(platform)) return true;
+
+  // 4. ポインタ・ホバー判定: 主入力がタッチ(coarse)かつホバー不可(none)の端末はPC版サイト表示でもモバイル/タブレット
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(any-pointer: coarse) and (any-hover: none)').matches) return true;
+    if (window.matchMedia('(pointer: coarse) and (hover: none)').matches) return true;
+  }
+
+  // 5. タッチデバイスかつ画面幅(または端末本来の画面短辺)がスマホ・タブレットサイズ (<= 840px)
+  const screenShortSide =
+    typeof window.screen !== 'undefined' && window.screen.width && window.screen.height
+      ? Math.min(window.screen.width, window.screen.height)
+      : window.innerWidth;
+  if (hasTouch && (window.innerWidth <= 840 || screenShortSide <= 840)) return true;
 
   return false;
 }
@@ -49,20 +51,38 @@ function injectBannerStyles(): void {
   const style = document.createElement('style');
   style.id = 'mobile-warning-banner-styles';
   style.textContent = `
-    /* ===== 上部固定警告バナー ===== */
+    /* ===== 非対応デバイス用 全画面中央表示 ===== */
+    html:has(body.is-mobile-blocked),
+    body.is-mobile-blocked {
+      overflow: hidden !important;
+      height: 100dvh !important;
+      padding: 0 !important;
+    }
+
+    body.is-mobile-blocked > *:not(#mobile-warning-banner) {
+      display: none !important;
+      pointer-events: none !important;
+      user-select: none !important;
+    }
+
     .mobile-warning-banner {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      inset: 0;
       z-index: 2147483640;
-      background: rgba(18, 16, 24, 0.94);
-      border-bottom: 2px solid #f59e0b;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 16px rgba(245, 158, 11, 0.2);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+      text-align: center;
+      background-color: #faf9f6;
+      background-image:
+        url('/doodles.svg'),
+        linear-gradient(to right, rgba(148, 163, 184, 0.28) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.28) 1px, transparent 1px);
+      background-repeat: repeat, repeat, repeat;
+      background-size: 800px 800px, 24px 24px, 24px 24px;
+      color: #1e293b;
       font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
       box-sizing: border-box;
       user-select: none;
@@ -70,60 +90,63 @@ function injectBannerStyles(): void {
     }
 
     .mobile-warning-container {
-      max-width: 1200px;
+      max-width: 460px;
+      width: 100%;
       margin: 0 auto;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 12px;
+      justify-content: center;
+      gap: 14px;
     }
 
     .mobile-warning-icon {
-      font-size: 22px;
-      line-height: 1;
-      flex-shrink: 0;
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f59e0b;
+      margin-bottom: 2px;
+      filter: drop-shadow(0 3px 6px rgba(245, 158, 11, 0.22));
     }
 
-    .mobile-warning-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
+    .mobile-warning-icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     .mobile-warning-title {
-      color: #fbbf24;
-      font-size: 13.5px;
-      font-weight: 700;
+      margin: 0;
+      max-width: 100%;
+      color: #0f172a;
+      font-size: clamp(0.85rem, 4.8vw, 1.35rem);
+      font-weight: 800;
       letter-spacing: 0.02em;
-      line-height: 1.3;
+      line-height: 1.4;
+      white-space: nowrap;
     }
 
     .mobile-warning-desc {
-      color: #d1d5db;
-      font-size: 12px;
-      line-height: 1.4;
-      word-break: break-word;
+      margin: 0;
+      color: #475569;
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.7;
+      text-align: center;
     }
 
-    .mobile-warning-hub-btn {
-      flex-shrink: 0;
-      padding: 6px 14px;
-      background: #f59e0b;
-      color: #0b0b10;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.15s ease, transform 0.1s ease;
-    }
-
-    .mobile-warning-hub-btn:active {
-      transform: scale(0.96);
-      background: #d97706;
+    .mobile-warning-url {
+      margin-top: 6px;
+      padding: 6px 16px;
+      background: #ffffff;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      color: #64748b;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
     }
 
     /* ===== モバイル表示時: ボタンガイド非表示 ===== */
@@ -131,26 +154,18 @@ function injectBannerStyles(): void {
     .agc-inline {
       display: none !important;
     }
-
-    /* ===== ゲーム直接アクセス時 ===== */
-    body.is-game-mobile-blocked > *:not(#mobile-warning-banner) {
-      pointer-events: none !important;
-      user-select: none !important;
-    }
   `;
   document.head.appendChild(style);
 }
 
-/** 上部警告バナーを作成・マウントする */
-export function mountMobileWarningBanner(options?: { isGame?: boolean }): HTMLElement | null {
+/** 非対応デバイス用の全画面案内を作成・マウントする */
+function mountMobileWarningBanner(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
 
   injectBannerStyles();
 
   let banner = document.getElementById('mobile-warning-banner');
   if (banner) return banner;
-
-  const isGame = options?.isGame ?? false;
 
   banner = document.createElement('aside');
   banner.id = 'mobile-warning-banner';
@@ -160,67 +175,40 @@ export function mountMobileWarningBanner(options?: { isGame?: boolean }): HTMLEl
 
   banner.innerHTML = `
     <div class="mobile-warning-container">
-      <div class="mobile-warning-icon">⚠️</div>
-      <div class="mobile-warning-content">
-        <strong class="mobile-warning-title">お使いの環境には対応しておりません</strong>
-        <span class="mobile-warning-desc">各ゲームのプレイにはキーボードまたはアーケードコントローラーが必要です。</span>
+      <div class="mobile-warning-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="9" x2="12" y2="13.5" stroke="#d97706" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="12" cy="17" r="1.2" fill="#d97706"/>
+        </svg>
       </div>
-      ${
-        isGame
-          ? '<button type="button" class="mobile-warning-hub-btn">ハブへ戻る</button>'
-          : ''
-      }
+      <h1 class="mobile-warning-title">お使いの環境には対応しておりません</h1>
+      <p class="mobile-warning-desc">各ゲームのプレイにはキーボードまたはアーケードコントローラが必要です。<br>Windows / macOSのGoogle Chromeをご利用ください。</p>
+      <div class="mobile-warning-url">https://game.hinata.works</div>
     </div>
   `;
 
-  if (isGame) {
-    banner.querySelector('.mobile-warning-hub-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      returnToHubFromBlocker();
-    });
-  }
-
   document.body.appendChild(banner);
-
-  // バナーの高さ分だけbody上部に余白を確保（重なり防止）
-  const updatePadding = () => {
-    if (banner) {
-      const bannerHeight = banner.offsetHeight;
-      document.body.style.paddingTop = `${bannerHeight}px`;
-    }
-  };
-
-  updatePadding();
-  window.addEventListener('resize', updatePadding);
-
   return banner;
 }
 
 /**
  * ハブ（トップページ）用: モバイルアクセス制限を初期化
- * - 画面上部に固定警告バナーを表示
- * - 背景・ゲームカードはそのまま綺麗に閲覧可能
- * - ゲームカードタップ時はゲームの起動のみを阻止（アニメーションなし）
  */
 export function initHubMobileBlock(): boolean {
   if (!isMobileDevice()) {
     return false;
   }
 
-  mountMobileWarningBanner({ isGame: false });
+  mountMobileWarningBanner();
   document.body.classList.add('is-mobile-blocked');
 
-  // カードをタップしたときに起動阻止（演出なしでそのままブロック）
+  // 万一イベントが伝播した場合も操作を無効化
   document.addEventListener(
     'click',
     (e) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const card = target.closest('.card');
-      if (card) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      e.preventDefault();
+      e.stopPropagation();
     },
     true
   );
@@ -230,16 +218,14 @@ export function initHubMobileBlock(): boolean {
 
 /**
  * 各ゲーム直接アクセス用: モバイルアクセス制限を初期化
- * - 画面上部に固定警告バナーを表示し「ハブへ戻る」ボタンを設置
- * - ゲーム本体の操作は無効化
  */
 export function initGameMobileBlock(): boolean {
   if (!isMobileDevice()) {
     return false;
   }
 
-  mountMobileWarningBanner({ isGame: true });
-  document.body.classList.add('is-game-mobile-blocked');
+  mountMobileWarningBanner();
+  document.body.classList.add('is-mobile-blocked');
 
   return true;
 }

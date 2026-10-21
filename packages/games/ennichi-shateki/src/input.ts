@@ -160,8 +160,6 @@ export class ArcadeInput {
     let padMoveX = 0; // アケコン・ゲームパッドの分だけ(キーボードより低い感度で動かす)
     let padMoveY = 0;
     let normalPressed = false;
-    let explosivePressed = false;
-    let startPressed = false;
     let padNormalPressed = false;
     let padExplosivePressed = false;
     let padStartPressed = false;
@@ -186,7 +184,6 @@ export class ArcadeInput {
       this.keyboard.pressed.has('Space') || this.keyboard.pressed.has('KeyZ') || this.keyboard.pressed.has('Enter');
     if (isKeyNormal || keyNormalJustPressed) {
       normalPressed = true;
-      startPressed = true;
       hasAnyInput = true;
     }
 
@@ -196,7 +193,6 @@ export class ArcadeInput {
     const keyExplosiveJustPressed =
       this.keyboard.pressed.has('KeyX') || this.keyboard.pressed.has('KeyE') || this.keyboard.pressed.has('ShiftLeft') || this.keyboard.pressed.has('ShiftRight');
     if (isKeyExplosive || keyExplosiveJustPressed) {
-      explosivePressed = true;
       hasAnyInput = true;
     }
 
@@ -234,7 +230,6 @@ export class ArcadeInput {
       // Button 0 (A/Cross): Normal Shoot & Start
       if (pad.buttons[0]?.pressed) {
         normalPressed = true;
-        startPressed = true;
         padNormalPressed = true;
         padStartPressed = true;
         hasAnyInput = true;
@@ -242,7 +237,6 @@ export class ArcadeInput {
 
       // Button 1 (B/Circle), Button 2 (X/Square), Button 7 (RT): Explosive Shoot
       if (pad.buttons[1]?.pressed || pad.buttons[2]?.pressed || pad.buttons[7]?.pressed) {
-        explosivePressed = true;
         padExplosivePressed = true;
         hasAnyInput = true;
       }
@@ -257,11 +251,9 @@ export class ArcadeInput {
     // 3. Mouse / Touch
     if (this.mouseLeftPressed || this.mouseLeftJustPressed || this.touchJustTapped) {
       normalPressed = true;
-      startPressed = true;
       hasAnyInput = true;
     }
     if (this.mouseRightPressed || this.mouseRightJustPressed) {
-      explosivePressed = true;
       hasAnyInput = true;
     }
 

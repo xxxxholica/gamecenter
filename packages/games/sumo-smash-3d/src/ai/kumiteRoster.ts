@@ -104,17 +104,35 @@ const MAWASHI_PALETTE = [
 const BOSS_MAWASHI = { hex: 0xc9a227, css: '#ffd166' }; // 黄金まわし
 const FINAL_BOSS_MAWASHI = { hex: 0x7209b7, css: '#ff4d6d' }; // 百獣王・覇王色
 
+// 3体同時ラッシュが発生する開始番号 (7〜9, 16〜18, 25〜27, 34〜36, 43〜45, 52〜54, 61〜63, 72〜74, 83〜85, 92〜94)
+const TRIPLE_TRIGGERS = new Set([7, 16, 25, 34, 43, 52, 61, 72, 83, 92]);
+// 2体同時ラッシュが発生する開始番号 (4〜5, 12〜13, 21〜22, 31〜32, 47〜48, 57〜58, 67〜68, 77〜78, 87〜88, 96〜97)
+const DOUBLE_TRIGGERS = new Set([4, 12, 21, 31, 47, 57, 67, 77, 87, 96]);
+
+/** 2体または3体同時降下ウェーブに含まれる番号か */
+export function isSimultaneousWaveMember(n: number): boolean {
+  for (const start of DOUBLE_TRIGGERS) {
+    if (n >= start && n < start + 2) return true;
+  }
+  for (const start of TRIPLE_TRIGGERS) {
+    if (n >= start && n < start + 3) return true;
+  }
+  return false;
+}
+
 /**
  * 1〜100 の通し番号(1始まり)から敵力士のスペックを返す。
+ * simultaneousCount >= 2（または同時降下ウェーブ対象番号）の場合は中ボス（巨漢・重量級）にせず、
+ * 少し弱め（軽くて吹き飛びやすく、動きと反応も穏やか）の通常力士にする。
  */
-export function getKumiteEnemySpec(num: number): KumiteEnemySpec {
+export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEnemySpec {
   const n = Math.max(1, Math.min(KUMITE_TOTAL, Math.floor(num)));
   const name = KUMITE_SHIKONA_LIST[n - 1] ?? `${toKanjiNumber(n)}番山`;
   const rankLabel = `${toKanjiNumber(n)}番`;
   const progress = (n - 1) / (KUMITE_TOTAL - 1); // 0.0 〜 1.0
 
-  // 10体ごとの節目（10, 20, ..., 100）は巨漢ボス
-  if (n % 10 === 0) {
+  // 10体ごとの節目（10, 20, ..., 100）は巨漢ボス（単独登場時のみ）
+  if (n % 10 === 0 && simultaneousCount <= 1) {
     const isFinal = n === 100;
     const scale = isFinal ? 1.5 : 1.32 + Math.min(0.14, (n / 100) * 0.14);
     const mass = isFinal ? 195 : Math.round(145 + (n / 100) * 35);
@@ -132,6 +150,27 @@ export function getKumiteEnemySpec(num: number): KumiteEnemySpec {
       skinColor: isFinal ? 0xc87d4b : 0xd48e5c,
       mawashiColor: mawashi.hex,
       hairColor: 0x111111,
+      css: mawashi.css,
+    };
+  }
+
+  // 複数同時降下時（2体・3体落ちてくるとき）は中ボス(heavy/boss)にせず、少し弱めの設定にする
+  if (simultaneousCount >= 2 || isSimultaneousWaveMember(n)) {
+    const mawashi = MAWASHI_PALETTE[(n * 2) % MAWASHI_PALETTE.length];
+    const isAgile = n % 3 === 0;
+    return {
+      number: n,
+      rankLabel,
+      name,
+      archetype: isAgile ? 'agile' : 'normal',
+      scale: isAgile ? 0.84 : 0.9 + (n % 2) * 0.04,
+      mass: isAgile ? 74 : 82 + (n % 3) * 3,
+      speedMult: (isAgile ? 1.04 : 0.9) + progress * 0.06,
+      knockbackTakenMult: Math.max(1.16, 1.28 - progress * 0.08),
+      thinkInterval: Math.max(0.085, 0.135 - progress * 0.035),
+      skinColor: SKIN_PALETTE[n % SKIN_PALETTE.length],
+      mawashiColor: mawashi.hex,
+      hairColor: 0x141210,
       css: mawashi.css,
     };
   }
@@ -211,22 +250,18 @@ export function pickSimultaneousDropCount(nextEnemyNumber: number, activeEnemies
   // 既に土俵上に敵がいる場合は補充しない(全滅するか、同時ウェーブの一括スポーン時のみ)
   if (activeEnemiesOnRing > 0) return 0;
 
-  // 1体目、または100体目(ラスボス)は必ず1体で登場
-  if (nextEnemyNumber === 1 || nextEnemyNumber === KUMITE_TOTAL) return 1;
-
-  // 3体同時ラッシュが発生する番号帯 (例: 7, 16, 25, 34, 43, 52, 61, 72, 83, 92 番目から3体同時)
-  const tripleTriggers = new Set([7, 16, 25, 34, 43, 52, 61, 72, 83, 92]);
-  // 2体同時ラッシュが発生する番号帯 (例: 4, 12, 21, 31, 47, 57, 67, 77, 87, 96 番目から2体同時)
-  const doubleTriggers = new Set([4, 12, 21, 31, 47, 57, 67, 77, 87, 96]);
+  // 1体目、または10体ごとのボス(10, 20, ..., 100)は必ず1体で登場
+  if (nextEnemyNumber === 1 || nextEnemyNumber % 10 === 0) return 1;
 
   let desired = 1;
-  if (tripleTriggers.has(nextEnemyNumber)) {
+  if (TRIPLE_TRIGGERS.has(nextEnemyNumber)) {
     desired = 3;
-  } else if (doubleTriggers.has(nextEnemyNumber)) {
+  } else if (DOUBLE_TRIGGERS.has(nextEnemyNumber)) {
     desired = 2;
   }
 
-  // 100体目(百獣王)が複数同時の中に巻き込まれないようにする
-  const maxBeforeFinal = nextEnemyNumber < KUMITE_TOTAL ? KUMITE_TOTAL - nextEnemyNumber : 1;
-  return Math.max(1, Math.min(desired, freeSlots, remainingToSpawn, maxBeforeFinal));
+  // 10体ごとのボス(10, 20, ..., 100)が複数同時の中に巻き込まれないようにする
+  const nextBossNumber = Math.ceil(nextEnemyNumber / 10) * 10;
+  const maxBeforeBoss = Math.max(1, nextBossNumber - nextEnemyNumber);
+  return Math.max(1, Math.min(desired, freeSlots, remainingToSpawn, maxBeforeBoss));
 }

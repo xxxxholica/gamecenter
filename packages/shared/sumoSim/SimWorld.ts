@@ -195,14 +195,37 @@ export class SimWorld {
       const dx = other.body.position.x - lx;
       const dz = other.body.position.z - lz;
       const dist = Math.hypot(dx, dz);
+      const minSep = 0.85 * (scale + other.bodyScale) + 0.18;
+
+      // 真下付近にいる力士と重なっていたら、頭上に乗ったりめり込んだりしないよう水平方向へ即座に押し分ける
+      let nx = 1;
+      let nz = 0;
+      if (dist > 0.05) {
+        nx = dx / dist;
+        nz = dz / dist;
+      } else {
+        // 完全な真下にいた場合は土俵中心方向(中心付近ならX方向)へ逃がす
+        const toCenter = Math.hypot(lx, lz);
+        if (toCenter > 0.2) {
+          nx = -lx / toCenter;
+          nz = -lz / toCenter;
+        }
+      }
+
+      if (dist < minSep) {
+        other.body.position.x = lx + nx * minSep;
+        other.body.position.z = lz + nz * minSep;
+        if (other.body.position.y > 1.05) {
+          other.body.position.y = 0.95;
+        }
+      }
+
       if (dist < shockRadius && other.body.position.y < 2.2) {
-        const nx = dist > 0.01 ? dx / dist : 1;
-        const nz = dist > 0.01 ? dz / dist : 0;
-        const factor = (1 - dist / shockRadius) * scale;
-        const pushSpeed = 11.5 * factor;
+        const factor = (1 - Math.min(dist, shockRadius) / shockRadius) * scale;
+        const pushSpeed = Math.max(8.5, 11.5 * factor);
         other.body.velocity.x += nx * pushSpeed;
         other.body.velocity.z += nz * pushSpeed;
-        other.body.velocity.y = Math.max(other.body.velocity.y, 3.2 * factor);
+        other.body.velocity.y = Math.max(other.body.velocity.y, 2.4 * factor);
         other.damagePercent = Math.min(999, other.damagePercent + Math.round(6 * factor));
       }
     }
@@ -348,7 +371,38 @@ export class SimWorld {
 
     this.resolveAttacks();
     this.physicsStep(dt);
+    this.resolveVerticalStacking();
     this.checkRingOut();
+  }
+
+  /** 万一、力士同士が上下に重なって頭上に乗ってしまった場合に水平方向へ滑り落とす安全策 */
+  private resolveVerticalStacking(): void {
+    for (let i = 0; i < this.fighters.length; i++) {
+      const a = this.fighters[i];
+      if (a.gone || a.isSkyDropping || this.fell.has(a)) continue;
+      for (let j = i + 1; j < this.fighters.length; j++) {
+        const b = this.fighters[j];
+        if (b.gone || b.isSkyDropping || this.fell.has(b)) continue;
+        const dy = a.body.position.y - b.body.position.y;
+        if (Math.abs(dy) < 0.85) continue;
+        const dx = a.body.position.x - b.body.position.x;
+        const dz = a.body.position.z - b.body.position.z;
+        const dist = Math.hypot(dx, dz);
+        const minSep = 0.85 * (a.bodyScale + b.bodyScale) + 0.12;
+        if (dist >= minSep) continue;
+
+        const top = dy > 0 ? a : b;
+        const bottom = dy > 0 ? b : a;
+        const rawDx = top.body.position.x - bottom.body.position.x;
+        const rawDz = top.body.position.z - bottom.body.position.z;
+        const nx = dist > 0.05 ? rawDx / dist : 1;
+        const nz = dist > 0.05 ? rawDz / dist : 0;
+        top.body.position.x = bottom.body.position.x + nx * minSep;
+        top.body.position.z = bottom.body.position.z + nz * minSep;
+        top.body.velocity.x += nx * 6;
+        top.body.velocity.z += nz * 6;
+      }
+    }
   }
 
   private physicsStep(dt: number): void {

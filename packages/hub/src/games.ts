@@ -23,6 +23,8 @@ export interface GameEntry {
   group: GroupId;
   // オンライン対戦に対応しているか(開催中かどうかは、サーバーに問い合わせて別に調べる)
   online?: boolean;
+  // クリアスター・完全制覇スターに対応しているか
+  star?: boolean;
   // true にするとハブ(ピックアップ・一覧)に表示しない。ゲーム本体のビルド・配信はそのまま。
   hidden?: boolean;
 }
@@ -93,6 +95,7 @@ const allGames: GameEntry[] = [
     accent: '#b544ff',
     group: 'party',
     online: true,
+    star: true,
     developer: KURENAI_BEAT,
   },
   {
@@ -106,6 +109,7 @@ const allGames: GameEntry[] = [
     accent: '#e63946',
     group: 'party',
     online: true,
+    star: true,
     developer: THOUSANDL000,
   },
   {
@@ -118,6 +122,7 @@ const allGames: GameEntry[] = [
     logo: 'logos/school-corridor-runner.webp',
     accent: '#ffb100',
     group: 'hard',
+    star: true,
     developer: XXXXHOLICA,
   },
   {
@@ -130,6 +135,7 @@ const allGames: GameEntry[] = [
     logo: 'logos/street-b-boy.webp',
     accent: '#ffea00',
     group: 'hard',
+    star: true,
     developer: XXXXHOLICA,
   },
   {
@@ -203,6 +209,7 @@ const allGames: GameEntry[] = [
     logo: 'logos/falldown.webp',
     accent: '#ff8a3d',
     group: 'hard',
+    star: true,
     developer: THOUSANDL000,
   },
 ];

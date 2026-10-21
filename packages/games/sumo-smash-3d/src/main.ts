@@ -553,7 +553,7 @@ class SumoGame {
     for (let k = 0; k < dropCount; k++) {
       if (this.cpu.nextEnemyNumber > KUMITE_TOTAL) break;
       const targetSlot = freeSlots[k];
-      const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++);
+      const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++, dropCount);
       this.cpu.pendingDrops.push({
         delay: 1.35 + k * 0.55,
         slot: targetSlot,
@@ -1084,7 +1084,7 @@ class SumoGame {
     this.applyCameraShake();
   }
 
-  /** CPU対戦の結果(勝った人の番号 0=自分 1=CPU)。百人組手では撃破数を表示し、ランキング登録(スターなし)を行う。 */
+  /** CPU対戦の結果(勝った人の番号 0=自分 1=CPU)。百人組手では撃破数を表示し、ランキング登録(100体撃破は完全制覇スター)を行う。 */
   private showVictory(winner: number) {
     this.soundManager.playTaiko();
     this.soundManager.playBgm('menu');
@@ -1118,8 +1118,7 @@ class SumoGame {
           setBlocked: (b) => {
             this.entryBlocked = b;
           },
-          // スター(★)は導入しないため、cleared / perfect オプションは渡さない
-          onName: (name) => saveLeaderboardScore('sumo-smash-3d', defeatedCount, name),
+          onName: (name) => saveLeaderboardScore('sumo-smash-3d', defeatedCount, name, undefined, undefined, { cleared, perfect: cleared }),
           onClosed: () => {
             this.armInput(400);
           },

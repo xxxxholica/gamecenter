@@ -137,12 +137,24 @@
       }
     }
 
-    /* オンライン対戦に対応したゲームの印(いつも出す)。開催中は点灯、誰かが待機中なら点が点滅する */
-    .card-online-pill {
+    /* カード左上のバッジ群(オンライン対戦・完全制覇に挑戦。両方あるときはオンラインの右隣に並ぶ) */
+    .card-badges {
       position: absolute;
       top: 12px;
       left: 12px;
+      right: 12px;
       z-index: 2;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    /* オンライン対戦に対応したゲームの印(いつも出す)。開催中は点灯、誰かが待機中なら点が点滅する */
+    .card-online-pill,
+    .card-star-pill {
       display: inline-flex;
       align-items: center;
       gap: 7px;
@@ -156,6 +168,21 @@
       letter-spacing: 0.06em;
       pointer-events: none;
       transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    /* スター対応ゲームの印(白背景・黒枠に、クリアスターのアイコン付き) */
+    .card-star-pill {
+      background: #ffffff;
+      border-color: #000000;
+      color: #000000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .card-star-pill::before {
+      content: '';
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.4l2.93 5.94 6.56.95-4.75 4.63 1.12 6.53L12 17.37l-5.86 3.08 1.12-6.53L2.51 9.29l6.56-.95L12 2.4z' fill='%23f59e0b'/></svg>") center / contain no-repeat;
+      filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.22));
     }
     /* 地球儀のアイコン(形は mask で切り抜き、色は background で決める): 閉鎖中は灰色、開催中は青、誰かが待機中なら青が点滅 */
     .card-online-pill::before {
@@ -538,13 +565,13 @@
       user-select: none;
     }
 
-    /* ===== 高難易度セクションの空き枠: 白色の枠の中を2分割したスター解説 ===== */
+    /* ===== 高難易度セクションの空き枠: 白色の枠の中に2分割したスター解説＋下部の対応注記 ===== */
     .star-guide-card {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
       height: 100%;
-      padding: 20px;
+      padding: 20px 20px 18px;
       background: #ffffff;
       border: 2px solid #cbd5e1;
       border-radius: 16px;
@@ -554,13 +581,46 @@
         0 1px 3px 0 rgba(15, 23, 42, 0.06);
     }
 
+    .star-guide-note {
+      margin: 0;
+      padding: 2px 4px 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 4px;
+      font-family: var(--hand-font);
+      font-size: 1.02rem;
+      font-weight: 700;
+      line-height: 1.5;
+      color: #334155;
+      text-align: left;
+    }
+
+    .card-star-pill.is-inline {
+      vertical-align: middle;
+      margin: 0 2px;
+      gap: 4px;
+      padding: 2px 8px;
+      border-width: 1.2px;
+      font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+      font-size: 0.68rem;
+      line-height: 1.15;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+    }
+
+    .card-star-pill.is-inline::before {
+      width: 12px;
+      height: 12px;
+    }
+
     .star-guide-block {
       flex: 1;
       display: flex;
       flex-direction: column;
-      justify-content: flex-start;
-      gap: 24px;
-      padding: 26px 28px;
+      justify-content: center;
+      gap: 20px;
+      padding: 22px 26px;
       background: #fffbeb;
       border: 1.5px solid #fde68a;
       border-radius: 12px;
@@ -574,27 +634,18 @@
     .star-guide-head {
       display: flex;
       align-items: center;
-      gap: 14px;
-    }
-
-    .star-guide-icon-box {
-      width: 56px;
-      height: 56px;
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: #ffffff;
-      border-radius: 14px;
-      box-shadow:
-        0 4px 12px rgba(15, 23, 42, 0.1),
-        0 2px 4px rgba(15, 23, 42, 0.06);
+      gap: 12px;
     }
 
     .star-guide-icon {
-      font-size: 2rem;
+      width: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.62rem;
       line-height: 1;
       color: #d97706;
+      flex-shrink: 0;
     }
 
     .star-guide-icon.is-pink {
@@ -612,7 +663,7 @@
     }
 
     .star-guide-label-name {
-      font-size: 1.4rem;
+      font-size: 1.62rem;
       color: #b45309;
     }
 
@@ -621,26 +672,26 @@
     }
 
     .star-guide-label-sub {
-      font-size: 1.1rem;
+      font-size: 1.24rem;
       color: #334155;
     }
 
     .star-guide-checklist {
       display: flex;
       flex-direction: column;
-      gap: 20px;
-      padding-left: 13px;
+      gap: 14px;
+      padding-left: 0;
     }
 
     .star-guide-check-item {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       font-family: var(--hand-font);
-      font-size: 1.2rem;
+      font-size: 1.38rem;
       font-weight: 700;
       color: #1e293b;
-      line-height: 1.35;
+      line-height: 1.3;
     }
 
     .star-guide-check-item.is-unchecked {
@@ -648,28 +699,28 @@
     }
 
     .star-guide-check-mark {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 8px;
-      background: #f59e0b;
-      color: #ffffff;
-      font-size: 1.1rem;
-      font-weight: 900;
+      color: #d97706;
       line-height: 1;
     }
 
+    .star-guide-check-mark svg {
+      width: 24px;
+      height: 24px;
+      display: block;
+    }
+
     .star-guide-check-mark.is-pink {
-      background: #ec4899;
+      color: #ec4899;
     }
 
     .star-guide-check-mark.is-empty {
-      background: #ffffff;
-      border: 2.5px solid #cbd5e1;
-      color: transparent;
+      color: #64748b;
     }
 
     /* アケコンガイドのライトスタイル調整 */

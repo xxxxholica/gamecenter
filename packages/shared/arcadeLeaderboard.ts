@@ -301,6 +301,7 @@ export async function saveLeaderboardScore(
       score,
       formattedScore: typeof def.formatScore === 'function' ? def.formatScore(score) : String(score),
       cleared: options.cleared === true,
+      perfect: options.perfect === true ? true : undefined,
       rank,
     });
     return { rank, list };

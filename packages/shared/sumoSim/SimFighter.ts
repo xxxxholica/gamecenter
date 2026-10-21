@@ -253,7 +253,8 @@ export class SimFighter {
 
     this.gone = false;
     this.isSkyDropping = true;
-    this.body.collisionResponse = true;
+    // 降下中は他の力士の頭上に乗らないよう衝突応答を無効化し、土俵着地時に有効化する
+    this.body.collisionResponse = false;
     this.body.wakeUp();
     this.body.position.set(x, y, z);
     this.body.velocity.set(0, -4.5, 0);
@@ -325,11 +326,12 @@ export class SimFighter {
         }
       }
       this.updateRotation(dt);
-      const landedOnGround = this.body.position.y <= 1.25;
-      const landedOnFighter = this.stateTimer > 0.15 && this.body.position.y <= 3.0 && Math.abs(this.body.velocity.y) < 1.5;
-      if (landedOnGround || landedOnFighter) {
+      const landedOnGround = this.body.position.y <= 1.05;
+      if (landedOnGround) {
         this.isSkyDropping = false;
+        this.body.position.y = 0.95;
         this.body.velocity.set(0, 0, 0);
+        this.body.collisionResponse = true;
         this.onSkyLanded?.(this);
       }
       return;

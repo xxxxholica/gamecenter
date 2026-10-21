@@ -31,12 +31,12 @@ stripDevParamsOnProduction();
 applyBenchFlagFromUrl();
 
 // モバイル端末（スマホ・タブレット）アクセス制限の適用
-initHubMobileBlock();
+const isMobileBlocked = initHubMobileBlock();
 
 // ゲームのiframeの中に読み込まれたハブは、親にゲームを閉じさせるだけで何もしない
 if (isFramedHub) {
   initFramedHub();
-} else {
+} else if (!isMobileBlocked) {
   initSessionTracking();
   listenGameFrameMessages();
   mountFullscreenKey();
@@ -202,11 +202,18 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
   const onlineBadgeHtml = game.online
     ? `<div class="card-online-pill" data-state="${onlineState(onlineStatus)}">オンライン対戦</div>`
     : '';
+  // スターシステムに対応したゲームの印(オンラインがあればその右隣に出す)
+  const starBadgeHtml = game.star
+    ? `<div class="card-star-pill">完全制覇に挑戦</div>`
+    : '';
+  const badgesHtml = onlineBadgeHtml || starBadgeHtml
+    ? `<div class="card-badges">${onlineBadgeHtml}${starBadgeHtml}</div>`
+    : '';
 
   card.innerHTML = `
     <a class="card-link" href="games/${game.slug}/" aria-label="${game.title}を開く"></a>
     <div class="card-thumb-wrap">
-      ${onlineBadgeHtml}
+      ${badgesHtml}
       <img class="card-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" loading="lazy" />
       <video class="card-preview" src="previews/${game.slug}.webm" loop muted playsinline preload="none"></video>
     </div>
@@ -266,33 +273,43 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
 
 /** 高難易度セクションの空き枠(4枠目)に出す、クリアスター＆完全制覇ピンクスターの解説 */
 function createStarGuideCard(): HTMLDivElement {
+  const iconFlag = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+  const iconTrophy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`;
+  const iconHeart = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+  const iconNoMiss = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="m12 6-2 4 4-1-2 4"/></svg>`;
+  const iconShield = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>`;
+  const iconNoShield = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9.5 9.5 5 5"/><path d="m14.5 9.5-5 5"/></svg>`;
+
   const box = document.createElement('div');
   box.className = 'star-guide-card';
   box.innerHTML = `
     <div class="star-guide-block">
       <div class="star-guide-head">
-        <span class="star-guide-icon-box"><span class="star-guide-icon">★</span></span>
+        <span class="star-guide-icon">★</span>
         <span class="star-guide-label"><span class="star-guide-label-name">クリアスター</span><span class="star-guide-label-sub">の解放条件</span></span>
       </div>
       <div class="star-guide-checklist">
-        <div class="star-guide-check-item"><span class="star-guide-check-mark">✓</span><span>最終ステージを突破</span></div>
-        <div class="star-guide-check-item"><span class="star-guide-check-mark">✓</span><span>TOP5にランクイン</span></div>
-        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty"></span><span>ミスはOK</span></div>
-        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty"></span><span>無敵アイテム使用はOK</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark">${iconFlag}</span><span>最終ステージを突破</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark">${iconTrophy}</span><span>TOP5にランクイン</span></div>
+        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty">${iconHeart}</span><span>ミスはOK</span></div>
+        <div class="star-guide-check-item is-unchecked"><span class="star-guide-check-mark is-empty">${iconShield}</span><span>無敵アイテム使用はOK</span></div>
       </div>
     </div>
     <div class="star-guide-block is-pink">
       <div class="star-guide-head">
-        <span class="star-guide-icon-box"><span class="star-guide-icon is-pink">★</span></span>
+        <span class="star-guide-icon is-pink">★</span>
         <span class="star-guide-label"><span class="star-guide-label-name is-pink">完全制覇スター</span><span class="star-guide-label-sub">の解放条件</span></span>
       </div>
       <div class="star-guide-checklist">
-        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>最終ステージを突破</span></div>
-        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>TOP5にランクイン</span></div>
-        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>ミスは許されない</span></div>
-        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">✓</span><span>無敵アイテムは使えない</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">${iconFlag}</span><span>最終ステージを突破</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">${iconTrophy}</span><span>TOP5にランクイン</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">${iconNoMiss}</span><span>ミスは許されない</span></div>
+        <div class="star-guide-check-item"><span class="star-guide-check-mark is-pink">${iconNoShield}</span><span>無敵アイテムは使えない</span></div>
       </div>
     </div>
+    <p class="star-guide-note">
+      ※ <span class="card-star-pill is-inline">完全制覇に挑戦</span> の表示があるゲームが対応
+    </p>
   `;
   return box;
 }
@@ -564,7 +581,7 @@ function launchSelected(slug?: string) {
 }
 
 // ゲームをiframeで開いている間はハブ側入力を抑制
-if (!isFramedHub) {
+if (!isFramedHub && !isMobileBlocked) {
   createArcadeInput({
     onActivate() {
       markActive();
@@ -649,7 +666,7 @@ async function updateOnlineStatuses() {
   }
 }
 
-if (!isFramedHub) {
+if (!isFramedHub && !isMobileBlocked) {
   // ブラウザのリロード時スクロール復元を抑止し、常にページの最上部から表示
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';

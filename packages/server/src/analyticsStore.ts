@@ -105,6 +105,7 @@ export interface PlayRecord {
   lastSeenAt?: string;
   durationSec?: number;
   completed?: boolean;
+  perfect?: boolean;
   score?: number;
   formattedScore?: string;
   rounds?: RoundRecord[];
@@ -717,6 +718,10 @@ export class AnalyticsStore {
       if (typeof data.formattedScore === 'string') play.formattedScore = data.formattedScore.slice(0, 40);
     }
     if (type === 'score_submit' && data.cleared === true) play.completed = true;
+    if (type === 'score_submit' && data.perfect === true) {
+      play.perfect = true;
+      play.completed = true;
+    }
     if (data.performance && typeof data.performance === 'object') play.performance = data.performance as PerformanceMetrics;
     if (data.input && typeof data.input === 'object') {
       play.input = data.input as InputMetrics;

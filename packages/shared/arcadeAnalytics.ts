@@ -1029,6 +1029,7 @@ export function trackScoreSubmit(
     score: number;
     formattedScore?: string;
     cleared?: boolean;
+    perfect?: boolean;
     playId?: string;
     rank?: number;
     progression?: ProgressionMetrics;

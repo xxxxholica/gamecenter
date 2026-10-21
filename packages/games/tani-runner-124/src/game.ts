@@ -1111,7 +1111,7 @@ export class Game {
         score,
         modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
         setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
-        onName: (name) => RankingStore.add(score, name, false),
+        onName: (name) => RankingStore.add(score, name),
       });
     }
   }
@@ -1162,7 +1162,7 @@ export class Game {
       score,
       modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: NAME_ENTRY_AFTER_RESULT_MS },
       setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
-      onName: (name) => RankingStore.add(score, name, true),
+      onName: (name) => RankingStore.add(score, name),
     });
   }
 
