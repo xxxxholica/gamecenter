@@ -110,6 +110,8 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required https://game.hi
 
 - **コミットメッセージ**: 1行目は `<type>(<scope>): <日本語の要約>`(Conventional Commits 形式 + 日本語)。本文を続けるときは1行空ける。
   - 使える `type`: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`, `style`, `build`, `ci`, `revert`, `security`, `bench`, `balance`
+  - 1行目の要約には PR 番号 `(#123)` を書かない。鉤括弧 `「」『』` と丸括弧 `()（）` も使わない(`<scope>` の括弧は除く)。名前は括弧でくくらず、空白で区切る(例: `feat(sumo-smash-3d): 3D物理相撲ゲーム 剛体大相撲 SUMO SMASH 3D を追加`)。PR のタイトルも同じ。
+  - GitHub の Squash merge は件名の末尾に `(#番号)` を自動で付けるので、マージ画面で消してからマージする。
 - **トレーラー**: `Co-Authored-By:` は可。`Claude-Session:` や `https://claude.ai/code/session_...` などのセッション URL・ID はコミットメッセージ・PR 本文・コメントすべてで記載しない。
 - **プライベート情報の禁止**:
   - コード・スクリプト・ドキュメント・コミット・PR 本文に個人のローカルパス(`/Users/<user>/...`, `C:\Users\<user>\...`, `file:///Users/...`)を残さない。
