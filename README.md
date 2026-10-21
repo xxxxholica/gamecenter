@@ -101,8 +101,9 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required https://game.hi
 
 1. `packages/games/<slug>/` に Vite + TypeScript のプロジェクトを作る(既存のゲームの `package.json`・`vite.config.ts` を雛形に。`base: './'` にする)。
 2. `src/main.ts` で `installHomeReturn()`(`packages/shared/homeReturn.ts`)を呼ぶ。プレイ中の Backspace は `ArcadePause`(`packages/shared/arcadePause.ts`)のポーズを開く。タイトル・開始・リトライはアケコンのボタンだけで操作できるようにする。
-3. `packages/hub/src/games.ts` に足し、サムネイルを `packages/hub/public/thumbnails/<slug>.webp` に置く。
-4. `npm install` → `npm run build` で確かめる。
+3. 画面はウィンドウの大きさに合わせて広げる(可変ウィンドウ)。16:9 固定などの比率の固定・範囲の制限や、黒帯(レターボックス)は使わない。どの縦横比(32:9 の横長・9:21 の縦長など)でも画面いっぱいに描き、UI は画面の大きさを単位に組む。ウィンドウの大きさが途中で変わっても追従させる。
+4. `packages/hub/src/games.ts` に足し、サムネイルを `packages/hub/public/thumbnails/<slug>.webp` に置く。
+5. `npm install` → `npm run build` で確かめる。
 
 ## コミット・PR の規則
 

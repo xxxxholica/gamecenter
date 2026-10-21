@@ -94,12 +94,14 @@ const css = `
 .msel.msel-arcade .msel-card.active { background: linear-gradient(150deg, color-mix(in srgb, var(--msel-accent) 16%, #12131c), color-mix(in srgb, var(--msel-accent) 7%, #0a0a10)); border-color: var(--msel-accent); transform: skewX(-3deg) translateY(-6px);
   box-shadow: 0 0 28px color-mix(in srgb, var(--msel-accent) 55%, transparent); }
 .msel.msel-arcade .msel-card.disabled:hover { transform: skewX(-3deg); border-color: #334466; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
-.msel.msel-arcade .msel-card .badge { font: 900 max(11px, calc(22 * var(--u))) inherit; letter-spacing: 0.08em; color: #67687f; text-shadow: none; }
+.msel.msel-arcade .msel-card .badge { font-weight: 900; font-size: max(11px, calc(22 * var(--u))); letter-spacing: 0.08em; color: #67687f; text-shadow: none; }
 .msel.msel-arcade .msel-card.active .badge { color: var(--msel-accent); }
-.msel.msel-arcade .msel-card .art { height: calc(170 * var(--u)); margin: calc(8 * var(--u)) 0 calc(14 * var(--u)); background: radial-gradient(circle, #ffffff12, transparent); border: 0; border-radius: 0; }
-.msel.msel-arcade .msel-card .t { font: 900 max(15px, calc(40 * var(--u)))/1.1 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: -0.02em; margin: calc(4 * var(--u)) 0; color: #fff; }
-.msel.msel-arcade .msel-card .s { font-size: max(9px, calc(14 * var(--u))); font-weight: 800; letter-spacing: 0.2em; color: var(--msel-accent); min-height: 1.3em; margin-bottom: calc(10 * var(--u)); }
-.msel.msel-arcade .msel-card .d { font-size: max(10px, calc(17 * var(--u))); line-height: 1.6; color: #a6a8b9; margin-top: 0; }
+.msel.msel-arcade .msel-card .art { height: calc(150 * var(--u)); margin: calc(8 * var(--u)) 0 calc(14 * var(--u)); background: radial-gradient(circle, #ffffff12, transparent); border: 0; border-radius: 0; }
+/* カードの文字は全ゲームで同じ大きさ(midnight-skyway のモード選択に合わせた。タイトル 36・サブ 24・特徴の行 25。単位は --u)。色は --msel-accent だけがゲームごとに変わる */
+.msel.msel-arcade .msel-card .t { font: 900 max(15px, calc(36 * var(--u)))/1.15 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif; letter-spacing: -0.02em; margin: calc(4 * var(--u)) 0; color: #fff; }
+.msel.msel-arcade .msel-card .s { font-size: max(11px, calc(24 * var(--u))); font-weight: 800; letter-spacing: 0.06em; line-height: 1.4; color: var(--msel-accent); min-height: 1.3em; margin-bottom: calc(12 * var(--u)); }
+.msel.msel-arcade .msel-card .d { display: flex; flex-direction: column; gap: calc(14 * var(--u)); margin: calc(22 * var(--u)) 0 0; font-size: max(11px, calc(25 * var(--u))); font-weight: 900; font-style: italic;
+  letter-spacing: 0.02em; line-height: 1.35; color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35); }
 .msel.msel-arcade .msel-bar { align-self: center; justify-content: space-between; width: clamp(60%, calc(100% - 440px), calc(1500 * var(--u))); gap: calc(18 * var(--u)); max-width: none;
   animation: mselBarIn 0.5s ease-out 0.35s both; }
 .msel.msel-arcade .msel-bar button { width: auto; min-width: calc(340 * var(--u)); height: auto; padding: calc(20 * var(--u)) calc(52 * var(--u));

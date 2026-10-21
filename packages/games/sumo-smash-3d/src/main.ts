@@ -16,6 +16,7 @@ import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAna
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
+import { FIST_SOLID_SVG, TROPHY_SOLID_SVG, PEOPLE_SOLID_SVG, RING_SOLID_SVG } from '../../../shared/online/modeIcons';
 import { CPU_ART, ONLINE_ART } from './modeArt';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { PadEdge, readPad } from '../../../shared/arcadePad';
@@ -500,13 +501,20 @@ class SumoGame {
     const st = this.onlineStatus;
     const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
     this.modeSelect.show([
-      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', desc: 'CPU力士と対戦します。張り手・頭突き・つかみで、先に二番取った方が勝ちです。' },
+      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', points: [
+        { icon: FIST_SOLID_SVG, text: '張り手・頭突き・\u200bつかみで戦う' },   // 狭い画面では「・」の後で折る
+        { icon: TROPHY_SOLID_SVG, text: '先に二番取った方が勝ち' },
+      ] },
       {
         id: 'online',
         art: ONLINE_ART,
         title: 'オンライン対戦',
         sub: !st ? '現在は開催されていません' : full ? '満員' : st.phase !== 'lobby' ? '対戦中' : `参加中 ${st.players}/${st.max}`,
-        desc: '最大4人の乱戦。土俵に最後まで残った人が1点、先に2点取った人の勝ち。待っている間に集まった人で始まります。',
+        points: [
+          { icon: PEOPLE_SOLID_SVG, text: '最大4人の乱戦' },
+          { icon: RING_SOLID_SVG, text: '土俵に最後まで\u200b残ると1点' },
+          { icon: TROPHY_SOLID_SVG, text: '先に2点取った人の勝ち' },
+        ],
         disabled: !st,                                           // 開催されていなくても項目は出す(選べない)
       },
     ]);

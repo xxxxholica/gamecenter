@@ -21,6 +21,7 @@ import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { PIECES, partExtents, randomPieceIndex, resetPieceBag, type Cell, type Part, type PieceDef } from './pieces';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
+import { BLOCKS_SOLID_SVG, TROPHY_SOLID_SVG, PEOPLE_SOLID_SVG, DROP_SOLID_SVG } from '../../../shared/online/modeIcons';
 import { SOLO_ART, ONLINE_ART } from './modeArt';
 import { Bgm } from './bgm';
 import type { PublicStatus } from '../../../shared/online/core';
@@ -1712,13 +1713,19 @@ function openModeSelect(): void {
   const st = onlineStatus;
   const full = !!st && st.players >= st.max;
   modeSelect.show([
-    { id: 'solo', art: SOLO_ART, title: 'ランキング挑戦', sub: '記録を塗り替える', desc: '過去の上位の記録を超える高さを目指します。' },
+    { id: 'solo', art: SOLO_ART, title: 'ランキング挑戦', sub: '記録を塗り替える', points: [
+      { icon: BLOCKS_SOLID_SVG, text: 'ひとりで高く積む' },
+      { icon: TROPHY_SOLID_SVG, text: '上位の記録を\u200b超える高さを目指す' },
+    ] },
     {
       id: 'online',
       art: ONLINE_ART,
       title: 'オンライン対戦',
       sub: !st ? '現在は開催されていません' : full ? '対戦中' : st.phase !== 'lobby' ? '対戦中' : `参加者 ${st.players}/${st.max}`,
-      desc: '1対1で同時に積みます。先に3個落とした方の負けです。',
+      points: [
+        { icon: PEOPLE_SOLID_SVG, text: '1対1で同時に積む' },
+        { icon: DROP_SOLID_SVG, text: '先に3個落とした方の負け' },
+      ],
       disabled: !st, // 開催されていなくても項目は出す(選べない)
     },
   ]);

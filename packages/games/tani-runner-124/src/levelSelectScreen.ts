@@ -5,6 +5,7 @@
 
 import { LEVELS, LEVEL_ORDER, LevelId } from './levels.ts';
 import { ModeSelect, type ModeItem } from '../../../shared/online/ModeSelect.ts';
+import { PENCIL_SOLID_SVG, CAP_SOLID_SVG } from '../../../shared/online/modeIcons.ts';
 
 const ACCENT = '#00e676';
 
@@ -73,7 +74,10 @@ export class LevelSelectScreen {
         art: levelArt(info),
         title: lv.label,
         sub: info.tag,
-        desc: `・${lv.description}\n・卒業は ${Math.min(...reqs) === Math.max(...reqs) ? `${reqs[0]}` : `${Math.min(...reqs)}〜${Math.max(...reqs)}`} 単位`,
+        points: [
+          { icon: PENCIL_SOLID_SVG, text: lv.description },
+          { icon: CAP_SOLID_SVG, text: `卒業は ${Math.min(...reqs) === Math.max(...reqs) ? `${reqs[0]}` : `${Math.min(...reqs)}〜${Math.max(...reqs)}`} 単位` },
+        ],
       };
     });
     this.select.show(items, current);

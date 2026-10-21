@@ -87,7 +87,7 @@ const allGames: GameEntry[] = [
     slug: 'cyber-2d-fighter-3d',
     title: 'サイバー２Dファイター３D',
     englishTitle: 'CYBER 2D FIGHTER 3D',
-    description: '3Dキャラクターで戦う横視点の対戦格闘。4人のファイターから選び、6ボタンの攻撃と必殺技で勝負！CPU戦・練習・開催中のオンライン対戦に対応。',
+    description: '3Dキャラクターで戦う横視点の対戦格闘。4人のファイターから選び、6ボタンの攻撃と必殺技で勝負！CPU戦・開催中のオンライン対戦に対応。',
     thumbnail: 'thumbnails/cyber-2d-fighter-3d.webp',
     logo: 'logos/cyber-2d-fighter-3d.webp',
     accent: '#b544ff',

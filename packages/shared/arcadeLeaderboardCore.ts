@@ -258,6 +258,16 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
   },
+  'cyber-2d-fighter-3d': {
+    slug: 'cyber-2d-fighter-3d',
+    hasScore: true,
+    minScore: 1,
+    maxScore: 8,
+    minRunMs: 5_000,
+    scoreOrder: 'desc',
+    unit: '連勝',
+    formatScore: (score) => (score > 0 ? `${Math.floor(score)} 連勝` : '0 連勝'),
+  },
 };
 
 export const GAME_LEADERBOARD_DEFS: Readonly<Record<string, GameLeaderboardDef>> = DEFS;
