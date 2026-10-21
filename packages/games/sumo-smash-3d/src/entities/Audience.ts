@@ -28,6 +28,10 @@ export class Audience {
     phase: number;
     speed: number;
     role: 'spectator' | 'judge' | 'rikishi';
+    row: number;
+    angle: number;
+    /** 1列後ろの最も近い席のインデックス（後ろから前へ詰める補充用。最奥列や通路前は -1） */
+    behindIndex: number;
   }> = [];
 
   private animTimer: number = 0;
@@ -46,11 +50,17 @@ export class Audience {
     maxT: number;
   }> = [];
   private blown: boolean[] = [];
+  /** 空席になってからの経過秒数（一定時間で後ろの列から前に詰めて補充） */
+  private blowTimer!: Float32Array;
+  private refillWaveTimer = 0;
+  /** 後ろの席から前の席へ移動中の観客 */
+  private scooting = new Map<number, { fromPos: THREE.Vector3; t: number; duration: number }>();
 
   // 客席の床(マス席)。1マスずつ吹き飛ばせるよう、インスタンスのタイルで組む
   private floorTiles!: THREE.InstancedMesh;
   private tileBase: Array<{ pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3 }> = [];
   private tileBlown: boolean[] = [];
+  private tileBlowTimer!: Float32Array;
   private innerRadius: number;
   private outerRadius: number;
   private numRows: number;
@@ -176,6 +186,7 @@ export class Audience {
     });
     this.floorTiles.instanceMatrix.needsUpdate = true;
     this.tileBlown = new Array(this.tileBase.length).fill(false);
+    this.tileBlowTimer = new Float32Array(this.tileBase.length);
     floorGroup.add(this.floorTiles);
 
     this.mesh.add(floorGroup);
@@ -341,6 +352,7 @@ export class Audience {
       facingAngle: number;
       role: 'spectator' | 'judge' | 'rikishi';
       row: number;
+      angle: number;
     }> = [];
 
     const stepWidth = (outerR - innerR) / numRows;
@@ -393,12 +405,14 @@ export class Audience {
           facingAngle,
           role,
           row: r,
+          angle,
         });
       }
     }
 
     this.totalCount = seatList.length;
     this.blown = new Array(this.totalCount).fill(false);
+    this.blowTimer = new Float32Array(this.totalCount);
 
     // ジオメトリ定義（座っている人物）
     // 1. 座布団
@@ -567,7 +581,32 @@ export class Audience {
         phase: Math.random() * Math.PI * 2,
         speed: 1.8 + Math.random() * 1.5,
         role: seat.role,
+        row: seat.row,
+        angle: seat.angle,
+        behindIndex: -1,
       });
+    }
+
+    // 各席の「1列後ろの最も近い席(behindIndex)」を計算しておく(後ろから前に詰める補充用)
+    const rowBuckets: number[][] = Array.from({ length: numRows }, () => []);
+    for (let i = 0; i < this.totalCount; i++) {
+      rowBuckets[this.spectatorData[i].row].push(i);
+    }
+    for (let i = 0; i < this.totalCount; i++) {
+      const d = this.spectatorData[i];
+      if (d.row >= numRows - 1) continue;
+      let bestIdx = -1;
+      let bestAngleDiff = 0.14; // 通路をまたがない範囲
+      for (const candIdx of rowBuckets[d.row + 1]) {
+        const cand = this.spectatorData[candIdx];
+        let diff = Math.abs(cand.angle - d.angle);
+        if (diff > Math.PI) diff = Math.PI * 2 - diff;
+        if (diff < bestAngleDiff) {
+          bestAngleDiff = diff;
+          bestIdx = candIdx;
+        }
+      }
+      d.behindIndex = bestIdx;
     }
 
     // インスタンスバッファをGPUへ更新
@@ -623,7 +662,7 @@ export class Audience {
 
     for (let i = start; i < end; i++) {
       const data = this.spectatorData[i];
-      if (this.blown[i]) continue; // 爆破で飛んだ観客は別処理
+      if (this.blown[i] || this.scooting.has(i)) continue; // 爆破で飛んだ観客・前詰め移動中は別処理
       if (data.role === 'judge') continue; // 審判親方は微動だにせず威厳を保つ
 
       // 微小なサイン波の首・体の揺れ
@@ -660,6 +699,125 @@ export class Audience {
     }
 
     this.updateFlyers(dt);
+    this.updateRefillAndScoot(dt);
+  }
+
+  /**
+   * 吹き飛ばされた観客席を、後ろの列から前の列へ順番に詰めることで補充する。
+   * 最奥の列には外周通路から新しい観客が補充され、吹き飛んだ床タイルも修復される。
+   */
+  private updateRefillAndScoot(dt: number) {
+    // 1. 吹き飛んだ床タイルの修復(飛散アニメーション終了後に元の位置へ戻す)
+    let tileRestored = false;
+    const tm = this.flyMatrix;
+    for (let i = 0; i < this.tileBase.length; i++) {
+      if (!this.tileBlown[i]) continue;
+      this.tileBlowTimer[i] += dt;
+      if (this.tileBlowTimer[i] >= 3.4) {
+        this.tileBlown[i] = false;
+        this.tileBlowTimer[i] = 0;
+        const tb = this.tileBase[i];
+        tm.compose(tb.pos, tb.quat, tb.scale);
+        this.floorTiles.setMatrixAt(i, tm);
+        tileRestored = true;
+      }
+    }
+    if (tileRestored) {
+      this.floorTiles.instanceMatrix.clearUpdateRanges();
+      this.floorTiles.instanceMatrix.needsUpdate = true;
+    }
+
+    // 2. 空席タイマーを進める
+    let hasBlownReady = false;
+    for (let i = 0; i < this.totalCount; i++) {
+      if (!this.blown[i]) continue;
+      this.blowTimer[i] += dt;
+      if (this.blowTimer[i] >= 3.6) hasBlownReady = true;
+    }
+
+    // 3. 定期的に後ろの列から前の空席へ1段ずつ詰めるウェーブを実行
+    this.refillWaveTimer += dt;
+    if (hasBlownReady && this.refillWaveTimer >= 0.65) {
+      this.refillWaveTimer = 0;
+      const allMeshes = [this.zabutonInstanced, this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced];
+      let anyHidden = false;
+      // 前列(row=0)から後列(row=numRows-1)の順に走査し、1ステップにつき1列分だけ前に詰める
+      for (let i = 0; i < this.totalCount; i++) {
+        if (!this.blown[i] || this.blowTimer[i] < 3.6) continue;
+        const d = this.spectatorData[i];
+        const b = d.behindIndex;
+        if (b >= 0) {
+          // 後ろの席に観客がいれば、その観客が前の席(i)へ移動し、後ろの席(b)が空席になる
+          if (!this.blown[b] && !this.scooting.has(b)) {
+            this.blown[i] = false;
+            this.blowTimer[i] = 0;
+            this.scooting.set(i, {
+              fromPos: this.spectatorData[b].basePosition.clone(),
+              t: 0,
+              duration: 0.42,
+            });
+            // 後ろの席(b)は次のウェーブでさらに後ろから詰められるように空席化
+            this.blown[b] = true;
+            this.blowTimer[b] = 3.6;
+            for (const m of allMeshes) {
+              m.setMatrixAt(b, this.zeroMatrix);
+            }
+            anyHidden = true;
+          }
+        } else {
+          // 最奥列(または通路前): 外周から新しい観客が座り直す
+          this.blown[i] = false;
+          this.blowTimer[i] = 0;
+          const rad = Math.hypot(d.basePosition.x, d.basePosition.z) || 1;
+          const fromPos = new THREE.Vector3(
+            d.basePosition.x + (d.basePosition.x / rad) * 1.35,
+            d.basePosition.y + 0.14,
+            d.basePosition.z + (d.basePosition.z / rad) * 1.35
+          );
+          this.scooting.set(i, { fromPos, t: 0, duration: 0.42 });
+        }
+      }
+      if (anyHidden) {
+        for (const m of allMeshes) {
+          m.instanceMatrix.clearUpdateRanges();
+          m.instanceMatrix.needsUpdate = true;
+        }
+      }
+    }
+
+    // 4. 前詰め移動中の観客の補間アニメーション更新
+    if (this.scooting.size > 0) {
+      const allMeshes = [this.zabutonInstanced, this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced];
+      for (const [idx, scoot] of this.scooting.entries()) {
+        if (this.blown[idx]) {
+          this.scooting.delete(idx);
+          continue;
+        }
+        scoot.t += dt;
+        const p = Math.min(1, scoot.t / scoot.duration);
+        const ease = p * p * (3 - 2 * p);
+        const hopY = Math.sin(p * Math.PI) * 0.16;
+        const d = this.spectatorData[idx];
+
+        this.tempObject.position.lerpVectors(scoot.fromPos, d.basePosition, ease);
+        this.tempObject.position.y += hopY;
+        this.tempObject.rotation.copy(d.baseRotation);
+        this.tempObject.scale.copy(d.baseScale);
+        this.tempObject.updateMatrix();
+
+        for (const m of allMeshes) {
+          m.setMatrixAt(idx, this.tempObject.matrix);
+        }
+
+        if (p >= 1) {
+          this.scooting.delete(idx);
+        }
+      }
+      for (const m of allMeshes) {
+        m.instanceMatrix.clearUpdateRanges();
+        m.instanceMatrix.needsUpdate = true;
+      }
+    }
   }
 
   /** 席の高さ(半径から、その段の踏み面の高さを求める) */
@@ -686,6 +844,8 @@ export class Audience {
       if (dist > radius) continue;
 
       this.blown[i] = true;
+      this.blowTimer[i] = 0;
+      this.scooting.delete(i);
       count++;
       const falloff = 1 - dist / radius; // 中心に近いほど強く飛ぶ
       const len = Math.hypot(dx, dz) || 1;
@@ -732,6 +892,7 @@ export class Audience {
       if (dist > tileRadius) continue;
 
       this.tileBlown[i] = true;
+      this.tileBlowTimer[i] = 0;
       const falloff = 1 - dist / tileRadius;
       const len = dist || 1;
       const dir = new THREE.Vector3(dx / len, 0, dz / len).add(
@@ -757,8 +918,11 @@ export class Audience {
   /** 吹き飛んだ観客を元の席に戻す(新しい試合の前に呼ぶ) */
   public restoreAll() {
     this.flyers.length = 0;
+    this.scooting.clear();
+    this.refillWaveTimer = 0;
     const dummy = new THREE.Object3D();
     for (let i = 0; i < this.totalCount; i++) {
+      this.blowTimer[i] = 0;
       if (!this.blown[i]) continue;
       this.blown[i] = false;
       const data = this.spectatorData[i];
@@ -774,6 +938,7 @@ export class Audience {
     }
     const tm = new THREE.Matrix4();
     for (let i = 0; i < this.tileBase.length; i++) {
+      this.tileBlowTimer[i] = 0;
       if (!this.tileBlown[i]) continue;
       this.tileBlown[i] = false;
       const tb = this.tileBase[i];

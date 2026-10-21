@@ -268,6 +268,16 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     unit: '連勝',
     formatScore: (score) => (score > 0 ? `${Math.floor(score)} 連勝` : '0 連勝'),
   },
+  'sumo-smash-3d': {
+    slug: 'sumo-smash-3d',
+    hasScore: true,
+    minScore: 1,
+    maxScore: 100,
+    minRunMs: 3_000,
+    scoreOrder: 'desc',
+    unit: '体',
+    formatScore: (score) => (score > 0 ? `${Math.floor(score)} 体` : '0 体'),
+  },
 };
 
 export const GAME_LEADERBOARD_DEFS: Readonly<Record<string, GameLeaderboardDef>> = DEFS;

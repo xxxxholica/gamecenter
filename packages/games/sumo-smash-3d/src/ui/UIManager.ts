@@ -39,6 +39,8 @@ export class UIManager {
   private battleHudEl!: HTMLElement;
   private p1PercentEl!: HTMLElement;
   private p2PercentEl!: HTMLElement;
+  private p2NameEl!: HTMLElement;
+  private kumiteCountEl!: HTMLElement;
   private p1WinsEl!: HTMLElement;
   private p2WinsEl!: HTMLElement;
   private p1ChargeBar!: HTMLElement;
@@ -90,8 +92,11 @@ export class UIManager {
     this.battleHudEl = document.getElementById('battle-hud')!;
     this.p1PercentEl = document.getElementById('p1-knockback')!;
     this.p2PercentEl = document.getElementById('p2-knockback')!;
+    this.p2NameEl = document.getElementById('p2-fighter-name')!;
+    this.kumiteCountEl = document.getElementById('kumite-count')!;
     this.p1WinsEl = document.getElementById('p1-stars')!;
     this.p2WinsEl = document.getElementById('p2-stars')!;
+    this.battleHudEl.classList.toggle('kumite', this.currentMode === 'pve');
     this.p1ChargeBar = document.getElementById('p1-charge-bar')!;
     this.p1HariteBox = document.getElementById('p1-harite-box')!;
     this.p1HariteBar = document.getElementById('p1-harite-bar')!;
@@ -164,11 +169,13 @@ export class UIManager {
     else this.onExit?.();
   }
 
-  /** 結果: 「勝利/敗北」の見出しと、得点の多い順の順位表(CPU対戦もオンラインも共通)。me=自分の行(オンラインだけ印を付ける)。 */
+  /** 結果: 「勝利/敗北」の見出しと、得点の多い順の順位表(オンライン対戦用)。me=自分の行。 */
   public showVictory(won: boolean, rows: ResultRow[]) {
     this.resultWinnerTitleEl.textContent = won ? '勝利' : '敗北';
     this.resultWinnerTitleEl.classList.toggle('win', won);
     this.resultWinnerTitleEl.classList.toggle('lose', !won);
+    const sub = document.getElementById('result-subtitle');
+    if (sub) sub.textContent = '';
     const sorted = rows.map((r, i) => ({ r, i })).sort((a, b) => b.r.wins - a.r.wins || a.i - b.i);
     const box = document.getElementById('result-list')!;
     box.replaceChildren(
@@ -195,6 +202,24 @@ export class UIManager {
         return row;
       })
     );
+    this.selectResultIndex(0);
+    this.resultModalEl.classList.add('show');
+  }
+
+  /** CPU百人組手モードの結果画面（大見出しの撃破数＋サブ1行のみ、順位表枠や星★は出さない） */
+  public showKumiteVictory(cleared: boolean, defeatedCount: number, lastEnemyName: string) {
+    this.resultWinnerTitleEl.textContent = cleared ? '百人抜き達成' : `${defeatedCount}体撃破`;
+    this.resultWinnerTitleEl.classList.toggle('win', cleared);
+    this.resultWinnerTitleEl.classList.toggle('lose', !cleared);
+
+    const sub = document.getElementById('result-subtitle');
+    if (sub) {
+      sub.textContent = cleared ? '全百体完全制覇' : lastEnemyName ? `${lastEnemyName} に敗北` : '';
+    }
+
+    const box = document.getElementById('result-list')!;
+    box.replaceChildren();
+
     this.selectResultIndex(0);
     this.resultModalEl.classList.add('show');
   }
@@ -261,12 +286,23 @@ export class UIManager {
   /** 対戦モードに合わせて西方(2P/CPU)の表示を切り替える */
   public setMode(mode: GameMode) {
     this.currentMode = mode;
-    this.documentP2Label(mode === 'pvp' ? '2P' : 'CPU');
+    this.lastWins[0] = -1;
+    this.lastWins[1] = -1;
+    this.battleHudEl.classList.toggle('kumite', mode === 'pve');
+    this.documentP2Label(mode === 'pvp' ? '2P' : '一番');
+    if (mode === 'pvp') {
+      setText(this.p2NameEl, '西方 紅炎山');
+    }
   }
 
   public documentP2Label(text: string) {
     const badge = document.getElementById('p2-badge-tag');
     if (badge) badge.textContent = text;
+  }
+
+  public updateEnemyHeader(name: string, badgeLabel: string) {
+    setText(this.p2NameEl, name);
+    this.documentP2Label(badgeLabel);
   }
 
   public closeHowToPlay() {
@@ -303,12 +339,16 @@ export class UIManager {
     this.updateDamageStyle(this.p1PercentEl, p1Percent);
     this.updateDamageStyle(this.p2PercentEl, p2Percent);
 
-    // 白星・黒星マーク（勝ち数が変わったときだけ描き直す）
+    // 白星・黒星マーク、または百人組手の残り体数（勝ち数が変わったときだけ描き直す）
     if (p1Wins !== this.lastWins[0]) {
       this.lastWins[0] = p1Wins;
-      this.p1WinsEl.innerHTML = this.renderWinMarks(p1Wins);
+      if (this.currentMode === 'pve') {
+        setText(this.kumiteCountEl, Math.max(0, 100 - p1Wins).toString());
+      } else {
+        this.p1WinsEl.innerHTML = this.renderWinMarks(p1Wins);
+      }
     }
-    if (p2Wins !== this.lastWins[1]) {
+    if (this.currentMode !== 'pve' && p2Wins !== this.lastWins[1]) {
       this.lastWins[1] = p2Wins;
       this.p2WinsEl.innerHTML = this.renderWinMarks(p2Wins);
     }

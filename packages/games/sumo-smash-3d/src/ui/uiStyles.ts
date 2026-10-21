@@ -199,6 +199,18 @@ export const UI_CSS = `
         .result-title.win { color: #ffe27a; text-shadow: 0 0 24px rgba(255, 215, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.7); }
         .result-title.lose { color: #aeb6c8; }
 
+        .result-subtitle {
+          font-size: 20px;
+          font-weight: 800;
+          color: #d8cab2;
+          letter-spacing: 3px;
+          margin: -18px 0 28px 0;
+          text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+        }
+        .result-subtitle:empty {
+          display: none;
+        }
+
 
 
 
@@ -237,8 +249,9 @@ export const UI_CSS = `
         .mcard .knockback-unit { font-size: 18px; margin-top: 2px; }
         .mcard .stars-container { justify-content: center; font-size: 18px; }
 
-        /* 結果: 順位表(CPU対戦もオンラインも共通) */
+        /* 結果: 順位表(オンライン用。CPU百人組手では空にして隠す) */
         .result-list { margin-bottom: 28px; background: rgba(0, 0, 0, 0.5); border: 1px solid #554433; border-radius: 8px; padding: 12px 18px; }
+        .result-list:empty { display: none; }
         .result-row { display: flex; align-items: center; gap: 14px; padding: 10px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
         .result-row:last-child { border-bottom: none; }
         .result-row .rank { width: 2em; font-size: 28px; font-weight: 900; color: #d4af37; text-align: center; }
@@ -400,6 +413,65 @@ export const UI_CSS = `
         .mark-pending {
           color: rgba(255, 255, 255, 0.55);
           text-shadow: 0 0 4px #000, 0 0 4px #000;
+        }
+
+        /* 百人組手の撃破数カウンター（スターは一切使わない） */
+        .kumite-counter {
+          display: none;
+          align-items: baseline;
+          gap: 5px;
+          padding: 2px 12px;
+          border-radius: 4px;
+          background: rgba(20, 14, 10, 0.78);
+          border: 1px solid rgba(212, 175, 55, 0.65);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+          white-space: nowrap;
+        }
+        #battle-hud.kumite .hud-center-marks .stars-container,
+        #battle-hud.kumite .hud-center-marks .marks-divider {
+          display: none;
+        }
+        #battle-hud.kumite .kumite-counter {
+          display: inline-flex;
+        }
+        .kumite-label {
+          font-size: 13px;
+          font-weight: 900;
+          color: #e6d09c;
+          letter-spacing: 2px;
+          text-shadow: 0 0 4px #000;
+        }
+        .kumite-count {
+          font-size: 24px;
+          font-weight: 900;
+          color: #ffd700;
+          text-shadow: 0 0 6px #000, 0 0 10px rgba(255, 215, 0, 0.45);
+        }
+        .kumite-slash {
+          font-size: 14px;
+          font-weight: 700;
+          color: rgba(255, 255, 255, 0.65);
+        }
+        .kumite-total {
+          font-size: 16px;
+          font-weight: 900;
+          color: #f6efdc;
+          text-shadow: 0 0 4px #000;
+        }
+        .result-row .rkills {
+          font-size: 28px;
+          font-weight: 900;
+          color: #ffd700;
+          letter-spacing: 2px;
+          white-space: nowrap;
+        }
+        .result-row .rsub {
+          display: block;
+          font-size: 14px;
+          font-weight: 700;
+          color: #cbbba0;
+          letter-spacing: 1px;
+          margin-top: 2px;
         }
 
 

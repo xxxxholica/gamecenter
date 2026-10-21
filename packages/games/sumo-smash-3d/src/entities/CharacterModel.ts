@@ -25,6 +25,10 @@ export class CharacterModel {
   private leftLegGroup: THREE.Group;
   private rightLegGroup: THREE.Group;
 
+  private skinMat: THREE.MeshStandardMaterial;
+  private mawashiMat: THREE.MeshStandardMaterial;
+  private hairMat: THREE.MeshStandardMaterial;
+
   // アニメーション用変数
   private animTimer: number = 0;
 
@@ -37,17 +41,20 @@ export class CharacterModel {
       roughness: 0.65,
       metalness: 0.05,
     });
+    this.skinMat = skinMat;
 
     const mawashiMat = new THREE.MeshStandardMaterial({
       color: colors.mawashiColor,
       roughness: 0.8,
       metalness: 0.1,
     });
+    this.mawashiMat = mawashiMat;
 
     const hairMat = new THREE.MeshStandardMaterial({
       color: colors.hairColor,
       roughness: 0.4,
     });
+    this.hairMat = hairMat;
 
     // 胴体グループ（Y軸中心）
     this.bodyGroup = new THREE.Group();
@@ -155,6 +162,13 @@ export class CharacterModel {
     rightLegMesh.position.y = -0.32;
     rightLegMesh.castShadow = true;
     this.rightLegGroup.add(rightLegMesh);
+  }
+
+  /** 力士の肌・まわし・髪の色を切り替える(百人組手の敵バリエーション用) */
+  public setColors(colors: CharacterColors): void {
+    this.skinMat.color.setHex(colors.skinColor);
+    this.mawashiMat.color.setHex(colors.mawashiColor);
+    this.hairMat.color.setHex(colors.hairColor);
   }
 
   /**

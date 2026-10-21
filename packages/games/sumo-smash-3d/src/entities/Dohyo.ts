@@ -7,10 +7,11 @@ export class Dohyo {
   public readonly radius: number = DOHYO_RADIUS;
   public readonly height: number = DOHYO_HEIGHT;
 
-  // 爆発で付く焦げ跡(その試合のあいだ残る)
-  private scorches: THREE.Mesh[] = [];
+  // 爆発で付く焦げ跡(時間経過で徐々に薄れて消える)
+  private scorches: Array<{ mesh: THREE.Mesh; age: number; maxAge: number; baseOpacity: number }> = [];
   private scorchTextures: THREE.CanvasTexture[] = [];
   private static readonly MAX_SCORCHES = 70;
+  private static readonly SCORCH_LIFE_SEC = 5.0;
 
   constructor() {
     this.mesh = new THREE.Group();
@@ -67,13 +68,13 @@ export class Dohyo {
   public addScorch(pos: THREE.Vector3, radius: number, strength: number = 1) {
     if (Math.hypot(pos.x, pos.z) > this.radius - 0.1) return;
 
-    let mesh: THREE.Mesh;
-    if (this.scorches.length >= Dohyo.MAX_SCORCHES) {
+    let entry = this.scorches.find((s) => !s.mesh.visible);
+    if (!entry && this.scorches.length >= Dohyo.MAX_SCORCHES) {
       // いちばん古い跡を使い回す
-      mesh = this.scorches.shift()!;
-      this.scorches.push(mesh);
-    } else {
-      mesh = new THREE.Mesh(
+      entry = this.scorches.shift()!;
+      this.scorches.push(entry);
+    } else if (!entry) {
+      const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
           transparent: true,
@@ -86,12 +87,20 @@ export class Dohyo {
       mesh.rotation.x = -Math.PI / 2;
       mesh.renderOrder = 1;
       this.mesh.add(mesh);
-      this.scorches.push(mesh);
+      entry = { mesh, age: 0, maxAge: Dohyo.SCORCH_LIFE_SEC, baseOpacity: 0.8 };
+      this.scorches.push(entry);
     }
+
+    const { mesh } = entry;
+    const baseOpacity = Math.min(1, 0.55 + 0.4 * strength);
+    entry.age = 0;
+    entry.maxAge = Dohyo.SCORCH_LIFE_SEC + Math.random() * 1.5;
+    entry.baseOpacity = baseOpacity;
+    mesh.visible = true;
 
     const mat = mesh.material as THREE.MeshBasicMaterial;
     mat.map = this.scorchTextures[Math.floor(Math.random() * this.scorchTextures.length)];
-    mat.opacity = Math.min(1, 0.55 + 0.4 * strength);
+    mat.opacity = baseOpacity;
     mat.needsUpdate = true;
     const size = radius * 2 * (0.85 + Math.random() * 0.3);
     mesh.scale.set(size, size, 1);
@@ -99,12 +108,30 @@ export class Dohyo {
     mesh.rotation.z = Math.random() * Math.PI * 2;
   }
 
+  /** 時間経過で爆破跡(焦げ跡)をフェードアウトして消す */
+  public update(dt: number) {
+    for (const s of this.scorches) {
+      if (!s.mesh.visible) continue;
+      s.age += dt;
+      if (s.age >= s.maxAge) {
+        s.mesh.visible = false;
+        continue;
+      }
+      const fadeStart = s.maxAge * 0.45;
+      if (s.age > fadeStart) {
+        const t = (s.age - fadeStart) / (s.maxAge - fadeStart);
+        const mat = s.mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = s.baseOpacity * Math.max(0, 1 - t);
+      }
+    }
+  }
+
   /** 焦げ跡を消す(新しい試合の前) */
   public clearScorches() {
-    for (const m of this.scorches) {
-      this.mesh.remove(m);
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
+    for (const s of this.scorches) {
+      this.mesh.remove(s.mesh);
+      s.mesh.geometry.dispose();
+      (s.mesh.material as THREE.Material).dispose();
     }
     this.scorches.length = 0;
   }

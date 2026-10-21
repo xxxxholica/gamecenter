@@ -106,8 +106,17 @@ type AttackType = 'harite' | 'harite_strong' | 'buchikamashi' | 'grab';
 
 export class SimFighter {
   public readonly id: string;
-  public readonly name: string;
+  public name: string;
   public readonly body: CANNONNS.Body;
+
+  // 百人組手用の体格・速度・耐性パラメータ(既定値はすべて1.0)
+  public bodyScale = 1.0;
+  public walkSpeedMult = 1.0;
+  public knockbackTakenMult = 1.0;
+  /** 空から降下中(着地するまで true) */
+  public isSkyDropping = false;
+  /** 空から降下して土俵に着地した瞬間のコールバック(着地衝撃波の発生用) */
+  public onSkyLanded: ((fighter: SimFighter) => void) | null = null;
 
   // 戦闘ステータス
   public damagePercent = 0; // 0%〜
@@ -197,6 +206,7 @@ export class SimFighter {
     this.stateTimer = 0;
     this.chargeTimer = 0;
     this.hasSuperArmor = false;
+    this.isSkyDropping = false;
     this.buchikamashiCooldown = 0;
     this.grabCooldown = 0;
     this.grabbedOpponent = null;
@@ -213,9 +223,64 @@ export class SimFighter {
     this.attackHitRegistered = false;
   }
 
+  /**
+   * 百人組手で次の敵力士を上空から土俵へ降下スポーンさせる。
+   */
+  public spawnFromSky(
+    x: number,
+    y: number,
+    z: number,
+    facingAngle: number,
+    opts?: { name?: string; scale?: number; mass?: number; speedMult?: number; knockbackTakenMult?: number },
+  ): void {
+    if (this.grabbedOpponent) {
+      this.grabbedOpponent.grabber = null;
+      this.grabbedOpponent.state = 'idle';
+      this.grabbedOpponent.body.collisionResponse = true;
+      this.grabbedOpponent = null;
+    }
+    if (this.grabber) {
+      this.grabber.grabbedOpponent = null;
+      if (this.grabber.state === 'grab_holding') this.grabber.state = 'idle';
+      this.grabber = null;
+    }
+    if (opts?.name !== undefined) this.name = opts.name;
+    this.bodyScale = opts?.scale ?? 1.0;
+    this.walkSpeedMult = opts?.speedMult ?? 1.0;
+    this.knockbackTakenMult = opts?.knockbackTakenMult ?? 1.0;
+    this.body.mass = opts?.mass ?? 100;
+    this.body.updateMassProperties();
+
+    this.gone = false;
+    this.isSkyDropping = true;
+    this.body.collisionResponse = true;
+    this.body.wakeUp();
+    this.body.position.set(x, y, z);
+    this.body.velocity.set(0, -4.5, 0);
+    this.body.angularVelocity.set(0, 0, 0);
+    this.facingAngle = facingAngle;
+    this.targetFacingAngle = facingAngle;
+    this.state = 'idle';
+    this.stateTimer = 0;
+    this.chargeTimer = 0;
+    this.hasSuperArmor = false;
+    this.buchikamashiCooldown = 0;
+    this.grabCooldown = 0;
+    this.lastAttacker = null;
+    this.counterMeter = 0;
+    this.invulnTimer = 0;
+    this.hariteGauge = 0;
+    this.hariteStrong = false;
+    this.damagePercent = 0;
+    this.isAttackActive = false;
+    this.currentAttackType = null;
+    this.attackHitRegistered = false;
+  }
+
   /** 試合から外す(退出)。土俵の外へ置き、以降は動かない。 */
   public leave(): void {
     this.gone = true;
+    this.isSkyDropping = false;
     this.state = 'fall';
     this.body.collisionResponse = false;
     this.body.position.set(this.startX, -25, this.startZ);
@@ -247,6 +312,28 @@ export class SimFighter {
   public update(dt: number, moveInput: FighterMoveInput, actions: FighterActions, oppX: number | null, oppZ: number | null): void {
     if (this.gone) return;
     this.stateTimer += dt;
+
+    // 空から降下中: 落下予告の影の位置にまっすぐ落ち、着地した瞬間に衝撃波を起こす
+    if (this.isSkyDropping) {
+      this.body.velocity.x = 0;
+      this.body.velocity.z = 0;
+      if (oppX !== null && oppZ !== null) {
+        const dx = oppX - this.body.position.x;
+        const dz = oppZ - this.body.position.z;
+        if (Math.hypot(dx, dz) > 0.1) {
+          this.targetFacingAngle = Math.atan2(dx, dz);
+        }
+      }
+      this.updateRotation(dt);
+      const landedOnGround = this.body.position.y <= 1.25;
+      const landedOnFighter = this.stateTimer > 0.15 && this.body.position.y <= 3.0 && Math.abs(this.body.velocity.y) < 1.5;
+      if (landedOnGround || landedOnFighter) {
+        this.isSkyDropping = false;
+        this.body.velocity.set(0, 0, 0);
+        this.onSkyLanded?.(this);
+      }
+      return;
+    }
 
     // クールタイムの減少
     if (this.buchikamashiCooldown > 0) {
@@ -341,8 +428,9 @@ export class SimFighter {
 
   /** 移動入力に合わせて歩く。ratio は歩行速度に対する割合 */
   private walk(moveInput: FighterMoveInput, ratio = 1): void {
-    this.body.velocity.x = moveInput.x * WALK_SPEED * ratio;
-    this.body.velocity.z = moveInput.z * WALK_SPEED * ratio;
+    const sp = WALK_SPEED * this.walkSpeedMult * ratio;
+    this.body.velocity.x = moveInput.x * sp;
+    this.body.velocity.z = moveInput.z * sp;
     this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
   }
 
@@ -553,7 +641,7 @@ export class SimFighter {
 
     // ダメージが溜まるほど遠くへ飛ぶ(0%で約2m、100%で約7m)
     const kbMult = 1.0 + opponent.damagePercent / 60.0;
-    const finalImpulse = 920 * KB_THROW * kbMult;
+    const finalImpulse = 920 * KB_THROW * kbMult * opponent.knockbackTakenMult * (opponent.body.mass / 100);
 
     opponent.body.applyImpulse(new C.Vec3(dirX * finalImpulse, finalImpulse * 0.12, dirZ * finalImpulse), opponent.body.position);
     opponent.state = 'hit';
@@ -708,7 +796,7 @@ export class SimFighter {
 
   /** 突進の速さ。歩行より速く、タメるほど速く・長く走る */
   private rushSpeed(chargeRatio: number): number {
-    return 9 + chargeRatio * 5; // 9〜14 m/s(歩行の3〜4.5倍)
+    return (9 + chargeRatio * 5) * this.walkSpeedMult; // 9〜14 m/s(歩行の3〜4.5倍)
   }
 
   private rushDuration(chargeRatio: number): number {
@@ -929,7 +1017,7 @@ export class SimFighter {
           ? 1.0 + this.damagePercent / 35.0
           : 1.0 + this.damagePercent / 70.0;
     const kbScale = attackType === 'buchikamashi' ? KB_RUSH : KB_HARITE;
-    const finalImpulse = baseImpulse * kbScale * knockbackMultiplier;
+    const finalImpulse = baseImpulse * kbScale * knockbackMultiplier * this.knockbackTakenMult * (this.body.mass / 100);
     this.body.applyImpulse(new this.env.C.Vec3(hx * finalImpulse, finalImpulse * 0.18, hz * finalImpulse), this.body.position);
 
     this.state = 'hit';
@@ -946,16 +1034,17 @@ export class SimFighter {
     const fx = Math.sin(this.facingAngle);
     const fz = Math.cos(this.facingAngle);
     const p = this.body.position;
+    const s = this.bodyScale;
 
     switch (this.currentAttackType) {
       case 'harite':
-        return { x: p.x + fx * 1.05, y: p.y + 0.2, z: p.z + fz * 1.05, radius: 0.75 };
+        return { x: p.x + fx * 1.05 * s, y: p.y + 0.2, z: p.z + fz * 1.05 * s, radius: 0.75 * s };
       case 'harite_strong':
-        return { x: p.x + fx * 1.15, y: p.y + 0.2, z: p.z + fz * 1.15, radius: 0.95 };
+        return { x: p.x + fx * 1.15 * s, y: p.y + 0.2, z: p.z + fz * 1.15 * s, radius: 0.95 * s };
       case 'buchikamashi':
-        return { x: p.x + fx * 1.3, y: p.y, z: p.z + fz * 1.3, radius: 1.3 };
+        return { x: p.x + fx * 1.3 * s, y: p.y, z: p.z + fz * 1.3 * s, radius: 1.3 * s };
       case 'grab':
-        return { x: p.x + fx * 1.3, y: p.y + 0.2, z: p.z + fz * 1.3, radius: 1.2 };
+        return { x: p.x + fx * 1.3 * s, y: p.y + 0.2, z: p.z + fz * 1.3 * s, radius: 1.2 * s };
     }
     return null;
   }

@@ -62,6 +62,10 @@ export interface SimOptions {
   roundTimeLimitSec?: number;
   /** 力士ごとの名前(勝負ありの表示に使う)。省略または足りない分は FIGHTERS の名前 */
   names?: string[];
+  /** 百人組手モードの目標撃破数(例: 100)。指定時はプレイヤー(slot 0)が落ちるか目標達成までラウンドを止めずに連戦する */
+  kumiteTotal?: number;
+  /** 百人組手モードで敵(slot 1〜3)が場外へ落ちた瞬間のコールバック */
+  onEnemyFell?: (slot: number, fighter: SimFighter, kimarite: string) => void;
 }
 
 const IDLE_INPUT: FighterInput = {
@@ -137,8 +141,70 @@ export class SimWorld {
     };
     for (let i = 0; i < opts.count; i++) {
       const f = FIGHTERS[i];
-      const pose = startPose(i, opts.count);
-      this.fighters.push(new SimFighter(env, { id: f.id, name: opts.names?.[i] ?? f.name, startX: pose.x, startY: 1.2, startZ: pose.z, startAngle: pose.angle }));
+      const pose = opts.kumiteTotal !== undefined ? startPose(i === 0 ? 0 : 1, 2) : startPose(i, opts.count);
+      const sf = new SimFighter(env, { id: f.id, name: opts.names?.[i] ?? f.name, startX: pose.x, startY: 1.2, startZ: pose.z, startAngle: pose.angle });
+      sf.onSkyLanded = (landed) => this.triggerLandingShockwave(landed);
+      if (opts.kumiteTotal !== undefined && i >= 2) {
+        sf.leave();
+      }
+      this.fighters.push(sf);
+    }
+  }
+
+  /** 百人組手用: 指定スロットの敵を上空から降下させる */
+  public spawnEnemySlotFromSky(
+    slot: number,
+    x: number,
+    y: number,
+    z: number,
+    facingAngle: number,
+    opts?: {
+      name?: string;
+      mass?: number;
+      bodyScale?: number;
+      walkSpeedMult?: number;
+      knockbackTakenMult?: number;
+    }
+  ): void {
+    const f = this.fighters[slot];
+    if (!f) return;
+    this.fell.delete(f);
+    f.spawnFromSky(x, y, z, facingAngle, {
+      name: opts?.name,
+      mass: opts?.mass,
+      scale: opts?.bodyScale,
+      speedMult: opts?.walkSpeedMult,
+      knockbackTakenMult: opts?.knockbackTakenMult,
+    });
+  }
+
+  /** 上空から降ってきた力士が土俵に着地した際の衝撃波 */
+  private triggerLandingShockwave(landed: SimFighter): void {
+    const lx = landed.body.position.x;
+    const lz = landed.body.position.z;
+    const scale = landed.bodyScale;
+    this.fx.sound('playTaiko');
+    this.fx.sound('playBuchikamashiHit', scale);
+    this.fx.particle('spawnBuchikamashiHit', lx, 0.25, lz, scale);
+    this.fx.particle('spawnDust', lx, 0.1, lz, 0, 1, 0);
+    this.fx.particle('triggerShake', 0.35 * scale);
+
+    const shockRadius = 3.2 * scale;
+    for (const other of this.fighters) {
+      if (other === landed || other.gone || other.isSkyDropping || this.fell.has(other)) continue;
+      const dx = other.body.position.x - lx;
+      const dz = other.body.position.z - lz;
+      const dist = Math.hypot(dx, dz);
+      if (dist < shockRadius && other.body.position.y < 2.2) {
+        const nx = dist > 0.01 ? dx / dist : 1;
+        const nz = dist > 0.01 ? dz / dist : 0;
+        const factor = (1 - dist / shockRadius) * scale;
+        const pushSpeed = 11.5 * factor;
+        other.body.velocity.x += nx * pushSpeed;
+        other.body.velocity.z += nz * pushSpeed;
+        other.body.velocity.y = Math.max(other.body.velocity.y, 3.2 * factor);
+        other.damagePercent = Math.min(999, other.damagePercent + Math.round(6 * factor));
+      }
     }
   }
 
@@ -291,10 +357,16 @@ export class SimWorld {
   }
 
   private nearestOpponent(me: SimFighter): SimFighter | null {
+    if (this.opts.kumiteTotal !== undefined) {
+      const player = this.fighters[0];
+      if (me !== player) {
+        return player && !player.gone && player.state !== 'fall' ? player : null;
+      }
+    }
     let best: SimFighter | null = null;
     let bestD = Infinity;
     for (const o of this.fighters) {
-      if (o === me || o.gone || o.state === 'fall') continue;
+      if (o === me || o.gone || o.state === 'fall' || this.fell.has(o)) continue;
       const d = Math.hypot(o.body.position.x - me.body.position.x, o.body.position.z - me.body.position.z);
       if (d < bestD) {
         bestD = d;
@@ -304,19 +376,48 @@ export class SimWorld {
     return best;
   }
 
-  /** 攻撃ヒット判定(ヒットボックス vs 相手の剛体)。1回の攻撃は、いちばん近い1人にだけ当たる。 */
+  /** 攻撃ヒット判定(ヒットボックス vs 相手の剛体)。1回の攻撃は、いちばん近い1人にだけ当たる(百人組手のプレイヤー打撃は範囲内の全敵にヒット)。 */
   private resolveAttacks(): void {
+    const isKumite = this.opts.kumiteTotal !== undefined;
+    const player = this.fighters[0];
+
     for (const attacker of this.fighters) {
-      if (attacker.gone) continue;
+      if (attacker.gone || attacker.isSkyDropping) continue;
       const hb = attacker.getHitbox();
       if (!hb || attacker.attackHitRegistered) continue;
+
+      if (isKumite && attacker === player && attacker.currentAttackType !== 'grab') {
+        const hitTargets: SimFighter[] = [];
+        for (let i = 1; i < this.fighters.length; i++) {
+          const d = this.fighters[i];
+          if (d.gone || d.isSkyDropping) continue;
+          const dist = Math.hypot(hb.x - d.body.position.x, hb.y - d.body.position.y, hb.z - d.body.position.z);
+          if (dist < hb.radius + 0.85 * d.bodyScale) {
+            hitTargets.push(d);
+          }
+        }
+        if (hitTargets.length > 0) {
+          attacker.attackHitRegistered = true;
+          for (const d of hitTargets) {
+            d.receiveHit(
+              attacker.body.position.x,
+              attacker.body.position.z,
+              attacker.currentAttackType as 'harite' | 'harite_strong' | 'buchikamashi',
+              attacker.chargeTimer / attacker.maxChargeTime,
+              attacker
+            );
+          }
+        }
+        continue;
+      }
 
       let defender: SimFighter | null = null;
       let bestD = Infinity;
       for (const d of this.fighters) {
-        if (d === attacker || d.gone) continue;
+        if (d === attacker || d.gone || d.isSkyDropping) continue;
+        if (isKumite && attacker !== player && d !== player) continue;
         const dist = Math.hypot(hb.x - d.body.position.x, hb.y - d.body.position.y, hb.z - d.body.position.z);
-        if (dist < hb.radius + 0.85 && dist < bestD) {
+        if (dist < hb.radius + 0.85 * d.bodyScale && dist < bestD) {
           bestD = dist;
           defender = d;
         }
@@ -347,8 +448,47 @@ export class SimWorld {
     }
   }
 
-  /** 場外の判定。残りが1人以下になったらラウンド終了。 */
+  /** 場外の判定。残りが1人以下になったらラウンド終了(百人組手モードではプレイヤーが落ちるか100体撃破まで継続)。 */
   private checkRingOut(): void {
+    if (this.opts.kumiteTotal !== undefined) {
+      const player = this.fighters[0];
+      if (!player.gone && !this.fell.has(player) && player.body.position.y < RING_OUT_Y) {
+        this.fell.add(player);
+        this.fx.push('main', 'blast', player.body.position.x, 0.8, player.body.position.z, 0);
+        this.nokottaTimer = null;
+        this.fx.sound('playHyoshigi');
+        this.fx.sound('setBgmCalm', true);
+        this.fx.push('ui', 'showBanner', '勝負あり', `${this.wins[0]}体撃破`, 2200);
+        this.endMatch(1);
+        return;
+      }
+
+      for (let slot = 1; slot < this.fighters.length; slot++) {
+        const f = this.fighters[slot];
+        if (f.gone || f.isSkyDropping || this.fell.has(f) || f.body.position.y >= RING_OUT_Y) continue;
+        this.fell.add(f);
+        this.lastFallen = f;
+        const bx = f.body.position.x;
+        const bz = f.body.position.z;
+        this.fx.push('main', 'blast', bx, 0.8, bz, 0);
+        const kimarite = this.determineKimarite(player, f);
+        f.leave();
+        player.damagePercent = 0;
+        this.wins[0] = Math.min(this.opts.kumiteTotal, this.wins[0] + 1);
+        this.opts.onEnemyFell?.(slot, f, kimarite);
+
+        if (this.wins[0] >= this.opts.kumiteTotal) {
+          this.nokottaTimer = null;
+          this.fx.sound('playHyoshigi');
+          this.fx.sound('setBgmCalm', true);
+          this.fx.push('ui', 'showBanner', '百人抜き達成！', `${player.name}　百体完全制覇`, 2600);
+          this.endMatch(0);
+          return;
+        }
+      }
+      return;
+    }
+
     for (const f of this.fighters) {
       if (f.gone || this.fell.has(f) || f.body.position.y >= RING_OUT_Y) continue;
       this.fell.add(f);

@@ -52,7 +52,7 @@ export function uiLayerHtml(): string {
               <tr>
                 <td><strong>勝負</strong></td>
                 <td>-</td>
-                <td>当たるほど吹き飛びやすい。土俵の外に出たら負け。二本先取。</td>
+                <td>当たるほど吹き飛びやすい。土俵の外に出たら負け。CPU戦は百人抜き、通信対戦は二本先取。</td>
               </tr>
               <tr>
                 <td><strong>反撃</strong></td>
@@ -69,6 +69,7 @@ export function uiLayerHtml(): string {
       <div id="match-result-modal">
         <div class="result-modal-content">
           <h2 class="result-title" id="result-winner-title">勝利</h2>
+          <div class="result-subtitle" id="result-subtitle"></div>
           <div class="result-list" id="result-list"></div>
 
           <div class="result-buttons" id="result-menu">
@@ -99,17 +100,22 @@ export function uiLayerHtml(): string {
           </div>
 
 
-          <!-- プレイヤー2 / CPU（西方 紅炎山） -->
-          <!-- 中央: 両者の星取り(白い丸=勝ち、薄い輪=これから) -->
+          <!-- プレイヤー2 / CPU（西方 紅炎山 / 百人組手） -->
+          <!-- 中央: 通信対戦は星取り、CPU百人組手は撃破数カウンター -->
           <div class="hud-center-marks">
             <div class="stars-container" id="p1-stars"></div>
             <span class="marks-divider"></span>
             <div class="stars-container" id="p2-stars"></div>
+            <div class="kumite-counter" id="kumite-counter">
+              <span class="kumite-label">あと</span>
+              <span class="kumite-count" id="kumite-count">100</span>
+              <span class="kumite-total">体</span>
+            </div>
           </div>
 
           <div class="fighter-card p2-card">
             <div class="fighter-header">
-              <span class="fighter-name p2-color">西方 紅炎山</span>
+              <span class="fighter-name p2-color" id="p2-fighter-name">西方 紅炎山</span>
               <span class="player-badge p2-badge" id="p2-badge-tag">2P</span>
             </div>
 

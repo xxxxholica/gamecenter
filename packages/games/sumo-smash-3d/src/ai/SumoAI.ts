@@ -13,6 +13,7 @@ export interface AiPlan {
 export class SumoAI {
   private fighter: SimFighter;
   private thinkTimer: number = 0;
+  private thinkInterval: number = 0.08;
 
   private move: FighterMoveInput = { x: 0, z: 0, isMoving: false };
   // 押しっぱなしの状態(タメ)
@@ -29,7 +30,27 @@ export class SumoAI {
     this.fighter = fighter;
   }
 
+  public setThinkInterval(sec: number): void {
+    this.thinkInterval = Math.max(0.03, sec);
+  }
+
+  public reset(): void {
+    this.thinkTimer = 0;
+    this.move = { x: 0, z: 0, isMoving: false };
+    this.holdStrike = false;
+    this.tapStrike = false;
+    this.tapGrab = false;
+    this.releaseStrike = false;
+    this.chargeTimer = 0;
+  }
+
   public update(dt: number, opponent: SimFighter): AiPlan {
+    if (this.fighter.isSkyDropping || this.fighter.gone) {
+      return {
+        move: { x: 0, z: 0, isMoving: false },
+        actions: { strikePressed: false, strike: false, strikeReleased: false, grabPressed: false },
+      };
+    }
     this.thinkTimer += dt;
 
     const myPos = new THREE.Vector3(this.fighter.body.position.x, 0, this.fighter.body.position.z);
@@ -50,7 +71,7 @@ export class SumoAI {
         this.holdStrike = false;
         this.releaseStrike = true;
       }
-    } else if (this.thinkTimer >= 0.08) {
+    } else if (this.thinkTimer >= this.thinkInterval) {
       this.thinkTimer = 0;
       this.plan(myPos, oppPos, opponent);
     }

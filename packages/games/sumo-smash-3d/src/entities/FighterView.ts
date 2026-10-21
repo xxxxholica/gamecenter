@@ -29,11 +29,17 @@ const MARKER_PALETTE = [
  * シミュレーション(shared/sumoSim。サーバー、またはCPU対戦ではブラウザ内)から届いた状態(FighterSnap)を画面に反映するだけ。
  */
 export class FighterView {
-  public readonly name: string;
+  public name: string;
   public readonly slot: number;
   public readonly model: CharacterModel;
   public readonly mesh: THREE.Group;
   public readonly overheadMarker: THREE.Sprite;
+  /** 空から降ってくる時の土俵上の落下影マーカー */
+  public readonly dropShadowMesh: THREE.Group;
+  private readonly shadowDiscMat: THREE.MeshBasicMaterial;
+  private readonly shadowRingMesh: THREE.Mesh;
+  private readonly shadowRingMat: THREE.MeshBasicMaterial;
+  public bodyScale = 1.0;
 
   // 最後に反映した状態(HUD・演出判定が読む)
   public readonly position = new THREE.Vector3();
@@ -65,6 +71,74 @@ export class FighterView {
     this.mesh = this.model.root;
     this.overheadMarker = this.createOverheadMarker(label, slot);
     this.mesh.add(this.overheadMarker);
+
+    // 空から降ってくる時の落下予告影マーカー（黒い丸影＋収縮する警告リング）
+    this.dropShadowMesh = new THREE.Group();
+    this.dropShadowMesh.visible = false;
+
+    const discGeo = new THREE.CircleGeometry(1.0, 28);
+    discGeo.rotateX(-Math.PI / 2);
+    this.shadowDiscMat = new THREE.MeshBasicMaterial({
+      color: 0x050302,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+    });
+    const discMesh = new THREE.Mesh(discGeo, this.shadowDiscMat);
+    discMesh.renderOrder = 2;
+    this.dropShadowMesh.add(discMesh);
+
+    const ringGeo = new THREE.RingGeometry(0.88, 1.0, 32);
+    ringGeo.rotateX(-Math.PI / 2);
+    this.shadowRingMat = new THREE.MeshBasicMaterial({
+      color: 0xff4422,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.shadowRingMesh = new THREE.Mesh(ringGeo, this.shadowRingMat);
+    this.shadowRingMesh.position.y = 0.004;
+    this.shadowRingMesh.renderOrder = 3;
+    this.dropShadowMesh.add(this.shadowRingMesh);
+  }
+
+  /** 力士の体格スケールを変更する(百人組手の小兵・巨漢・ボス用) */
+  public setBodyScale(scale: number): void {
+    this.bodyScale = scale;
+    this.mesh.scale.setScalar(scale);
+    // 頭上マーカーの大きさが体格で極端に変わらないように補正
+    const inv = 1 / Math.max(0.6, scale);
+    this.overheadMarker.scale.set(2.4 * inv, 1.2 * inv, 1.0);
+  }
+
+  /** 力士の配色を変更する */
+  public setColors(colors: CharacterColors): void {
+    this.model.setColors(colors);
+  }
+
+  private updateDropShadow(): void {
+    if (this.gone) {
+      this.dropShadowMesh.visible = false;
+      return;
+    }
+    const r = Math.hypot(this.position.x, this.position.z);
+    // 土俵の上空(Y > 1.55m)から降下している間、着地予定地点に影とリングを表示する
+    if (this.position.y > 1.55 && r < 9.0) {
+      this.dropShadowMesh.visible = true;
+      this.dropShadowMesh.position.set(this.position.x, 0.025, this.position.z);
+      const height = Math.max(0, this.position.y - 1.2);
+      const closeness = 1 - Math.min(1, height / 15.0); // 0(高空) → 1(着地寸前)
+      const discScale = (0.45 + 0.72 * closeness) * this.bodyScale;
+      this.dropShadowMesh.children[0].scale.setScalar(discScale);
+      this.shadowDiscMat.opacity = 0.22 + 0.62 * closeness;
+
+      const ringScale = (2.1 - 0.95 * closeness) * this.bodyScale;
+      this.shadowRingMesh.scale.setScalar(ringScale);
+      this.shadowRingMat.opacity = 0.25 + 0.65 * closeness;
+    } else {
+      this.dropShadowMesh.visible = false;
+    }
   }
 
   /**
@@ -87,6 +161,7 @@ export class FighterView {
     this.hasSuperArmor = this.state === 'buchikamashi_rush';
     this.chargeRatio = this.state === 'buchikamashi_charge' ? Math.min(1, this.chargeTimer / MAX_CHARGE_TIME) : 0;
 
+    this.updateDropShadow();
     if (this.gone) return;
 
     if (this.state === 'buchikamashi_charge') {
@@ -108,6 +183,7 @@ export class FighterView {
   public placeAt(x: number, z: number, angle: number): void {
     this.gone = false;
     this.mesh.visible = true;
+    this.dropShadowMesh.visible = false;
     this.state = 'idle';
     this.damagePercent = 0;
     this.hasSuperArmor = false;

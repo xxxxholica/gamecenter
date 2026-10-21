@@ -70,23 +70,23 @@ export class ParticleManager {
   public spawnMegaBlast(center: THREE.Vector3, scale: number) {
     this.fx.explode(center, scale);
     this.fx.explode(new THREE.Vector3(center.x, center.y + 1.5, center.z), scale * 0.7);
-    this.onScreenFlash?.(1);
-    this.triggerShake(3.0);
-    this.requestHitStop(0.16);
+    this.onScreenFlash?.(0.85);
+    this.triggerShake(2.4);
+    this.requestHitStop(0.09);
 
-    // 連鎖: 中心のまわりで、少しずつ遅れて次々に爆発する
-    const n = 9;
+    // 連鎖: 中心のまわりで、短時間でテンポよく誘爆して素早く収まる
+    const n = 4;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const d = Math.random() * (scale * 0.85);
+      const d = Math.random() * (scale * 0.75);
       this.scheduled.push({
-        t: 0.08 + (i / n) * 0.85 + Math.random() * 0.08,
+        t: 0.04 + (i / n) * 0.24 + Math.random() * 0.04,
         pos: new THREE.Vector3(
           center.x + Math.cos(a) * d,
-          center.y + Math.random() * 2.2,
+          center.y + Math.random() * 1.8,
           center.z + Math.sin(a) * d
         ),
-        scale: scale * (0.45 + Math.random() * 0.4),
+        scale: scale * (0.4 + Math.random() * 0.3),
       });
     }
   }

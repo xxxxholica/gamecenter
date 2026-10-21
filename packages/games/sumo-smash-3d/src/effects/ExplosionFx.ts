@@ -387,10 +387,10 @@ export class ExplosionFx {
     const p = new THREE.Vector3();
 
     // 1. 閃光(一瞬だけ画面を白く焼く)
-    this.spawn('flash', pos, v.set(0, 0, 0), 0.11, 1.4 * sz, 3.4 * sz, 1, 0);
+    this.spawn('flash', pos, v.set(0, 0, 0), 0.08, 1.4 * sz, 3.2 * sz, 1, 0);
 
     // 2. 火球の芯(大きく膨らみ、すぐ赤くなる)
-    this.spawn('fire', pos, v.set(0, 0.8 * s, 0), 0.55, 1.0 * sz, 3.0 * sz, 0.4, 0);
+    this.spawn('fire', pos, v.set(0, 0.8 * s, 0), 0.36, 1.0 * sz, 2.8 * sz, 0.4, 0);
 
     // 3. 炎の塊(外へ飛び散りながら膨らむ)
     const nFire = Math.round(5 + 11 * c);
@@ -399,11 +399,11 @@ export class ExplosionFx {
       const sp = R(1.5, 5.0) * (0.6 + 0.5 * s);
       v.set(Math.cos(a) * sp, R(0.5, 4.0) * (0.6 + 0.4 * s), Math.sin(a) * sp);
       p.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.4 * s, (Math.random() - 0.3) * 0.4 * s, (Math.random() - 0.5) * 0.4 * s));
-      this.spawn('fire', p, v, R(0.35, 0.75), R(0.45, 0.8) * sz, R(1.1, 1.9) * sz, 0.12, 0);
+      this.spawn('fire', p, v, R(0.24, 0.48), R(0.45, 0.8) * sz, R(1.1, 1.9) * sz, 0.12, 0);
     }
 
-    // 4. 煙(遅れて立ち上り、長く残る)
-    const nSmoke = Math.round((4 + 7 * c) * (s > 3 ? 0.5 : 1));
+    // 4. 煙(立ち上り、視界を塞がないよう素早く消える)
+    const nSmoke = Math.round((4 + 7 * c) * (s > 3 ? 0.45 : 1));
     for (let i = 0; i < nSmoke; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = R(0.6, 2.4) * (0.6 + 0.4 * s);
@@ -415,39 +415,39 @@ export class ExplosionFx {
         'smoke',
         p,
         v,
-        Math.min(huge ? 1.5 : 2.8, R(1.1, 2.2) * (0.8 + 0.1 * Math.min(s, 3))),
+        Math.min(huge ? 0.78 : 1.35, R(0.6, 1.15) * (0.75 + 0.08 * Math.min(s, 3))),
         R(0.7, 1.1) * sz,
-        R(2.2, 3.8) * sz,
+        R(2.0, 3.4) * sz,
         0.35,
         -0.6,
-        huge ? 0.22 : 1
+        huge ? 0.2 : 0.85
       );
     }
 
     // 5. 火花(細かく速く飛び、重力で落ちる)
-    const nSpark = Math.round(12 + 26 * c);
+    const nSpark = Math.round(12 + 24 * c);
     for (let i = 0; i < nSpark; i++) {
       const a = Math.random() * Math.PI * 2;
       const el = R(-0.1, 1.0);
       const sp = R(6, 17) * (0.6 + 0.4 * s);
       v.set(Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp + 2, Math.sin(a) * Math.cos(el) * sp);
-      this.spawn('spark', pos, v, R(0.35, 0.9), R(0.1, 0.2), 0.03, 0.5, 20);
+      this.spawn('spark', pos, v, R(0.24, 0.55), R(0.1, 0.2), 0.03, 0.5, 22);
     }
 
     // 6. 破片(砂と欠片が弧を描いて落ちる)
-    const nDebris = Math.round(3 + 8 * c);
+    const nDebris = Math.round(3 + 7 * c);
     for (let i = 0; i < nDebris; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = R(3, 9) * (0.6 + 0.4 * s);
       v.set(Math.cos(a) * sp, R(4, 11) * (0.6 + 0.4 * s), Math.sin(a) * sp);
-      this.spawn('debris', pos, v, R(0.7, 1.4), R(0.12, 0.28), R(0.08, 0.18), 0.7, 22);
+      this.spawn('debris', pos, v, R(0.45, 0.85), R(0.12, 0.28), R(0.08, 0.18), 0.7, 24);
     }
 
     // 7. 地面を走る衝撃波
-    this.spawnRing(pos, 1.3 + 2.8 * s, 0.38 + 0.12 * s);
+    this.spawnRing(pos, 1.3 + 2.8 * s, 0.26 + 0.08 * s);
 
     // 8. 照り返し
-    this.flashLight(pos, 3 + 8 * s, 0.22 + 0.1 * s, 12 + 6 * s);
+    this.flashLight(pos, 3 + 8 * s, 0.16 + 0.06 * s, 12 + 6 * s);
   }
 
   private spawnRing(pos: THREE.Vector3, r1: number, life: number) {

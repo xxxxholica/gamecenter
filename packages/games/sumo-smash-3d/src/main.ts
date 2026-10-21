@@ -10,9 +10,12 @@ import { ParticleManager } from './effects/ParticleManager';
 import { HalfResFx } from './effects/HalfResFx';
 import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
+import { KUMITE_TOTAL, getKumiteEnemySpec, pickSimultaneousDropCount, type KumiteEnemySpec } from './ai/kumiteRoster';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
+import { beginLeaderboardRun, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { ModeSelect } from '../../../shared/online/ModeSelect';
@@ -142,8 +145,18 @@ class SumoGame {
   // 画面を切り替えた直後に、同じ押下が次の画面の決定・戻るとして二重に入らないようにする
   private inputArmTime: number = 0;
 
-  // CPU対戦(ブラウザ内のシミュレーション)
-  private cpu: { sim: SimWorld; ai: SumoAI; benchAis?: SumoAI[] } | null = null;
+  // CPU対戦(ブラウザ内のシミュレーション: 百人組手 または ベンチマーク)
+  private cpu: {
+    sim: SimWorld;
+    ais: SumoAI[];
+    nextEnemyNumber: number;
+    slotSpecs: (KumiteEnemySpec | null)[];
+    lastEnemyName: string;
+    pendingDrops: { delay: number; slot: number; spec: KumiteEnemySpec }[];
+    benchAis?: SumoAI[];
+  } | null = null;
+  private cancelEntryFlow: (() => void) | null = null;
+  private entryBlocked = false;
   // ベンチマーク(?bench=1&scene=bout&n=2〜4): 全員を CPU が操作して、1試合(二本先取)を最後まで見せる
   private readonly benchScene = benchParam('scene');
   private benchReadySent = false;
@@ -259,6 +272,7 @@ class SumoGame {
     FIGHTERS.forEach((f, i) => {
       const view = new FighterView(i, f.name, { skinColor: f.skin, mawashiColor: f.mawashi, hairColor: f.hair }, this.soundManager, this.particleManager, `${i + 1}P`);
       this.scene.add(view.mesh);
+      this.scene.add(view.dropShadowMesh);
       this.views.push(view);
     });
     this.showViews(2, [null, null]);
@@ -388,6 +402,10 @@ class SumoGame {
   private showViews(n: number, labels: (string | null)[]) {
     this.activeCount = n;
     this.views.forEach((v, i) => {
+      const f = FIGHTERS[i];
+      v.setBodyScale(1.0);
+      v.setColors({ skinColor: f.skin, mawashiColor: f.mawashi, hairColor: f.hair });
+      v.dropShadowMesh.visible = false;
       if (i >= n) {
         v.mesh.visible = false;
         v.gone = true;
@@ -401,6 +419,9 @@ class SumoGame {
 
   /** 試合の画面の共通の準備(CPU対戦・オンライン対戦) */
   private prepareBattleScreen() {
+    this.cancelEntryFlow?.();
+    this.cancelEntryFlow = null;
+    this.entryBlocked = false;
     this.gameState = 'battle';
     this.camera.position.copy(this.cameraBasePos);
     this.camera.lookAt(this.cameraLookAt);
@@ -437,22 +458,155 @@ class SumoGame {
   }
 
   /**
-   * CPU対戦(1P=自分 vs 2P=CPU、二本先取)。シミュレーションはこのブラウザの中で動かす。
+   * CPU対戦(百人組手: 1P=自分 vs 1〜100番のCPU力士、最大3体同時降下)。シミュレーションはこのブラウザの中で動かす。
    */
   public startCpuBattle() {
     reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
     reportRoundStart({ mode: 'CPU対戦' });
+    beginLeaderboardRun('sumo-smash-3d');
     this.match = null;
-    this.showViews(2, ['あなた', null]);
+    const firstSpec = getKumiteEnemySpec(1);
+    this.showViews(4, ['あなた', firstSpec.name, null, null]);
+    // 最初は slot 0 (自分) と slot 1 (一番富士) の2人が土俵上で向かい合い、slot 2, 3 は上空降下まで待機
+    const pose0 = startPose(0, 2);
+    const pose1 = startPose(1, 2);
+    this.views[0].placeAt(pose0.x, pose0.z, pose0.angle);
+    this.views[1].placeAt(pose1.x, pose1.z, pose1.angle);
+    this.views[1].setColors({ skinColor: firstSpec.skinColor, mawashiColor: firstSpec.mawashiColor, hairColor: firstSpec.hairColor });
+    this.views[1].setBodyScale(firstSpec.scale);
+    this.views[2].mesh.visible = false;
+    this.views[2].gone = true;
+    this.views[3].mesh.visible = false;
+    this.views[3].gone = true;
+
     this.uiManager.setMultiLayout(null);
     this.uiManager.setRematchEnabled(true);
     this.uiManager.setMode('pve');
+    this.uiManager.updateEnemyHeader(firstSpec.name, firstSpec.rankLabel);
     this.prepareBattleScreen();
 
-    const sim = new SimWorld(CANNON, { count: 2, winsToMatch: WINS_TO_MATCH });
-    this.cpu = { sim, ai: new SumoAI(sim.fighters[1]) };
+    const sim = new SimWorld(CANNON, {
+      count: 4,
+      winsToMatch: KUMITE_TOTAL,
+      kumiteTotal: KUMITE_TOTAL,
+      names: [FIGHTERS[0].name, firstSpec.name, '', ''],
+      onEnemyFell: (slot) => this.onKumiteEnemyFell(slot),
+    });
+    const f1 = sim.fighters[1];
+    f1.name = firstSpec.name;
+    f1.body.mass = firstSpec.mass;
+    f1.body.updateMassProperties();
+    f1.bodyScale = firstSpec.scale;
+    f1.walkSpeedMult = firstSpec.speedMult;
+    f1.knockbackTakenMult = firstSpec.knockbackTakenMult;
+
+    const ais = sim.fighters.map((f) => new SumoAI(f));
+    ais[1].setThinkInterval(firstSpec.thinkInterval);
+
+    this.cpu = {
+      sim,
+      ais,
+      nextEnemyNumber: 2,
+      slotSpecs: [null, firstSpec, null, null],
+      lastEnemyName: firstSpec.name,
+      pendingDrops: [],
+    };
     this.roundState = 'standby';
     sim.start();                                              // 「見合って」から。柝・バナーは演出イベントとして最初のフレームで再生される
+  }
+
+  /** 百人組手で敵(slot 1〜3)が土俵下に落ちたときの補充予約 */
+  private onKumiteEnemyFell(slot: number) {
+    if (!this.cpu || this.cpu.benchAis) return;
+    this.blastedFighters.delete(slot);
+    const fallenSpec = this.cpu.slotSpecs[slot];
+    if (fallenSpec) {
+      this.cpu.lastEnemyName = fallenSpec.name;
+    }
+    this.cpu.slotSpecs[slot] = null;
+
+    // すでに100体すべて撃破済み、または100体目まで手配済みなら補充しない
+    if (this.cpu.nextEnemyNumber > KUMITE_TOTAL) return;
+
+    // 現在土俵上に残っている敵の数 + 降下予約中の敵の数
+    let activeEnemies = 0;
+    const busySlots = new Set<number>();
+    for (let s = 1; s <= 3; s++) {
+      const f = this.cpu.sim.fighters[s];
+      if (!f.gone) {
+        activeEnemies++;
+        busySlots.add(s);
+      }
+    }
+    for (const p of this.cpu.pendingDrops) {
+      activeEnemies++;
+      busySlots.add(p.slot);
+    }
+
+    const freeSlots: number[] = [];
+    for (let s = 1; s <= 3; s++) {
+      if (!busySlots.has(s)) freeSlots.push(s);
+    }
+    if (freeSlots.length === 0) return;
+
+    const dropCount = pickSimultaneousDropCount(this.cpu.nextEnemyNumber, activeEnemies, freeSlots.length);
+    for (let k = 0; k < dropCount; k++) {
+      if (this.cpu.nextEnemyNumber > KUMITE_TOTAL) break;
+      const targetSlot = freeSlots[k];
+      const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++);
+      this.cpu.pendingDrops.push({
+        delay: 1.35 + k * 0.55,
+        slot: targetSlot,
+        spec,
+      });
+    }
+  }
+
+  /** 上空から降下予約された敵力士を実際にスポーンさせる */
+  private spawnKumiteDrop(slot: number, spec: KumiteEnemySpec) {
+    if (!this.cpu) return;
+    const { sim, ais } = this.cpu;
+    const player = sim.fighters[0];
+    const px = player.body.position.x;
+    const pz = player.body.position.z;
+
+    // プレイヤーの頭上直撃は避けつつ、土俵内のランダムな位置に降らせる
+    let lx = 0;
+    let lz = 0;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 1.4 + Math.random() * 4.2;
+      lx = Math.cos(angle) * radius;
+      lz = Math.sin(angle) * radius;
+      if (Math.hypot(lx - px, lz - pz) >= 2.2) break;
+    }
+    const facingAngle = Math.atan2(px - lx, pz - lz);
+
+    this.blastedFighters.delete(slot);
+    this.cpu.slotSpecs[slot] = spec;
+    this.cpu.lastEnemyName = spec.name;
+
+    sim.spawnEnemySlotFromSky(slot, lx, 19.5, lz, facingAngle, {
+      name: spec.name,
+      mass: spec.mass,
+      bodyScale: spec.scale,
+      walkSpeedMult: spec.speedMult,
+      knockbackTakenMult: spec.knockbackTakenMult,
+    });
+    ais[slot].setThinkInterval(spec.thinkInterval);
+    ais[slot].reset();
+
+    const view = this.views[slot];
+    view.setColors({ skinColor: spec.skinColor, mawashiColor: spec.mawashiColor, hairColor: spec.hairColor });
+    view.setBodyScale(spec.scale);
+    view.setMarkerLabel(spec.name);
+    view.gone = false;
+    view.mesh.visible = true;
+
+    // 十番ごとの大関・横綱級や百獣王が降ってくるときは呼び出しバナーを表示
+    if (spec.archetype === 'boss') {
+      this.uiManager.showBanner(spec.rankLabel, spec.name, 1300);
+    }
   }
 
   /** ベンチマーク用: n 人(2〜4)の力士を全員 CPU が操作する。HUD は2人用のまま(3人目以降は描画だけ)。 */
@@ -465,7 +619,16 @@ class SumoGame {
     this.prepareBattleScreen();
 
     const sim = new SimWorld(CANNON, { count: n, winsToMatch: WINS_TO_MATCH });
-    this.cpu = { sim, ai: new SumoAI(sim.fighters[1]), benchAis: sim.fighters.map((f) => new SumoAI(f)) };
+    const ais = sim.fighters.map((f) => new SumoAI(f));
+    this.cpu = {
+      sim,
+      ais,
+      nextEnemyNumber: 2,
+      slotSpecs: new Array(n).fill(null),
+      lastEnemyName: FIGHTERS[1].name,
+      pendingDrops: [],
+      benchAis: ais,
+    };
     this.roundState = 'standby';
     sim.start();
   }
@@ -479,6 +642,9 @@ class SumoGame {
   }
 
   private showTitle() {
+    this.cancelEntryFlow?.();
+    this.cancelEntryFlow = null;
+    this.entryBlocked = false;
     this.leaveOnline();                                       // オンラインの途中だった場合の片付け(オフラインでは何もしない)
     this.cpu = null;
     this.particleManager.clear();
@@ -501,9 +667,9 @@ class SumoGame {
     const st = this.onlineStatus;
     const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
     this.modeSelect.show([
-      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: 'ひとりで二本先取', points: [
+      { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: '百人抜きサバイバル', points: [
         { icon: FIST_SOLID_SVG, text: '張り手・頭突き・\u200bつかみで戦う' },   // 狭い画面では「・」の後で折る
-        { icon: TROPHY_SOLID_SVG, text: '先に二番取った方が勝ち' },
+        { icon: TROPHY_SOLID_SVG, text: '空から降る百体の\u200b力士をぶっ飛ばせ' },
       ] },
       {
         id: 'online',
@@ -561,8 +727,9 @@ class SumoGame {
       this.updateBattle(dt);
     }
 
-    // 観客の生き生きとしたアニメーション更新（ざわめき・熱狂・拍手）
+    // 観客の生き生きとしたアニメーション更新（ざわめき・熱狂・拍手・前方詰め補充）と土俵の焦げ跡フェードアウト
     this.audience.update(dt, this.isRoundActive, this.particleManager.shakeIntensity);
+    this.dohyo.update(dt);
 
     // 毎フレーム末尾で入力単発バッファをクリア
     this.inputManager.update();
@@ -594,6 +761,7 @@ class SumoGame {
    * リザルトのメニュー操作(再挑戦 / タイトルに戻る / ゲームを終了)
    */
   private updateResultMenu(padConfirm: boolean, padExit: boolean) {
+    if (this.entryBlocked) return;
     const pad = readPad();
     this.menuNav.updatePad(pad.left ? -1 : pad.right ? 1 : 0, pad.up ? -1 : pad.down ? 1 : 0);
     // 移動は受付待ちの間も効かせる(決定だけ誤爆防止で待たせる)
@@ -781,8 +949,8 @@ class SumoGame {
     let events: FxEvent[] = [];
 
     if (this.cpu) {
-      // 1P は自分の操作、2P は CPU
-      const { sim, ai, benchAis } = this.cpu;
+      // 1P は自分の操作、slot 1〜3 は CPU(百人組手)
+      const { sim, ais, benchAis } = this.cpu;
       const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
       let mine: FighterInput;
       if (benchAis) {
@@ -823,8 +991,40 @@ class SumoGame {
         mine = { move: this.toWorldMoveInput(raw), actions: this.toActions(raw) };
       }
       if (!benchAis) {
-        const plan = ai.update(dt, sim.fighters[0]);
-        sim.step(dt, [mine, { move: plan.move, actions: plan.actions }]);
+        // 降下予約中の力士のタイマーを進める
+        if (sim.phase === 'active' && this.cpu.pendingDrops.length > 0) {
+          const remaining: typeof this.cpu.pendingDrops = [];
+          for (const drop of this.cpu.pendingDrops) {
+            drop.delay -= dt;
+            if (drop.delay <= 0) {
+              this.spawnKumiteDrop(drop.slot, drop.spec);
+            } else {
+              remaining.push(drop);
+            }
+          }
+          this.cpu.pendingDrops = remaining;
+        } else if (
+          sim.phase === 'active' &&
+          this.cpu.pendingDrops.length === 0 &&
+          this.cpu.nextEnemyNumber <= KUMITE_TOTAL &&
+          sim.fighters.slice(1).every((f) => f.gone)
+        ) {
+          // 万一土俵上の敵が全員消えて予約も空なら間をおいて次の敵を降らせる
+          const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++);
+          this.cpu.pendingDrops.push({ delay: 1.35, slot: 1, spec });
+        }
+
+        const inputs: (FighterInput | null)[] = [mine];
+        for (let s = 1; s < sim.fighters.length; s++) {
+          const ef = sim.fighters[s];
+          if (ef.gone || ef.isSkyDropping) {
+            inputs.push(null);
+          } else {
+            const plan = ais[s].update(dt, sim.fighters[0]);
+            inputs.push({ move: plan.move, actions: plan.actions });
+          }
+        }
+        sim.step(dt, inputs);
       }
       snaps = sim.fighterSnaps();
       wins = sim.wins;
@@ -884,19 +1084,50 @@ class SumoGame {
     this.applyCameraShake();
   }
 
-  /** CPU対戦の結果(勝った人の番号 0=自分 1=CPU)。 */
+  /** CPU対戦の結果(勝った人の番号 0=自分 1=CPU)。百人組手では撃破数を表示し、ランキング登録(スターなし)を行う。 */
   private showVictory(winner: number) {
     this.soundManager.playTaiko();
     this.soundManager.playBgm('menu');
     this.menuNav.clear();
     this.armInput(600);
     const wins = this.cpu?.sim.wins ?? [0, 0];
+    const defeatedCount = wins[0] ?? 0;
+    const cleared = winner === 0 && defeatedCount >= KUMITE_TOTAL;
+
     reportDeepAnalytics('progression_update', {
-      result: winner === 0 ? 'clear' : 'gameover',
-      ...(winner === 0 ? {} : { deathReason: 'CPUに敗北' }),
+      result: cleared ? 'clear' : 'gameover',
+      ...(cleared ? {} : { deathReason: `${this.cpu?.lastEnemyName ?? 'CPU'}に敗北 (${defeatedCount}体撃破)` }),
       mode: 'CPU対戦',
-      extraStats: { wins: wins[0], cpuWins: wins[1] },
+      extraStats: { defeated: defeatedCount },
     });
+
+    if (this.cpu && !this.cpu.benchAis) {
+      this.uiManager.showKumiteVictory(cleared, defeatedCount, this.cpu.lastEnemyName);
+      guideResult();
+      if (defeatedCount > 0) {
+        this.cancelEntryFlow?.();
+        this.cancelEntryFlow = runHighScoreEntryFlow({
+          slug: 'sumo-smash-3d',
+          score: defeatedCount,
+          modal: {
+            title: '番付記録登録',
+            scoreDisplay: `${defeatedCount} 体撃破`,
+            themeClass: 'theme-ennichi',
+            delayMs: NAME_ENTRY_AFTER_RESULT_MS,
+          },
+          setBlocked: (b) => {
+            this.entryBlocked = b;
+          },
+          // スター(★)は導入しないため、cleared / perfect オプションは渡さない
+          onName: (name) => saveLeaderboardScore('sumo-smash-3d', defeatedCount, name),
+          onClosed: () => {
+            this.armInput(400);
+          },
+        });
+      }
+      return;
+    }
+
     this.uiManager.showVictory(winner === 0, [
       { name: FIGHTERS[0].name, css: FIGHTERS[0].css, wins: wins[0], me: false },
       { name: FIGHTERS[1].name, css: FIGHTERS[1].css, wins: wins[1], me: false },
@@ -922,8 +1153,34 @@ class SumoGame {
       );
       return;
     }
+
+    let enemyPercent = v[1].damagePercent;
+    if (this.cpu && !this.cpu.benchAis) {
+      // 百人組手: 現在土俵上にいる敵のうち、プレイヤーに最も近い敵を右側HUDに表示する
+      const p0 = v[0].position;
+      let bestSlot = -1;
+      let bestDist = Infinity;
+      let activeEnemies = 0;
+      for (let s = 1; s <= 3; s++) {
+        if (!v[s].gone && this.cpu.slotSpecs[s]) {
+          activeEnemies++;
+          const d = Math.hypot(v[s].position.x - p0.x, v[s].position.z - p0.z);
+          if (d < bestDist) {
+            bestDist = d;
+            bestSlot = s;
+          }
+        }
+      }
+      if (bestSlot >= 1) {
+        const spec = this.cpu.slotSpecs[bestSlot]!;
+        enemyPercent = v[bestSlot].damagePercent;
+        const multiSuffix = activeEnemies >= 2 ? ` ×${activeEnemies}` : '';
+        this.uiManager.updateEnemyHeader(spec.name, `${spec.rankLabel}${multiSuffix}`);
+      }
+    }
+
     this.uiManager.updateStats(
-      v[0].damagePercent, v[1].damagePercent, wins[0] ?? 0, wins[1] ?? 0,
+      v[0].damagePercent, enemyPercent, wins[0] ?? 0, wins[1] ?? 0,
       v[0].chargeRatio,
       v[0].buchikamashiCooldownRatio, v[0].grabCooldownRatio,
       v[0].hariteGauge
@@ -958,9 +1215,9 @@ class SumoGame {
     benchMark(audienceRadius > 0 ? 'mega-blast audience' : 'mega-blast');
     if (audienceRadius > 0) this.audience.explodeAt(center, audienceRadius);
     this.particleManager.spawnMegaBlast(center, 14);
-    this.particleManager.spawnBurn(center, 7, 2.6);
-    this.soundManager.playExplosion(2.4);
-    this.soundManager.duckBgm(2.2);
+    this.particleManager.spawnBurn(center, 1.8, 2.2);
+    this.soundManager.playExplosion(1.4);
+    this.soundManager.duckBgm(1.1);
   }
 
   /**
