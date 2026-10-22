@@ -402,7 +402,7 @@ export class GameManager {
     this.briefTimer = 0.0;
     this.briefCount = -1;
     this.centerBanner.style.display = 'flex';
-    this.centerBanner.style.setProperty('--dim', '1');
+    document.body.style.setProperty('--dim', '1');
     this.centerBanner.innerHTML = this.introHtml(this.currentStage.briefing.headline, '3');
 
     // Unfade screen
@@ -460,7 +460,7 @@ export class GameManager {
         const t = GameManager.PREVIEW ? 3.3 : this.briefTimer;
         const count = t < 0 ? -1 : 3 - Math.floor(t);
         // 暗幕は、カウントダウンの経過に合わせて3秒かけて完全に透明にする(数字の入れ替えで演出がやり直しにならないよう、毎フレーム直接指定)
-        this.centerBanner.style.setProperty('--dim', String(Math.max(0, 1 - Math.max(0, t) / 3)));
+        document.body.style.setProperty('--dim', String(Math.max(0, 1 - Math.max(0, t) / 3)));
         if (count > 0 && count !== this.briefCount) {
           this.briefCount = count;
           this.centerBanner.innerHTML = this.introHtml(this.currentStage!.briefing.headline, String(count));
@@ -469,7 +469,7 @@ export class GameManager {
         if (t >= 3) {
           // 見出しとカウントダウンは同時に消す
           this.centerBanner.style.display = 'none';
-          this.centerBanner.style.removeProperty('--dim');
+          document.body.style.removeProperty('--dim');
           this.state = 'STAGE_INTRO';
           this.stateTimer = 0;
         }
@@ -685,7 +685,7 @@ export class GameManager {
       }
     }
 
-    this.centerBanner.style.removeProperty('--dim');
+    document.body.style.removeProperty('--dim');
     this.centerBanner.style.display = 'flex';
     this.centerBanner.innerHTML = this.judgmentPages[0].html;
     this.stateTimer = this.judgmentPages[0].seconds;

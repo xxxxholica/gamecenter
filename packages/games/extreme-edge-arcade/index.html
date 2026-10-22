@@ -180,30 +180,23 @@
     }
 
     /* 種目の始まり: 見出しを大きく出して、3・2・1のカウントダウン */
-    /* カウントダウン中は、後ろの要素を暗く半透明で覆って薄くする(画面全体を覆うため、中央の帯を基準に大きく広げている) */
-    #center-banner:has(.intro-count)::before {
+    /* カウントダウン中と、判定(成功・大惨事・パーセント)を出している間は、後ろの要素を暗く半透明で覆って薄くする。
+       覆いは画面の大きさの層(body の ::after)にして、中央の帯(z-index 30)のすぐ下に置く。
+       帯の ::before を画面の 9 倍(300vw x 300vh)に広げて覆っていたときは、Safari のフルスクリーンで、判定を出す瞬間と
+       ページを切り替える瞬間に 33〜50ms のフレームが出ていた(計測: Safari 26・Mac・1920x1080、どの種目も判定の瞬間に 1 回)。
+       帯は transform で中央に寄せているので、帯の中の position: fixed は画面ではなく帯が基準になる。そのため body に置く。
+       帯は中身を残したまま style.display = 'none' で隠すので、隠れている間は覆わない(game.ts は display を必ず style で書く) */
+    body:has(> #center-banner:not([style*="display: none"]) .intro-count)::after,
+    body:has(> #center-banner:not([style*="display: none"]) .judgment-score)::after {
       content: '';
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 300vw;
-      height: 300vh;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, calc(0.82 * var(--dim, 1)));   /* --dim はカウントダウンの経過に合わせて game.ts が 1→0 に下げる */
-      z-index: -1;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 29;
     }
-    /* 判定(成功・大惨事・パーセント)を出している間も、後ろを同じように暗くする(こちらは薄くしない) */
-    #center-banner:has(.judgment-score)::before {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 300vw;
-      height: 300vh;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.82);
-      z-index: -1;
-    }
+    /* --dim はカウントダウンの経過に合わせて game.ts が body に 1→0 で書く。判定の間は薄くしない */
+    body:has(> #center-banner:not([style*="display: none"]) .intro-count)::after { background: rgba(0, 0, 0, calc(0.82 * var(--dim, 1))); }
+    body:has(> #center-banner:not([style*="display: none"]) .judgment-score)::after { background: rgba(0, 0, 0, 0.82); }
     .intro-headline { color: #ffffff; }
     /* 見出し(溢れる前に止めろ)・成功・大惨事・もう一度挑戦・パーセントは、すべて同じ文字サイズ・太さ・字間・影にそろえる */
     .intro-headline, .judgment-label, .judgment-retry, .judgment-score {
