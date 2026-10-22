@@ -27,6 +27,7 @@ import { installHomeReturn } from '../../../shared/homeReturn';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { replayBarrier } from '../../../shared/arcadeReplay';
+import { waitFramesSettled } from '../../../shared/shaderCompile';
 import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
@@ -1239,9 +1240,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     flow.startRace();
   } else if (benchScene === 'garage') {
     flow.goToCarSelect();
+    await waitFramesSettled(30);   // Firefox は着いた直後の 0.3 秒ほど、GPU プロセスが残りの作業を済ませて 50〜67ms のフレームが出る。落ち着いてから知らせる
     benchReady('garage');
   } else {
     flow.goToTitle();
-    if (benchScene === 'title') benchReady('title');
+    if (benchScene === 'title') { await waitFramesSettled(30); benchReady('title'); }   // ガレージと同じく、落ち着いてから知らせる
   }
 });

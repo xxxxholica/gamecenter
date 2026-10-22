@@ -2,7 +2,7 @@
 // 作ってあるシェーダを、初めて使う時の確認まで済ませておく(falldown・tower-stack・school-corridor-runner)。
 // ベンチで、ページの立ち上がりが済むのを待ってから着いたと知らせる(ennichi-shateki・falldown・tower-stack・school-corridor-runner)
 // 物に使われているテクスチャを、最初の描画より前に GPU へ送っておく(school-corridor-runner)
-import type { Camera, Material, Mesh, Object3D, Texture, WebGLRenderer, WebGLRenderTarget } from 'three';
+import type { Camera, Material, Mesh, Object3D, Scene, Texture, WebGLRenderer, WebGLRenderTarget } from 'three';
 import { realNow, replayBarrier, untrackedFrame, untrackedTimeout } from './arcadeReplay';
 
 /**
@@ -14,14 +14,19 @@ import { realNow, replayBarrier, untrackedFrame, untrackedTimeout } from './arca
  * 待ち方は three.js の compileAsync と同じ。ただし compileAsync は setTimeout で何度も確かめに行き、その回数は端末次第なので、
  * 操作のリプレイに記録しないタイマーで確かめ、終わった所を記録と揃える(replayBarrier)。
  * 影の深度のシェーダ(MeshDepthMaterial)は renderer.compile の対象外なので、最初の描画で作られる。
+ * during: シェーダを作る間だけ、物の見え方(ふだんは出していないライトなど)を変える関数。戻す関数を返す。
+ * 作る時にだけ呼ぶ(拡張の無い Firefox では、作るフレームごとに呼ぶ。呼び出し元が作ったあとすぐ戻しても、作る時の状態がそろう)。
  */
-export function compileInParallel(renderer: WebGLRenderer, scene: Object3D, camera: Camera, target: WebGLRenderTarget | null): Promise<void> {
+export function compileInParallel(renderer: WebGLRenderer, scene: Object3D, camera: Camera, target: WebGLRenderTarget | null, during?: () => () => void): Promise<void> {
+  if (!renderer.extensions.has('KHR_parallel_shader_compile')) return replayBarrier('shader-compile', compileOnePerFrame(renderer, scene, camera, target, during));
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
+  const restore = during?.();
   let materials: Set<Material>;
   try {
     materials = renderer.compile(scene, camera);   // シェーダを作るところまでは、ここで(描画先の設定が効くうちに)済む
   } finally {
+    restore?.();
     renderer.setRenderTarget(prev);
   }
   return replayBarrier('shader-compile', new Promise<void>((resolve) => {
@@ -33,10 +38,53 @@ export function compileInParallel(renderer: WebGLRenderer, scene: Object3D, came
       if (materials.size === 0) resolve();
       else untrackedTimeout(check, 10);
     };
-    // 拡張が無いと isReady() はリンクの完了まで止まるので、three.js と同じく少し待ってから確かめる
-    if (renderer.extensions.has('KHR_parallel_shader_compile')) check();
-    else untrackedTimeout(check, 10);
+    check();
   }));
+}
+
+/**
+ * KHR_parallel_shader_compile が無いブラウザ(Firefox)用。three.js は拡張が無いと isReady() をすぐ true にするので、
+ * scene 全体を renderer.compile してから描くと、作ったシェーダ全部のリンクの完了を 1 フレームで待つことになる。
+ * Firefox の GPU プロセスは頼まれた順に処理するので、全部を先に頼むと、どれか 1 つを待つだけでも、前に頼んだ全部を待つ。
+ * そこで、物ごとに renderer.compile し、新しいシェーダができたら、そのフレームで初めて使う時の問い合わせ(getUniforms。リンクの完了を待つ)まで済ませて、
+ * 次のフレームに回す。止まるのは 1 フレームにシェーダ 1 つ分になる。
+ * 同じ材質・同じ種類の物は 1 回だけ試す(シェーダは材質と、物の種類・頂点色で決まる)。
+ * 計測(Windows, Firefox 157, ANGLE D3D11、midnight-skyway の起動): 1 つのリンクに 0.3 秒前後かかり、まとめて待つと 1.2〜2.8 秒のフレームになっていた。
+ */
+function compileOnePerFrame(renderer: WebGLRenderer, scene: Object3D, camera: Camera, target: WebGLRenderTarget | null, during?: () => () => void): Promise<void> {
+  const objects: Object3D[] = [];
+  const seen = new Set<string>();
+  scene.traverse((o) => {
+    const mesh = o as Mesh & { isPoints?: boolean; isLine?: boolean; isSprite?: boolean; isInstancedMesh?: boolean; isSkinnedMesh?: boolean };
+    if (!(mesh.isMesh || mesh.isPoints || mesh.isLine || mesh.isSprite) || !mesh.material) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const kind = `${o.type}|${mesh.geometry?.attributes?.color ? 1 : 0}|${mesh.geometry?.morphAttributes?.position ? 1 : 0}`;
+    const keys = mats.map((m) => `${m.uuid}|${kind}`);
+    if (keys.every((k) => seen.has(k))) return;
+    for (const k of keys) seen.add(k);
+    objects.push(o);
+  });
+  const programs = renderer.info.programs as unknown as { getUniforms(): unknown }[] | null;
+  return new Promise<void>((resolve) => {
+    let i = 0;
+    const step = (): void => {
+      const before = programs?.length ?? 0;
+      const prev = renderer.getRenderTarget();
+      renderer.setRenderTarget(target);
+      const restore = during?.();
+      try {
+        // 新しいシェーダが 1 つできるまで進める(作り済みのシェーダしか使わない物は、そのまま次へ)
+        while (i < objects.length && (programs?.length ?? 0) === before) renderer.compile(objects[i++], camera, scene as Scene);
+      } finally {
+        restore?.();
+        renderer.setRenderTarget(prev);
+      }
+      if (programs) for (let p = before; p < programs.length; p++) programs[p].getUniforms();
+      if (i >= objects.length) resolve();
+      else untrackedFrame(step);
+    };
+    untrackedFrame(step);
+  });
 }
 
 /**
