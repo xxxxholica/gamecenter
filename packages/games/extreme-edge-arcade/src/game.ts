@@ -722,7 +722,7 @@ export class GameManager {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了' },
+        { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',

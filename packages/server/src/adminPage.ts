@@ -592,6 +592,8 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
 .deathmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 12px; align-items: start; }
 .deathmap-panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .deathmap-panel.wide { grid-column: 1 / -1; }
+.deathmap-scroll { max-height: 620px; overflow: auto; border-radius: 10px; border: 1.5px solid #334155; background: #1c1917; }
+.deathmap-scroll canvas { border: 0; border-radius: 0; margin: 0 auto; }
 .deathmap-panel-head { font-size: 13px; font-weight: 800; color: #0f172a; }
 .deathmap-geo-legend { font-size: 11px; color: #475569; }
 .deathmap-causes { font-size: 12px; font-weight: 700; color: #334155; }
@@ -1098,12 +1100,16 @@ export const ADMIN_JS = `
     ['modes', 'モード']
   ];
 
+  function gameTitle(gid) {
+    return BOARD_TITLES[gid] || TITLES[gid] || gid;
+  }
+
   function buildGameBox(gid, g) {
     var sections = PROG_SECTIONS.filter(function (sec) { return Object.keys(g[sec[0]] || {}).length > 0; });
     if (sections.length === 0) return null;
-    var name = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || gid;
+    var name = gameTitle(gid);
     var meta = [el('span', { className: 'meta-tag', text: 'プレイ ' + g.launchCount + '回' })];
-    if (g.launchCount > 0) meta.push(el('span', { className: 'meta-tag soft', text: 'クリア ' + Math.round(g.clearRate * 100) + '%' }));
+    if (g.launchCount > 0) meta.push(el('span', { className: 'meta-tag soft', text: '完走率 ' + Math.round(g.clearRate * 100) + '%' }));
     var box = el('section', { className: 'game-box' });
     box.appendChild(el('div', { className: 'game-box-head' }, [el('h3', { text: name }), el('div', { className: 'game-box-meta' }, meta)]));
     var grid = el('div', { className: 'game-box-grid' });
@@ -1202,24 +1208,10 @@ export const ADMIN_JS = `
   }
 
   // ==========================================
-  // ==========================================
   // 📈 アナリティクス レンダリング
   // ==========================================
   var selectedGame = 'all';
   var cachedAnalyticsData = null;
-  var GAME_META = {
-    'midnight-skyway': { name: 'ミッドナイト・スカイウェイ' },
-    'street-b-boy': { name: 'ストリートビーボーイ' },
-    'cyber-2d-fighter-3d': { name: 'サイバー２Dファイター３D' },
-    'sumo-smash-3d': { name: '剛体大相撲' },
-    'school-corridor-runner': { name: 'テンパレラン' },
-    'survivor-score-battle': { name: 'サバイバー・スコアバトル' },
-    'ennichi-shateki': { name: 'えんにち射的' },
-    'extreme-edge-arcade': { name: '極限ギリギリ選手権' },
-    'tani-runner-124': { name: '単位増殖ラン' },
-    'tower-stack': { name: 'タワースタック' },
-    'falldown': { name: '無限降下ドリル' }
-  };
 
   function updateFilterUI() {
     var statusEl = document.getElementById('game-filter-status');
@@ -1230,11 +1222,11 @@ export const ADMIN_JS = `
       if (hintEl) hintEl.textContent = '対象: 全ゲーム';
       if (exportBtn) exportBtn.textContent = 'JSONダウンロード';
     } else {
-      var meta = GAME_META[selectedGame] || { name: selectedGame };
+      var gname = gameTitle(selectedGame);
       if (statusEl) {
         statusEl.style.display = 'flex';
         statusEl.textContent = '';
-        statusEl.appendChild(el('span', { text: meta.name + ' に絞り込み中' }));
+        statusEl.appendChild(el('span', { text: gname + ' に絞り込み中' }));
         var clearBtn = el('button', { text: '解除', title: '全ゲーム表示に戻す' });
         clearBtn.addEventListener('click', function () {
           var sel = document.getElementById('analytics-game-filter');
@@ -1242,12 +1234,12 @@ export const ADMIN_JS = `
           selectedGame = 'all';
           updateFilterUI();
           if (cachedAnalyticsData) renderAnalytics(cachedAnalyticsData);
-          loadRawLogs();
+          reloadAnalyticsSubTabs();
         });
         statusEl.appendChild(clearBtn);
       }
-      if (hintEl) hintEl.textContent = '対象: ' + meta.name;
-      if (exportBtn) exportBtn.textContent = meta.name + ' のJSONダウンロード';
+      if (hintEl) hintEl.textContent = '対象: ' + gname;
+      if (exportBtn) exportBtn.textContent = gname + ' のJSONダウンロード';
     }
   }
 
@@ -1273,13 +1265,12 @@ export const ADMIN_JS = `
     tbl.appendChild(el('thead', null, [el('tr', null, headers)]));
     var tbody = el('tbody');
     list.forEach(function (p) {
-      var gid = gidOfPlay(p);
-      var gname = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || TITLES[gid] || gid;
+      var gname = gameTitle(p.gameId);
       var timeStr = p.startedAt ? new Date(p.startedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
       var durStr = p.durationSec ? formatDuration(p.durationSec) : '-';
       
       var resPillClass = p.perfect ? 'status-pill perfect' : (p.completed ? 'status-pill clear' : (p.endedAt ? 'status-pill retire' : 'status-pill unknown'));
-      var resText = p.perfect ? '★ 完全制覇' : (p.completed ? '完走/クリア' : (p.endedAt ? 'リタイア' : '終了未受信'));
+      var resText = p.perfect ? '★ 完全制覇' : (p.completed ? '完走' : (p.endedAt ? 'リタイア' : '終了未受信'));
       var resPill = el('span', { className: resPillClass, text: resText });
 
       var scoreText = p.formattedScore || (p.score !== undefined ? fmtNum(p.score) : '-');
@@ -1340,8 +1331,6 @@ export const ADMIN_JS = `
     var how = p.exitReason ? (EXIT_REASON_LABEL[p.exitReason] || p.exitReason) : (p.endedAt ? '' : '終了未受信');
     return how ? where + ' / ' + how : where;
   }
-
-  function gidOfPlay(p) { return p.gameId; }
 
   /** リプレイの再生ボタン。seekSec: そのラウンドが始まった所(少し前から見せる) */
   function replayButton(gid, replayId, seekSec) {
@@ -1517,7 +1506,7 @@ export const ADMIN_JS = `
       geo.platforms.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0] + p[2]); y1 = Math.max(y1, p[1] + 4); });
       x1 = Math.max(x1, geo.goal[0] + 6);
       return {
-        range: [x0 - 2, x1 + 2, -4, Math.max(y1, maxY + 2)], equal: true, flipY: true, bg: '#111827', minH: 150,
+        range: [x0 - 2, x1 + 2, -4, Math.max(y1, Math.min(maxY + 2, y1 + 30))], equal: true, flipY: true, bg: '#111827', minH: 150,
         draw: function (ctx, P, s) {
           var rect = function (x, yTop, w, h, fill, stroke) {
             var a = P(x, yTop), b = P(x + w, yTop - h);
@@ -1547,50 +1536,80 @@ export const ADMIN_JS = `
       };
     }
     if (gid === 'falldown') {
+      // 坑道は横 geo.width マス(マスの中心が x=0..width-1)、1段 = 深さ1m。1マスを正方形の実寸で描き、枠の中で縦にスクロールして見る
+      var font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
+      var bottom = Math.max(geo.goalDepth + 3, Math.min(maxY + 2, geo.goalDepth + 20));
       return {
-        range: [-0.5, geo.width + 0.5, -4, Math.max(geo.goalDepth + 15, maxY + 10)], aspect: 1.5, bg: '#1c1917',
+        range: [-0.5, geo.width - 0.5, 0, bottom], cell: 22, gutter: 46, bg: '#1c1917',
+        // 地点は、いたマスの真ん中(深さ d m の段は d〜d+1)
+        point: function (d) { return [Math.min(geo.width - 1, Math.max(0, Math.round(d.x))), d.y + 0.5]; },
+        where: function (d) { return '深さ' + d.y + 'm・左から' + (Math.min(geo.width - 1, Math.max(0, Math.round(d.x))) + 1) + '列目'; },
         draw: function (ctx, P) {
+          var L = -0.5, R = geo.width - 0.5;
           geo.strata.forEach(function (layer, i) {
             var next = i + 1 < geo.strata.length ? geo.strata[i + 1].depth : geo.goalDepth;
-            var a = P(0, layer.depth), b = P(geo.width, next);
+            var a = P(L, layer.depth), b = P(R, next);
             ctx.fillStyle = layer.back; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
-            ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText(layer.name + ' ' + layer.depth + 'm', a[0] + 4, a[1] + 13);
           });
-          var g = P(0, geo.goalDepth), g2 = P(geo.width, geo.goalDepth + 10);
+          var g = P(L, geo.goalDepth), g2 = P(R, bottom);
           ctx.fillStyle = '#ca8a04'; ctx.fillRect(g[0], g[1], g2[0] - g[0], g2[1] - g[1]);
-          ctx.fillStyle = '#fff7d6'; ctx.fillText('黄金郷(ゴール) ' + geo.goalDepth + 'm', g[0] + 4, g[1] + 12);
-          ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
-          for (var c = 1; c < geo.width; c++) { var a1 = P(c, 0), b1 = P(c, geo.goalDepth); ctx.beginPath(); ctx.moveTo(a1[0], a1[1]); ctx.lineTo(b1[0], b1[1]); ctx.stroke(); }
+          // ブロックの区切り(1マスごとの細い線、10mごとに太い線)
+          ctx.lineWidth = 1;
+          for (var c = 0; c <= geo.width; c++) { var a1 = P(c - 0.5, 0), b1 = P(c - 0.5, bottom); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.moveTo(a1[0] + 0.5, a1[1]); ctx.lineTo(b1[0] + 0.5, b1[1]); ctx.stroke(); }
+          ctx.textAlign = 'right'; ctx.font = font;
+          for (var y = 0; y <= bottom; y++) {
+            var p1 = P(L, y), p2 = P(R, y), major = y % 10 === 0;
+            ctx.strokeStyle = major ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.12)';
+            ctx.beginPath(); ctx.moveTo(p1[0], p1[1] + 0.5); ctx.lineTo(p2[0], p2[1] + 0.5); ctx.stroke();
+            if (major) { ctx.fillStyle = '#cbd5e1'; ctx.fillText(y + 'm', p1[0] - 6, p1[1] + 4); }
+          }
+          ctx.textAlign = 'left';
+          // 地層・ゴールの名前(段の中に書く)
+          geo.strata.forEach(function (layer) { var a = P(L, layer.depth); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(layer.name, a[0] + 4, a[1] + 15); });
+          ctx.fillStyle = '#fff7d6'; ctx.fillText('黄金郷(ゴール)', g[0] + 4, g[1] + 15);
         },
       };
     }
     if (gid === 'school-corridor-runner') {
-      var len = Math.max(400, Math.ceil((maxX + 40) / geo.segment) * geo.segment);
+      var len = Math.max(400, Math.ceil((Math.min(maxX, 50000) + 40) / geo.segment) * geo.segment);
       var hw = geo.width / 2;
       return {
         range: [0, len, -hw - 0.8, hw + 0.8], aspect: 0.18, bg: '#1e1b16', minH: 140,
         draw: function (ctx, P) {
           var a = P(0, -hw), b = P(len, hw);
+          // 1m の画面上の長さ。廊下が長いほど細かくなるので、継ぎ目・窓・距離の数値はこれに合わせて間引く
+          var ppm = P(1, 0)[0] - P(0, 0)[0];
           ctx.fillStyle = '#a8a29e'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);            // 床
-          for (var z = 0; z < len; z += geo.segment) {                                             // 区画(36m)ごとの継ぎ目
-            var t = P(z, -hw), u = P(z, hw); ctx.strokeStyle = 'rgba(68,64,60,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(u[0], u[1]); ctx.stroke();
+          if (geo.segment * ppm >= 10) {                                                            // 区画(36m)ごとの継ぎ目(詰まる時は描かない)
+            for (var z = 0; z < len; z += geo.segment) {
+              var t = P(z, -hw), u = P(z, hw); ctx.strokeStyle = 'rgba(68,64,60,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(u[0], u[1]); ctx.stroke();
+            }
           }
-          for (var w = 0; w < len; w += geo.windowChunk) {                                         // 窓側の壁(左)
-            var p1 = P(w + 1, -hw - 0.8), p2 = P(w + geo.windowChunk - 1, -hw);
-            ctx.fillStyle = '#7dd3fc'; ctx.fillRect(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1]);
-          }
+          ctx.fillStyle = '#7dd3fc';                                                                // 窓側の壁(左。詰まる時は1本の帯にする)
+          if (geo.windowChunk * ppm >= 8) {
+            for (var w = 0; w < len; w += geo.windowChunk) {
+              var p1 = P(w + 1, -hw - 0.8), p2 = P(w + geo.windowChunk - 1, -hw);
+              ctx.fillRect(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1]);
+            }
+          } else { var wa = P(0, -hw - 0.8), wb = P(len, -hw); ctx.fillRect(wa[0], wa[1], wb[0] - wa[0], wb[1] - wa[1]); }
           var r1 = P(0, hw), r2 = P(len, hw + 0.8); ctx.fillStyle = '#78716c'; ctx.fillRect(r1[0], r1[1], r2[0] - r1[0], r2[1] - r1[1]);   // 教室側の壁(右)
           ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1;
           for (var i = 0; i < geo.lanes.length - 1; i++) { var m = (geo.lanes[i] + geo.lanes[i + 1]) / 2, q1 = P(0, m), q2 = P(len, m); ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke(); }
           ctx.setLineDash([]);
-          ctx.fillStyle = '#1c1917'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
-          for (var d = 100; d < len; d += 100) { var q = P(d, hw); ctx.fillText(d + 'm', q[0] + 2, q[1] - 3); }
+          // 距離の目盛り: 隣と 90px 以上あく間隔(100m・200m・500m・1000m…)で、線と数値を描く。右端からはみ出す数値は描かない
+          var step = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000].filter(function (v) { return v * ppm >= 90; })[0] || 20000;
+          ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
+          for (var d = step; d < len; d += step) {
+            var q = P(d, hw), q0 = P(d, -hw), label = d + 'm';
+            ctx.strokeStyle = 'rgba(28,25,23,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(q0[0], q0[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+            if (q[0] + 3 + ctx.measureText(label).width <= b[0]) { ctx.fillStyle = '#1c1917'; ctx.fillText(label, q[0] + 3, q[1] - 3); }
+          }
           var w1 = P(2, -hw - 0.8); ctx.fillStyle = '#e0f2fe'; ctx.fillText('窓', w1[0], w1[1] - 3);
         },
       };
     }
     if (gid === 'tower-stack') {
-      var top = Math.max(20, maxY + 4);
+      var top = Math.max(20, Math.min(maxY + 4, 500));
       return {
         range: [-geo.moveLimit - 2, geo.moveLimit + 2, geo.killY - 1, top], equal: true, flipY: true, bg: '#0c1a33', minH: 220,
         draw: function (ctx, P, s) {
@@ -1634,22 +1653,35 @@ export const ADMIN_JS = `
   function drawDeathMapCanvas(st) {
     var spec = st.spec, r = spec.range;
     var minX = r[0], maxX = r[1], minY = r[2], maxY = r[3];
-    st.deaths.forEach(function (d) { minX = Math.min(minX, d.x - 1); maxX = Math.max(maxX, d.x + 1); minY = Math.min(minY, d.y - 1); maxY = Math.max(maxY, d.y + 1); });
-    var cw = st.canvas.clientWidth || 800;
-    var ch = spec.equal ? cw * (maxY - minY) / (maxX - minX) : cw * (spec.aspect || 0.6);
-    ch = Math.max(spec.minH || 180, Math.min(620, ch));
+    var pad = 10, cw, ch, sx, sy, ox, oy;
+    if (spec.cell) {
+      // 1マス = spec.cell px の実寸(範囲は spec.range のまま。地点で広げると、実際のマップとずれる)
+      sx = sy = spec.cell;
+      cw = (maxX - minX) * sx + pad * 2 + spec.gutter;
+      ch = (maxY - minY) * sy + pad * 2;
+      st.canvas.style.width = Math.round(cw) + 'px';
+      ox = pad + spec.gutter; oy = pad;
+    } else {
+      var spanX = Math.max(10, r[1] - r[0]), spanY = Math.max(10, r[3] - r[2]);
+      st.deaths.forEach(function (d) {
+        if (d.x >= r[0] - spanX && d.x <= r[1] + spanX) { minX = Math.min(minX, d.x - 1); maxX = Math.max(maxX, d.x + 1); }
+        if (d.y >= r[2] - spanY && d.y <= r[3] + spanY) { minY = Math.min(minY, d.y - 1); maxY = Math.max(maxY, d.y + 1); }
+      });
+      cw = st.canvas.clientWidth || 800;
+      ch = spec.equal ? cw * (maxY - minY) / (maxX - minX) : cw * (spec.aspect || 0.6);
+      ch = Math.max(spec.minH || 180, Math.min(620, ch));
+      sx = (cw - pad * 2) / (maxX - minX); sy = (ch - pad * 2) / (maxY - minY);
+      if (spec.equal) sx = sy = Math.min(sx, sy);
+      ox = pad + ((cw - pad * 2) - (maxX - minX) * sx) / 2; oy = pad + ((ch - pad * 2) - (maxY - minY) * sy) / 2;
+    }
     st.canvas.style.height = Math.round(ch) + 'px';
-    var dpr = window.devicePixelRatio || 1;
+    var dpr = Math.min(window.devicePixelRatio || 1, 32000 / ch);   // (キャンバスの縦は 32767px まで)
     st.canvas.width = Math.round(cw * dpr);
     st.canvas.height = Math.round(ch * dpr);
     var ctx = st.canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = spec.bg || '#0b1120';
     ctx.fillRect(0, 0, cw, ch);
-    var pad = 10;
-    var sx = (cw - pad * 2) / (maxX - minX), sy = (ch - pad * 2) / (maxY - minY);
-    if (spec.equal) sx = sy = Math.min(sx, sy);
-    var ox = pad + ((cw - pad * 2) - (maxX - minX) * sx) / 2, oy = pad + ((ch - pad * 2) - (maxY - minY) * sy) / 2;
     var P = function (x, y) { return [ox + (x - minX) * sx, spec.flipY ? oy + (maxY - y) * sy : oy + (y - minY) * sy]; };
     ctx.save();
     spec.draw(ctx, P, sx);
@@ -1662,7 +1694,7 @@ export const ADMIN_JS = `
       ctx.beginPath(); ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k); ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k); ctx.stroke();
     };
     st.deaths.forEach(function (d) {
-      var p = P(d.x, d.y);
+      var q = spec.point ? spec.point(d) : [d.x, d.y], p = P(q[0], q[1]);
       cross(p[0], p[1], 'rgba(0,0,0,.75)', 4.2);
       cross(p[0], p[1], '#ef4444', 2.2);
       st.placed.push({ x: p[0], y: p[1], d: d });
@@ -1679,7 +1711,8 @@ export const ADMIN_JS = `
     var title = mapTitle(gid, mapId, geo);
     if (title) panel.appendChild(el('div', { className: 'deathmap-panel-head', text: title + ' — ' + deaths.length + '件' }));
     var canvas = el('canvas');
-    panel.appendChild(canvas);
+    // 実寸で描く縦長のマップは、枠の中でスクロールして見る
+    if (spec.cell) { var scroller = el('div', { className: 'deathmap-scroll' }); scroller.appendChild(canvas); panel.appendChild(scroller); } else panel.appendChild(canvas);
     var st = { gid: gid, canvas: canvas, spec: spec, deaths: deaths, placed: [], legend: spec.legend };
     var nearest = function (e) {
       var r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, best = null, bd = 80;
@@ -1689,7 +1722,7 @@ export const ADMIN_JS = `
     canvas.addEventListener('mousemove', function (e) {
       var d = nearest(e);
       if (!d) { hideDeathHover(); return; }
-      showDeathHover(e, (d.cause || '不明') + ' / ' + new Date(d.at).toLocaleString('ja-JP') + (d.round ? ' / ' + d.round + 'ラウンド目' : '') + (d.t !== undefined ? ' / 開始から' + Math.round(d.t) + '秒' : ''));
+      showDeathHover(e, (d.cause || '不明') + (spec.where ? ' / ' + spec.where(d) : '') + ' / ' + new Date(d.at).toLocaleString('ja-JP') + (d.round ? ' / ' + d.round + 'ラウンド目' : '') + (d.t !== undefined ? ' / 開始から' + Math.round(d.t) + '秒' : ''));
     });
     canvas.addEventListener('mouseleave', hideDeathHover);
     deathMapPanels.push(st);
@@ -1705,8 +1738,7 @@ export const ADMIN_JS = `
     deaths.forEach(function (d) { var k = d.cause || '不明'; causeCount[k] = (causeCount[k] || 0) + 1; });
     var causes = Object.keys(causeCount).sort(function (a, b) { return causeCount[b] - causeCount[a]; });
     var card = el('div', { className: 'sub-card deathmap' });
-    var gMeta = GAME_META[gid] || { name: gid };
-    card.appendChild(el('h4', { text: gMeta.name + ' — ' + (POINT_LABEL[gid] || '死亡地点') + ' ' + deaths.length + '件' }));
+    card.appendChild(el('h4', { text: gameTitle(gid) + ' — ' + (POINT_LABEL[gid] || '死亡地点') + ' ' + deaths.length + '件' }));
     // 死因ごとの件数(地点はどれも赤いバツ。死因は、バツに合わせると出る)
     var legend = el('div', { className: 'deathmap-causes', text: causes.length === 0 ? 'まだ記録はありません' : causes.map(function (k) { return k + ' ' + causeCount[k] + '件'; }).join(' ・ ') });
     card.appendChild(legend);
@@ -1801,7 +1833,7 @@ export const ADMIN_JS = `
         ])]));
         var tbody = el('tbody');
         rows.forEach(function (x) {
-          var gname = (GAME_META[x.b.slug] && GAME_META[x.b.slug].name) || BOARD_TITLES[x.b.slug] || x.b.slug;
+          var gname = gameTitle(x.b.slug);
           var nameCell = el('td');
           nameCell.appendChild(el('span', { text: x.e.name }));
           if (x.e.perfect) {
@@ -1839,7 +1871,7 @@ export const ADMIN_JS = `
 
   function renderAnalytics(data) {
     cachedAnalyticsData = data;
-    var allKeys = Object.keys(data.games || {}).filter(function (gid) { return Object.prototype.hasOwnProperty.call(GAME_META, gid); });
+    var allKeys = Object.keys(data.games || {}).filter(function (gid) { return Object.prototype.hasOwnProperty.call(BOARD_TITLES, gid); });
     var activeKeys = selectedGame === 'all' ? allKeys : (data.games[selectedGame] ? [selectedGame] : []);
 
     // 1. サマリータブ
@@ -1871,7 +1903,7 @@ export const ADMIN_JS = `
             el('th', { text: 'ゲーム' }),
             el('th', { text: 'プレイ数' }),
             el('th', { text: '食いつき度 リピート・滞在' }),
-            el('th', { text: 'クリア' }),
+            el('th', { text: '完走数' }),
             el('th', { text: '完走率' }),
             el('th', { text: '平均時間' }),
             el('th', { text: 'ハイスコア' }),
@@ -1882,7 +1914,7 @@ export const ADMIN_JS = `
         var tbody = el('tbody');
         allKeys.forEach(function (gid) {
           var g = data.games[gid];
-          var name = (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || TITLES[gid] || gid;
+          var name = gameTitle(gid);
           var bestText = g.bestScore !== undefined ? fmtNum(g.bestScore) : '-';
           var rep = g.repeatRate !== undefined ? Number(g.repeatRate.toFixed(1)) : 1;
           var engSec = g.engagementScore || g.avgPlayTimeSec || 0;
@@ -1921,7 +1953,7 @@ export const ADMIN_JS = `
         gameView.style.gap = '12px';
       }
 
-      var meta = GAME_META[selectedGame] || { name: selectedGame };
+      var gname = gameTitle(selectedGame);
       var g = data.games[selectedGame] || {
         launchCount: 0,
         uniquePlayers: 0,
@@ -1944,7 +1976,7 @@ export const ADMIN_JS = `
       if (gHead) {
         gHead.textContent = '';
         gHead.appendChild(el('h3', null, [
-          el('span', { text: meta.name + ' アナリティクス分析' }),
+          el('span', { text: gname + ' アナリティクス分析' }),
           el('span', { className: 'meta-tag', text: '総プレイ: ' + g.launchCount + '回' })
         ]));
       }
@@ -1954,7 +1986,7 @@ export const ADMIN_JS = `
         ['遊んだ人数', String(g.uniquePlayers || 1), '人'],
         ['食いつき度 リピート', (g.repeatRate ? g.repeatRate.toFixed(1) : '1.0') + '回/人', (g.repeatRate >= 2.0 || (g.engagementScore || 0) >= 300) ? '超没入' : ((g.repeatRate >= 1.3 || (g.engagementScore || 0) >= 120) ? '好評' : '通常'), (g.repeatRate >= 1.3)],
         ['1人あたり滞在時間', formatDuration(g.engagementScore || g.avgPlayTimeSec)],
-        ['クリア', String(g.completeCount), '', g.completeCount > 0],
+        ['完走数', String(g.completeCount), '', g.completeCount > 0],
         ['完走率', String(Math.round(g.clearRate * 100)) + '%', '', g.completeCount > 0],
         ['1プレイ平均時間', formatDuration(g.avgPlayTimeSec)],
         ['ハイスコア', g.bestScore !== undefined ? fmtNum(g.bestScore) : '-', g.avgScore ? '平均 ' + Math.round(g.avgScore) : ''],
@@ -1969,38 +2001,12 @@ export const ADMIN_JS = `
       if (gProg) {
         gProg.textContent = '';
         var hasProg = false;
-        if (Object.keys(g.deathReasons || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '死因・ゲームオーバー要因', g.deathReasons);
-        }
-        if (Object.keys(g.exitPhases || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '離脱した場面', g.exitPhases);
-        }
-        if (Object.keys(g.exitReasons || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '閉じた理由', g.exitReasons);
-        }
-        if (Object.keys(g.vehicles || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '選択車両ランキング', g.vehicles);
-        }
-        if (Object.keys(g.characters || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '選択キャラクターランキング', g.characters);
-        }
-        if (Object.keys(g.maxStages || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '到達ステージ・WAVE分布', g.maxStages);
-        }
-        if (Object.keys(g.difficulties || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, '難易度の選択', g.difficulties);
-        }
-        if (Object.keys(g.modes || {}).length > 0) {
-          hasProg = true;
-          renderShareList(gProg, 'モードの選択', g.modes);
-        }
+        PROG_SECTIONS.forEach(function (sec) {
+          if (Object.keys(g[sec[0]] || {}).length > 0) {
+            hasProg = true;
+            renderShareList(gProg, sec[1], g[sec[0]]);
+          }
+        });
         if (!hasProg) {
           var emptyCard = el('div', { className: 'sub-card' });
           emptyCard.appendChild(el('div', { className: 'empty', text: 'このゲームの固有データ 死因・キャラ・車両等はまだ記録されていません。' }));
@@ -2057,7 +2063,7 @@ export const ADMIN_JS = `
     activeKeys.forEach(function (gid) {
       var g = data.games[gid];
       pTbody.appendChild(el('tr', null, [
-        el('td', { text: (GAME_META[gid] ? GAME_META[gid].name : null) || BOARD_TITLES[gid] || gid }),
+        el('td', { text: gameTitle(gid) }),
         el('td', { className: 'num', text: g.avgFps ? String(g.avgFps) + ' fps' : '-' }),
         el('td', { className: 'num', text: g.minFps ? String(g.minFps) + ' fps' : '-' }),
         el('td', { text: String(g.errorCount || 0) + ' 件' }),
@@ -2112,7 +2118,7 @@ export const ADMIN_JS = `
     var wrap = document.getElementById('raw-logs-wrap');
     return call('GET', '/admin/api/analytics/export?type=events' + q).then(function (res) {
       wrap.textContent = '';
-      var events = (res.events || []).filter(function (ev) { return !ev.gameId || Object.prototype.hasOwnProperty.call(GAME_META, ev.gameId); }).slice(-100).reverse();
+      var events = (res.events || []).filter(function (ev) { return !ev.gameId || Object.prototype.hasOwnProperty.call(BOARD_TITLES, ev.gameId); }).slice(-100).reverse();
       if (events.length === 0) {
         wrap.appendChild(el('div', { className: 'empty', text: '対象のイベントログはまだありません。' }));
         return;
@@ -2127,7 +2133,7 @@ export const ADMIN_JS = `
         tbody.appendChild(el('tr', null, [
           el('td', { className: 'log-time', text: formatLogTime(ev.timestamp) }),
           el('td', { className: 'log-type' }, [el('span', { className: 'log-type-chip', text: ev.type })]),
-          el('td', { className: 'log-game', text: (GAME_META[ev.gameId] && GAME_META[ev.gameId].name) || ev.gameId || '-' }),
+          el('td', { className: 'log-game', text: ev.gameId ? gameTitle(ev.gameId) : '-' }),
           el('td', { className: 'log-data', text: eventSummary(ev.data) }),
         ]));
       });
@@ -2352,9 +2358,7 @@ export const ADMIN_JS = `
       .then(function () { location.href = '/admin/login'; });
   });
 
-  document.getElementById('boards-reload').addEventListener('click', loadBoards);
-  document.getElementById('analytics-reload').addEventListener('click', function () {
-    loadAnalytics();
+  function reloadAnalyticsSubTabs() {
     loadRawLogs();
     loadErrors();
     var replaysTab = document.getElementById('tab-replays');
@@ -2365,6 +2369,12 @@ export const ADMIN_JS = `
     if (deathMapTab && deathMapTab.classList.contains('active')) {
       loadDeathMapTab();
     }
+  }
+
+  document.getElementById('boards-reload').addEventListener('click', loadBoards);
+  document.getElementById('analytics-reload').addEventListener('click', function () {
+    loadAnalytics();
+    reloadAnalyticsSubTabs();
   });
 
   // ゲームフィルターの変更イベント
@@ -2374,16 +2384,7 @@ export const ADMIN_JS = `
       selectedGame = gameFilterSelect.value;
       updateFilterUI();
       if (cachedAnalyticsData) renderAnalytics(cachedAnalyticsData);
-      loadRawLogs();
-      loadErrors();
-      var replaysTab = document.getElementById('tab-replays');
-      if (replaysTab && replaysTab.classList.contains('active')) {
-        loadAllReplays();
-      }
-      var deathMapTab = document.getElementById('tab-deathmap');
-      if (deathMapTab && deathMapTab.classList.contains('active')) {
-        loadDeathMapTab();
-      }
+      reloadAnalyticsSubTabs();
     });
   }
 

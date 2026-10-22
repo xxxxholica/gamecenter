@@ -245,6 +245,10 @@ export class OnlineHUD {
     }
   }
 
+  public isResultOpen(): boolean {
+    return this.result.style.display === 'flex';
+  }
+
   public hideResults(): void {
     if (this.countdownTimer) clearInterval(this.countdownTimer);
     this.countdownTimer = null;

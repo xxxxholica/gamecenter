@@ -58,9 +58,9 @@ type RoomOf<S> = Extract<S, { t: 'room' }> & BaseRoom;
 
 /**
  * オンライン対戦の待機画面(sumo-smash-3d・tower-stack 共通)。接続・自動参加は LobbyConnection(共通部品)。
- * 参加者(4人枠)と、開始までの残り(2人目が入ると自動で始まる / 自分だけの間は「待機中」)を出し、退出できる。
+ * 参加者(4人枠)と、開始までの残り(2人目が入ると自動で始まる / 自分だけの間・満員や対戦中で空き待ちの間は「待機中」)を出し、退出できる。
  * 参加順がそのまま番号と色になる。
- * 入れない時(閉鎖・満員・対戦中・切断)は、リトライを尋ねずにタイトルへ戻して案内する。
+ * 閉鎖・切断の時は、タイトルへ戻して案内する。
  */
 export class WaitScreen<S extends { t: string }, C extends { t: string }> {
   private readonly conn: LobbyConnection<RoomOf<S>, S, C>;
@@ -87,7 +87,6 @@ export class WaitScreen<S extends { t: string }, C extends { t: string }> {
     document.body.append(this.root);
     this.conn = new LobbyConnection<RoomOf<S>, S, C>(client, {
       onChange: () => this.render(),
-      onProblem: () => {},                                   // render が案内を出して画面を閉じる
     });
   }
 
@@ -133,13 +132,7 @@ export class WaitScreen<S extends { t: string }, C extends { t: string }> {
     const c = this.conn;
 
     if (c.hasProblem) {
-      const msg = c.view === 'closed' ? '現在、オンライン対戦は開催していません' : c.message || '接続エラーが発生しました';
-      this.hide();
-      this.opts.onErrorToTitle(msg);
-      return;
-    }
-    if (c.view === 'blocked') {                                // 満員・対戦中: 空くのを待たず、案内してタイトルへ
-      const msg = c.message || '参加できません';
+      const msg = c.problemMessage;
       this.hide();
       this.opts.onErrorToTitle(msg);
       return;

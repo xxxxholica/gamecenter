@@ -124,7 +124,7 @@ const guideOnlineWait = () => mountArcadeGuide({
   showHomeHint: true,
 });
 // レース中のガイドは、メニュー(ポーズ・結果)を開いている間だけ、メニュー用に入れ替える
-let raceGuideState: 'race' | 'pause' | 'result' = 'race';
+let raceGuideState: 'race' | 'pause' | 'result' | 'onlineResult' = 'race';
 /** ロード中(ロード画面を出してから、明転が始まるまで)は、ガイドを出さない */
 let raceLoading = false;
 const guideRace = (hidden = false): HTMLElement => {
@@ -158,6 +158,15 @@ const guideRaceMenu = (state: 'pause' | 'result') => {
     buttons: [{ indices: [0], label: '決定' }],
     showHomeHint: true,
     backLabel: state === 'pause' ? '再開' : 'タイトルへ',
+  });
+};
+/** オンライン対戦の結果(ボタンは「タイトルへ戻る」だけ。A / B / START のどれでも戻る) */
+const guideOnlineResult = () => {
+  raceGuideState = 'onlineResult';
+  mountArcadeGuide({
+    buttons: [{ indices: [0, 1, 9], label: 'タイトルへ', keyLabel: 'Enter' }],
+    showHomeHint: true,
+    backLabel: 'タイトルへ',
   });
 };
 
@@ -298,6 +307,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   /** 待機中に自分で選んだ(または前のレースで走った)マシン。次に参加した時、最初に希望として送り直す。 */
   let onlinePicked: CarSpec | null = null;
+  /** 待機中(空き待ちを含む)に選んだコース希望。空きが出て部屋に入った時にも送り直す。 */
+  let onlineCoursePicked: string | null = null;
   /** STARTを押した時に取得した、オンライン対戦の開催状況(null=閉鎖中)。モード選択に出す。 */
   let onlineStatus: PublicStatus | null = null;
 
@@ -688,6 +699,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const mapSelectScreen = new MapSelectScreen(mapSelectContainer, {
     onSelectMap: (mapId) => {
       if (flow.currentScreen === 'ONLINE_COURSE') {          // オンライン: 選んだコースは希望として送る
+        onlineCoursePicked = mapId;
         net.send({ t: 'pref', course: mapId });
         sfx.uiMove();
         return;
@@ -712,6 +724,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       flow.goToOnlineWait();
     },
     onClearPick: () => {                                     // コース希望の取り消し(選択済みのカードを押し直す/Backspace)
+      onlineCoursePicked = null;
       net.send({ t: 'pref', course: null });
       sfx.uiMove();
     },
@@ -750,6 +763,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     sfx.uiBack();
     net.send({ t: 'leave' });
     onlineRoom = null;
+    onlineCoursePicked = null;
     lobby.setRoom(null);
     net.close();
     flow.goToModeSelect();
@@ -761,6 +775,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     returnCarToGarage();
     net.send({ t: 'leave' });
     onlineRoom = null;
+    onlineCoursePicked = null;
     lobby.setRoom(null);
     lobby.hide();
     onlineHUD.hide();
@@ -780,7 +795,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   /** 部屋の状況(希望の集計・自分の希望・主催者の固定)をコース希望の画面に反映する。 */
   const syncCourseUI = () => {
     const r = lobby.room;
-    if (!r) return;
+    if (!r) {
+      if (onlineCoursePicked) mapSelectScreen.setOnlineState({ [onlineCoursePicked]: 1 }, onlineCoursePicked, null);
+      return;
+    }
     const fixed = r.mapMode !== 'random' ? r.mapMode : null;
     mapSelectScreen.setOnlineState(r.votes, lobby.myCourse, fixed);
   };
@@ -789,10 +807,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     onBack: leaveOnlineLobby,
     onColorTaken: resyncColor,
     onBackToCourse: () => flow.goToOnlineCourse(),
-    onProblem: () => {
-      // 接続エラー時はリトライを尋ねず即座にタイトルへ戻る
-      leaveOnlineToTitle();
-    },
     onErrorToTitle: (msg) => leaveOnlineToTitle(msg),
   });
 
@@ -802,8 +816,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     lobby.setRoom(m);
     carSelectScreen.setTakenColors(lobby.othersBodies());
     syncCourseUI();
-    // 参加した直後: 前に選んだマシンがあれば、希望として送り直す
-    if (joinedNow && flow.currentScreen === 'ONLINE_LOBBY' && onlinePicked) net.send({ t: 'pref', car: onlinePicked });
+    // 参加した直後(空き待ちから部屋に入った時も含む): 前に選んだマシン・コース希望があれば送り直す
+    if (joinedNow && (flow.currentScreen === 'ONLINE_LOBBY' || flow.currentScreen === 'ONLINE_COURSE' || flow.currentScreen === 'ONLINE_WAIT')) {
+      if (onlinePicked) net.send({ t: 'pref', car: onlinePicked });
+      if (onlineCoursePicked) net.send({ t: 'pref', course: onlineCoursePicked });
+    }
     // ロード中またはレース中に誰かが抜けた(ロード中に抜けた人の車が、出走時に残らないよう、参加者の一覧も追従させる)
     if (online) {
       online.players = online.players.filter((p) => m.players.some((mp) => mp.id === p.id));
@@ -941,6 +958,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       garage.start();
       guideModeSelect();
       modeSelectScreen.show(onlineStatus);
+      void fetchSkywayStatus(1500).then((st) => {
+        onlineStatus = st;
+        if (flow.currentScreen === 'MODE_SELECT') modeSelectScreen.update(st);
+      });
     },
     onEnterCarSelect: () => {
       stopTitleCarCycle();
@@ -1182,8 +1203,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const ignore = menuOpen || menuWasOpen;
     menuWasOpen = menuOpen;
     if (flow.currentScreen === 'RACE') {
-      const want = driveHUD.isResultModalOpen() ? 'result' : menuOpen ? 'pause' : 'race';
-      if (!raceLoading && want !== raceGuideState) { if (want === 'race') guideRace(); else guideRaceMenu(want); }
+      const want = onlineHUD.isResultOpen() ? 'onlineResult' : driveHUD.isResultModalOpen() ? 'result' : menuOpen ? 'pause' : 'race';
+      if (!raceLoading && want !== raceGuideState) {
+        if (want === 'race') guideRace();
+        else if (want === 'onlineResult') guideOnlineResult();
+        else guideRaceMenu(want);
+      }
     }
     if (ignore || flow.currentScreen !== 'RACE' || !driveScene.active) {
       driveScene.setFrontViewPad(false);

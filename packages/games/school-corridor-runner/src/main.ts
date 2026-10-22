@@ -25,7 +25,7 @@ import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
-import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
+import { finishPrograms, uploadTextures, waitFramesSettled } from '../../../shared/shaderCompile';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -33,7 +33,12 @@ watchResultAutoReturn(['btn-result-title']);
 
 const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
-  buttons: [{ indices: [0, 1, 2, 3], label: '攻撃', keyLabel: 'Space / Enter' }],
+  keyMoveKeys: 'A / D',
+  buttons: [
+    { indices: [12], label: 'ジャンプ', keyLabel: 'W' },
+    { indices: [13], label: 'スライディング', keyLabel: 'S' },
+    { indices: [0, 1, 2, 3], label: '攻撃', keyLabel: 'Space / Enter' },
+  ],
   showHomeHint: true,
   backLabel: 'ポーズ',
 });
@@ -244,6 +249,8 @@ class Game {
       this.balancePointLights();
       this.renderer.compile(this.scene, this.camera);
       this.corridor.compileGlassReflection(this.renderer, this.scene, this.camera);
+      // テクスチャも送っておく(障害物の看板・跳び箱の数字などのキャンバスのテクスチャは、初めて視界に入った瞬間に送られて遅れていた)
+      uploadTextures(this.renderer, this.scene);
       // 作ったシェーダは、初めて使う時の確認(エラーの記録・uniform の一覧)まで、リンクが終わったものから済ませておく
       // (片付けた物のシェーダは、タイトルの障害物の入れ替わりや、プレイ中の初登場で初めて使われ、そこで GPU を待っていた)
       finishPrograms(this.renderer);
@@ -2311,7 +2318,7 @@ class Game {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了' },
+        { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',

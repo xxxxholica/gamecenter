@@ -45,6 +45,11 @@ export class EffectsManager {
   private redParticleMat: THREE.MeshBasicMaterial;
   private yellowParticleMat: THREE.MeshBasicMaterial;
   private brickParticleMat: THREE.MeshLambertMaterial;
+  /** 壁のかけらの形(大きさごとに1つ作って、全部のかけらで共有する) */
+  private readonly brickGeometries = new Map<string, THREE.BoxGeometry>();
+  /** 材質の準備のために、起動直後だけ描く見本 */
+  private warmMeshes: THREE.Mesh[] = [];
+  private warmFrames = 3;
 
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
     this.scene = scene;
@@ -54,6 +59,17 @@ export class EffectsManager {
     this.redParticleMat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
     this.yellowParticleMat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
     this.brickParticleMat = new THREE.MeshLambertMaterial({ color: 0x6e2619 });
+
+    // 破片の材質は、初めて使う瞬間(最初に障害物に当たった時・壁が崩れる時)に描く前の準備が起き、そのフレームが遅れていた
+    // (計測: Firefox・Mac、小学生のコースで最初に当たった瞬間の描画 9ms、33ms のフレーム)。
+    // 起動して最初の数フレームだけ、同じ材質の見本を画面の外(はるか下)に描いて、準備を先に済ませておく
+    for (const mat of [this.redParticleMat, this.yellowParticleMat, this.brickParticleMat]) {
+      const mesh = new THREE.Mesh(this.particleGeometry, mat);
+      mesh.position.set(0, -1000, 0);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.warmMeshes.push(mesh);
+    }
   }
 
   // Trigger screen shake
@@ -93,9 +109,16 @@ export class EffectsManager {
     const blockW = width / cols;
     const blockH = height / rows;
 
+    // かけらは全部同じ大きさなので、形を共有する(1つずつ作ると、崩れる瞬間に 96 個の形を GPU へ送ってそのフレームが遅れ、
+    // 破棄もしていなかったので、走るたびに GPU のメモリに残っていた)
+    const key = `${blockW}x${blockH}`;
+    let geo = this.brickGeometries.get(key);
+    if (!geo) {
+      geo = new THREE.BoxGeometry(blockW * 0.9, blockH * 0.9, 0.8);
+      this.brickGeometries.set(key, geo);
+    }
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const geo = new THREE.BoxGeometry(blockW * 0.9, blockH * 0.9, 0.8);
         const p = new THREE.Mesh(geo, this.brickParticleMat);
         const px = wallX - width / 2 + (c + 0.5) * blockW;
         const py = wallY - height / 2 + (r + 0.5) * blockH;
@@ -122,6 +145,10 @@ export class EffectsManager {
 
   // Update projectiles, particles, and camera shake
   public update(dt: number, targetCamPos: THREE.Vector3, targetLookAt: THREE.Vector3, onProjectileImpact?: (x: number, y: number, z: number) => void): void {
+    if (this.warmFrames > 0 && --this.warmFrames === 0) {
+      for (const mesh of this.warmMeshes) this.scene.remove(mesh);
+      this.warmMeshes = [];
+    }
     // 1. Update Camera Shake
     let shakeOffset = new THREE.Vector3(0, 0, 0);
     if (this.shakeTimer > 0) {

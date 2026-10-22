@@ -343,7 +343,19 @@ export class Game {
   private showRunGuide(pausable = true): void {
     mountArcadeGuide({
       moveLabel: '移動',
+      keyMoveKeys: 'A / D',
       showHomeHint: pausable,
+      backLabel: 'ポーズ',
+    });
+  }
+
+  /** ボーナスのガイド。ジャンプ台の手前(launch)はタイミング押し、飛んでいる間(flight)は左右の向きと加速 */
+  private showBonusGuide(phase: 'launch' | 'flight'): void {
+    mountArcadeGuide({
+      moveLabel: phase === 'flight' ? '移動' : undefined,
+      keyMoveKeys: 'A / D',
+      buttons: [{ indices: [0, 1, 7], label: phase === 'launch' ? 'ジャンプ' : '加速', keyLabel: 'Enter' }],
+      showHomeHint: true,
       backLabel: 'ポーズ',
     });
   }
@@ -353,7 +365,7 @@ export class Game {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了' },
+        { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',
@@ -845,6 +857,7 @@ export class Game {
       this.launchPressed = false;
       this.launchLockedAt = 0;
       this.showLaunchTiming(true);
+      this.showBonusGuide('launch');
     }
   }
 
@@ -902,7 +915,7 @@ export class Game {
     if (!box) return;
     box.classList.toggle('hidden', !show);
     if (show) {
-      // 押すボタンをアイコンで示す(プレイ中のガイドには出さないため、ここで教える)
+      // 押すボタンをアイコンで示す(左下のガイドにも出す)
       const label = box.querySelector('.launch-timing-label');
       if (label) label.innerHTML = `${buttonIconHtml([0])} タイミングよくジャンプ`;
       const zone = document.getElementById('launch-timing-zone');
@@ -929,6 +942,7 @@ export class Game {
 
     // Launch all remaining students
     this.crowd.launchFlight(this.flightBoost);
+    this.showBonusGuide('flight');
 
     // Show bonus multiplier HUD
     this.flightBoostsLeft = LEVELS[this.level].maxBoosts;
@@ -999,8 +1013,10 @@ export class Game {
     this.totalScore += stageScore;
     this.stageScores.push({ level: this.level, score: stageScore });
 
+    // 完走(クリア)は高専まで卒業した時だけ。小学校・中学校の卒業は途中なので結果を付けない
+    const lastStage = this.stageIndex >= LEVEL_ORDER.length - 1;
     reportDeepAnalytics('progression_update', {
-      result: 'clear',
+      ...(lastStage ? { result: 'clear' as const } : {}),
       difficulty: LEVELS[this.level].label,
       score: stageScore,
       itemsCollected: this.pickupsCollected,
@@ -1016,7 +1032,7 @@ export class Game {
     });
 
     // ベンチマーク(?bench=1&scene=run)では指定レベル1本だけで完了させる
-    if (this.benchScene === 'run' || this.stageIndex >= LEVEL_ORDER.length - 1) {
+    if (this.benchScene === 'run' || lastStage) {
       this.triggerGameClear(this.totalScore, prevTotal);
       return;
     }

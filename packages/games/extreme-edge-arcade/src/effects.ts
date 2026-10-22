@@ -36,6 +36,13 @@ export class EffectsManager {
   private readonly shapes = new Map<string, THREE.BufferGeometry>();
   /** 同時に出せる粒の上限(連続して演出が重なっても、描画する数が増え続けない。超えたら古い粒から消す) */
   private static readonly MAX_PARTICLES = 400;
+  /**
+   * 消えていく粒(しぶき・煙)の材質の使い回し。透明度を粒ごとに変えるので共有できないが、粒ごとに作ると、作るのと初めて描くときの準備
+   * (シェーダの割り当て・設定の読み込み)が演出の瞬間(判定など)にまとめて起き、そのフレームが遅れる。消えた粒の材質は捨てずにここへ戻す。
+   */
+  private readonly fadePool: THREE.MeshBasicMaterial[] = [];
+  /** 起動時に作って準備まで済ませておく、消えていく粒の材質の数(いちばん多い演出は、しぶき 60 粒) */
+  private static readonly PREWARM_FADE = 80;
 
   constructor(camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.camera = camera;
@@ -76,20 +83,64 @@ export class EffectsManager {
     return g;
   }
 
-  private addParticle(p: Particle): void {
-    this.particles.push(p);
-    while (this.particles.length > EffectsManager.MAX_PARTICLES) {
-      const old = this.particles.shift()!;
-      this.particleGroup.remove(old.mesh);
-      (old.mesh.material as THREE.Material).dispose();
+  /**
+   * 消えていく粒の材質を先に作り、描く準備まで済ませておく(初めての演出の瞬間に、まとめて準備が起きないように)。
+   * 準備は描くものの設定(光など)で決まるが、この材質は光を使わないので、ステージが変わってもやり直しにならない。
+   */
+  prewarm(renderer: THREE.WebGLRenderer): void {
+    const geom = new THREE.BoxGeometry(0.001, 0.001, 0.001);
+    const meshes: THREE.Mesh[] = [];
+    for (let i = 0; i < EffectsManager.PREWARM_FADE; i++) {
+      const mesh = new THREE.Mesh(geom, this.fadeMaterial(0xffffff, 0.9));
+      this.particleGroup.add(mesh);
+      meshes.push(mesh);
     }
+    renderer.compile(this.scene, this.camera);
+    for (const mesh of meshes) {
+      this.particleGroup.remove(mesh);
+      this.fadePool.push(mesh.material as THREE.MeshBasicMaterial);
+    }
+    geom.dispose();
   }
 
-  /** 共有している形を破棄する(ゲームを作り直す時) */
+  /** 消えていく粒の材質(使い回しがあればそれを使う) */
+  private fadeMaterial(color: number, opacity: number): THREE.MeshBasicMaterial {
+    const mat = this.fadePool.pop() ?? new THREE.MeshBasicMaterial({ transparent: true });
+    mat.userData.fade = true;
+    mat.color.setHex(color);
+    mat.opacity = opacity;
+    return mat;
+  }
+
+  /**
+   * 1回の演出の不透明な粒(破片・火花)で共有する材質。不透明な材質は透明度を変えても見た目が変わらないので、粒ごとに分けなくてよい。
+   * 共有している粒の数を数えておき、最後の粒が消えた時に破棄する。
+   */
+  private sharedMaterial(mat: THREE.Material, users: number): THREE.Material {
+    mat.userData.users = users;
+    return mat;
+  }
+
+  /** 粒を消す。消えていく粒の材質は使い回しに戻し、共有の材質は最後の粒が消えた時に破棄する(形は共有なので破棄しない) */
+  private release(p: Particle): void {
+    this.particleGroup.remove(p.mesh);
+    const mat = p.mesh.material as THREE.Material;
+    if (mat.userData.fade) this.fadePool.push(mat as THREE.MeshBasicMaterial);
+    else if (--mat.userData.users <= 0) mat.dispose();
+  }
+
+  private addParticle(p: Particle): void {
+    this.particles.push(p);
+    while (this.particles.length > EffectsManager.MAX_PARTICLES) this.release(this.particles.shift()!);
+  }
+
+  /** 共有している形と、使い回しの材質を破棄する(ゲームを作り直す時) */
   dispose() {
     this.clear();
     for (const g of this.shapes.values()) g.dispose();
     this.shapes.clear();
+    for (const m of this.fadePool) m.dispose();
+    this.fadePool.length = 0;
   }
 
   setCameraBase(pos: THREE.Vector3, target: THREE.Vector3) {
@@ -179,8 +230,7 @@ export class EffectsManager {
       p.life += dt;
 
       if (p.life >= p.maxLife) {
-        this.particleGroup.remove(p.mesh);
-        (p.mesh.material as THREE.Material).dispose();          // 形は共有なので破棄しない
+        this.release(p);
         this.particles.splice(i, 1);
         continue;
       }
@@ -199,14 +249,14 @@ export class EffectsManager {
       const scale = 1.0 - progress * 0.5;
       p.mesh.scale.setScalar(scale);
 
-      if ('opacity' in (p.mesh.material as THREE.Material)) {
-        ((p.mesh.material as unknown) as { opacity: number }).opacity = 1.0 - progress;
-      }
+      const mat = p.mesh.material as THREE.Material;
+      if (mat.userData.fade) mat.opacity = 1.0 - progress;
     }
   }
 
   // Spawn bursting chunks (for meat bun explosion, food splat, plastic bits)
   spawnExplosionChunks(pos: THREE.Vector3, color: number, count = 25, size = 0.08) {
+    const mat = this.sharedMaterial(new THREE.MeshStandardMaterial({ color, roughness: 0.8 }), count);
     for (let i = 0; i < count; i++) {
       const v = Math.floor(Math.random() * 6);                // 大きさの違うかけらを6通りから選ぶ
       const geom = this.shape(`chunk:${size}:${v}`, () => new THREE.BoxGeometry(
@@ -214,10 +264,6 @@ export class EffectsManager {
         size * (0.6 + 0.8 * ((v * 0.61 + 0.2) % 1)),
         size * (0.6 + 0.8 * ((v * 0.83 + 0.5) % 1))
       ));
-      const mat = new THREE.MeshStandardMaterial({
-        color: color,
-        roughness: 0.8,
-      });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.copy(pos);
 
@@ -255,12 +301,7 @@ export class EffectsManager {
     for (let i = 0; i < count; i++) {
       const v = Math.floor(Math.random() * 4);
       const geom = this.shape(`splash:${v}`, () => new THREE.SphereGeometry(0.04 + v * 0.01, 6, 6));
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.9,
-      });
-      const mesh = new THREE.Mesh(geom, mat);
+      const mesh = new THREE.Mesh(geom, this.fadeMaterial(color, 0.9));
       mesh.position.copy(pos);
 
       const angle = Math.random() * Math.PI * 2;
@@ -289,12 +330,7 @@ export class EffectsManager {
     for (let i = 0; i < count; i++) {
       const v = Math.floor(Math.random() * 4);
       const geom = this.shape(`smoke:${v}`, () => new THREE.SphereGeometry(0.08 + v * 0.027, 6, 6));
-      const mat = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.8,
-      });
-      const mesh = new THREE.Mesh(geom, mat);
+      const mesh = new THREE.Mesh(geom, this.fadeMaterial(color, 0.8));
       mesh.position.set(
         pos.x + (Math.random() - 0.5) * 0.2,
         pos.y + (Math.random() - 0.5) * 0.1,
@@ -322,9 +358,9 @@ export class EffectsManager {
 
   // Sparks
   spawnSparks(pos: THREE.Vector3, count = 20) {
+    const mat = this.sharedMaterial(new THREE.MeshBasicMaterial({ color: 0xffea00 }), count);
     for (let i = 0; i < count; i++) {
       const geom = this.shape('spark', () => new THREE.BoxGeometry(0.02, 0.02, 0.06));
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.copy(pos);
 
@@ -349,10 +385,7 @@ export class EffectsManager {
   }
 
   clear() {
-    for (const p of this.particles) {
-      this.particleGroup.remove(p.mesh);
-      (p.mesh.material as THREE.Material).dispose();
-    }
+    for (const p of this.particles) this.release(p);
     this.particles = [];
     this.trauma = 0;
   }

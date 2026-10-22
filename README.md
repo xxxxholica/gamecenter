@@ -56,7 +56,8 @@ npm run bench:all -- --games midnight-skyway --targets 'race-tsukikage_touge'   
 - 場面はゲームが `declareBenchTargets()`(`packages/shared/arcadeBenchTargets.ts`)で申告し、着いたら `benchReady()`、やりきったら `benchDone()` を呼ぶ。
 - シェーダのコンパイルで落ちた場面は `node scripts/shader-trace.mjs <chromium|firefox> <ゲーム> <場面>` で、いつどのシェーダを作ったかを出せる。
 - テクスチャの送り方の速さは GPU の描画方式で逆になる(Windows の D3D11 と Mac の Metal)。新しい環境では `node scripts/upload-probe.mjs` で確かめる(midnight-skyway の `usesStripUpload`)。
-- Safari は Mac で `--browsers safari` を付けたときに測る(`scripts/bench-safari.mjs`。safaridriver で本物の Safari を動かす)。初回だけ `sudo safaridriver --enable` と、Safari の設定 → デベロッパ →「リモートオートメーションを許可」。計測中は Safari の窓にもほかのアプリにも触らない(フルスクリーンの窓が裏に回ると描画が止まる)。`--sweep` は使えない。
+- Safari は Mac で `--browsers safari` を付けたときに測る(`scripts/bench-safari.mjs`。safaridriver で本物の Safari を動かす)。初回だけ `sudo safaridriver --enable` と、Safari の設定 → デベロッパ →「リモートオートメーションを許可」。計測中は Safari の窓にもほかのアプリにも触らない(フルスクリーンの窓が裏に回ると描画が止まる)。`--fullscreen` では、ゲームを入れ物のページの iframe で開く(本番のハブと同じ。Safari 26 の自動操作は、ページを移るたびにフルスクリーンを解除するため)。`--sweep` は使えない。
+- 画面が2枚あれば、`--browsers firefox,safari --parallel` で2つのブラウザを同時に測れる(既定ではない)。ゲームを1つずつ、両方とも終わってから次へ進む。窓は Firefox をメインの画面、もう一方を2枚目の画面に出す。読み込み(開いてから場面に着くまで)は同時に1つだけにし、もう一方は待つ(同じ場面を同時に読み込むと、重い処理が重なって読み込みで止まるため)。同時に測ると負荷が増えるだけなので合格はそのまま使い、不合格・すれすれの場面は、もう一方を止めて1つだけで測り直す。重い midnight-skyway は最後に1つずつ測る(`--solo` で変えられる)。
 
 **合否の基準**(`packages/shared/arcadeBenchCore.ts` の `ACCEPTANCE`)。全体の計測は筐体(Windows・Chrome・60Hz・フルHD)で行う。速いモニターでは `--hz 60` で 60Hz を再現する。
 

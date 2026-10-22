@@ -1,7 +1,8 @@
 // シェーダを、最初の描画より前に、メインスレッドを止めずに作り終えておく(midnight-skyway・ennichi-shateki)。
 // 作ってあるシェーダを、初めて使う時の確認まで済ませておく(falldown・tower-stack・school-corridor-runner)。
 // ベンチで、ページの立ち上がりが済むのを待ってから着いたと知らせる(ennichi-shateki・falldown・tower-stack・school-corridor-runner)
-import type { Camera, Material, Object3D, WebGLRenderer, WebGLRenderTarget } from 'three';
+// 物に使われているテクスチャを、最初の描画より前に GPU へ送っておく(school-corridor-runner)
+import type { Camera, Material, Mesh, Object3D, Texture, WebGLRenderer, WebGLRenderTarget } from 'three';
 import { realNow, replayBarrier, untrackedFrame, untrackedTimeout } from './arcadeReplay';
 
 /**
@@ -87,4 +88,27 @@ export function waitFramesSettled(frames = 10, notBeforeMs = 1300, maxMs = 3000)
     };
     untrackedFrame(tick);
   }));
+}
+
+/**
+ * root の下の物の材質に使われているテクスチャ(map などと、ShaderMaterial の uniform)を、いまのうちに GPU へ送る。
+ * renderer.compile はシェーダを作るだけで、テクスチャはその物を初めて描く瞬間に送る。プレイ中に初めて出てくる物(障害物など)のキャンバスのテクスチャは、
+ * そのフレームで送られて遅れる(計測: Firefox・Mac、school-corridor-runner の play で texSubImage2D が 1 回 5ms、33ms のフレーム)。
+ * 送り済みのテクスチャは、three.js が飛ばすので、何度呼んでもよい。
+ */
+export function uploadTextures(renderer: WebGLRenderer, root: Object3D): void {
+  const seen = new Set<Texture>();
+  const upload = (v: unknown): void => {
+    const t = v as Texture | null;
+    if (t?.isTexture && !seen.has(t)) { seen.add(t); renderer.initTexture(t); }
+  };
+  root.traverse((o) => {
+    const mat = (o as Mesh).material as Material | Material[] | undefined;
+    if (!mat) return;
+    for (const m of Array.isArray(mat) ? mat : [mat]) {
+      for (const v of Object.values(m)) upload(v);
+      const uniforms = (m as Material & { uniforms?: Record<string, { value: unknown }> }).uniforms;
+      if (uniforms) for (const u of Object.values(uniforms)) upload(u?.value);
+    }
+  });
 }

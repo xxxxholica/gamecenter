@@ -75,7 +75,7 @@ const guideResult = () => mountArcadeGuide({
   moveLabel: '選択',
   buttons: [
     { indices: [0], label: '決定' },
-    { indices: [1], label: '終了' },
+    { indices: [1], label: 'タイトルへ' },
   ],
   showHomeHint: true, backLabel: 'タイトルへ',
 });
@@ -1704,15 +1704,11 @@ async function onStartPressed(): Promise<void> {
   }
   if (state !== 'title') return;
   if (isPreview) startGame();
-  else openModeSelect(); // 開催されていなくても、オンライン対戦の項目は出す(選べない)
+  else openModeSelect(false); // 開催されていなくても、オンライン対戦の項目は出す(選べない)
 }
 
-function openModeSelect(): void {
-  state = 'menu';
-  titleScreen.hide();
-  const st = onlineStatus;
-  const full = !!st && st.players >= st.max;
-  modeSelect.show([
+function modeItems(st: PublicStatus | null) {
+  return [
     { id: 'solo', art: SOLO_ART, title: 'ランキング挑戦', sub: '記録を塗り替える', points: [
       { icon: BLOCKS_SOLID_SVG, text: 'ひとりで高く積む' },
       { icon: TROPHY_SOLID_SVG, text: '上位の記録を\u200b超える高さを目指す' },
@@ -1721,15 +1717,27 @@ function openModeSelect(): void {
       id: 'online',
       art: ONLINE_ART,
       title: 'オンライン対戦',
-      sub: !st ? '現在は開催されていません' : full ? '対戦中' : st.phase !== 'lobby' ? '対戦中' : `参加者 ${st.players}/${st.max}`,
+      sub: !st ? '現在は開催されていません' : st.players >= st.max || st.phase !== 'lobby' ? '対戦中' : `参加者 ${st.players}/${st.max}`,
       points: [
         { icon: PEOPLE_SOLID_SVG, text: '1対1で同時に積む' },
         { icon: DROP_SOLID_SVG, text: '先に3個落とした方の負け' },
       ],
       disabled: !st, // 開催されていなくても項目は出す(選べない)
     },
-  ]);
+  ];
+}
+
+function openModeSelect(refresh = true): void {
+  state = 'menu';
+  titleScreen.hide();
+  modeSelect.show(modeItems(onlineStatus));
   guideMenu();
+  if (refresh && !isPreview) {
+    void fetchTowerStatus(1500).then((st) => {
+      onlineStatus = st;
+      if (state === 'menu') modeSelect.update(modeItems(st));
+    });
+  }
 }
 
 function onModeSelected(id: string): void {

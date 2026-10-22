@@ -23,11 +23,10 @@ export class ModeSelectScreen {
     );
   }
 
-  /** online: 開催中ならその状況(null=開催されていない。オンライン対戦のカードは出るが選べない)。 */
-  public show(online: PublicStatus | null): void {
+  private items(online: PublicStatus | null) {
     const full = online !== null && online.players >= online.max;
     const sub = !online ? '現在は開催されていません' : online.phase !== 'lobby' ? 'レース中' : full ? '満員' : `参加中 ${online.players}/${online.max}`;
-    this.select.show([
+    return [
       { id: 'offline', art: CAR, title: 'オフライン走行', sub: 'ひとりでタイムアタック', points: [
         { icon: PIN_SOLID_SVG, text: '好きなコースを選ぶ' },
         { icon: TIMER_SOLID_SVG, text: 'ベストタイムを記録できる' },
@@ -36,8 +35,17 @@ export class ModeSelectScreen {
       { id: 'online', art: VS, title: 'オンライン対戦', sub, points: [
         { icon: PEOPLE_SOLID_SVG, text: '最大4人で同時にスタート' },
         { icon: PIN_SOLID_SVG, text: '待機中に\u200bコースの希望を出せる' },   // 狭い画面では「に」で折る
-      ], disabled: !online || full },
-    ]);
+      ], disabled: !online },
+    ];
+  }
+
+  /** online: 開催中ならその状況(null=開催されていない。オンライン対戦のカードは出るが選べない)。 */
+  public show(online: PublicStatus | null): void {
+    this.select.show(this.items(online));
+  }
+
+  public update(online: PublicStatus | null): void {
+    this.select.update(this.items(online));
   }
 
   public hide(): void {

@@ -48,6 +48,7 @@ function initApp() {
   const input = new InputManager();
   const effects = new EffectsManager(camera, scene);
   const game = new GameManager(scene, camera, effects, input);
+  effects.prewarm(renderer);
   renderer.compile(scene, camera);
 
   // Resize

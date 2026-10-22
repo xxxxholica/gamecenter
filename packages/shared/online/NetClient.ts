@@ -12,9 +12,9 @@ const SYNC_WINDOW = 12;
 
 /** 接続先。VITE_ONLINE_WS で上書き可。開発時(vite)はローカルのサーバー、本番は同一ホストの /online-ws。 */
 export function serverUrl(game: string): string {
-  const env = import.meta.env.VITE_ONLINE_WS as string | undefined;
+  const env = import.meta.env?.VITE_ONLINE_WS as string | undefined;
   if (env) return `${env}?game=${game}`;
-  if (import.meta.env.DEV) return `ws://${location.hostname}:8787/online-ws?game=${game}`;
+  if (import.meta.env?.DEV) return `ws://${location.hostname}:8787/online-ws?game=${game}`;
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/online-ws?game=${game}`;
 }
 
@@ -25,7 +25,7 @@ export function serverUrl(game: string): string {
 export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: string } = CoreClientMsg> {
   public open = false;           // サーバーが開放中か(最後に受け取った status)
   public connected = false;
-  private readonly game: string;
+  public readonly game: string;
   private ws: WebSocket | null = null;
   private handlers = new Map<string, Set<(m: never) => void>>();
   private closeHandlers = new Set<(code: number) => void>();

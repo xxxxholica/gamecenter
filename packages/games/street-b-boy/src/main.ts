@@ -25,7 +25,9 @@ watchResultAutoReturn(['btn-result-title']);
 
 const mountPlayGuide = () => mountArcadeGuide({
   moveLabel: '移動',
+  keyMoveKeys: 'A / D',
   buttons: [
+    { indices: [13], label: 'しゃがむ', keyLabel: 'S' },
     { indices: [0], label: 'ジャンプ', keyLabel: 'Space' },
     { indices: [1, 2, 3], label: 'スピン攻撃', keyLabel: 'J / K / X / Enter' },
   ],
@@ -316,7 +318,7 @@ class StreetBBoyGame {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了' },
+        { indices: [1], label: '終了', keyLabel: 'J / K / X' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',

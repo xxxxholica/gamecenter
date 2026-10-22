@@ -7,7 +7,8 @@ interface Outline { drive: Pt[] }
 
 const xz = (rows: number[][]): Pt[] => rows.map((r) => [r[0], r[2]]);
 
-const OUTLINES: Record<string, Outline> = {
+// (管理画面の死亡マップの背景も、ここからコースの形を作る: scripts/deathmap/extract.ts)
+export const OUTLINES: Record<string, Outline> = {
   tsukikage_touge: { drive: xz(tougeDownhill.road) },
   tokyo_climb: { drive: xz(tokyoClimb.road) },
 };

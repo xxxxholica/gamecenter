@@ -110,10 +110,10 @@ class SumoGame {
 
   // 固定カメラの基本位置・注視点（クォータービュー）
   // 土俵が下部中央の技ゲージと被らないよう、画面上寄りに収める
-  private readonly cameraBasePos = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
+  private readonly cameraBasePos = isPreviewMode()
     ? new THREE.Vector3(0, 9.5, 11.2)
     : new THREE.Vector3(0, 18.2, 20.0);
-  private readonly cameraLookAt = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'))
+  private readonly cameraLookAt = isPreviewMode()
     ? new THREE.Vector3(0, 1.2, 0)
     : new THREE.Vector3(0, -1.5, 1.8);
 
@@ -336,8 +336,7 @@ class SumoGame {
     ]);
 
     // 初期状態はタイトル画面
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
-    if (isPreview) {
+    if (isPreviewMode()) {
       this.titleScreen.hide();
       this.startCpuBattle();
     } else if (this.benchScene === 'bout') {
@@ -443,8 +442,7 @@ class SumoGame {
     this.lastRc = -1;
     this.modalShown = false;
 
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
-    if (isPreview) {
+    if (isPreviewMode()) {
       this.camera.position.set(0, 11.5, 13.5);
       this.camera.lookAt(new THREE.Vector3(0, 1.0, 0));
       this.computeCameraVectors();
@@ -659,14 +657,9 @@ class SumoGame {
     guideTitle();
   }
 
-  /** モード選択(CPU対戦 / オンライン対戦) */
-  private openModeSelect() {
-    this.gameState = 'menu';
-    this.titleScreen.hide();
-    this.armInput();
-    const st = this.onlineStatus;
-    const full = !!st && st.players >= st.max;                // 満員でもグレーアウトしない(選ぶと「満員です」と案内が出る)
-    this.modeSelect.show([
+  private modeItems(st: PublicStatus | null) {
+    const full = !!st && st.players >= st.max;                // 満員・対戦中でもグレーアウトしない(選ぶと待機画面で空きを待つ)
+    return [
       { id: 'pve', art: CPU_ART, title: 'CPU対戦', sub: '百人抜きサバイバル', points: [
         { icon: FIST_SOLID_SVG, text: '張り手・頭突き・\u200bつかみで戦う' },   // 狭い画面では「・」の後で折る
         { icon: TROPHY_SOLID_SVG, text: '空から降る百体の\u200b力士をぶっ飛ばせ' },
@@ -683,8 +676,22 @@ class SumoGame {
         ],
         disabled: !st,                                           // 開催されていなくても項目は出す(選べない)
       },
-    ]);
+    ];
+  }
+
+  /** モード選択(CPU対戦 / オンライン対戦) */
+  private openModeSelect(refresh = true) {
+    this.gameState = 'menu';
+    this.titleScreen.hide();
+    this.armInput();
+    this.modeSelect.show(this.modeItems(this.onlineStatus));
     guideModeSelect();
+    if (refresh) {
+      void fetchSumoStatus(1500).then((st) => {
+        this.onlineStatus = st;
+        if (this.gameState === 'menu') this.modeSelect.update(this.modeItems(st));
+      });
+    }
   }
 
   private onModeSelected(id: string) {
@@ -795,7 +802,7 @@ class SumoGame {
       this.startingFlow = false;
     }
     if (this.gameState !== 'title') return;
-    this.openModeSelect();                                    // 開催されていなくても、オンライン対戦の項目は出す(選べない)
+    this.openModeSelect(false);                               // 開催されていなくても、オンライン対戦の項目は出す(選べない)
   }
 
   /** 画面の上部に出す短い案内(接続が切れた・相手が抜けた など) */

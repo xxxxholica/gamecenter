@@ -240,6 +240,8 @@ const MAX_ROUNDS_PER_PLAY = 100;
 const MAX_TIMELINE_PER_PLAY = 200;
 /** ゲームごとに残す死亡地点の数(古いものから捨てる) */
 const MAX_DEATHS_PER_GAME = 5000;
+/** 死亡地点の座標として受け付ける上限(巨大な値で管理画面の描画ループや表示範囲が壊れるのを防ぐ) */
+const MAX_SPATIAL_COORD = 100_000;
 /** 死亡地点を保持するゲームの枠の上限(ランダムな gameId を大量に送られて Map が無制限に増えるのを防ぐ) */
 const MAX_SPATIAL_GAMES = 32;
 /** 本番のゲームID(ランダムな gameId で押し出されないよう保護する) */
@@ -409,7 +411,9 @@ export class AnalyticsStore {
           if (!GAME_ID_RE.test(gid) || RETIRED_GAMES.has(gid) || !sp) continue;
           if (this.spatial.size >= MAX_SPATIAL_GAMES && !KNOWN_SPATIAL_GAMES.has(gid)) continue;
           this.spatial.set(gid, {
-            deaths: Array.isArray(sp.deaths) ? sp.deaths.slice(-MAX_DEATHS_PER_GAME) : [],
+            deaths: Array.isArray(sp.deaths)
+              ? sp.deaths.filter((d) => d && typeof d.x === 'number' && typeof d.y === 'number' && Math.abs(d.x) <= MAX_SPATIAL_COORD && Math.abs(d.y) <= MAX_SPATIAL_COORD).slice(-MAX_DEATHS_PER_GAME)
+              : [],
           });
         }
       }
@@ -619,7 +623,7 @@ export class AnalyticsStore {
     if (!map) return;
     const x = num(d.x);
     const y = num(d.y);
-    if (x === undefined || y === undefined) return;
+    if (x === undefined || y === undefined || Math.abs(x) > MAX_SPATIAL_COORD || Math.abs(y) > MAX_SPATIAL_COORD) return;
     let sp = this.spatial.get(gameId);
     if (!sp) {
       if (this.spatial.size >= MAX_SPATIAL_GAMES) {

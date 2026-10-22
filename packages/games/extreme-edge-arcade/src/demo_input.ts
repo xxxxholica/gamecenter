@@ -51,8 +51,9 @@ export class DemoInputManager extends InputManager {
     }
 
     // Stage 4 (id=4, Stage5Balloon): 自動でふくらむ風船を、割れる寸前で止める
+    // 風船は速さの幅(±10%)で 4.5〜5.6 秒で割れるので、4.2 秒で止める(大きさ 80〜94%)。これより遅いと、速い風船は先に割れる
     else if (this.stageId === 4) {
-      this.simBtn0 = this.demoTime >= 6.3 && this.demoTime < 6.5;
+      this.simBtn0 = this.demoTime >= 4.2 && this.demoTime < 4.4;
     }
   }
 
