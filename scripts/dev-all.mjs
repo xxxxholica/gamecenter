@@ -11,7 +11,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import connect from 'connect';
 import { createServer as createViteServer } from 'vite';
 
 const root = path.dirname(fileURLToPath(import.meta.url)) + '/..';
@@ -25,7 +24,45 @@ const slugs = readdirSync(gamesDir, { withFileTypes: true })
   .map((entry) => entry.name)
   .sort();
 
-const app = connect();
+// 外部パッケージ connect に依存せず、パスプレフィックスの切り出しとフォールスルーを行う最小ルーター
+function createPrefixRouter() {
+  const stack = [];
+  const router = (req, res) => {
+    req.originalUrl = req.originalUrl || req.url || '/';
+    let idx = 0;
+    const next = (err) => {
+      if (err) {
+        if (!res.headersSent) res.writeHead(500).end('Internal Server Error');
+        return;
+      }
+      while (idx < stack.length) {
+        const { prefix, handler } = stack[idx++];
+        const reqUrl = req.originalUrl;
+        if (prefix === '/') {
+          req.url = reqUrl;
+          return handler(req, res, next);
+        }
+        if (reqUrl === prefix || reqUrl.startsWith(prefix + '/') || reqUrl.startsWith(prefix + '?')) {
+          const stripped = reqUrl.slice(prefix.length);
+          req.url = stripped.startsWith('/') ? stripped : '/' + stripped;
+          return handler(req, res, next);
+        }
+      }
+      if (!res.headersSent) res.writeHead(404).end('Not Found');
+    };
+    next();
+  };
+  router.use = (prefixOrHandler, maybeHandler) => {
+    if (typeof prefixOrHandler === 'function') {
+      stack.push({ prefix: '/', handler: prefixOrHandler });
+    } else {
+      stack.push({ prefix: prefixOrHandler.replace(/\/$/, '') || '/', handler: maybeHandler });
+    }
+  };
+  return router;
+}
+
+const app = createPrefixRouter();
 const httpServer = http.createServer(app);
 
 // 開発用: 本番ではリバースプロキシが担う /admin/ を、ここで代わりに中継する。
