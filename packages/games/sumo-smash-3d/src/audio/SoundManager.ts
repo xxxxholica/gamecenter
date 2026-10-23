@@ -42,8 +42,7 @@ export class SoundManager {
   /** BGMを流す(同じ曲なら何もしない) */
   public playBgm(track: BgmTrack) {
     this.wantedTrack = track;
-    if (this.ctx) this.startBgmNow();
-    else this.initCtx(); // 操作前は音が止まったまま待機し、最初の操作で鳴り出す
+    if (!this.ctx) this.initCtx(); // 操作前は音が止まったまま待機し、最初の操作で鳴り出す
     if (this.ctx) this.startBgmNow();
   }
 

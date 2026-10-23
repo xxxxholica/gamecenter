@@ -3,15 +3,6 @@
 import { buttonIconHtml } from '../../../../shared/arcadeGuide';
 import { UI_CSS } from './uiStyles';
 
-/**
- * 技名を1文字ずつ縦に積む。writing-mode の縦書きはフォントによって字送りがずれるため使わず、
- * 「ー」だけは回して縦棒にする。
- */
-export function verticalText(text: string): string {
-  const chars = [...text].map((c) => `<span class="skill-char${c === 'ー' ? ' skill-choon' : ''}">${c}</span>`);
-  return `<span class="skill-text">${chars.join('')}</span>`;
-}
-
 export function uiLayerHtml(): string {
   return `
       <style>${UI_CSS}</style>

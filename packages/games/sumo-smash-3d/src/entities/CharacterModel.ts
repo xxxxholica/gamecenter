@@ -179,7 +179,7 @@ export class CharacterModel {
    */
   public updateAnimation(
     dt: number,
-    state: 'idle' | 'walk' | 'dash' | 'harite' | 'buchikamashi_charge' | 'buchikamashi_rush' | 'shiko' | 'grab_attempt' | 'grab_holding' | 'throw' | 'grabbed' | 'guard' | 'stun' | 'hit',
+    state: 'idle' | 'walk' | 'harite' | 'buchikamashi_charge' | 'buchikamashi_rush' | 'grab_attempt' | 'grab_holding' | 'throw' | 'grabbed' | 'hit',
     stateProgress: number = 0,
     chargeProgress: number = 0,
     hariteArm: 'left' | 'right' = 'right'
@@ -196,9 +196,6 @@ export class CharacterModel {
       case 'walk':
         this.animateWalk();
         break;
-      case 'dash':
-        this.animateDash();
-        break;
       case 'harite':
         this.animateHarite(stateProgress, hariteArm);
         break;
@@ -207,9 +204,6 @@ export class CharacterModel {
         break;
       case 'buchikamashi_rush':
         this.animateBuchikamashiRush();
-        break;
-      case 'shiko':
-        this.animateShiko(stateProgress);
         break;
       case 'grab_attempt':
         this.animateGrabAttempt(stateProgress);
@@ -223,51 +217,11 @@ export class CharacterModel {
       case 'grabbed':
         this.animateGrabbed();
         break;
-      case 'guard':
-        this.animateGuard();
-        break;
-      case 'stun':
-        this.animateStun();
-        break;
       case 'hit':
         this.animateHit(stateProgress);
         break;
     }
   }
-
-  private animateGuard() {
-    // ガード（腰を落として両腕を胸の前で立てて固める）
-    this.bodyGroup.position.y = 0.74;
-    this.bodyGroup.rotation.x = 0.2; // わずかに前傾
-    // 両腕を前に立ててクロス気味に構える
-    this.leftArmGroup.rotation.set(1.3, 0.3, -0.4);
-    this.rightArmGroup.rotation.set(1.3, -0.3, 0.4);
-    this.leftArmGroup.position.x = -0.45;
-    this.rightArmGroup.position.x = 0.45;
-    this.leftLegGroup.rotation.x = 0.25;
-    this.rightLegGroup.rotation.x = -0.25;
-  }
-
-  private animateStun() {
-    // スタン（腰が浮いて棒立ち、体がふらふら揺れて脱力）
-    const sway = Math.sin(this.animTimer * 5.0) * 0.22;
-    const wobble = Math.cos(this.animTimer * 6.5) * 0.16;
-    this.bodyGroup.position.y = 0.95 + Math.sin(this.animTimer * 8.0) * 0.04;
-    this.bodyGroup.rotation.z = sway;
-    this.bodyGroup.rotation.x = -0.15 + wobble;
-
-    // 頭がクラクラ
-    this.headMesh.rotation.y = Math.sin(this.animTimer * 7.0) * 0.4;
-    this.headMesh.rotation.z = Math.cos(this.animTimer * 7.0) * 0.3;
-
-    // 両腕がだらんと脱力
-    this.leftArmGroup.rotation.set(-0.2 + wobble, 0, 0.15);
-    this.rightArmGroup.rotation.set(-0.2 - wobble, 0, -0.15);
-    this.leftArmGroup.position.x = -0.55;
-    this.rightArmGroup.position.x = 0.55;
-  }
-
-
 
   private resetPose() {
     this.bodyGroup.position.y = 0.9;
@@ -313,19 +267,6 @@ export class CharacterModel {
 
     this.leftArmGroup.rotation.x = -Math.sin(walkCycle) * 0.45 + 0.3;
     this.rightArmGroup.rotation.x = Math.sin(walkCycle) * 0.45 + 0.3;
-  }
-
-  private animateDash() {
-    // すり足（超高速な足踏み込みで砂煙を巻き上げる）
-    this.bodyGroup.position.y = 0.72;
-    this.bodyGroup.rotation.x = 0.4; // 前傾姿勢
-    this.leftArmGroup.rotation.x = 0.8;
-    this.rightArmGroup.rotation.x = 0.8;
-
-    // 高速すり足の足元振動
-    const dashFlutter = Math.sin(this.animTimer * 40.0) * 0.18;
-    this.leftLegGroup.rotation.x = 0.3 + dashFlutter;
-    this.rightLegGroup.rotation.x = -0.3 - dashFlutter;
   }
 
   private animateHarite(progress: number, armSide: 'left' | 'right' = 'right') {
@@ -427,35 +368,6 @@ export class CharacterModel {
     this.bodyGroup.rotation.x = 0.95; // ほぼ水平に頭から突っ込む
     this.leftArmGroup.rotation.x = -0.8;
     this.rightArmGroup.rotation.x = -0.8;
-  }
-
-  private animateShiko(progress: number) {
-    // 四股（片足を天高く突き上げ、一気に振り下ろす！）
-    // progress: 0.0 ~ 0.5: 足上げ, 0.5 ~ 0.7: 振り下ろし, 0.7 ~ 1.0: 着地・踏ん張り
-    if (progress < 0.5) {
-      const lift = progress / 0.5;
-      this.bodyGroup.position.y = 0.85 + lift * 0.15;
-      this.bodyGroup.rotation.z = -lift * 0.35; // 体を傾ける
-      // 右足を高く上げる
-      this.rightLegGroup.rotation.z = -lift * 1.5;
-      this.rightLegGroup.rotation.x = -lift * 0.4;
-      // 手を広げてバランス
-      this.rightArmGroup.rotation.z = -lift * 0.8;
-      this.leftArmGroup.rotation.z = lift * 0.5;
-    } else if (progress < 0.75) {
-      // 振り下ろし〜着地ドスン！
-      this.bodyGroup.position.y = 0.65; // 深く沈み込む
-      this.bodyGroup.rotation.z = 0;
-      this.rightLegGroup.rotation.z = 0;
-      this.leftLegGroup.rotation.z = 0.4;
-      this.rightLegGroup.rotation.z = -0.4;
-      this.leftArmGroup.rotation.x = 0.6;
-      this.rightArmGroup.rotation.x = 0.6;
-    } else {
-      // 構えへ復帰
-      const recover = (progress - 0.75) / 0.25;
-      this.bodyGroup.position.y = 0.65 + recover * 0.2;
-    }
   }
 
   private animateHit(progress: number) {

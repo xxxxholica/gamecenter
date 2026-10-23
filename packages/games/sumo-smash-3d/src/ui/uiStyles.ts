@@ -677,31 +677,6 @@ export const UI_CSS = `
           white-space: nowrap !important;
         }
 
-        /* LT / RT: 同じ丸の中で LT と RT を交互に切り替える */
-        .skill-label .agc-btn.skill-guard-loop {
-          position: relative;
-        }
-
-        .skill-guard-loop .loop-lt,
-        .skill-guard-loop .loop-rt {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: guardLoop 2s steps(1, end) infinite;
-        }
-
-        .skill-guard-loop .loop-rt {
-          animation-delay: -1s;
-        }
-
-        @keyframes guardLoop {
-          0% { opacity: 1; }
-          50% { opacity: 0; }
-          100% { opacity: 1; }
-        }
-
         .skill-text {
           flex: 1;
           text-align: center;
