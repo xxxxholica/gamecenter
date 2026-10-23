@@ -117,8 +117,11 @@ export class StageLoadingScreen {
     this.target = Math.max(this.target, pct);
   }
 
-  /** メーターを振り切るまで上げ(読み込みが速くても、最後までなめらかに)、カードをしまう。画面は閉じない(発進演出のあとで hide する)。 */
-  public async finish(): Promise<void> {
+  /**
+   * メーターを振り切るまで上げる(読み込みが速くても、最後までなめらかに)。このあと leave() でカードをしまう。
+   * 2つに分けるのは、振り切るまでは読み込み画面として、戻る操作でレースを取り消せるようにするため(main.ts の cancelRaceLoading)。
+   */
+  public async fillMeter(): Promise<void> {
     this.target = 1;
     // 振り切るまで待つ(メーターは本当の時刻で動くので、操作のリプレイでは、記録と同じ所で振り切ったことにする)
     await replayBarrier('loading-meter', new Promise<void>((resolve) => {
@@ -129,6 +132,10 @@ export class StageLoadingScreen {
       };
       poll();
     }));
+  }
+
+  /** 振り切ったメーターのカードをしまう。画面は閉じない(発進演出のあとで hide する)。 */
+  public async leave(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 320));        // 振り切ったまま、ひと呼吸
     this.container.classList.add('leaving');
     await new Promise((resolve) => setTimeout(resolve, 220));

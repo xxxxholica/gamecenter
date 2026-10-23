@@ -250,7 +250,21 @@ export class ArcadeTitleScreen {
     this.render();
     document.body.appendChild(this.overlay);
     this.bindEvents();
+    window.addEventListener('keydown', this.earlyBackHandler);
   }
+
+  /**
+   * タイトルは作った時から見えているが、スタートを受け付けるのは show() から(ゲームの読み込みが済んでから呼ばれる)。
+   * その間も、戻る操作(Backspace、アケコンは SELECT)だけは受けて、ホーム(ハブ)へ戻す。
+   * 計測(Chrome, GPU なし): cyber-2d-fighter-3d は、タイトルが見えてから show() まで 3.4 秒、戻る操作が効かなかった
+   */
+  private readonly earlyBackHandler = (e: KeyboardEvent): void => {
+    if (this.isVisible || this.isStarting || e.code !== 'Backspace' || e.repeat) return;
+    if (this.overlay.classList.contains('ats-hidden') || this.overlay.style.display === 'none') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    returnToHub();
+  };
 
   private render(): void {
     const {
@@ -383,8 +397,10 @@ export class ArcadeTitleScreen {
 
       for (const pad of pads) {
         if (!pad || !pad.connected) continue;
-        // 攻撃ボタン 0〜7 と START(9)
+        // 攻撃ボタン 0〜7 と START(9)。SELECT(8) は戻る操作(homeReturn.ts が Backspace として届ける)なので、スタートにしない。
+        // スタートにすると、同じフレームで戻る操作と取り合いになり、先にこちらが動くとハブへ戻らずゲームが始まっていた
         for (let i = 0; i <= 9; i++) {
+          if (i === 8) continue;
           if (pad.buttons[i]?.pressed) {
             anyAction = true;
             break;
@@ -406,6 +422,7 @@ export class ArcadeTitleScreen {
   }
 
   public destroy(): void {
+    window.removeEventListener('keydown', this.earlyBackHandler);
     this.hide();
     this.overlay.remove();
   }

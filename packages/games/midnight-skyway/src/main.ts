@@ -126,8 +126,15 @@ const guideOnlineWait = () => mountArcadeGuide({
 });
 // レース中のガイドは、メニュー(ポーズ・結果)を開いている間だけ、メニュー用に入れ替える
 let raceGuideState: 'race' | 'pause' | 'result' | 'onlineResult' = 'race';
-/** ロード中(ロード画面を出してから、明転が始まるまで)は、ガイドを出さない */
+/** ロード中(ロード画面を出してから、明転が始まるまで)。レースのガイドは出さない(取り消せる間は、戻る操作だけ出す) */
 let raceLoading = false;
+/** コースの読み込み中(メーターが振り切るまで。発進の演出の前)は、戻る操作で取り消せる */
+let raceCancellable = false;
+/** レースを始めるたびに増やす。取り消したら増やし、読み込みの続きが、古いレースのものなら何もしない */
+let raceStartSeq = 0;
+/** 取り消せなくなってから(発進の演出〜明転)戻る操作が来たら、走行シーンが見えた時にポーズを開く(そこからコース変更・終了を選べる) */
+let pauseAfterLoading = false;
+const guideRaceLoading = (isOnline: boolean) => mountArcadeGuide({ showHomeHint: true, backLabel: isOnline ? '退出' : 'コース選択へ' });
 const guideRace = (hidden = false): HTMLElement => {
   raceGuideState = 'race';
   const root = mountArcadeGuide({
@@ -507,6 +514,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     onlineRoom = null;
     lobby.setRoom(null);
     flow.goToOnlineLobby();
+  };
+
+  /**
+   * コースの読み込み中に、戻る操作(SELECT / Backspace)でレースを取り消す。ひとりはコース選択へ、オンライン対戦は参加を取り消して待機画面へ。
+   * 読み込み(onStartRace の続き)は止められないので、終わったら raceStartSeq を見て何もしない。
+   */
+  const cancelRaceLoading = () => {
+    raceStartSeq++;
+    raceCancellable = false;
+    raceLoading = false;
+    (currentMapInstance as MapBase & { onProgress?: ((l: number, t: number) => void) | null }).onProgress = null;   // 次のレースの読み込み画面に、古い進み具合を出さない
+    sfx.uiBack();
+    if (online) leaveOnlineRace();
+    else flow.goToMapSelect();                     // 読み込み画面を閉じると、エンジン音も止まる(stageLoadingScreen.onHide)
   };
 
   // Safe helper to move player car back to garage turntable
@@ -1045,6 +1066,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       lobby.setWaitingVisible(true);                         // 参加者と「あと◯秒 / 待機中」を出す
     },
     onStartRace: async () => {
+      const seq = ++raceStartSeq;
+      pauseAfterLoading = false;
       stopTitleCarCycle();
       if (online) bgm.stop();                 // 対戦は、全員の出走に合わせて、同じ曲を同じ位置から流す(tryStartOnlineCountdown)
       else bgm.play('race', true);
@@ -1094,7 +1117,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       stageLoadingScreen.show(courseName, currentMapInstance.metadata.attribution);
       sfx.startEngine();                               // ロード中のエンジン音(メーターに合わせて大きくなる。onLevel で更新)
       raceLoading = true;
-      fadeGuide(document.getElementById('agc-guide'), 0, 350);       // ロード中はボタンガイドを消す(フェードアウト)
+      raceCancellable = true;
+      guideRaceLoading(!!online);                      // 読み込み中は、取り消す操作(SELECT / Backspace)だけを出す
 
       // ロード中も、背景のガレージ(街の中を走る車)はそのまま動かす。車は台座に置いたまま、コースだけ先に読み込む
       lightsBeforeRace = currentCar.lightsEnabled;
@@ -1120,9 +1144,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       } catch (err) {
         console.warn('Map open data load error:', err);
       }
-
-      // ロードが終わったら、カードをしまい、車が画面に向かって突っ込む → 暗転 → 明転で走行シーンへ
-      await stageLoadingScreen.finish();
+      if (seq !== raceStartSeq) return;                // 読み込み中に戻る操作で取り消された(cancelRaceLoading)
+      // ロードが終わったら、メーターを振り切り、カードをしまい、車が画面に向かって突っ込む → 暗転 → 明転で走行シーンへ
+      await stageLoadingScreen.fillMeter();
+      if (seq !== raceStartSeq) return;                // メーターが振り切るまでも、読み込み画面として取り消せる
+      raceCancellable = false;
+      fadeGuide(document.getElementById('agc-guide'), 0, 350);       // 発進の演出からは取り消せないので、ボタンガイドを消す(フェードアウト)
+      await stageLoadingScreen.leave();
       await garage.launch();
       await stageLoadingScreen.blackout();             // 車が画面を覆うところで暗転し、真っ暗の間に走行シーンへ入れ替える
       garage.stop();
@@ -1175,7 +1203,15 @@ window.addEventListener('DOMContentLoaded', async () => {
       driveScene.start();
       if (driveScene.carController) driveScene.carController.padBlocked = () => driveHUD.isMenuOpen();
       stageLoadingScreen.reveal();                     // 明転(走行シーンの最初の描画のあとに明るくなる)
-      requestAnimationFrame(() => requestAnimationFrame(() => { fadeGuide(raceGuide, 1, 650); raceLoading = false; if (benchAutoDrive) benchReady('race-start'); }));   // ガイドも同じタイミングでフェードイン
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        fadeGuide(raceGuide, 1, 650);                  // ガイドも同じタイミングでフェードイン
+        raceLoading = false;
+        if (pauseAfterLoading) {                       // 暗転中に押された戻る操作は、ここでポーズとして開く
+          pauseAfterLoading = false;
+          driveHUD.togglePause(true);
+        }
+        if (benchAutoDrive) benchReady('race-start');
+      }));
       if (online) {
         online.ready = true;
         onlineHUD.show();
@@ -1190,6 +1226,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       restartRace();
     },
     onTogglePause: () => {
+      // 読み込み中は HUD ごと隠れていて、ポーズを開いても見えない。コースの読み込み中なら取り消して戻り、発進の演出〜明転の間は何もしない
+      if (raceLoading) {
+        if (raceCancellable) cancelRaceLoading();
+        else pauseAfterLoading = true;
+        return;
+      }
+      // 名前入力の Backspace は1文字消す操作。結果画面の Backspace は、それぞれの画面(DriveHUD / OnlineHUD)が受ける
+      if (driveHUD.isNameEntryOpen || driveHUD.isResultModalOpen() || onlineHUD.isResultOpen()) return;
       driveHUD.togglePause();
     },
   });
