@@ -36,8 +36,8 @@ export function uiLayerHtml(): string {
               </tr>
               <tr>
                 <td><strong>張り手</strong></td>
-                <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">Space</span> を<strong>ちょん押し</strong></td>
-                <td>連打できる小さな突き。タメている相手を止める。当てるほど吹き飛ばしが強くなり(外してもたまった分は消えない)、満タンで次の1発が強い。</td>
+                <td><span class="guide-key-tag">A / Xボタン</span> / <span class="guide-key-tag">Space</span> を<strong>単押し</strong></td>
+                <td>単押しで3連バーストの突っ張りを繰り出す。タメている相手を止め、頭突きの半分ほどの力で吹き飛ばす。当てるほど威力が上がり、満タンで次が強くなる。</td>
               </tr>
               <tr>
                 <td><strong>頭突き</strong></td>
@@ -136,7 +136,7 @@ export function uiLayerHtml(): string {
             <div class="skill-fill"></div>
             <div class="charge-fill" id="p1-harite-bar"></div>
             <div class="skill-label">
-              <span class="skill-input">${buttonIconHtml([0], 'Space')}<span class="skill-hint">を連打</span></span>
+              <span class="skill-input">${buttonIconHtml([0], 'Space')}<span class="skill-hint">を単押し</span></span>
               <span class="skill-text">張り手</span>
             </div>
           </div>

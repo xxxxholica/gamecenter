@@ -10,7 +10,10 @@ import { ParticleManager } from './effects/ParticleManager';
 import { HalfResFx } from './effects/HalfResFx';
 import { UIManager } from './ui/UIManager';
 import { SumoAI } from './ai/SumoAI';
-import { KUMITE_TOTAL, getKumiteEnemySpec, pickSimultaneousDropCount, type KumiteEnemySpec } from './ai/kumiteRoster';
+import {
+  KUMITE_TOTAL, KUMITE_DROP_DELAY_SEC, KUMITE_DROP_STAGGER_SEC, getKumiteEnemySpec, pickSimultaneousDropCount,
+  type KumiteEnemySpec,
+} from './ai/kumiteRoster';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
@@ -553,7 +556,7 @@ class SumoGame {
       const targetSlot = freeSlots[k];
       const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++, dropCount);
       this.cpu.pendingDrops.push({
-        delay: 1.35 + k * 0.55,
+        delay: KUMITE_DROP_DELAY_SEC + k * KUMITE_DROP_STAGGER_SEC,
         slot: targetSlot,
         spec,
       });
@@ -1018,7 +1021,7 @@ class SumoGame {
         ) {
           // 万一土俵上の敵が全員消えて予約も空なら間をおいて次の敵を降らせる
           const spec = getKumiteEnemySpec(this.cpu.nextEnemyNumber++);
-          this.cpu.pendingDrops.push({ delay: 1.35, slot: 1, spec });
+          this.cpu.pendingDrops.push({ delay: KUMITE_DROP_DELAY_SEC, slot: 1, spec });
         }
 
         const inputs: (FighterInput | null)[] = [mine];

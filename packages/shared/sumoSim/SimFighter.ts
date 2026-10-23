@@ -61,8 +61,12 @@ export interface FighterConfig {
  */
 export const WALK_SPEED = 3.1;
 
-/** これより短い押下は張り手、これ以上押し続けるとぶちかましのタメに入る(秒) */
-const TAP_MAX_SEC = 0.16;
+/** これより短い押下は張り手(3連バースト)、これ以上押し続けるとぶちかましのタメに入る(秒) */
+const TAP_MAX_SEC = 0.2;
+/** 1回の単押しで繰り出す張り手の連撃数(3連バースト) */
+export const HARITE_BURST_COUNT = 3;
+/** 3連バーストの張り手1発あたりの長さ(秒) */
+export const HARITE_STEP_DURATION = 0.12;
 /** タメ中の移動速度(歩行に対する割合) */
 const CHARGE_MOVE_RATIO = 0.4;
 
@@ -140,6 +144,9 @@ export class SimFighter {
   // 張り手ゲージ(当てると溜まり、時間では減らない。段階で吹き飛びが強くなり、満タンで次の張り手が強くなる)
   public hariteGauge = 0; // 0〜100
   private hariteStrong = false;
+  public hariteBurstStep = 0; // 0〜2 (3連バーストの何発目か)
+  private hariteBurstStage = 0;
+  private hariteBurstGaugeGranted = false;
 
   // 反撃(ハメ抜け)
   public lastAttacker: SimFighter | null = null;
@@ -216,6 +223,9 @@ export class SimFighter {
     this.invulnTimer = 0;
     this.hariteGauge = 0;
     this.hariteStrong = false;
+    this.hariteBurstStep = 0;
+    this.hariteBurstStage = 0;
+    this.hariteBurstGaugeGranted = false;
     this.damagePercent = 0;
     this.body.collisionResponse = true;
     this.isAttackActive = false;
@@ -272,6 +282,9 @@ export class SimFighter {
     this.invulnTimer = 0;
     this.hariteGauge = 0;
     this.hariteStrong = false;
+    this.hariteBurstStep = 0;
+    this.hariteBurstStage = 0;
+    this.hariteBurstGaugeGranted = false;
     this.damagePercent = 0;
     this.isAttackActive = false;
     this.currentAttackType = null;
@@ -369,7 +382,7 @@ export class SimFighter {
         this.handleStrikeHold(moveInput, actions, oppX, oppZ);
         break;
       case 'harite':
-        this.handleHarite();
+        this.handleHarite(moveInput, oppX, oppZ);
         break;
       case 'buchikamashi_charge':
         this.handleBuchikamashiCharge(dt, actions, moveInput);
@@ -452,9 +465,9 @@ export class SimFighter {
       return;
     }
 
-    // 打撃: 押した瞬間に離していれば張り手、そのまま押していれば様子を見る
+    // 打撃: 押した瞬間に離していれば(または頭突きクールタイム中なら即座に)張り手3連バースト、そのまま押していれば様子を見る
     if (actions.strikePressed && grounded) {
-      if (actions.strikeReleased) {
+      if (actions.strikeReleased || this.buchikamashiCooldown > 0) {
         this.startHarite();
       } else {
         this.state = 'strike_hold';
@@ -706,43 +719,67 @@ export class SimFighter {
   }
 
   // ---------------------------------------------------------------
-  // 打撃: 張り手(ちょん押し) / ぶちかまし(長押し)
+  // 打撃: 張り手3連バースト(単押し) / ぶちかまし(長押し)
   // ---------------------------------------------------------------
 
   private startHarite(): void {
-    // ゲージが満タンなら、この1発は強い張り手(ゲージは使い切る)
+    // ゲージが満タンなら、3連バーストの締めが強い張り手になる(ゲージは使い切る)
+    this.hariteBurstStage = Math.min(HARITE_STAGE_KB.length - 1, Math.floor(this.hariteGauge / HARITE_GAUGE_STAGE));
     this.hariteStrong = this.hariteGauge >= 100;
     if (this.hariteStrong) this.hariteGauge = 0;
+    this.hariteBurstStep = 0;
+    this.hariteBurstGaugeGranted = false;
+    this.beginHariteStrike();
+  }
 
+  private beginHariteStrike(): void {
+    const isFinisher = this.hariteBurstStep >= HARITE_BURST_COUNT - 1;
     this.state = 'harite';
     this.stateTimer = 0;
     this.isAttackActive = true;
-    this.currentAttackType = this.hariteStrong ? 'harite_strong' : 'harite';
+    this.currentAttackType = this.hariteStrong && isFinisher ? 'harite_strong' : 'harite';
     this.attackHitRegistered = false;
 
     // 左右交互に突っ張りを繰り出す
     this.hariteArm = this.hariteArm === 'right' ? 'left' : 'right';
 
-    // 前方へ踏み込む
+    // 前方へ踏み込む(土俵際で外を向いているときは飛び出さないよう抑える)
     const dirX = Math.sin(this.facingAngle);
     const dirZ = Math.cos(this.facingAngle);
-    this.body.velocity.x = dirX * 3;
-    this.body.velocity.z = dirZ * 3;
+    const r = Math.hypot(this.body.position.x, this.body.position.z);
+    const outwardDot = dirX * this.body.position.x + dirZ * this.body.position.z;
+    const stepSpeed = r > 6.2 && outwardDot > 0 ? 1.2 : 4.2;
+    this.body.velocity.x = dirX * stepSpeed;
+    this.body.velocity.z = dirZ * stepSpeed;
 
     this.env.fx.particle('spawnHariteSwing', this.body.position.x, this.body.position.y, this.body.position.z, dirX, 0, dirZ);
     this.env.fx.sound('playHarite');
   }
 
-  private handleHarite(): void {
-    // 判定は 0.04〜0.14 秒
-    this.isAttackActive = this.stateTimer >= 0.04 && this.stateTimer <= 0.14;
+  private handleHarite(moveInput: FighterMoveInput, oppX: number | null, oppZ: number | null): void {
+    // 各連撃の判定は 0.02〜0.10 秒
+    this.isAttackActive = this.stateTimer >= 0.02 && this.stateTimer <= 0.1;
 
-    if (this.stateTimer > 0.09) {
-      this.brake(0.7);
+    if (this.stateTimer > 0.07) {
+      this.brake(0.75);
     }
 
-    // 0.22 秒で終了。連打はできるが、一方的に押し切れるほど速くはない
-    if (this.stateTimer > 0.22) {
+    // 1発あたり HARITE_STEP_DURATION 秒で3連バーストを連続発動する
+    if (this.stateTimer >= HARITE_STEP_DURATION) {
+      if (this.hariteBurstStep + 1 < HARITE_BURST_COUNT) {
+        this.hariteBurstStep++;
+        if (moveInput.isMoving) {
+          this.targetFacingAngle = Math.atan2(moveInput.x, moveInput.z);
+        } else if (oppX !== null && oppZ !== null) {
+          const dx = oppX - this.body.position.x;
+          const dz = oppZ - this.body.position.z;
+          if (Math.hypot(dx, dz) > 0.1) {
+            this.targetFacingAngle = Math.atan2(dx, dz);
+          }
+        }
+        this.beginHariteStrike();
+        return;
+      }
       this.state = 'idle';
       this.isAttackActive = false;
       this.currentAttackType = null;
@@ -982,19 +1019,35 @@ export class SimFighter {
     let baseDamage = 0;
     let baseImpulse = 0;
 
+    const inBurstLink =
+      attackType === 'harite' &&
+      attacker !== null &&
+      attacker.state === 'harite' &&
+      attacker.hariteBurstStep < HARITE_BURST_COUNT - 1;
+
     if (attackType === 'harite') {
-      baseDamage = 4;
-      // 攻撃側のゲージが溜まっているほど強く吹き飛ばす(加算する前の段階で決める)
-      const stage = attacker ? Math.min(HARITE_STAGE_KB.length - 1, Math.floor(attacker.hariteGauge / HARITE_GAUGE_STAGE)) : 0;
-      baseImpulse = 180 * HARITE_STAGE_KB[stage];
+      baseDamage = inBurstLink ? 2 : 4;
+      // 攻撃側のゲージが溜まっているほど強く吹き飛ばす(バースト開始時点または現在の段階で決める)
+      const stage = attacker
+        ? attacker.state === 'harite'
+          ? attacker.hariteBurstStage
+          : Math.min(HARITE_STAGE_KB.length - 1, Math.floor(attacker.hariteGauge / HARITE_GAUGE_STAGE))
+        : 0;
+      // 3連バーストの1・2発目は相手を逃がさない繋ぎの押し込み、3発目(または単発)で頭突きの半分程度のノックバックを与える
+      baseImpulse = (inBurstLink ? 95 : 360) * HARITE_STAGE_KB[stage];
       this.env.fx.particle('spawnHariteHit', this.body.position.x, 1.2, this.body.position.z);
       this.env.fx.sound('playHarite');
 
-      // 当てるほど、攻撃側の張り手ゲージが溜まる
-      if (attacker) attacker.hariteGauge = Math.min(100, attacker.hariteGauge + HARITE_GAUGE_PER_HIT);
+      // 1回のバースト(または単発呼び出し)につきゲージが20溜まる
+      if (attacker && !attacker.hariteBurstGaugeGranted) {
+        attacker.hariteGauge = Math.min(100, attacker.hariteGauge + HARITE_GAUGE_PER_HIT);
+        if (attacker.state === 'harite') {
+          attacker.hariteBurstGaugeGranted = true;
+        }
+      }
     } else if (attackType === 'harite_strong') {
-      baseDamage = 9;
-      baseImpulse = 480;
+      baseDamage = 10;
+      baseImpulse = 620;
       this.env.fx.particle('spawnBuchikamashiHit', this.body.position.x, 1.1, this.body.position.z, 0.9);
       this.env.requestHitStop(hitStopFor(0.9));
       this.env.fx.particle('triggerShake', 0.3);
@@ -1010,17 +1063,24 @@ export class SimFighter {
 
     this.damagePercent += baseDamage;
 
+    // 3連バースト中は直前の連撃の速度を軽く減衰させてから新しい衝撃を与える(3発目まで確実に繋がり、締めできっちり吹き飛ぶ)
+    if (attacker && attacker.state === 'harite') {
+      this.body.velocity.x *= 0.2;
+      this.body.velocity.z *= 0.2;
+    }
+
     // ノックバック = 基本インパルス × (1 + ダメージ / k)。
-    // 張り手は1発が軽いぶん、ダメージが溜まったときの伸びを大きくする(0%で約0.6m、100%で約3.5m)。
-    const knockbackMultiplier =
-      attackType === 'harite'
-        ? 1.0 + this.damagePercent / 21.0
+    // 張り手3連バーストの締めは、頭突き(ぶちかまし)の半分程度のノックバックが出るようにする。
+    const knockbackMultiplier = inBurstLink
+      ? 1.0
+      : attackType === 'harite'
+        ? 1.0 + this.damagePercent / 45.0
         : attackType === 'harite_strong'
-          ? 1.0 + this.damagePercent / 35.0
+          ? 1.0 + this.damagePercent / 40.0
           : 1.0 + this.damagePercent / 70.0;
     const kbScale = attackType === 'buchikamashi' ? KB_RUSH : KB_HARITE;
     const finalImpulse = baseImpulse * kbScale * knockbackMultiplier * this.knockbackTakenMult * (this.body.mass / 100);
-    this.body.applyImpulse(new this.env.C.Vec3(hx * finalImpulse, finalImpulse * 0.18, hz * finalImpulse), this.body.position);
+    this.body.applyImpulse(new this.env.C.Vec3(hx * finalImpulse, finalImpulse * (inBurstLink ? 0.06 : 0.18), hz * finalImpulse), this.body.position);
 
     this.state = 'hit';
     this.stateTimer = 0;
@@ -1039,10 +1099,14 @@ export class SimFighter {
     const s = this.bodyScale;
 
     switch (this.currentAttackType) {
-      case 'harite':
-        return { x: p.x + fx * 1.05 * s, y: p.y + 0.2, z: p.z + fz * 1.05 * s, radius: 0.75 * s };
+      case 'harite': {
+        const reachBoost = this.hariteBurstStep * 0.14;
+        const offset = (1.05 + reachBoost) * s;
+        const radius = (0.75 + this.hariteBurstStep * 0.08) * s;
+        return { x: p.x + fx * offset, y: p.y + 0.2, z: p.z + fz * offset, radius };
+      }
       case 'harite_strong':
-        return { x: p.x + fx * 1.15 * s, y: p.y + 0.2, z: p.z + fz * 1.15 * s, radius: 0.95 * s };
+        return { x: p.x + fx * 1.35 * s, y: p.y + 0.2, z: p.z + fz * 1.35 * s, radius: 1.0 * s };
       case 'buchikamashi':
         return { x: p.x + fx * 1.3 * s, y: p.y, z: p.z + fz * 1.3 * s, radius: 1.3 * s };
       case 'grab':

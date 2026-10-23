@@ -9,6 +9,7 @@ import {
   BUCHIKAMASHI_MAX_COOLDOWN,
   GRAB_HOLD_TIME,
   GRAB_MAX_COOLDOWN,
+  HARITE_STEP_DURATION,
   MAX_CHARGE_TIME,
   rushDurationFor,
 } from '../../../../shared/sumoSim/SimFighter';
@@ -211,7 +212,7 @@ export class FighterView {
         break;
       case 'harite':
         animState = 'harite';
-        animProgress = Math.min(1.0, this.stateTimer / 0.22);
+        animProgress = Math.min(1.0, this.stateTimer / HARITE_STEP_DURATION);
         break;
       case 'buchikamashi_charge':
         animState = 'buchikamashi_charge';

@@ -104,18 +104,13 @@ const MAWASHI_PALETTE = [
 const BOSS_MAWASHI = { hex: 0xc9a227, css: '#ffd166' }; // 黄金まわし
 const FINAL_BOSS_MAWASHI = { hex: 0x7209b7, css: '#ff4d6d' }; // 百獣王・覇王色
 
-// 3体同時ラッシュが発生する開始番号 (7〜9, 16〜18, 25〜27, 34〜36, 43〜45, 52〜54, 61〜63, 72〜74, 83〜85, 92〜94)
-const TRIPLE_TRIGGERS = new Set([7, 16, 25, 34, 43, 52, 61, 72, 83, 92]);
-// 2体同時ラッシュが発生する開始番号 (4〜5, 12〜13, 21〜22, 31〜32, 47〜48, 57〜58, 67〜68, 77〜78, 87〜88, 96〜97)
-const DOUBLE_TRIGGERS = new Set([4, 12, 21, 31, 47, 57, 67, 77, 87, 96]);
+// 2体同時降下ラッシュが定期的に発生する開始番号（10体ごとの各区間に2回ずつ: 4〜5, 7〜8, 12〜13, 16〜17, 21〜22, 25〜26, 31〜32, 35〜36, 42〜43, 46〜47, 52〜53, 56〜57, 62〜63, 66〜67, 72〜73, 76〜77, 82〜83, 86〜87, 92〜93, 96〜97）
+const DOUBLE_TRIGGERS = new Set([4, 7, 12, 16, 21, 25, 31, 35, 42, 46, 52, 56, 62, 66, 72, 76, 82, 86, 92, 96]);
 
-/** 2体または3体同時降下ウェーブに含まれる番号か */
+/** 2体同時降下ウェーブに含まれる番号か */
 export function isSimultaneousWaveMember(n: number): boolean {
   for (const start of DOUBLE_TRIGGERS) {
     if (n >= start && n < start + 2) return true;
-  }
-  for (const start of TRIPLE_TRIGGERS) {
-    if (n >= start && n < start + 3) return true;
   }
   return false;
 }
@@ -238,9 +233,9 @@ export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEn
 
 /**
  * 次にスポーンする敵の通し番号 nextEnemyNumber (1〜100) に対し、
- * 空から同時に降らせる人数 (1〜3体) を決める。
- * - たまに2〜3体が同時に空から降ってくるラッシュを発生させる
- * - 10体ごとのボス (10, 20, ..., 100) はタイマンまたは護衛付きにならないよう単独降下(100体目は単独)
+ * 空から同時に降らせる人数 (1〜2体) を決める。
+ * - 定期的に2体が同時に空から降ってくるラッシュを発生させる
+ * - 10体ごとのボス (10, 20, ..., 100) は必ず単独で登場させる
  */
 export function pickSimultaneousDropCount(nextEnemyNumber: number, activeEnemiesOnRing: number, maxSlots = 3): number {
   const remainingToSpawn = KUMITE_TOTAL - nextEnemyNumber + 1;
@@ -253,15 +248,15 @@ export function pickSimultaneousDropCount(nextEnemyNumber: number, activeEnemies
   // 1体目、または10体ごとのボス(10, 20, ..., 100)は必ず1体で登場
   if (nextEnemyNumber === 1 || nextEnemyNumber % 10 === 0) return 1;
 
-  let desired = 1;
-  if (TRIPLE_TRIGGERS.has(nextEnemyNumber)) {
-    desired = 3;
-  } else if (DOUBLE_TRIGGERS.has(nextEnemyNumber)) {
-    desired = 2;
-  }
+  const desired = DOUBLE_TRIGGERS.has(nextEnemyNumber) ? 2 : 1;
 
   // 10体ごとのボス(10, 20, ..., 100)が複数同時の中に巻き込まれないようにする
   const nextBossNumber = Math.ceil(nextEnemyNumber / 10) * 10;
   const maxBeforeBoss = Math.max(1, nextBossNumber - nextEnemyNumber);
   return Math.max(1, Math.min(desired, freeSlots, remainingToSpawn, maxBeforeBoss));
 }
+
+/** 敵の降下を予約してから、空から落ち始めるまでの間(秒) */
+export const KUMITE_DROP_DELAY_SEC = 1.35;
+/** 2体同時ウェーブで1体目と2体目が空から続けて落ちてくる間隔(秒) */
+export const KUMITE_DROP_STAGGER_SEC = 0.55;

@@ -527,7 +527,7 @@ export class SimWorld {
         this.fx.push('main', 'blast', bx, 0.8, bz, 0);
         const kimarite = this.determineKimarite(player, f);
         f.leave();
-        player.damagePercent = 0;
+        player.damagePercent = Math.floor(player.damagePercent * 0.5);
         this.wins[0] = Math.min(this.opts.kumiteTotal, this.wins[0] + 1);
         this.opts.onEnemyFell?.(slot, f, kimarite);
 
