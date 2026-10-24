@@ -1,8 +1,6 @@
 import { IS_FIREFOX, IS_SAFARI, decodeInWorker, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
 import { benchMark } from '../../../../shared/arcadeBenchTargets';
 import { realNow, untrackedFrame, untrackedTimeout } from '../../../../shared/arcadeReplay';
-import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
-import { audio } from '../audio';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -751,16 +749,6 @@ if (abs(vNightNor.y) < 0.4) {
     });
   }
 
-  private lastCrashReport = -Infinity;
-  /** 死亡地点マップ: ぶつかった場所(プレイヤーが運転している間だけ。続けて当たっている間は1秒に1回) */
-  private reportCrash(car: CarController, p: { x: number; z: number }, impact: number, what: string): void {
-    if (!car.canDrive || impact < 0.2) return;
-    const now = performance.now();
-    if (now - this.lastCrashReport < 1000) return;
-    this.lastCrashReport = now;
-    reportDeathPoint(`course:${this.metadata.id}`, p.x, p.z, what, { impact: Math.round(impact * 100) / 100 });
-  }
-
   /** Load chunks that came into range, release the ones that fell out of it. */
   protected updateStreaming(x: number, z: number): void {
     if (!this.manifest) return;
@@ -910,19 +898,6 @@ if (abs(vNightNor.y) < 0.4) {
     }
     p.y = surfaceY + lift;
     car.groundPitch += (-Math.atan(pitchSlope * along) - car.groundPitch) * 0.15;
-
-    // Traffic obstacle collision check (Same-lane other cars). 隠している間(ゴールした後)は当たらない
-    if (this.traffic?.group.visible) {
-      const tCol = this.traffic.checkPlayerCollision(p, car.rotationY, car.speed);
-      if (tCol.hit) {
-        car.applyKnockback(tCol.pushX, tCol.pushZ, tCol.impact, tCol.isRearEnd, tCol.knockX, tCol.knockZ, tCol.fresh, tCol.turn);
-        if (tCol.fresh) {
-          car.speed = car.speed * tCol.speedFactor + tCol.speedAdd;
-          audio.sfx.crash(tCol.impact);
-          this.reportCrash(car, p, tCol.impact, '一般車');
-        }
-      }
-    }
   }
 
   /** Moving-average (+-`half` samples, ~2 m apart) slope and vertical curvature of the closed route. */
@@ -978,10 +953,6 @@ if (abs(vNightNor.y) < 0.4) {
       }
     }
     return bestY;
-  }
-
-  public override update(dt: number, carPosition: THREE.Vector3): void {
-    this.traffic?.update(dt, carPosition);
   }
 
   public override getProgressFraction(): number {

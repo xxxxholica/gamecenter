@@ -33,10 +33,8 @@ import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
 import { BenchRivalNet, BenchRivalPlan, benchRivalPlayers, benchSelfPlayer } from './net/benchRivals';
-import { mulberry32 } from '../../../shared/online/seededRandom';
 import { fetchGhost, loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
-import { setTrafficRng } from './core/Traffic';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { ModeSelectScreen } from './ui/ModeSelectScreen';
 import { OnlineHUD } from './ui/OnlineHUD';
@@ -376,8 +374,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     online.goTime = goTime;
     // BGM: 部屋の乱数の種で全員が同じ曲を選び、カウントダウンの開始(goAt)を曲の頭にそろえる
     bgm.playSynced(online.seed, performance.now() + (goAt - net.serverNow()));
-    const traffic = currentMapInstance.traffic;
-    if (traffic) traffic.sharedClock = () => (net.serverNow() - goTime) / 1000;
     timeAttack.startCountdownSynced(goTime - net.serverNow(), () => goTime - net.serverNow());
   };
 
@@ -600,11 +596,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     driveHUD.updateTelemetry(speed, rpm, gear);
     sfx.updateEngine(rpm, speed, !!isDrifting);
   };
-  driveScene.callbacks.onPositionUpdate = (pos, rotY, fwdTraffic) => {
-    driveHUD.updateCarPosition(pos, rotY, fwdTraffic);
+  driveScene.callbacks.onPositionUpdate = (pos, rotY) => {
+    driveHUD.updateCarPosition(pos, rotY);
   };
   const remoteMarkersPool: { x: number; z: number; color: number }[] = [];
-  driveScene.callbacks.onFxUpdate = (speed, boost, slipstream) => driveHUD.setFx(speed, boost, slipstream);
+  driveScene.callbacks.onFxUpdate = (speed, boost) => driveHUD.setFx(speed, boost);
   driveScene.callbacks.onProgressUpdate = (fraction, speedKmH, dt) => {
     timeAttack.update(dt, fraction, speedKmH);
     raceDirector.update(fraction);
@@ -1082,16 +1078,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       const reuseBootMap = bootMapUnused && !online && currentMapId === bootMapId;
       bootMapUnused = false;
       if (!reuseBootMap) {
-        if (online) setTrafficRng(mulberry32(online.seed));    // 全員同じ交通NPC
-        try {
-          currentMapInstance = mapFactories[currentMapId]();
-        } finally {
-          setTrafficRng(null);
-        }
+        currentMapInstance = mapFactories[currentMapId]();
       }
       if (online) {
-        const traffic = currentMapInstance.traffic;
-        if (traffic) traffic.sharedClock = () => -1;         // go が来るまで動かさない
         raceDirector.online = true;
         driveHUD.setOnlineMode(true);
         driveScene.gridOffset = { lateral: (online.slot % 2 === 0 ? -1 : 1) * 1.8, back: Math.floor(online.slot / 2) * 6 };

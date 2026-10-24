@@ -2,9 +2,7 @@ import * as THREE from 'three';
 import { MapMetadata } from './MapBase';
 import { StreamedCityMap } from './StreamedCityMap';
 import { buildRoadSigns, JP_STYLE, SignSpec } from './RoadSigns';
-import { routeLength } from './RoadNetwork';
 import { GoalHologram } from './GoalHologram';
-import { Traffic } from '../core/Traffic';
 import { SECTOR_FRACTIONS } from '../core/Ghost';
 import { buildTougeCourse } from './TougeBuilder';
 import type { CarController } from '../core/CarController';
@@ -142,15 +140,7 @@ export class TougeDownhillMap extends StreamedCityMap {
     this.goal = new GoalHologram(a.clone().lerp(b, gu), Math.atan2(b.x - a.x, b.z - a.z), W);
     this.group.add(this.goal.group);
 
-    // 4. Touge Traffic NPCs
-    const npcCount = Math.max(10, Math.round(routeLength(this.road) / 260));
-    this.traffic = new Traffic(W, {
-      forwardRoute: this.road,
-      forwardCount: npcCount,
-    });
-    this.group.add(this.traffic.group);
-
-    // 5. Deep Valley Ground Plane
+    // 4. Deep Valley Ground Plane
     const base = new THREE.Mesh(
       new THREE.PlaneGeometry(8000, 8000),
       new THREE.MeshBasicMaterial({ color: 0x0b1017 }),

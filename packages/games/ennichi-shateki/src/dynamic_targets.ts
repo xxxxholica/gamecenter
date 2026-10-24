@@ -16,6 +16,7 @@ export class FloatingBalloon {
   public points: number = 300;
   public isPopped: boolean = false;
   public respawnTimer: number = 0;
+  public spawnProgress: number = 1;
   private floatSeed: number;
 
   constructor(initialPos: THREE.Vector3, colorHex: number, seed: number) {
@@ -66,20 +67,35 @@ export class FloatingBalloon {
     if (this.isPopped) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
-        // Respawn balloon
+        // Respawn balloon: float up smoothly from behind the middle shelf
         this.isPopped = false;
+        this.spawnProgress = 0;
         this.mesh.visible = true;
-        this.mesh.scale.setScalar(TARGET_SCALE);
+        this.mesh.scale.setScalar(0.01);
         sounds.playRestock();
+      } else {
+        return;
       }
-      return;
     }
 
     // Bobbing and drifting in air
     const swayX = Math.sin(elapsed * 1.2 + this.floatSeed) * 0.35;
-    const swayY = Math.cos(elapsed * 1.6 + this.floatSeed) * 0.08;
-    this.pos.x = this.basePos.x + swayX;
-    this.pos.y = this.basePos.y + swayY;
+    const swayY = Math.cos(elapsed * 1.6 + this.floatSeed) * 0.06;
+    const targetX = this.basePos.x + swayX;
+    const targetY = this.basePos.y + swayY;
+    const targetZ = this.basePos.z;
+
+    if (this.spawnProgress < 1) {
+      this.spawnProgress = Math.min(1, this.spawnProgress + dt / 0.75);
+      const ease = 1 - Math.pow(1 - this.spawnProgress, 3);
+      this.pos.x = targetX;
+      this.pos.y = THREE.MathUtils.lerp(1.15, targetY, ease);
+      this.pos.z = THREE.MathUtils.lerp(-0.55, targetZ, ease);
+      this.mesh.scale.setScalar(TARGET_SCALE * Math.max(0.05, ease));
+    } else {
+      this.pos.set(targetX, targetY, targetZ);
+      this.mesh.scale.setScalar(TARGET_SCALE);
+    }
     this.mesh.position.copy(this.pos);
 
     // Gentle string tilt
@@ -172,11 +188,14 @@ export class MovingDuck {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
         this.isDown = false;
-        this.flipAngle = 0;
-        this.mesh.rotation.x = 0;
         sounds.playRestock();
       }
       return;
+    }
+
+    if (this.flipAngle > 0) {
+      this.flipAngle = Math.max(0, this.flipAngle - 10.0 * dt);
+      this.mesh.rotation.x = -this.flipAngle;
     }
 
     // Move along conveyor track
@@ -215,6 +234,8 @@ export class FlyingUFO {
   public isHit: boolean = false;
   public fallVelocity: THREE.Vector3 = new THREE.Vector3();
   public respawnTimer: number = 0;
+  public spawnProgress: number = 1;
+  private spawnStartX: number = 3.4;
   /**
    * オンライン対戦の共有の的として使う時(外部制御): 位置・出現は外(online/SharedUfo)が決める。ここでは動かさず、
    * 命中しても自分では墜ちない(当たりはサーバーが決める。命中の通知だけ出る)。
@@ -226,7 +247,7 @@ export class FlyingUFO {
   private lights: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 
   constructor() {
-    this.pos = new THREE.Vector3(0, 2.35, -0.6);
+    this.pos = new THREE.Vector3(0, 2.12, -0.6);
     this.mesh = this.buildMesh();
     this.mesh.scale.setScalar(TARGET_SCALE);
     this.mesh.position.copy(this.pos);
@@ -297,25 +318,48 @@ export class FlyingUFO {
 
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
-        // Respawn UFO
+        // Respawn UFO: fly in smoothly from outside the stall
         this.isHit = false;
-        this.pos.set(0, 2.35, -0.6);
+        this.spawnProgress = 0;
+        const nextTargetX = Math.sin(elapsed * 0.65) * 1.7;
+        this.spawnStartX = (nextTargetX >= 0 ? 1 : -1) * 3.4;
+        this.pos.set(this.spawnStartX, 2.45, -0.85);
         this.mesh.position.copy(this.pos);
         this.mesh.rotation.set(0, 0, 0);
+        this.mesh.scale.setScalar(TARGET_SCALE * 0.25);
         this.mesh.visible = true;
         sounds.playRestock();
+      } else {
+        return;
       }
-      return;
     }
 
     // Gentle, relaxed Lissajous flight in canopy space (slowed down for comfortable tracking)
-    this.pos.x = Math.sin(elapsed * 0.65) * 1.7;
-    this.pos.y = 2.32 + Math.cos(elapsed * 0.95) * 0.08;
-    this.pos.z = -0.6 + Math.sin(elapsed * 0.4) * 0.12;
+    const targetX = Math.sin(elapsed * 0.65) * 1.7;
+    const targetY = 2.10 + Math.cos(elapsed * 0.95) * 0.06;
+    const targetZ = -0.6 + Math.sin(elapsed * 0.4) * 0.12;
+
+    if (this.spawnProgress < 1) {
+      this.spawnProgress = Math.min(1, this.spawnProgress + dt / 0.9);
+      const ease = 1 - Math.pow(1 - this.spawnProgress, 3);
+      this.pos.x = THREE.MathUtils.lerp(this.spawnStartX, targetX, ease);
+      this.pos.y = THREE.MathUtils.lerp(2.45, targetY, ease);
+      this.pos.z = THREE.MathUtils.lerp(-0.85, targetZ, ease);
+      this.mesh.scale.setScalar(TARGET_SCALE * (0.25 + 0.75 * ease));
+    } else {
+      this.pos.set(targetX, targetY, targetZ);
+      this.mesh.scale.setScalar(TARGET_SCALE);
+    }
     this.mesh.position.copy(this.pos);
 
     // Saucer tilt
-    this.mesh.rotation.z = -Math.cos(elapsed * 0.65) * 0.14;
+    const flightTilt = -Math.cos(elapsed * 0.65) * 0.14;
+    if (this.spawnProgress < 1) {
+      const entryTilt = Math.sign(this.spawnStartX - targetX) * 0.28 * (1 - this.spawnProgress);
+      this.mesh.rotation.z = flightTilt + entryTilt;
+    } else {
+      this.mesh.rotation.z = flightTilt;
+    }
     this.mesh.rotation.y += 1.3 * dt;
 
     // Pulse rim lights
@@ -331,6 +375,8 @@ export class FlyingUFO {
       return this.pos.clone();
     }
     this.isHit = true;
+    this.spawnProgress = 1;
+    this.mesh.scale.setScalar(TARGET_SCALE);
     this.respawnTimer = 6.0;
     this.fallVelocity.set((Math.random() - 0.5) * 2.0, 1.5, -0.8);
     sounds.playUFOHit();
@@ -362,12 +408,12 @@ export class DynamicTargetsManager {
     this.group = new THREE.Group();
     this.confettiGeo = new THREE.BoxGeometry(0.025, 0.025, 0.005);
 
-    // 1. Floating Balloons (4 balloons floating at different heights)
+    // 1. Floating Balloons (4 balloons floating at different heights, clearly visible below canopy)
     const balloonConfigs = [
-      { pos: new THREE.Vector3(-1.4, 2.15, -0.2), color: 0xd91414, seed: 0 },
-      { pos: new THREE.Vector3(-0.5, 2.25, -0.4), color: 0xffcc00, seed: 1.8 },
-      { pos: new THREE.Vector3(0.5, 2.20, -0.3), color: 0x0984e3, seed: 3.2 },
-      { pos: new THREE.Vector3(1.4, 2.18, -0.2), color: 0x9b59b6, seed: 4.5 },
+      { pos: new THREE.Vector3(-1.4, 1.90, -0.2), color: 0xd91414, seed: 0 },
+      { pos: new THREE.Vector3(-0.5, 1.98, -0.4), color: 0xffcc00, seed: 1.8 },
+      { pos: new THREE.Vector3(0.5, 1.94, -0.3), color: 0x0984e3, seed: 3.2 },
+      { pos: new THREE.Vector3(1.4, 1.92, -0.2), color: 0x9b59b6, seed: 4.5 },
     ];
 
     balloonConfigs.forEach((c) => {
@@ -446,6 +492,8 @@ export class DynamicTargetsManager {
   public reset() {
     this.balloons.forEach((b) => {
       b.isPopped = false;
+      b.spawnProgress = 1;
+      b.mesh.scale.setScalar(TARGET_SCALE);
       b.mesh.visible = true;
     });
     this.ducks.forEach((d) => {
@@ -454,9 +502,11 @@ export class DynamicTargetsManager {
       d.mesh.rotation.x = 0;
     });
     this.ufo.isHit = false;
-    this.ufo.pos.set(0, 2.35, -0.6);
+    this.ufo.spawnProgress = 1;
+    this.ufo.pos.set(0, 2.12, -0.6);
     this.ufo.mesh.position.copy(this.ufo.pos);
     this.ufo.mesh.rotation.set(0, 0, 0);
+    this.ufo.mesh.scale.setScalar(TARGET_SCALE);
     this.ufo.mesh.visible = true;
 
     for (const c of this.confetti) {

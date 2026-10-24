@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { CarController } from '../core/CarController';
-import type { Traffic } from '../core/Traffic';
 
 export interface MapMetadata {
   id: string;
@@ -65,9 +64,6 @@ export abstract class MapBase {
 
   /** 走行ルートの点 i の上に屋根(トンネル・洞門)があるか。ゴール後のカメラが上空へ上がってよいかの判断に使う */
   public isRoofed(_i: number): boolean { return false; }
-
-  /** Traffic system (Opposite + Same-lane obstacles) */
-  public traffic: Traffic | null = null;
 
   constructor() {
     this.group = new THREE.Group();

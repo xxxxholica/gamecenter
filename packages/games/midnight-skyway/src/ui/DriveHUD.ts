@@ -134,6 +134,7 @@ export class DriveHUD {
   private modalArmTime = 0;
 
   private minimapPoints: THREE.Vector2[] = [];
+  private minimapRoadWidth = 12;
   private extraRoutes: { points: THREE.Vector2[]; drivable: boolean }[] = [];
   /** オンライン対戦: ミニマップに出す他プレイヤー。 */
   private remoteMarkers: { x: number; z: number; color: number }[] = [];
@@ -367,8 +368,17 @@ export class DriveHUD {
     }
 
     this.minimapPoints = [];
+    this.minimapRoadWidth = map.getRoadWidth() ?? 12;
     this.extraRoutes = map.overviewRoutes;
 
+    const route = map.getRoutePoints();
+    if (route && route.length > 0) {
+      // 実際の走行レーン・壁判定と同じ中心線を使い、カーブで道幅がずれないようにする(約4m間隔)
+      for (let i = 0; i < route.length; i += 2) {
+        this.minimapPoints.push(new THREE.Vector2(route[i].x, route[i].z));
+      }
+      return;
+    }
     if (!map.roadSpline) return;
     // 拡大して見せるので、折れ線が角ばらないよう細かく取る
     for (const p of map.roadSpline.getPoints(800)) {
@@ -477,10 +487,10 @@ export class DriveHUD {
   }
 
   /**
-   * 速度(0〜1)・ブースト(0〜1)・スリップストリーム(0〜1)を伝える: 画面の縁が光り、バンドがブースト表示になる。
+   * 速度(0〜1)・ブースト(0〜1)を伝える: 画面の縁が光り、バンドがブースト表示になる。
    */
-  public setFx(speed: number, boost: number, slipstream: number): void {
-    const edgeAlpha = Math.min(1, speed * 0.35 + boost * 0.9 + slipstream * 0.5);
+  public setFx(speed: number, boost: number): void {
+    const edgeAlpha = Math.min(1, speed * 0.35 + boost * 0.9);
     const qAlpha = Math.round(edgeAlpha * 20) / 20;
     const boosting = boost > 0.3;
     const key = `${qAlpha.toFixed(2)}|${boosting ? 1 : 0}`;
@@ -921,13 +931,12 @@ export class DriveHUD {
 
   public updateCarPosition(
     carPos: THREE.Vector3,
-    carRotY: number,
-    forwardCars: THREE.Vector2[] = []
+    carRotY: number
   ): void {
-    this.drawMinimap(carPos, carRotY, forwardCars);
+    this.drawMinimap(carPos, carRotY);
   }
 
-  private drawMinimap(carPos: THREE.Vector3, carRotY: number, forwardCars: THREE.Vector2[]): void {
+  private drawMinimap(carPos: THREE.Vector3, carRotY: number): void {
     const ctx = this.ctx, w = MAP_SIZE, h = MAP_SIZE;
     ctx.clearRect(0, 0, w, h);
     if (this.minimapPoints.length === 0) return;
@@ -955,40 +964,38 @@ export class DriveHUD {
     }
     ctx.restore();
 
-    // 2. Main course drivable loop
+    // 2. Main course drivable loop (実際の道幅 + 自車アイコンの半径ぶんで描き、壁際を走っても道からはみ出さないようにする)
+    const roadWidthPx = this.minimapRoadWidth * scale + 10;
     ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
     ctx.shadowBlur = 5;
     ctx.beginPath();
     tracePolylineNear(ctx, this.minimapPoints, true, toCanvas);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3.6;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.lineWidth = roadWidthPx + 3.2;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(18, 28, 48, 0.88)';
+    ctx.lineWidth = roadWidthPx;
     ctx.stroke();
     ctx.restore();
 
-    // 3. Start / Finish Line (Gold box with outline)
+    // 3. Start / Finish Line (道幅いっぱいに横断するゴールドのライン)
     const [sx, sy] = toCanvas(this.minimapPoints[0].x, this.minimapPoints[0].y);
+    const p1 = this.minimapPoints[1] ?? this.minimapPoints[0];
+    const [s1x, s1y] = toCanvas(p1.x, p1.y);
     ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.atan2(s1y - sy, s1x - sx));
     ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
     ctx.shadowBlur = 4;
     ctx.fillStyle = '#e2b05e';
-    ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9);
+    ctx.fillRect(-2.5, -roadWidthPx / 2, 5, roadWidthPx);
     ctx.restore();
 
-    // 4. Forward Traffic Obstacle Cars (Yellow dots with shadow)
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 4;
-    ctx.fillStyle = '#e2b05e';
-    for (const fc of forwardCars) {
-      const [fx, fy] = toCanvas(fc.x, fc.y);
-      ctx.beginPath();
-      ctx.arc(fx, fy, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // 5b. Other players (online): coloured dots with a white ring
+    // 4. Other players (online): coloured dots with a white ring
     for (const m of this.remoteMarkers) {
       const [mx, my] = toCanvas(m.x, m.z);
       ctx.save();

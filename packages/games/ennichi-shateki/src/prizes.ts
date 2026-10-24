@@ -92,7 +92,7 @@ export class PrizeEntity {
     this.isSpawning = true;
     this.spawnTimer = 0;
     this.currentPos.copy(this.basePos);
-    this.currentPos.y += 0.90; // Drop gently from above
+    this.currentPos.y += 0.55; // Drop gently from above
     // Slow descent speed: rare top-shelf items descend at 0.38 m/s, lower shelves at 0.60 m/s
     const descentSpeed = this.config.shelfIndex === 2 ? -0.38 : -0.60;
     this.velocity.set(0, descentSpeed, 0);
@@ -103,6 +103,7 @@ export class PrizeEntity {
     this.isFalling = false;
     this.isDefeated = false;
     this.isGrounded = false;
+    this.mesh.scale.setScalar(0.01);
     this.mesh.visible = true;
   }
 
@@ -476,6 +477,7 @@ export class PrizeEntity {
     if (this.isDefeated) return;
     if (this.isSpawning) {
       this.isSpawning = false;
+      this.mesh.scale.setScalar(1);
     }
 
     const hitLocalY = hitPoint.y - this.currentPos.y;
@@ -519,6 +521,7 @@ export class PrizeEntity {
     if (this.isDefeated) return;
     if (this.isSpawning) {
       this.isSpawning = false;
+      this.mesh.scale.setScalar(1);
     }
 
     const dist = this.currentPos.distanceTo(center);
@@ -577,11 +580,15 @@ export class PrizeEntity {
     if (this.isGrounded) return false;
 
     if (this.isSpawning) {
+      this.spawnTimer += dt;
+      const scaleT = Math.min(1, this.spawnTimer / 0.3);
+      this.mesh.scale.setScalar(Math.max(0.01, 1 - Math.pow(1 - scaleT, 3)));
       this.currentPos.y += this.velocity.y * dt;
       if (this.currentPos.y <= this.basePos.y) {
         this.currentPos.y = this.basePos.y;
         this.velocity.set(0, 0, 0);
         this.isSpawning = false;
+        this.mesh.scale.setScalar(1);
         sounds.playRestock();
       }
       this.updateMeshTransform();
@@ -589,6 +596,16 @@ export class PrizeEntity {
     }
 
     if (!this.isFalling) {
+      if (this.currentPos.y > this.basePos.y) {
+        this.velocity.y = Math.min(this.velocity.y, -0.4) - 6.0 * dt;
+        this.currentPos.y += this.velocity.y * dt;
+        if (this.currentPos.y <= this.basePos.y) {
+          this.currentPos.y = this.basePos.y;
+          this.velocity.y = 0;
+          sounds.playRestock();
+        }
+      }
+
       const halfDepth = this.config.baseDepth * 0.5;
       const shelfBack = this.shelf.zBack;
       const rearEdgeZ = this.currentPos.z - halfDepth;
@@ -698,6 +715,7 @@ export class PrizeEntity {
     this.isDefeated = false;
     this.isGrounded = false;
     this.isSpawning = false;
+    this.mesh.scale.setScalar(1);
     this.mesh.visible = true;
     this.updateMeshTransform();
   }

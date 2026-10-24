@@ -122,12 +122,6 @@ export class Sfx {
     [79, 84, 88, 91].forEach((n, i) => this.tone('triangle', midiHz(n), midiHz(n), t + i * 0.05, 0.28, 0.13));
   }
 
-  /** 走行中の車の脇をかすめた時の風切り音 */
-  public nearMiss(): void {
-    const t = this.ctx.currentTime;
-    this.noiseHit(t, 0.3, 'bandpass', 4200, 700, 0.14, 0.04);
-  }
-
   /** 衝突。impact: 0〜1 */
   public crash(impact: number): void {
     const t = this.ctx.currentTime;

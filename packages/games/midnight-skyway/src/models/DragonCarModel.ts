@@ -509,7 +509,6 @@ export class DragonCarModel extends CarBase {
     const def = DRAGON_DEFS[variant];
     this.emissiveOn = def.emissive;
     this.specs = def.specs;
-    this.skipMeshMerge = true;
     this.cockpitEyeOffset = new THREE.Vector3(...def.cockpitEye);
     this.cockpitLookOffset = new THREE.Vector3(0, -0.04, 20.0);
     this.buildCar(def);

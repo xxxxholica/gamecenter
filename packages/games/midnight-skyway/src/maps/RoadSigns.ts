@@ -72,14 +72,20 @@ function drawArrow(g: CanvasRenderingContext2D, cx: number, cy: number, size: nu
   g.restore();
 }
 
-/** One rounded destination board (its own canvas, sized to the text) plus its plain back with stiffener ribs. */
-function makeBoard(row: SignRow, style: SignStyle, badge?: string): Board {
+function measureBoardWidth(row: SignRow, style: SignStyle, badge?: string): number {
   const mainPx = (row.sub ? ROW_H * 0.5 : ROW_H * 0.55) * PX_PER_M, subPx = ROW_H * 0.27 * PX_PER_M;
   measureCtx.font = `bold ${mainPx}px ${style.fontFamily}`;
   let textW = measureCtx.measureText(row.main).width;
   if (row.sub) { measureCtx.font = `${subPx}px ${style.subFontFamily}`; textW = Math.max(textW, measureCtx.measureText(row.sub).width); }
   const badgeW = badge ? 1.35 : 0, arrowW = row.arrow ? 1.05 : 0.2;
-  const w = Math.max(3.0, 0.45 + badgeW + textW / PX_PER_M + 0.3 + arrowW + 0.2), h = BOARD_H;
+  return Math.max(3.0, 0.45 + badgeW + textW / PX_PER_M + 0.3 + arrowW + 0.2);
+}
+
+/** One rounded destination board (its own canvas, sized to the text or `fixedW`) plus its plain back with stiffener ribs. */
+function makeBoard(row: SignRow, style: SignStyle, badge?: string, fixedW?: number): Board {
+  const mainPx = (row.sub ? ROW_H * 0.5 : ROW_H * 0.55) * PX_PER_M, subPx = ROW_H * 0.27 * PX_PER_M;
+  const badgeW = badge ? 1.35 : 0, arrowW = row.arrow ? 1.05 : 0.2;
+  const w = fixedW ?? measureBoardWidth(row, style, badge), h = BOARD_H;
   const W = Math.round(w * PX_PER_M), H = Math.round(h * PX_PER_M);
 
   const c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -98,11 +104,12 @@ function makeBoard(row: SignRow, style: SignStyle, badge?: string): Board {
     g.textAlign = 'left'; g.fillStyle = '#fff';
     x0 = 0.45 * PX_PER_M + badgeW * PX_PER_M;
   }
+  const maxTextW = Math.max(60, W - x0 - (0.3 + arrowW + 0.2) * PX_PER_M);
   if (row.sub) {
-    g.font = `bold ${mainPx}px ${style.fontFamily}`; g.fillText(row.main, x0, cy - ROW_H * 0.13 * PX_PER_M);
-    g.font = `${subPx}px ${style.subFontFamily}`; g.fillText(row.sub, x0, cy + ROW_H * 0.28 * PX_PER_M);
+    g.font = `bold ${mainPx}px ${style.fontFamily}`; g.fillText(row.main, x0, cy - ROW_H * 0.13 * PX_PER_M, maxTextW);
+    g.font = `${subPx}px ${style.subFontFamily}`; g.fillText(row.sub, x0, cy + ROW_H * 0.28 * PX_PER_M, maxTextW);
   } else {
-    g.font = `bold ${mainPx}px ${style.fontFamily}`; g.fillText(row.main, x0, cy);
+    g.font = `bold ${mainPx}px ${style.fontFamily}`; g.fillText(row.main, x0, cy, maxTextW);
   }
   if (row.arrow) drawArrow(g, W - 0.35 * PX_PER_M - 0.5 * PX_PER_M, cy, ROW_H * 0.8 * PX_PER_M, row.arrow);
   const front = new THREE.CanvasTexture(c); front.colorSpace = THREE.SRGBColorSpace; front.anisotropy = 8;
@@ -294,9 +301,9 @@ export function buildRoadSigns(
         l += b.w + gap;
       }
     } else if (spec.kind === 'side') {
-      const boards = spec.rows!.map((row) => makeBoard(row, style));
+      const minW = Math.min(...spec.rows!.map((row) => measureBoardWidth(row, style)));
+      const boards = spec.rows!.map((row) => makeBoard(row, style, undefined, minW));
       const rad = 0.15, postLat = (half + 0.9) / S, gapV = 0.18, bh = BOARD_H, clear = CLEAR_REAL / S;
-      const minW = Math.min(...boards.map((b) => b.w));
       const stack = boards.length * bh + (boards.length - 1) * gapV;
       pole(postLat, 0, 0, clear + stack + 0.6, rad);
       boards.forEach((b, k) => {

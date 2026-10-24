@@ -104,19 +104,19 @@ export class FestivalStall {
       side: THREE.DoubleSide,
     });
 
-    // Front roof slope
+    // Front roof slope (水平基準から手前へ緩やかに下る軒屋根にし、奥の風船やUFOを隠さないようにする)
     const roofFrontGeo = new THREE.PlaneGeometry(4.9, 1.8);
     const roofFront = new THREE.Mesh(roofFrontGeo, roofMat);
-    roofFront.position.set(0, 2.65, 0.4);
-    roofFront.rotation.x = Math.PI / 8;
+    roofFront.position.set(0, 2.73, 0.6);
+    roofFront.rotation.x = -Math.PI / 2 + Math.PI / 10;
     roofFront.castShadow = true;
     this.group.add(roofFront);
 
     // Back roof slope
     const roofBackGeo = new THREE.PlaneGeometry(4.9, 1.5);
     const roofBack = new THREE.Mesh(roofBackGeo, roofMat);
-    roofBack.position.set(0, 2.7, -0.6);
-    roofBack.rotation.x = -Math.PI / 8;
+    roofBack.position.set(0, 2.75, -0.82);
+    roofBack.rotation.x = -Math.PI / 2 - Math.PI / 9;
     roofBack.castShadow = true;
     this.group.add(roofBack);
 
@@ -143,7 +143,7 @@ export class FestivalStall {
     this.group.add(banner);
 
     // Back wall
-    const backWallGeo = new THREE.PlaneGeometry(4.7, 2.0);
+    const backWallGeo = new THREE.PlaneGeometry(4.7, 2.4);
     const backWallMat = new THREE.MeshStandardMaterial({
       color: 0x0a1128,
       roughness: 0.9,
@@ -247,8 +247,8 @@ export class FestivalStall {
       { x: -0.7, y: 2.2, z: 1.35, tex: lanternTexRight },
       { x: 0.7, y: 2.2, z: 1.35, tex: lanternTexLeft },
       { x: 2.1, y: 2.15, z: 1.35, tex: lanternTexRight },
-      { x: -1.6, y: 2.25, z: -0.4, tex: lanternTexRight },
-      { x: 1.6, y: 2.25, z: -0.4, tex: lanternTexLeft },
+      { x: -1.95, y: 2.38, z: -0.4, tex: lanternTexRight },
+      { x: 1.95, y: 2.38, z: -0.4, tex: lanternTexLeft },
     ];
 
     const bodyGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.38, 16);
