@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { RateWindow } from './limits.ts';
+import { emptyFighterLearning, parseFighterLearning, mergeFighterLearning, type FighterLearningModel } from '../../shared/cyberFighterLearning.ts';
 
 export interface ClientDevice {
   os?: string;
@@ -223,6 +224,7 @@ export interface SpatialData {
 }
 
 export interface AnalyticsDataPayload {
+  fighterLearning?: FighterLearningModel;
   sessions: SessionData[];
   plays: PlayRecord[];
   events: AnalyticsEvent[];
@@ -357,6 +359,8 @@ const NON_PLAY_TYPES = new Set(['game_launch', 'session_start', 'hub_leave', 'cl
 const SKIP_EVENT_LOG_TYPES = new Set(['phase_change', 'game_heartbeat', 'perf_sample', 'trace', 'visibility']);
 
 export class AnalyticsStore {
+  private fighterLearning = emptyFighterLearning();
+  public fighterLearningProfile(): FighterLearningModel { return structuredClone(this.fighterLearning); }
   private sessions = new Map<string, SessionData>();
   private plays = new Map<string, PlayRecord>();
   private events: AnalyticsEvent[] = [];
@@ -383,6 +387,10 @@ export class AnalyticsStore {
       if (!fs.existsSync(this.filePath)) return;
       const raw = fs.readFileSync(this.filePath, 'utf8');
       const data = JSON.parse(raw) as Partial<AnalyticsDataPayload>;
+      const learned = parseFighterLearning(data.fighterLearning, true);
+      if (learned && data.fighterLearning?.version === 1 && Number.isSafeInteger(data.fighterLearning.matches) && data.fighterLearning.matches >= 0 && data.fighterLearning.matches <= 10000) {
+        this.fighterLearning = { ...learned, version: 1, matches: data.fighterLearning.matches };
+      }
       if (Array.isArray(data.sessions)) {
         for (const s of data.sessions) {
           if (s && typeof s.id === 'string') this.sessions.set(s.id, roundNumbersDeep(s));
@@ -448,6 +456,7 @@ export class AnalyticsStore {
     if (!this.dirty || !this.filePath) return;
     this.dirty = false;
     const payload: AnalyticsDataPayload = {
+      fighterLearning: this.fighterLearning,
       sessions: Array.from(this.sessions.values()).slice(-MAX_SESSIONS),
       plays: Array.from(this.plays.values()).slice(-MAX_PLAYS),
       events: this.events.slice(-MAX_EVENTS),
@@ -532,6 +541,11 @@ export class AnalyticsStore {
       if (input.device) {
         session.device = { ...session.device, ...input.device };      // sanitizeDevice 済みのキーだけなので、増え続けない
       }
+    }
+
+    if (input.type === 'fighter_learning' && input.gameId === 'cyber-2d-fighter-3d' && input.data?.version === 1) {
+      const report = parseFighterLearning(input.data);
+      if (report && report.frames >= 60) this.fighterLearning = mergeFighterLearning(this.fighterLearning, report);
     }
 
     // 2. イベントログ追加(高頻度の中間通知は timeline / snapshot 側に集約し、events 配列への重複蓄積をスキップ)

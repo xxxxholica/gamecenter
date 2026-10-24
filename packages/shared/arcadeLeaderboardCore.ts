@@ -262,7 +262,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'cyber-2d-fighter-3d',
     hasScore: true,
     minScore: 1,
-    maxScore: 8,
+    maxScore: 9,
     minRunMs: 5_000,
     maxScorePerSec: 0.5,
     scoreOrder: 'desc',

@@ -18,6 +18,7 @@ export interface ArcadePauseOptions {
   onClose?: () => void;
   /** やり直す。省略すると、ボタンは出すが選べない(グレーアウト。オンライン対戦など、やり直せない時) */
   onRestart?: () => void;
+  canRestart?: () => boolean;
   /** ゲームを終了。省略するとホーム(ハブ)へ戻る */
   onExit?: () => void;
   /** 終了ボタンの文字。オンライン対戦では「退出」にする */
@@ -78,7 +79,10 @@ export class ArcadePause {
       this.enabled.push(!!run);
     };
     add('再開', opts.accent, () => this.close());
-    add('やり直す', '#7bdff2', opts.onRestart ? () => { this.close('restart'); opts.onRestart!(); } : null);
+    add('やり直す', '#7bdff2', opts.onRestart ? () => {
+      if (opts.canRestart?.() === false) return;
+      this.close('restart'); opts.onRestart!();
+    } : null);
     add(opts.exitLabel ?? 'ゲームを終了', '#ff8fa3', () => { this.close('exit'); (opts.onExit ?? returnToHub)(); });
     setupResultMenu(menu, this.items);
 
@@ -119,6 +123,10 @@ export class ArcadePause {
   /** ポーズを開く(ゲーム側から開きたい時にも使える) */
   show(): void {
     if (this.open_) return;
+    const canRestart = !!this.opts.onRestart && (this.opts.canRestart?.() ?? true);
+    this.enabled[1] = canRestart;
+    this.items[1].button?.classList.toggle('ap-disabled', !canRestart);
+    this.items[1].button?.setAttribute('aria-disabled', String(!canRestart));
     this.open_ = true;
     this.focus = 0;
     applyResultMenuFocus(this.items, 0);

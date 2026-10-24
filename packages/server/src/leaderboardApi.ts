@@ -178,6 +178,10 @@ function route(
     return send(res, 200, { boards: store.all() });
   }
 
+  if (method === 'GET' && parts[0] === 'fighter-learning' && parts.length === 1 && analytics) {
+    return send(res, 200, analytics.fighterLearningProfile());
+  }
+
   if (method === 'GET' && parts[0] === 'leaderboard' && (parts.length === 2 || parts.length === 3)) {
     const entries = store.list(parts[1], parts[2]);
     return entries ? send(res, 200, { entries }) : send(res, 404, { error: 'unknown_board' });
