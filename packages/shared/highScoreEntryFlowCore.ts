@@ -1,5 +1,6 @@
 // 「順位の確認 → 名前入力 → 登録」の流れの制御だけを切り出したもの(DOM・通信は外から渡す)。
 // 止めを外すのが1回だけであること、確認中に取り消されたら名前入力を出さないこと、を保つ。arcadeNameEntryModal.ts の runHighScoreEntryFlow が使う。
+import type { SaveLeaderboardResult } from './arcadeLeaderboardResult.ts';
 
 export interface EntryFlowDeps {
   /** 上位に入るかの確認(サーバーへの問い合わせ。失敗は「入らない」として返す) */
@@ -7,14 +8,14 @@ export interface EntryFlowDeps {
   /** 操作を止めるシールドを出す。返す関数で外す */
   showShield: () => () => void;
   /** 名前入力を(予約して)出す。返す関数で、予約の取り消し・閉じる */
-  mountModal: (opts: { rank: number; onComplete: (name: string) => Promise<unknown> }) => () => void;
+  mountModal: (opts: { rank: number; onComplete: (name: string) => Promise<SaveLeaderboardResult>; onClosed: () => void }) => () => void;
 }
 
 export interface EntryFlowCallbacks {
   /** 順位の確認中と名前入力中は true、それ以外は false */
   setBlocked: (blocked: boolean) => void;
   /** 名前が決まったとき(登録はここで行う。Promise を返すと完了まで止めを維持する) */
-  onName: (name: string) => Promise<unknown> | void;
+  onName: (name: string) => Promise<SaveLeaderboardResult>;
   /** 名前入力が閉じたあと(止めを外した後) */
   onClosed?: () => void;
   /** 順位の確認が終わったとき(上位に入れば順位、入らない・失敗なら null)。結果画面に順位を出す用 */
@@ -47,19 +48,14 @@ export function runEntryFlow(deps: EntryFlowDeps, cb: EntryFlowCallbacks): () =>
     }
     cancelModal = deps.mountModal({
       rank: check.rank,
-      onComplete: async (name) => {
-        try {
-          return await cb.onName(name);
-        } finally {
-          if (release()) cb.onClosed?.();
-        }
-      },
+      onComplete: cb.onName,
+      onClosed: () => { if (release()) cb.onClosed?.(); },
     });
   });
 
   return () => {
     if (released) return;
-    cancelModal?.();
     release();
+    cancelModal?.();
   };
 }

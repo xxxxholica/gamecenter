@@ -16,6 +16,7 @@ import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { ENNICHI_ROUND_SECONDS, ENNICHI_EXTENSION_SECONDS } from '../../../shared/ennichiRules';
 
 const SLUG = 'ennichi-shateki';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
@@ -81,10 +82,10 @@ class ArcadeCorkShooter {
   private countdownHandle: ArcadeCountdownHandle | null = null;
   private score: number = 0;
   private highScore: number = 0;
-  private timeLeft: number = 30.0;
-  readonly MAX_TIME_CAP = 45.0; // 念のための上限。実際は下の延長枠で 30+15=45秒 を超えない
+  private timeLeft: number = ENNICHI_ROUND_SECONDS;
+  readonly MAX_TIME_CAP = ENNICHI_ROUND_SECONDS + ENNICHI_EXTENSION_SECONDS;
   // 延長できる秒数の総量(1プレイ)。延長の種類を増やしても、この枠を使い切ったらそれ以上は延びない
-  readonly EXTENSION_BUDGET = 15.0;
+  readonly EXTENSION_BUDGET = ENNICHI_EXTENSION_SECONDS;
   private extensionUsed: number = 0;
   private comboBonusTier: number = 0;
 
@@ -410,7 +411,7 @@ class ArcadeCorkShooter {
     this.prizePileManager.reset();
     this.stateTimer = 0;
     this.score = 0;
-    this.timeLeft = 30.0;
+    this.timeLeft = ENNICHI_ROUND_SECONDS;
     this.totalDefeatedCount = 0;
     this.maxComboSeen = 0;
     this.shotsNormal = 0;
@@ -420,7 +421,7 @@ class ArcadeCorkShooter {
     this.comboCount = 0;
     this.comboTimer = 0;
     this.lastScoreMilestone = 0;
-    this.lastTickInt = 30;
+    this.lastTickInt = ENNICHI_ROUND_SECONDS;
     this.screenShake = 0;
     this.restockQueue = [];
 

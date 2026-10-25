@@ -618,7 +618,16 @@ export function reportPhase(phase: PlayPhase, detail?: Record<string, unknown>):
 
 /** 1ラウンド(ゲームオーバー/クリアで終わる1回の挑戦)を始めた。やり直し・再挑戦のたびに呼ぶ。detail には stage・mode などを入れる */
 let gameRoundNo = 0;
+const roundStartListeners = new Set<() => void>();
+
+/** ラウンド開始に合わせた準備用。ランキングは失敗・期限切れのチケットだけ取り直す。 */
+export function onArcadeRoundStart(listener: () => void): () => void {
+  roundStartListeners.add(listener);
+  return () => { roundStartListeners.delete(listener); };
+}
+
 export function reportRoundStart(detail?: Record<string, unknown>): void {
+  for (const listener of roundStartListeners) listener();
   // リプレイ: ラウンドごとに乱数を作り直す(タイトルのデモなどのずれを、ラウンドへ持ち込まない)
   replayRoundStart(++gameRoundNo);
   reportDeepAnalytics('round_start', detail);

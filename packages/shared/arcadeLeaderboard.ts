@@ -1,24 +1,28 @@
 // アーケード共通ランキング管理基盤(ブラウザ側)。ランキングはサーバー(/api/leaderboard...)に保存する。
 // 型・ゲーム定義・順位判定などの純粋ロジックは arcadeLeaderboardCore.ts(サーバーと共有)。
-// 通信は同一オリジンの相対パス。失敗しても例外は投げず、取得は「記録なし」、登録は rank=-1 を返す(ゲームの進行を止めない)。
+// 通信は同一オリジンの相対パス。登録の成否は status で区別し、失敗してもゲームの進行を止めない。
 import {
   DEV_NAME,
   GAME_LEADERBOARD_DEFS,
   LEADERBOARD_MAX_ENTRIES,
+  getLeaderboardDef,
   isValidAdminRole,
   isValidAdminRoleName,
   leaderboardBoardKey,
   padEmptyEntries,
   rankForScore,
+  scoreInRange,
   sanitizeLeaderboardExtra,
   sanitizeLeaderboardName,
 } from './arcadeLeaderboardCore.ts';
 import type { GameLeaderboardDef, LeaderboardEntry } from './arcadeLeaderboardCore.ts';
-import { trackScoreSubmit } from './arcadeAnalytics.ts';
+import { onArcadeRoundStart, trackScoreSubmit } from './arcadeAnalytics.ts';
+import type { SaveLeaderboardResult } from './arcadeLeaderboardResult.ts';
 import { getReplayRef } from './arcadeReplay.ts';
 import { isBenchEnabled } from './arcadeBenchCore.ts';
 
 export * from './arcadeLeaderboardCore.ts';
+export type { SaveLeaderboardResult } from './arcadeLeaderboardResult.ts';
 
 const API = '/api';
 const TIMEOUT_MS = 8000;
@@ -49,10 +53,15 @@ export const getLeaderboardKey = leaderboardBoardKey;
 const boardPath = (slug: string, variantId?: string) =>
   `${API}/leaderboard/${encodeURIComponent(slug)}${variantId ? `/${encodeURIComponent(variantId)}` : ''}`;
 
-async function request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
+class LeaderboardRequestError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.code = code; }
+}
+
+async function request(method: 'GET' | 'POST', path: string, body?: unknown, allowKeepalive = true): Promise<any> {
   const jsonBody = body === undefined ? undefined : JSON.stringify(body);
   // Safari/ブラウザの keepalive クォータ(約64KB)未満なら keepalive を有効化し、ページ遷移・iframe破棄時の切断を防ぐ
-  const canKeepalive = method === 'POST' && jsonBody !== undefined && jsonBody.length < 60 * 1024;
+  const canKeepalive = allowKeepalive && method === 'POST' && jsonBody !== undefined && jsonBody.length < 60 * 1024;
 
   const doFetch = (keepalive: boolean) =>
     fetch(path, {
@@ -76,7 +85,11 @@ async function request(method: 'GET' | 'POST', path: string, body?: unknown): Pr
     }
   }
 
-  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const code = typeof data?.error === 'string' ? data.error.slice(0, 64) : res.status === 429 ? 'rate' : 'http_error';
+    throw new LeaderboardRequestError(code);
+  }
   return res.json();
 }
 
@@ -176,7 +189,8 @@ export async function loadLeaderboardAndCheck(
   if (!def || !def.hasScore) return { list: padEmptyEntries(def, [], minCount), isRankIn: false, rank: -1 };
   try {
     const raw = await fetchRawScores(def, slug, variantId);
-    if (rankingLocked()) return { list: padEmptyEntries(def, raw, minCount), isRankIn: false, rank: -1 };
+    score = roundScore(score);
+    if (rankingLocked() || !scoreInRange(def, score, variantId)) return { list: padEmptyEntries(def, raw, minCount), isRankIn: false, rank: -1 };
     const rank = rankForScore(def, raw, score, maxEntries);
     return { list: padEmptyEntries(def, raw, minCount), isRankIn: rank > 0, rank };
   } catch (e) {
@@ -199,31 +213,52 @@ export async function checkHighScore(
 
 // ===== プレイチケット =====
 // スコアの申告には、サーバーが発行した使い切りの札(チケット)が要る。サーバーは発行からの経過時間を自分の時計で測り、
-// 「起動してすぐ高得点」のような申告を断る。札は、ゲームのページを開いた時点と、スコアを送るたびに取り直す。
-let ticketSlug: string | null = null;
-let ticketPromise: Promise<string | null> | null = null;
+// 「起動してすぐ高得点」のような申告を断る。札はラウンド開始時に取り、スコアを送ると使い切る(結果画面の時間を次の計測に含めない)。
+// atLoad: ページを開いた時の札。タイトル画面の時間を経過時間に含めないよう、最初のラウンド開始で取り直す。
+type RunTicket = { slug: string; startedAt: number; failed: boolean; atLoad: boolean; promise: Promise<string | null> };
+let runTicket: RunTicket | null = null;
+// サーバーの24時間の期限に届く前に、次のラウンド開始時に更新する。
+const TICKET_REFRESH_MS = 23 * 60 * 60 * 1000;
 
 async function fetchTicket(slug: string): Promise<string | null> {
   try {
     const data = await request('POST', `${API}/ticket/${encodeURIComponent(slug)}`, {});
-    return typeof data?.ticket === 'string' ? data.ticket : null;
+    return typeof data?.ticket === 'string' && data.ticket.length > 0 ? data.ticket : null;
   } catch {
     return null;
   }
 }
 
 /** このゲームのプレイ開始として、チケットを取っておく(ゲームのページが開いた時に自動で呼ばれる) */
-export function beginLeaderboardRun(slug: string): void {
-  const def = GAME_LEADERBOARD_DEFS[slug];
-  if (!def || !def.hasScore) return;
-  ticketSlug = slug;
-  ticketPromise = fetchTicket(slug);
+export function beginLeaderboardRun(slug: string, atLoad = false): Promise<void> {
+  const def = getLeaderboardDef(slug);
+  if (!def || !def.hasScore || rankingLocked()) return Promise.resolve();
+  const state: RunTicket = { slug, startedAt: Date.now(), failed: false, atLoad, promise: Promise.resolve(null) };
+  runTicket = state;
+  state.promise = (async () => {
+    // 一時的な取得失敗は、プレイの早い段階で1回再試行する。
+    const ticket = (await fetchTicket(slug)) ?? (await fetchTicket(slug));
+    state.failed = !ticket;
+    return ticket;
+  })();
+  return state.promise.then(() => {});
+}
+
+/** 有効な札は保つ(連戦の途中で計測をリセットしない)。開始時に取得失敗・期限切れだけ回復する。 */
+export function prepareLeaderboardRun(slug: string): Promise<void> {
+  if (!runTicket || runTicket.slug !== slug || runTicket.failed || runTicket.atLoad || Date.now() - runTicket.startedAt >= TICKET_REFRESH_MS) {
+    return beginLeaderboardRun(slug);
+  }
+  return runTicket.promise.then(() => {});
 }
 
 // ゲームのページ(/games/<slug>/)として開かれた時だけ、自動でチケットを取る(ハブ・テストでは何もしない)。
 if (typeof window !== 'undefined' && typeof window.location?.pathname === 'string') {
   const m = /\/games\/([\w-]+)\/?/.exec(window.location.pathname);
-  if (m) beginLeaderboardRun(m[1]);
+  if (m) {
+    void beginLeaderboardRun(m[1], true);
+    onArcadeRoundStart(() => { void prepareLeaderboardRun(m[1]); });
+  }
 }
 
 // ===== 匿名名の予約 =====
@@ -265,7 +300,7 @@ export interface SaveLeaderboardOptions {
   ghost?: unknown;
 }
 
-/** 記録を登録する。rank は登録後の順位(圏外・失敗は -1)、list は更新後の表示用ランキング */
+/** 記録を登録する。圏外と失敗は status で区別。rank は登録後の順位、list は更新後の表示用ランキング。 */
 export async function saveLeaderboardScore(
   slug: string,
   score: number,
@@ -273,17 +308,26 @@ export async function saveLeaderboardScore(
   variantId?: string,
   extra?: string,
   options: SaveLeaderboardOptions = {},
-): Promise<{ rank: number; list: LeaderboardEntry[] }> {
-  const def = GAME_LEADERBOARD_DEFS[slug];
+): Promise<SaveLeaderboardResult> {
+  const def = getLeaderboardDef(slug);
   score = roundScore(score);
-  if (!def || !def.hasScore || score <= 0 || rankingLocked()) return { rank: -1, list: [] };
-  // 札は1回きり: 使うために取り出し、次のプレイ用の札をすぐ取りに行く(取れなかった場合はここで取る)
-  const pending = ticketSlug === slug ? ticketPromise : null;
-  ticketPromise = null;
+  const failure = (error: string): SaveLeaderboardResult => ({ status: 'error', error, rank: -1, list: [] });
+  const invalid = !def || !def.hasScore ? 'unknown_board' : rankingLocked() ? 'ranking_disabled' : !scoreInRange(def, score, variantId) ? 'bad_score' : null;
+  if (invalid || !def) {
+    if (anonToken) releaseAnonName(anonToken);
+    return failure(invalid ?? 'unknown_board');
+  }
+  // 札は1回きり。登録時に新しく発行してもプレイ時間の証明にはならないので代用しない。
+  const pending = runTicket?.slug === slug ? runTicket : null;
+  if (pending) runTicket = null;
   const token = anonToken;   // 予約した匿名名の札は、この登録で使い切る(サーバーが使う・破棄するのどちらでも)
   anonToken = null;
   try {
-    const ticket = (pending ? await pending : null) ?? (await fetchTicket(slug));
+    const ticket = pending ? await pending.promise : null;
+    if (!ticket) {
+      if (token) releaseAnonName(token);
+      return failure('ticket_unavailable');
+    }
     const data = await request('POST', boardPath(slug, variantId), {
       name: sanitizeLeaderboardName(name),
       score,
@@ -291,12 +335,15 @@ export async function saveLeaderboardScore(
       cleared: options.cleared === true ? true : undefined,
       perfect: options.perfect === true ? true : undefined,
       ghost: options.ghost,
-      ticket: ticket ?? undefined,
+      ticket,
       anonToken: token ?? undefined,
       replay: getReplayRef(),   // ランキングに載ったら、このプレイのリプレイを残す(載らなければサーバーが消す)
-    });
+    }, false); // 操作ロック中の通常fetch。keepaliveの容量制限を避け、使い切りの札で自動再送もしない。
+    if (!data || !Array.isArray(data.entries) || !Number.isInteger(data.rank) || (data.rank !== -1 && (data.rank < 1 || data.rank > LEADERBOARD_MAX_ENTRIES))) {
+      return failure('invalid_response');
+    }
     const list = padEmptyEntries(def, normalizeEntries(def, data.entries), 5);
-    const rank = typeof data.rank === 'number' && data.rank > 0 ? data.rank : -1;
+    const rank = data.rank > 0 ? data.rank : -1;
     trackScoreSubmit(slug, {
       score,
       formattedScore: typeof def.formatScore === 'function' ? def.formatScore(score) : String(score),
@@ -304,12 +351,11 @@ export async function saveLeaderboardScore(
       perfect: options.perfect === true ? true : undefined,
       rank,
     });
-    return { rank, list };
+    return { status: rank > 0 ? 'saved' : 'out_of_rank', rank, list };
   } catch (e) {
     console.warn('Failed to save leaderboard', e);
-    return { rank: -1, list: [] };
-  } finally {
-    if (ticketSlug === slug) ticketPromise = fetchTicket(slug);
+    if (token) releaseAnonName(token);
+    return failure(e instanceof LeaderboardRequestError ? e.code : 'network_error');
   }
 }
 

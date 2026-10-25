@@ -1,5 +1,6 @@
 // アーケード共通ランキングの純粋ロジック(型・ゲーム定義・名前の検証・順位の判定・挿入)。
 // ブラウザ(arcadeLeaderboard.ts)とサーバー(packages/server)の両方から import する。DOM・fetch・localStorage には触れない。
+import { ENNICHI_ROUND_SECONDS } from './ennichiRules.ts';
 
 export interface LeaderboardEntry {
   /** サーバーが付ける一意なid(ゴーストの取得に使う) */
@@ -180,7 +181,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'ennichi-shateki',
     hasScore: true,
     maxScore: 200_000,                // サーバーの対戦側 MAX_SCORE と同じ
-    minRunMs: 40_000,                 // 制限時間は45秒
+    minRunMs: ENNICHI_ROUND_SECONDS * 1000, // 基本30秒。延長を獲得しないプレイも受け付ける
     maxScorePerSec: 6_000,
     scoreOrder: 'desc',
     unit: 'g',
@@ -303,6 +304,17 @@ export function parseBoardKey(key: string): [string, string | undefined] {
 
 /** ランキングボード(ハブ)に出るのは上位5位まで。6位以下は記録も名前登録もしない。 */
 export const LEADERBOARD_MAX_ENTRIES = 5;
+
+/** クライアントの事前確認とサーバーの保存で、同じ枠・スコア範囲を使う。 */
+export function scoreInRange(def: GameLeaderboardDef, score: number, variant?: string): boolean {
+  if (!def.hasScore || !Number.isFinite(score)) return false;
+  const v = def.variants?.find((x) => x.id === variant);
+  if (def.variants ? !v : variant !== undefined) return false;
+  const [lo, hi] = def.scoreOrder === 'asc' ? [1000, 3_600_000] : [1, 1_000_000_000];
+  const min = Math.max(lo, def.minScore ?? lo, v?.minScore ?? lo);
+  const max = Math.min(hi, def.maxScore ?? hi, v?.maxScore ?? hi);
+  return score >= min && score <= max;
+}
 
 /** a が b より良い記録か(ascなら小さい方、descなら大きい方) */
 export function isBetterScore(def: GameLeaderboardDef, a: number, b: number): boolean {

@@ -1606,6 +1606,10 @@ function showRanking(): void {
         menuNav.clear();
         const res = await saveLeaderboardScore(SLUG, s, name);
         if (seq === resultSeq && res.rank > 0) renderRanking(res.list, res.rank);
+        return res;
+      },
+      onClosed: () => {
+        if (seq !== resultSeq) return;
         nameEntryOpen = false;
         resultArmUntil = performance.now() + 800; // 名前の決定がメニューの決定として入らないようにする
       },

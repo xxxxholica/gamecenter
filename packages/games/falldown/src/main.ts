@@ -701,6 +701,10 @@ function showRanking(cleared: boolean) {
         const perfect = cleared && game.deaths === 0;
         const res = await saveLeaderboardScore(SLUG, score, name, undefined, extra, { cleared, perfect });
         if (seq === resultSeq && res.rank > 0) renderRanking(res.list, res.rank);
+        return res;
+      },
+      onClosed: () => {
+        if (seq !== resultSeq) return;
         nameEntryOpen = false;
         resultArmUntil = performance.now() + 800; // 名前の決定がメニューの決定として入らないようにする
       },

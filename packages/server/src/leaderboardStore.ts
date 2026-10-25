@@ -18,6 +18,7 @@ import {
   leaderboardBoardKey as boardKey,
   parseBoardKey,
   rankForScore,
+  scoreInRange,
   sanitizeLeaderboardExtra,
   sanitizeLeaderboardName,
   type AdminRole,
@@ -140,16 +141,6 @@ export function validateGhost(raw: unknown, timeMs: number): GhostTrace | null {
     kind: 'player',
     s: g.s as number[],
   };
-}
-
-/** スコアの妥当な範囲。タイム(asc)は1秒〜1時間、点数は1〜10億。 */
-function scoreInRange(def: GameLeaderboardDef, score: number, variant?: string): boolean {
-  if (!Number.isFinite(score)) return false;
-  const v = def.variants?.find((x) => x.id === variant);
-  const [lo, hi] = def.scoreOrder === 'asc' ? [1000, 3_600_000] : [1, 1_000_000_000];
-  const min = Math.max(lo, def.minScore ?? lo, v?.minScore ?? lo);
-  const max = Math.min(hi, def.maxScore ?? hi, v?.maxScore ?? hi);
-  return score >= min && score <= max;
 }
 
 /** 通信の遅れ・端末の時計のずれの余裕(ms)。タイムアタックの申告タイムが、経過時間より長いことを許す幅 */

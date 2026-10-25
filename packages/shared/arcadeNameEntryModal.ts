@@ -16,6 +16,7 @@ import { checkHighScore, escapeHtml, reserveAnonName, releaseAnonName } from './
 import { showInputShield } from './inputShield';
 import { runEntryFlow } from './highScoreEntryFlowCore';
 import { reportDeepAnalytics, reportPhase } from './arcadeAnalytics';
+import { leaderboardSaveFeedback, type SaveLeaderboardResult } from './arcadeLeaderboardResult';
 
 /** リザルトでスコアを見せてから登録画面を出すまでの待ち時間 */
 export const NAME_ENTRY_AFTER_RESULT_MS = 2200;
@@ -37,7 +38,9 @@ export interface ArcadeNameEntryModalOptions {
   initialName?: string;
   /** 表示までの待ち時間(ms)。リザルトのスコアを先に見せたいときに指定する。 */
   delayMs?: number;
-  onComplete: (name: string) => Promise<unknown> | void;
+  onComplete: (name: string) => Promise<SaveLeaderboardResult>;
+  /** 保存結果を見せてウィンドウを閉じたあと、結果画面の操作を戻す。 */
+  onClosed?: () => void;
 }
 
 let stylesInjected = false;
@@ -552,6 +555,9 @@ function injectStyles() {
       to { opacity: 1; transform: scale(1.0); }
     }
     .ane-complete-title {
+      max-width: 90%;
+      text-align: center;
+      line-height: 1.5;
       font-size: clamp(16px, 2.4vw, 24px);
       font-weight: 900;
       letter-spacing: clamp(4px, 0.8vw, 8px);
@@ -565,6 +571,14 @@ function injectStyles() {
       letter-spacing: clamp(6px, 1.2vw, 14px);
       color: #ffffff;
       text-shadow: 0 0 24px rgba(255, 255, 255, 0.9);
+    }
+    .ane-complete-message {
+      max-width: 90%;
+      margin: 16px 12px 0;
+      font-size: clamp(14px, 2vw, 18px);
+      line-height: 1.6;
+      color: #333;
+      text-align: center;
     }
 
     /* ========================================================
@@ -919,8 +933,9 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
       </div>
 
       <div class="ane-completed-layer" id="ane-complete-layer" style="display: none;">
-        <div class="ane-complete-title">登録完了</div>
+        <div class="ane-complete-title" role="status">登録中…</div>
         <div class="ane-complete-name" id="ane-complete-name-val"></div>
+        <div class="ane-complete-message" id="ane-complete-message"></div>
       </div>
     </div>
   `;
@@ -1002,6 +1017,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     const completeLayer = document.getElementById('ane-complete-layer');
     const completeTitleEl = completeLayer?.querySelector<HTMLElement>('.ane-complete-title');
     const completeNameEl = document.getElementById('ane-complete-name-val');
+    const completeMessageEl = document.getElementById('ane-complete-message');
     if (isAnon) {
       // 匿名は完了表示を出さず、ウィンドウを消して登録だけ済ませる
       confetti.remove();
@@ -1011,18 +1027,23 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
       completeLayer.style.display = 'flex';
     }
 
-    // 通信の完了と最低限のアニメーション表示(850ms)の両方を待つ。
-    // 通信中に画面遷移(iframeの破棄)が起きてWebKit/Safari等でリクエストが強制切断されるのを防ぐ。
-    const minWait = new Promise((resolve) => window.setTimeout(resolve, isAnon ? 0 : 850));
+    const showResult = async (result: SaveLeaderboardResult) => {
+      if (cleaned || (isAnon && result.status === 'saved')) return;
+      const feedback = leaderboardSaveFeedback(result);
+      // 匿名登録でも、失敗したときは理由を見せる。
+      overlay.style.display = '';
+      if (completeLayer) completeLayer.style.display = 'flex';
+      if (completeTitleEl) completeTitleEl.textContent = feedback.title;
+      if (completeNameEl) completeNameEl.textContent = name;
+      if (completeMessageEl) completeMessageEl.textContent = feedback.message;
+      if (result.status !== 'saved') confetti.remove();
+      await new Promise((resolve) => window.setTimeout(resolve, result.status === 'saved' ? 850 : 2500));
+    };
     try {
-      const [, res] = await Promise.all([minWait, Promise.resolve(options.onComplete(name))]);
-      // 同時に他のプレイヤーが登録して枠外に押し出された場合(rank <= 0)のフィードバック
-      if (res && typeof res === 'object' && 'rank' in res && (res as { rank: number }).rank <= 0) {
-        if (completeTitleEl) completeTitleEl.textContent = '枠外となりました';
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
-      }
+      await showResult(await options.onComplete(name));
     } catch (e) {
       console.warn('Name entry onComplete error:', e);
+      await showResult({ status: 'error', error: 'network_error', rank: -1, list: [] });
     } finally {
       cleanup();
     }
@@ -1067,6 +1088,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
   });
 
   const cleanup = () => {
+    if (cleaned) return;
     cleaned = true;
     window.removeEventListener('pagehide', onPageHide);
     if (anon && !submitted) releaseAnonName(anon.token);
@@ -1075,6 +1097,7 @@ function mountNow(options: ArcadeNameEntryModalOptions): () => void {
     if (overlay.parentNode) {
       overlay.parentNode.removeChild(overlay);
     }
+    options.onClosed?.();
   };
 
   return cleanup;
@@ -1085,11 +1108,11 @@ export interface HighScoreEntryFlowOptions {
   score: number;
   variantId?: string;
   /** 名前入力の見出し・スコア表示・テーマ・待ち時間(順位と完了時の処理はこの関数が足す) */
-  modal: Omit<ArcadeNameEntryModalOptions, 'rankDisplay' | 'onComplete'>;
+  modal: Omit<ArcadeNameEntryModalOptions, 'rankDisplay' | 'onComplete' | 'onClosed'>;
   /** 順位の確認中と名前入力中は true、それ以外は false。結果画面の操作を止めるために使う */
   setBlocked: (blocked: boolean) => void;
   /** 名前が決まったとき(ランキングへの登録はここで行う)。Promise を返すと通信完了まで操作ブロックを維持する */
-  onName: (name: string) => Promise<unknown> | void;
+  onName: (name: string) => Promise<SaveLeaderboardResult>;
   /** 名前入力が閉じたあと(操作の受付を戻した後)。決定ボタンの誤爆防止の待ちなどに使う */
   onClosed?: () => void;
   /** 順位の確認が終わったとき(上位に入れば順位、入らない・失敗なら null) */
@@ -1111,7 +1134,7 @@ export function runHighScoreEntryFlow(options: HighScoreEntryFlowOptions): () =>
     {
       check: () => checkHighScore(slug, score, variantId),
       showShield: showInputShield,
-      mountModal: ({ rank, onComplete }) => mountNameEntryModal({ ...modal, rankDisplay: `第${rank}位`, onComplete }),
+      mountModal: ({ rank, onComplete, onClosed }) => mountNameEntryModal({ ...modal, rankDisplay: `第${rank}位`, onComplete, onClosed }),
     },
     { setBlocked, onName, onClosed, onRank },
   );

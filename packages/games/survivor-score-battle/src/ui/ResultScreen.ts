@@ -174,6 +174,10 @@ export class ResultScreen {
           if (seq === this.showSeq) {
             this.renderLeaderboard(res.rank > 0 ? res.list : list, res.rank > 0 ? res.rank : undefined);
           }
+          return res;
+        },
+        onClosed: () => {
+          if (seq !== this.showSeq) return;
           this.nameEntryOpen = false;
           this.armTime = performance.now() + 800;
         },

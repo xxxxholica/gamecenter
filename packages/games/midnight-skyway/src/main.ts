@@ -433,8 +433,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (rank !== null) sfx.rankIn();
       },
       onName: async (name) => {
-        await saveLeaderboardScore('midnight-skyway', totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
+        const saved = await saveLeaderboardScore('midnight-skyway', totalTimeMs, name, currentMapId, result.carName, { ghost: trace ?? undefined });
         syncBestTimeDisplay();
+        return saved;
       },
     });
   };

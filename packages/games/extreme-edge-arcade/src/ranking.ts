@@ -24,8 +24,7 @@ export class RankingManager {
     }));
   }
 
-  static async addScore(score: number, title: string, name = 'ゲスト'): Promise<number> {
-    const res = await saveLeaderboardScore('extreme-edge-arcade', score, name, undefined, title);
-    return res.rank;
+  static addScore(score: number, title: string, name = 'ゲスト') {
+    return saveLeaderboardScore('extreme-edge-arcade', score, name, undefined, title);
   }
 }
