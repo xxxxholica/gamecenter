@@ -5,7 +5,7 @@
 // shadowBlur は座標変換(拡大)を受けず、画面の px で効く。そこで絵は、貼る先の拡大率(画面の px / ゲームの座標)と同じ解像度で描き、
 // 1px = 画面の 1px で貼る(ぼかしの幅も、図形の大きさも、元の描き方と同じになる)。
 
-import { drawFilledText } from './outlinedText';
+import { drawFilledText, drawOutlinedText } from './outlinedText';
 
 const CHEVRON_BLUR = 12;
 const LABEL_BLUR = 4;
@@ -126,4 +126,54 @@ export function drawShadowedLabel(ctx: CanvasRenderingContext2D, text: string, x
     drawFilledText(ctx, ch, cx, y);
     cx += advance(ctx, ch);
   }
+}
+
+let warmedScale = 0;
+const WARMUP_UI_FONT = "'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
+
+/**
+ * 画面外の剣の矢印・距離の文字・試合開始直後に出る案内文字の絵を、最初の描画フレームで作っておく。
+ * 試合が始まって初めて剣が画面外に出たフレームで、別フォント(LOCATOR_FONT)の初期化と絵の作成が重なり 20〜30ms かかるのを防ぐ。
+ */
+export function warmupLocatorSprites(ctx: CanvasRenderingContext2D): void {
+  const scale = currentScale(ctx);
+  const s = quantize(scale);
+  if (s === warmedScale) return;
+  warmedScale = s;
+
+  ctx.save();
+  ctx.font = LOCATOR_FONT;
+  getChevronSprite(scale);
+  drawShadowedLabel(ctx, '0123456789m', 0, 0, scale);
+
+  // 剣を拾った直後や会心の一撃で出る文字(拡大率 1.0〜1.3)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle = '#000000';
+  for (const mult of [1.0, 1.1, 1.2, 1.3]) {
+    ctx.save();
+    ctx.scale(mult, mult);
+    ctx.font = `900 26px ${WARMUP_UI_FONT}`;
+    ctx.lineWidth = 4;
+    ctx.fillStyle = '#ffd700';
+    drawOutlinedText(ctx, 'SWORD +1!', 0, 0);
+    ctx.font = `900 12px ${WARMUP_UI_FONT}`;
+    ctx.lineWidth = 3;
+    ctx.fillStyle = '#ff2255';
+    drawOutlinedText(ctx, 'CRITICAL!', 0, 0);
+    ctx.restore();
+  }
+
+  // 順位変動のバナー文字(試合開始直後に剣を拾うとすぐ出る)
+  ctx.font = `900 36px ${WARMUP_UI_FONT}`;
+  ctx.shadowBlur = 25;
+  ctx.fillStyle = ctx.shadowColor = '#ffd700';
+  drawFilledText(ctx, 'YOU ARE #1', 0, 0);
+  for (let r = 2; r <= 8; r++) {
+    ctx.fillStyle = ctx.shadowColor = '#00ffaa';
+    drawFilledText(ctx, `RANK UP #${r}`, 0, 0);
+    ctx.fillStyle = ctx.shadowColor = '#ff2255';
+    drawFilledText(ctx, `RANK DOWN #${r}`, 0, 0);
+  }
+  ctx.restore();
 }

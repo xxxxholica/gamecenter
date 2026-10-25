@@ -8,7 +8,14 @@ export class SynthSfx {
   private ctx: AudioContext;
   private sfxGain: GainNode;
 
+  private bladeBuffer: AudioBuffer;
+  private smallExplosionBuffer: AudioBuffer;
+  private largeExplosionBuffer: AudioBuffer;
+
   constructor(ctx: AudioContext, sfxGain: GainNode) {
+    this.bladeBuffer = createWhiteNoiseBuffer(ctx, 0.08, (_t, p) => Math.exp(-p / 0.4));
+    this.smallExplosionBuffer = createWhiteNoiseBuffer(ctx, 0.22, (_t, p) => Math.pow(1 - p, 2));
+    this.largeExplosionBuffer = createWhiteNoiseBuffer(ctx, 0.45, (_t, p) => Math.pow(1 - p, 2));
     this.ctx = ctx;
     this.sfxGain = sfxGain;
   }
@@ -76,7 +83,7 @@ export class SynthSfx {
   /** Blade swing swoosh */
   playBladeSlash() {
     const now = this.ctx.currentTime;
-    const buffer = createWhiteNoiseBuffer(this.ctx, 0.08, (_t, p) => Math.exp(-p / 0.4));
+    const buffer = this.bladeBuffer;
 
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
@@ -143,7 +150,7 @@ export class SynthSfx {
   playExplosion(isLarge: boolean = false) {
     const now = this.ctx.currentTime;
     const duration = isLarge ? 0.45 : 0.22;
-    const buffer = createWhiteNoiseBuffer(this.ctx, duration, (_t, p) => Math.pow(1 - p, 2));
+    const buffer = isLarge ? this.largeExplosionBuffer : this.smallExplosionBuffer;
 
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;

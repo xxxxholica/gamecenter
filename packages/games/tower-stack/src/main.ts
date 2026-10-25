@@ -2375,6 +2375,7 @@ function frame(now: number): void {
   const inp = benchSolo && state === 'playing' ? demoInput(dt) : readInput();
   if (inp.left || inp.right || inp.up || inp.down || inp.rotate || inp.item || inp.confirm || inp.cancel) bgm.unlock(); // アケコンの操作も、最初の操作として扱う
   bgm.setScene(state === 'playing' && !demoActive ? 'play' : 'menu');
+  bgm.tick();
 
   if (state === 'playing') {
     if (!pauseSolo.isOpen) updatePlaying(dt, inp);

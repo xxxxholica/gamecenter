@@ -14,6 +14,7 @@ import { CpuPlayer, CPU_PROFILES } from '../entities/CpuPlayer';
 import { Enemy } from '../entities/Enemy';
 import { Boss } from '../entities/Boss';
 import { HudRenderer } from '../ui/HudRenderer';
+import { warmupLocatorSprites } from '../ui/locatorSprites';
 import { ControllerTestScreen } from '../ui/ControllerTestScreen';
 import { LevelUpScreen } from '../ui/LevelUpScreen';
 import { OptionsScreen } from '../ui/OptionsScreen';
@@ -152,6 +153,7 @@ export class GameEngine {
   }
 
   public update(dt: number) {
+    this.sound.tick();
     let inputState = this.input.update();
     if (this.benchAuto) inputState = this.benchAutoInput(dt, inputState);
     if (this.pauseUi.isOpen) return;
@@ -1131,6 +1133,7 @@ export class GameEngine {
 
   public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
     this.syncGuide();
+    warmupLocatorSprites(ctx);
     ctx.clearRect(0, 0, width, height);
 
 

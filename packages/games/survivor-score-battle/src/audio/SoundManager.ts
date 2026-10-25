@@ -82,6 +82,10 @@ export class SoundManager {
     }
   }
 
+  public tick() {
+    this.bgm.tick();
+  }
+
   public stopBgm() {
     if (this.bgm) {
       this.bgm.stop();

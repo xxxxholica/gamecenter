@@ -38,7 +38,10 @@ export class Bgm {
 
   /** 最初の操作のあとに呼ぶ(ブラウザは操作の前には音を出せない)。音を出す準備をして、鳴らし始める */
   unlock(): void {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      return;
+    }
     const ctx = this.getContext();
     if (!ctx) return;
     this.ctx = ctx;
@@ -47,17 +50,19 @@ export class Bgm {
     this.master.gain.value = MASTER;
     this.master.connect(ctx.destination);
     this.nextTime = ctx.currentTime + 0.1;
-    window.setInterval(() => this.tick(), 25);
+    if (ctx.state === 'suspended') void ctx.resume();
   }
 
   setScene(scene: BgmScene): void {
     this.scene = scene;
   }
 
-  private tick(): void {
+  /** 毎フレーム呼ぶ。少し先までノートを予約する(25ms の setInterval にすると、Windows の Chrome で他の setTimeout の起きる時刻が最大 16ms 揺れて入力遅延が跳ねる) */
+  tick(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (ctx.state === 'suspended') { void ctx.resume(); this.nextTime = ctx.currentTime + 0.1; return; }
+    if (ctx.state !== 'running') { this.nextTime = ctx.currentTime + 0.1; return; }
+    if (this.nextTime < ctx.currentTime) this.nextTime = ctx.currentTime + 0.05;
     while (this.nextTime < ctx.currentTime + LOOKAHEAD) {
       this.play(this.step, this.nextTime);
       this.step = (this.step + 1) % 64;

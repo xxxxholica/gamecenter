@@ -11,13 +11,13 @@ export class SynthBgm {
   private bgmGain: GainNode;
   private isPlaying: boolean = false;
   private currentTrack: BgmTrack = 'NONE';
-  private timerId: number | null = null;
+  private snareBuffer: AudioBuffer;
+  private hiHatBuffer: AudioBuffer;
 
   // Music sequencer state
   private bpm: number = 160;
   private currentStep: number = 0;
   private nextStepTime: number = 0;
-  private lookahead: number = 25.0; // ms
   private scheduleAheadTime: number = 0.15; // seconds
 
   // Musical scales (MIDI note frequencies)
@@ -54,6 +54,8 @@ export class SynthBgm {
   constructor(ctx: AudioContext, bgmGain: GainNode) {
     this.ctx = ctx;
     this.bgmGain = bgmGain;
+    this.snareBuffer = createWhiteNoiseBuffer(ctx, 0.1, (_t, p) => Math.exp(-p / 0.3));
+    this.hiHatBuffer = createWhiteNoiseBuffer(ctx, 0.04, (_t, p) => Math.exp(-p / 0.2));
   }
 
   start(track: BgmTrack = 'NORMAL') {
@@ -65,16 +67,13 @@ export class SynthBgm {
     this.bpm = track === 'CLIMAX' ? 175 : track === 'BOSS' ? 165 : 160;
     this.nextStepTime = this.ctx.currentTime + 0.05;
 
-    this.timerId = window.setInterval(() => this.scheduler(), this.lookahead);
+    // 25ms の setInterval にすると、Windows の Chrome で他の setTimeout の起きる時刻が最大 16ms 揺れて入力遅延が跳ねるため、毎フレームの tick() で先読み予約する
+    this.scheduler();
   }
 
   stop() {
     this.isPlaying = false;
     this.currentTrack = 'NONE';
-    if (this.timerId !== null) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
   }
 
   setTrack(track: BgmTrack) {
@@ -84,6 +83,15 @@ export class SynthBgm {
     } else {
       this.start(track);
     }
+  }
+
+  /** 毎フレーム呼ぶ。少し先(scheduleAheadTime = 150ms)までノートを予約する */
+  tick() {
+    if (!this.isPlaying) return;
+    if (this.nextStepTime < this.ctx.currentTime) {
+      this.nextStepTime = this.ctx.currentTime + 0.05;
+    }
+    this.scheduler();
   }
 
   private scheduler() {
@@ -165,7 +173,7 @@ export class SynthBgm {
 
   private triggerSnare(time: number, vol: number = 0.6) {
     // Noise snap
-    const buffer = createWhiteNoiseBuffer(this.ctx, 0.1, (_t, p) => Math.exp(-p / 0.3));
+    const buffer = this.snareBuffer;
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
@@ -198,7 +206,7 @@ export class SynthBgm {
   }
 
   private triggerHiHat(time: number, vol: number = 0.15) {
-    const buffer = createWhiteNoiseBuffer(this.ctx, 0.04, (_t, p) => Math.exp(-p / 0.2));
+    const buffer = this.hiHatBuffer;
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
