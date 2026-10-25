@@ -2,6 +2,7 @@ import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の
 import { GameEngine } from './game/GameEngine';
 import { installHomeReturn } from '../../../shared/homeReturn';
 import { benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { waitFramesSettled } from '../../../shared/shaderCompile';
 
 installHomeReturn();
 
@@ -53,7 +54,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ]);
   const benchScene = benchParam('scene');
   if (benchScene === 'play' || benchScene === 'full') engine.startBenchMatch();
-  else if (benchScene === 'title') benchReady('title');
+  else if (benchScene === 'title') void waitFramesSettled().then(() => benchReady('title'));
 
   // AudioContext unlock on first interaction
   const unlockAudio = () => {

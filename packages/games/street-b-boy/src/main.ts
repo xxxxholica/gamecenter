@@ -18,6 +18,7 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -199,6 +200,7 @@ class StreetBBoyGame {
     this.renderer.render(this.scene, this.camera);
     if (this.titleGroup) this.titleGroup.visible = true;
     this.renderer.render(this.scene, this.camera);
+    finishPrograms(this.renderer);
     this.renderer.getContext().finish();
     this.lastTime = performance.now();
 
@@ -217,7 +219,7 @@ class StreetBBoyGame {
       })),
     ]);
     if (this.benchScene === 'play') this.startGame();
-    else if (this.benchScene === 'title') benchReady('title');
+    else if (this.benchScene === 'title') void waitFramesSettled().then(() => benchReady('title'));
   }
 
   /**

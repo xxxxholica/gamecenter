@@ -32,6 +32,7 @@ import type { FighterSnap, FxEvent, ServerMsg } from '../../../shared/sumoProtoc
 import { ROUND_NAMES, WINS_TO_MATCH } from '../../../shared/sumoProtocol';
 import { FIGHTERS, MATCH_OVER_DELAY_SEC, SimWorld, startPose } from '../../../shared/sumoSim/SimWorld';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
+import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 import type { FighterInput } from '../../../shared/sumoSim/SimWorld';
 import type { FighterActions, FighterMoveInput } from '../../../shared/sumoSim/SimFighter';
 import { createNet, fetchSumoStatus } from './online/net';
@@ -323,6 +324,7 @@ class SumoGame {
 
     // 初回フレームのシェーダコンパイル・テクスチャ転送を requestAnimationFrame 開始前に完了させる
     this.halfResFx.render(this.renderer, this.scene, this.camera, true);
+    finishPrograms(this.renderer);
     this.renderer.getContext().finish();
     this.particleManager.update(0.016);
 
@@ -347,7 +349,7 @@ class SumoGame {
       this.startBenchBout(Math.min(4, Math.max(2, Number(benchParam('n')) || 2)));
     } else {
       this.showTitle();
-      if (this.benchScene === 'title') benchReady('title');
+      if (this.benchScene === 'title') void waitFramesSettled().then(() => benchReady('title'));
     }
 
     // アニメーションループ開始
