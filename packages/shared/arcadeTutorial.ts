@@ -137,19 +137,19 @@ function injectStyle(): void {
     .atut-card::after {
       content: '';
       position: absolute;
-      width: 8px;
+      left: 4px;
+      right: 4px;
       height: 8px;
-      background: var(--atut-accent, #ffea00);
+      background:
+        linear-gradient(var(--atut-accent, #ffea00), var(--atut-accent, #ffea00)) left / 8px 8px no-repeat,
+        linear-gradient(var(--atut-accent, #ffea00), var(--atut-accent, #ffea00)) right / 8px 8px no-repeat;
       pointer-events: none;
     }
     .atut-card::before {
       top: 4px;
-      left: 4px;
-      box-shadow: calc(100% - 8px) 0 0 var(--atut-accent, #ffea00);
     }
     .atut-card::after {
       bottom: 4px;
-      left: 4px;
     }
     .atut-card.is-cleared {
       background: #0d2618;
@@ -161,7 +161,9 @@ function injectStyle(): void {
     }
     .atut-card.is-cleared::before,
     .atut-card.is-cleared::after {
-      background: #39ff88;
+      background:
+        linear-gradient(#39ff88, #39ff88) left / 8px 8px no-repeat,
+        linear-gradient(#39ff88, #39ff88) right / 8px 8px no-repeat;
     }
     @keyframes atutPixelIn {
       from { transform: translateY(8px); opacity: 0; }
@@ -325,6 +327,12 @@ function getStepKeyboardCodes(step: ArcadeTutorialStep): string[] {
       else if (tok === 'A') { codes.add('KeyA'); codes.add('ArrowLeft'); }
       else if (tok === 'W') { codes.add('KeyW'); codes.add('ArrowUp'); }
       else if (tok === 'S') { codes.add('KeyS'); codes.add('ArrowDown'); }
+      else if (tok === 'WASD') {
+        codes.add('KeyW'); codes.add('ArrowUp');
+        codes.add('KeyA'); codes.add('ArrowLeft');
+        codes.add('KeyS'); codes.add('ArrowDown');
+        codes.add('KeyD'); codes.add('ArrowRight');
+      }
       else if (tok === 'Z') { codes.add('KeyZ'); codes.add('KeyJ'); }
       else if (tok === 'X') { codes.add('KeyX'); codes.add('KeyK'); }
       else if (tok === 'SPACE') { codes.add('Space'); }

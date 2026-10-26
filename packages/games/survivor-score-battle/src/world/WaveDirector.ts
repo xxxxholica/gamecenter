@@ -54,9 +54,6 @@ export class WaveDirector {
     screenEffects.shake(18);
     screenEffects.flash('#ff0033', 0.6);
 
-    this.warningBannerText = `WARNING ${bossType.replace(/_/g, ' ')} APPROACHING`;
-    this.warningBannerTimer = 4.0;
-
     const liveContenders = contenders.filter((c) => c.alive);
     const targetPos = liveContenders[0] || { x: 0, y: 0 };
     const angle = Math.random() * Math.PI * 2;
@@ -68,6 +65,8 @@ export class WaveDirector {
       Math.max(-1700, Math.min(1700, rawY)),
       bossType
     );
+    this.warningBannerText = `ボス ${boss.bossName} 接近`;
+    this.warningBannerTimer = 4.0;
     this.activeBoss = boss;
     return boss;
   }

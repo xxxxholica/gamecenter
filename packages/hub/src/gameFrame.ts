@@ -18,7 +18,7 @@ const CLOSE_MESSAGE = 'gamecenter:close-game';
 /** 一瞬だけチラつくのを防ぐための「読み込み中」の最小表示時間(ms) */
 const MIN_LOADING_MS = 250;
 /** 万が一ゲーム側から phase 通知が来なかった場合のフォールバック(load 後の ms) */
-const LOAD_FALLBACK_MS = 4000;
+const LOAD_FALLBACK_MS = 10000;
 
 /** このページがゲームのiframeの中に読み込まれたハブか。 */
 export const isFramedHub = window.self !== window.top;

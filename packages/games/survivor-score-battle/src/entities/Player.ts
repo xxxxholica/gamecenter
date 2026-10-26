@@ -88,13 +88,13 @@ export class Player extends Entity {
 
       if (damageNumbers) {
         if (this.comboCount === 10) {
-          damageNumbers.addPopup(this.x, this.y - 70, 'GREAT! 10 KILLS', '#ffaa00', 24);
+          damageNumbers.addPopup(this.x, this.y - 70, '10体撃破', '#ffaa00', 24);
         } else if (this.comboCount === 25) {
-          damageNumbers.addPopup(this.x, this.y - 70, 'SUPER! 25 KILLS', '#ffdd00', 26);
+          damageNumbers.addPopup(this.x, this.y - 70, '25体撃破', '#ffdd00', 26);
         } else if (this.comboCount === 50) {
-          damageNumbers.addPopup(this.x, this.y - 70, 'AMAZING!! 50 KILLS', '#ff2255', 30);
+          damageNumbers.addPopup(this.x, this.y - 70, '50体撃破', '#ff2255', 30);
         } else if (this.comboCount === 100) {
-          damageNumbers.addPopup(this.x, this.y - 70, 'MEGA KILL!! 100 KILLS', '#00f0ff', 36);
+          damageNumbers.addPopup(this.x, this.y - 70, '100体撃破', '#00f0ff', 36);
         }
       }
     }
@@ -119,7 +119,7 @@ export class Player extends Entity {
     if (this.specialGauge >= 100) {
       this.isSpecialReady = true;
       if (soundManager) soundManager.sfx.playSpecialReady();
-      if (damageNumbers) damageNumbers.addPopup(this.x, this.y - 50, 'SWORD STORM READY!', '#ff0055', 26);
+      if (damageNumbers) damageNumbers.addPopup(this.x, this.y - 50, 'SWORD STORM 発動可能', '#ff0055', 26);
     }
   }
 
@@ -145,7 +145,7 @@ export class Player extends Entity {
 
     particleSystem.emitRing(this.x, this.y, '#ffd700', 1000, 0.8);
     particleSystem.emitBurst(this.x, this.y, '#ffd700', 40, 450, 8, 0.8);
-    damageNumbers.addPopup(this.x, this.y - 80, 'SWORD STORM!!', '#ffd700', 42);
+    damageNumbers.addPopup(this.x, this.y - 80, 'SWORD STORM', '#ffd700', 42);
 
     // Initial shockwave clearing surrounding enemies
     const victims = enemyGrid.query(this.x, this.y, 800);
@@ -216,7 +216,7 @@ export class Player extends Entity {
         if (item.type === 'SWORD_ITEM') {
           this.swordSystem.addSword(1);
           soundManager.sfx.playSwordPickup();
-          damageNumbers.addPopup(this.x, this.y - 45, 'SWORD +1!', '#ffd700', 26);
+          damageNumbers.addPopup(this.x, this.y - 45, '剣 +1', '#ffd700', 26);
           particleSystem.emitBurst(this.x, this.y, '#ffd700', 22, 220, 5, 0.4);
           screenEffects.shake(5);
         } else if (item.type.startsWith('EXP')) {
@@ -229,10 +229,10 @@ export class Player extends Entity {
         } else if (item.type === 'MAGNET') {
           pickupPool.attractAllTo(this);
           soundManager.sfx.playSpecialReady();
-          damageNumbers.addPopup(this.x, this.y - 30, 'MAGNET!', '#3388ff', 24);
+          damageNumbers.addPopup(this.x, this.y - 30, 'アイテム吸引', '#3388ff', 24);
         } else if (item.type === 'SPECIAL_ORB') {
           this.addSpecialGauge(item.value, soundManager, damageNumbers);
-          damageNumbers.addPopup(this.x, this.y - 30, '+25% SPECIAL', '#ff2255', 22);
+          damageNumbers.addPopup(this.x, this.y - 30, '必殺ゲージ +25%', '#ff2255', 22);
         }
       }
     }

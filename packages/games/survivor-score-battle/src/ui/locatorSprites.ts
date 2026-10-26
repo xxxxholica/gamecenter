@@ -156,11 +156,11 @@ export function warmupLocatorSprites(ctx: CanvasRenderingContext2D): void {
     ctx.font = `900 26px ${WARMUP_UI_FONT}`;
     ctx.lineWidth = 4;
     ctx.fillStyle = '#ffd700';
-    drawOutlinedText(ctx, 'SWORD +1!', 0, 0);
+    drawOutlinedText(ctx, '剣 +1', 0, 0);
     ctx.font = `900 12px ${WARMUP_UI_FONT}`;
     ctx.lineWidth = 3;
     ctx.fillStyle = '#ff2255';
-    drawOutlinedText(ctx, 'CRITICAL!', 0, 0);
+    drawOutlinedText(ctx, 'CRITICAL', 0, 0);
     ctx.restore();
   }
 
@@ -168,12 +168,12 @@ export function warmupLocatorSprites(ctx: CanvasRenderingContext2D): void {
   ctx.font = `900 36px ${WARMUP_UI_FONT}`;
   ctx.shadowBlur = 25;
   ctx.fillStyle = ctx.shadowColor = '#ffd700';
-  drawFilledText(ctx, 'YOU ARE #1', 0, 0);
+  drawFilledText(ctx, '現在 1位', 0, 0);
   for (let r = 2; r <= 8; r++) {
     ctx.fillStyle = ctx.shadowColor = '#00ffaa';
-    drawFilledText(ctx, `RANK UP #${r}`, 0, 0);
+    drawFilledText(ctx, `RANK UP ${r}位`, 0, 0);
     ctx.fillStyle = ctx.shadowColor = '#ff2255';
-    drawFilledText(ctx, `RANK DOWN #${r}`, 0, 0);
+    drawFilledText(ctx, `RANK DOWN ${r}位`, 0, 0);
   }
   ctx.restore();
 }

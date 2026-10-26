@@ -30,17 +30,20 @@ export class HudRenderer {
   private rankChangeText: string | null = null;
   private rankChangeTimer: number = 0;
   private rankChangeIsUp: boolean = true;
+  private rankChangeIsTop: boolean = false;
 
   public notifyRankChange(newRank: number, prevRank: number) {
     if (newRank < prevRank) {
       // Rank Up (1 is best)
-      this.rankChangeText = newRank === 1 ? 'YOU ARE #1' : `RANK UP #${newRank}`;
+      this.rankChangeText = newRank === 1 ? '現在 1位' : `RANK UP ${newRank}位`;
       this.rankChangeIsUp = true;
+      this.rankChangeIsTop = newRank === 1;
       this.rankChangeTimer = 2.5;
     } else if (newRank > prevRank) {
       // Rank Down
-      this.rankChangeText = `RANK DOWN #${newRank}`;
+      this.rankChangeText = `RANK DOWN ${newRank}位`;
       this.rankChangeIsUp = false;
+      this.rankChangeIsTop = false;
       this.rankChangeTimer = 2.0;
     }
   }
@@ -69,7 +72,7 @@ export class HudRenderer {
       w = Math.max(30, ctx.measureText(label).width + (isKey ? 22 : 18));
       this.badgeWidths.set(widthKey, w);
     }
-    const h = 30;
+    const h = isKey ? 32 : 30;
     const r = isKey ? 6 : h / 2; // 角の丸み(キーは四角、パッドは丸)
     const hh = h / 2;
     ctx.shadowBlur = 0;
@@ -92,15 +95,15 @@ export class HudRenderer {
       ctx.strokeStyle = tint ?? 'rgba(255, 255, 255, 0.75)';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(left + r, cy + hh - 1);
-      ctx.lineTo(left + w - r, cy + hh - 1);
+      ctx.moveTo(left + r, cy + hh - 1.5);
+      ctx.lineTo(left + w - r, cy + hh - 1.5);
       ctx.stroke();
     }
 
     ctx.fillStyle = tint ?? '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    drawFilledText(ctx, label, left + w / 2, cy + (isKey ? 0 : 1));
+    drawFilledText(ctx, label, left + w / 2, cy + (isKey ? -1 : 1));
     ctx.restore();
     return w;
   }
@@ -170,8 +173,9 @@ export class HudRenderer {
       // 下地(まだ埋まっていない部分)を暗く出し、その上に、左から progress の分だけ明るい1行を重ねる
       drawRow('#4a5566', 0.45);
       ctx.save();
+      const clipH = SPECIAL_GAUGE_H + 8;
       ctx.beginPath();
-      ctx.rect(left - 4, cy - SPECIAL_GAUGE_H / 2, (contentW + 8) * progress, SPECIAL_GAUGE_H);
+      ctx.rect(left - 6, cy - clipH / 2, (contentW + 12) * progress, clipH);
       ctx.clip();
       drawRow(fill, 1, '#ffd700');
       ctx.restore();
@@ -234,9 +238,11 @@ export class HudRenderer {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.font = `900 36px ${UI_FONT}`;
 
-      const isTop = this.rankChangeText.includes('#1');
-      const boxW = 500;
+      const isTop = this.rankChangeIsTop;
+      const textW = ctx.measureText(this.rankChangeText).width;
+      const boxW = Math.min(width - 40, Math.max(500, Math.ceil(textW + 80)));
       const boxH = 75;
       const boxY = height * 0.28;
 
@@ -249,7 +255,6 @@ export class HudRenderer {
       ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
       ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
 
-      ctx.font = `900 36px ${UI_FONT}`;
       ctx.fillStyle = ctx.strokeStyle;
       drawFilledText(ctx, this.rankChangeText, width / 2, boxY);
       ctx.restore();
@@ -260,7 +265,9 @@ export class HudRenderer {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const boxW = 750;
+      ctx.font = `900 32px ${UI_FONT}`;
+      const textW = ctx.measureText(warningBanner).width;
+      const boxW = Math.min(width - 40, Math.max(750, Math.ceil(textW + 80)));
       const boxH = 65;
       const boxY = height * 0.2;
 
@@ -272,7 +279,11 @@ export class HudRenderer {
       ctx.fillRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
       ctx.strokeRect((width - boxW) / 2, boxY - boxH / 2, boxW, boxH);
 
-      ctx.font = `900 32px ${UI_FONT}`;
+      const maxTextW = boxW - 56;
+      if (textW > maxTextW) {
+        const scaledPx = Math.max(18, Math.floor((32 * maxTextW) / textW));
+        ctx.font = `900 ${scaledPx}px ${UI_FONT}`;
+      }
       ctx.fillStyle = '#ffffff';
       drawFilledText(ctx, warningBanner, width / 2, boxY);
       ctx.restore();

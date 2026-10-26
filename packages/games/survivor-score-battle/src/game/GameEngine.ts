@@ -381,7 +381,7 @@ export class GameEngine {
     if (this.waveDirector.gameTime >= 300 && !this.playerCleared5Min && this.player.alive) {
       this.playerCleared5Min = true;
       this.player.addScore(50000, true, this.sound, this.damageNumbers);
-      this.damageNumbers.addPopup(this.player.x, this.player.y - 110, '5-MINUTE SURVIVAL CLEARED! +50,000 PTS!', '#ffd700', 36);
+      this.damageNumbers.addPopup(this.player.x, this.player.y - 110, '5分間生存クリア +50,000', '#ffd700', 36);
       this.sound.sfx.playSpecialReady();
       this.screenEffects.flash('#00f0ff', 0.8);
       this.screenEffects.shake(20);
@@ -728,14 +728,14 @@ export class GameEngine {
     // Generous sword drops & special items
     if (enemy.type === 'BERSERKER') {
       if (byPlayer) {
-        this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破! +120', '#ff0033', 24);
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破 +120', '#ff0033', 24);
       }
       if (Math.random() < 0.6) {
         this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
       }
     } else if (enemy.type === 'WEAPON_MASTER') {
       if (byPlayer) {
-        this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕! +250', '#e000ff', 26);
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕 +250', '#e000ff', 26);
       }
       this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
     } else if (enemy.type === 'ELITE') {
@@ -764,7 +764,7 @@ export class GameEngine {
       this.screenEffects.shake(25);
       this.screenEffects.flash('#ffd700', 0.8);
       this.particleSystem.emitRing(enemy.x, enemy.y, '#ffd700', 500, 1.0);
-      this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'BOSS DEFEATED!! +5000', '#ffd700', 36);
+      this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'ボス撃破 +5,000', '#ffd700', 36);
       this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 6);
       this.waveDirector.activeBoss = null;
     }
@@ -825,12 +825,12 @@ export class GameEngine {
     this.sound.sfx.playCpuDefeated();
     this.screenEffects.shake(18);
     this.screenEffects.flash(cpu.color, 0.4);
-    this.damageNumbers.addPopup(cpu.x, cpu.y - 40, `${cpu.name} ELIMINATED!`, '#ff2255', 28);
+    this.damageNumbers.addPopup(cpu.x, cpu.y - 40, `${cpu.name} 脱落`, '#ff2255', 28);
 
     if (killer) {
       if (killer.isPlayer) {
         this.player.addScore(3000, true, this.sound, this.damageNumbers);
-        this.damageNumbers.addPopup(this.player.x, this.player.y - 70, 'RIVAL TAKEDOWN! +3,000', '#ffd700', 32);
+        this.damageNumbers.addPopup(this.player.x, this.player.y - 70, 'ライバル撃破 +3,000', '#ffd700', 32);
       } else if (killer instanceof CpuPlayer) {
         killer.addScore(3000, true);
       }
@@ -839,7 +839,7 @@ export class GameEngine {
     // Check if all CPUs are down at this moment (Domination bonus, game continues!)
     const aliveCpus = this.cpus.filter((c) => c.alive);
     if (aliveCpus.length === 0 && this.player.alive) {
-      this.damageNumbers.addPopup(this.player.x, this.player.y - 90, 'TOTAL DOMINATION! ALL RIVALS DOWN! +10,000', '#ffd700', 38);
+      this.damageNumbers.addPopup(this.player.x, this.player.y - 90, 'ライバル全滅 +10,000', '#ffd700', 38);
       this.player.addScore(10000, true, this.sound, this.damageNumbers);
       this.sound.sfx.playSpecialReady();
     }
@@ -1019,7 +1019,7 @@ export class GameEngine {
         { indices: [14], keyLabel: 'A', label: '左に動く' },
         { indices: [12], keyLabel: 'W', label: '上に動く' },
         { indices: [13], keyLabel: 'S', label: '下に動く' },
-        { indices: [14, 15], keyLabel: 'W / A / S / D', label: '剣を拾ってブレードを増やす' },
+        { indices: [14, 15], keyLabel: 'WASD', label: '剣を拾ってブレードを増やす' },
         { indices: [3, 5], keyLabel: 'Space', label: 'ソードストームで敵を一掃' },
       ],
       onComplete: () => {
@@ -1213,7 +1213,7 @@ export class GameEngine {
           slug: 'survivor-score-battle',
           logoUrl,
           accentColor: '#00e5ff',
-          tagline: '剣を奪い合う8人サバイバル！',
+          tagline: '剣を奪い合う8人サバイバル',
           startButtonLabel: 'スタート',
           onStart: () => this.startFromTitle(),
         });

@@ -4,7 +4,7 @@ import { toggleFullscreen } from '../../../../shared/fullscreenKey';
 
 export class OptionsScreen {
   public selectedIndex: number = 0;
-  private readonly items = ['BGM VOLUME', 'SFX VOLUME', 'MUTE AUDIO', 'FULLSCREEN TOGGLE', 'BACK TO MENU'];
+  private readonly items = ['BGM 音量', 'SE 音量', 'ミュート切替', 'フルスクリーン切替', 'メニューへ戻る'];
 
   public update(input: InputState, soundManager: SoundManager): boolean {
     if (input.upTap) {
@@ -72,7 +72,7 @@ export class OptionsScreen {
     ctx.fillStyle = '#00f0ff';
     ctx.shadowColor = '#00f0ff';
     ctx.shadowBlur = 15;
-    ctx.fillText('OPTIONS & AUDIO SETTINGS', width / 2, 90);
+    ctx.fillText('オプション設定', width / 2, 90);
     ctx.shadowBlur = 0;
 
     const settings = soundManager.getSettings();
@@ -101,7 +101,7 @@ export class OptionsScreen {
       let valueText = '';
       if (i === 0) valueText = `< ${Math.round(settings.bgmVolume * 100)}% >`;
       else if (i === 1) valueText = `< ${Math.round(settings.sfxVolume * 100)}% >`;
-      else if (i === 2) valueText = settings.isMuted ? 'MUTED' : 'SOUND ON';
+      else if (i === 2) valueText = settings.isMuted ? 'ON' : 'OFF';
       else if (i === 3) valueText = document.fullscreenElement ? 'ON' : 'OFF';
 
       const label = this.items[i];

@@ -42,7 +42,7 @@ export class DamageNumbers {
         item.x = x + (Math.random() - 0.5) * 20;
         item.y = y + (Math.random() - 0.5) * 10;
         item.text = Math.round(amount).toString();
-        item.subText = isCrit ? 'CRITICAL!' : undefined;
+        item.subText = isCrit ? 'CRITICAL' : undefined;
         item.color = isCrit ? '#ffdd00' : '#ffffff';
         item.size = isCrit ? 26 : 18;
         item.isCrit = isCrit;

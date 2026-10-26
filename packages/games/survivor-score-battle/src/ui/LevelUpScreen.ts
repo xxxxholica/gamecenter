@@ -76,8 +76,8 @@ export class LevelUpScreen {
         id: 'stat_sword_count',
         category: 'STAT_BOOST',
         statType: 'SWORD_COUNT',
-        title: 'SWORD +1',
-        description: `回転する剣を1本追加！ (現在: ${player.swordSystem.swordCount}本)`,
+        title: '回転剣 +1',
+        description: `回転する剣を1本追加 (現在: ${player.swordSystem.swordCount}本)`,
         rarity: 'EPIC',
       },
       {
@@ -127,7 +127,7 @@ export class LevelUpScreen {
         id: 'stat_power',
         category: 'STAT_BOOST',
         statType: 'ATTACK_POWER',
-        title: 'POWER',
+        title: '攻撃力UP',
         description: '全武器の攻撃力 +25%',
         rarity: 'COMMON',
       },
@@ -135,7 +135,7 @@ export class LevelUpScreen {
         id: 'stat_rapid',
         category: 'STAT_BOOST',
         statType: 'ATTACK_SPEED',
-        title: 'RAPID',
+        title: '連射速度UP',
         description: '全武器の攻撃速度 +20%',
         rarity: 'COMMON',
       },
@@ -143,7 +143,7 @@ export class LevelUpScreen {
         id: 'stat_speed',
         category: 'STAT_BOOST',
         statType: 'MOVE_SPEED',
-        title: 'SPEED',
+        title: '移動速度UP',
         description: '移動速度 +15%',
         rarity: 'COMMON',
       },
@@ -151,7 +151,7 @@ export class LevelUpScreen {
         id: 'stat_vital',
         category: 'STAT_BOOST',
         statType: 'MAX_HP',
-        title: 'VITAL',
+        title: '最大HP UP',
         description: '最大HP +25 & HP+25回復',
         rarity: 'COMMON',
       },
@@ -159,7 +159,7 @@ export class LevelUpScreen {
         id: 'stat_magnet',
         category: 'STAT_BOOST',
         statType: 'MAGNET_RADIUS',
-        title: 'MAGNET',
+        title: '回収範囲UP',
         description: 'アイテム回収範囲 +40%',
         rarity: 'COMMON',
       },
@@ -167,7 +167,7 @@ export class LevelUpScreen {
         id: 'stat_crit',
         category: 'STAT_BOOST',
         statType: 'CRIT_CHANCE',
-        title: 'CRITICAL',
+        title: 'クリティカル率UP',
         description: '会心の一撃確率 +12%',
         rarity: 'RARE',
       },
@@ -292,18 +292,19 @@ export class LevelUpScreen {
       ctx.fillStyle = '#ffffff';
       this.wrapText(ctx, card.title, 0, y0 + (hasBadge ? 224 : 216), cardW - 40, 34);
       if (badge) {
-        const bw = 62;
-        const bh = 28;
+        ctx.font = "900 19px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
+        const textW = ctx.measureText(badge.text).width;
+        const bw = Math.max(76, Math.ceil(textW + 24));
+        const bh = 30;
         const bx = -bw / 2;
-        const by = y0 + 166;
+        const by = y0 + 165;
         ctx.fillStyle = badge.color;
         ctx.fillRect(bx, by, bw, bh);
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
         ctx.strokeRect(bx, by, bw, bh);
-        ctx.font = "900 22px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
         ctx.fillStyle = '#000000';
-        ctx.fillText(badge.text, 0, by + bh / 2 + 1);
+        ctx.fillText(badge.text, 0, by + bh / 2);
       }
 
       ctx.font = "700 20px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
