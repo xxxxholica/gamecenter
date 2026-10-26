@@ -384,9 +384,6 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
   }
 }
 
-/** ランキングを取り直す間隔 */
-const BOARD_REFRESH_MS = 30_000;
-
 // ===== 時間経過でコース/難易度ランキングをローテーション切替 =====
 const ROTATION_INTERVAL_MS = 4000;
 let rotationTimer: number | null = null;
@@ -650,6 +647,7 @@ function applyRotation() {
   cards = Array.from(document.querySelectorAll<HTMLDivElement>('.card'));
   window.scrollTo(0, 0);
   goTo(0);
+  void refreshBoards();
 }
 
 // オンライン開催状況の定期更新: 印の状態(点灯・点滅)だけを書き換える。セクションは作り直さないので、並びもスクロール位置も動かない
@@ -697,11 +695,6 @@ if (!isFramedHub && !isMobileBlocked) {
   window.addEventListener('mousemove', (e) => {
     if (e.movementX !== 0 || e.movementY !== 0) markActive();
   }, { passive: true });
-
-  // ランキングの定期更新(リロードしなくても、新しい記録が出る)。表示中のカードの中身だけを書き換える
-  setInterval(() => {
-    if (!document.hidden && !isGameFrameOpen()) void refreshBoards();
-  }, BOARD_REFRESH_MS);
 
   // ウィンドウフォーカス復帰時にも即座にステータスをチェック
   window.addEventListener('focus', () => {

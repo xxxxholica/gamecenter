@@ -237,6 +237,10 @@ export class UIManager {
     this.countdownOverlay.classList.add('hidden');
   }
 
+  public setHUDVisible(visible: boolean): void {
+    this.setClass(this.hudContainer, 'hidden', !visible);
+  }
+
   public setGameState(state: GameState, scoreData?: GameScore): void {
     this.triggerInvincibleEnd();
     this.hideChaseWarning();

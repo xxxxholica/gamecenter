@@ -9,13 +9,14 @@ import { Stage, STAGE_CONFIGS, FINAL_STAGE, DEFAULT_BACKGROUND, DEFAULT_FOG_DENS
 import { INITIAL_LIVES, stageClearBonus } from './world/rewards';
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
-import { CassetteTape, StageBlock } from './entities/objects';
-import { SurveillanceDrone } from './entities/enemies';
+import { CassetteTape, StageBlock, StreetObstacle } from './entities/objects';
+import { SecurityBot, SurveillanceDrone } from './entities/enemies';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
@@ -36,12 +37,11 @@ const mountPlayGuide = () => mountArcadeGuide({
   backLabel: 'ポーズ',
 });
 const mountTitleGuide = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
-mountTitleGuide();
 
 /** ミス後に再開するときの最低残り時間(秒)。時間切れで再開直後にまたミスするのを防ぐ */
 const RESPAWN_MIN_TIME = 30;
 /** ステージの開始地点。チェックポイントを通過していないときの再開地点にもなる */
-const STAGE_SPAWN = { x: 1.5, y: 0.5 } as const;
+const STAGE_SPAWN = { x: 1.5, y: 0 } as const;
 /** スピンがドローンに届く、本体の上下の余裕(m)。どの角度からでも落とせるようにする */
 const DRONE_SPIN_REACH = 0.6;
 
@@ -90,8 +90,14 @@ class StreetBBoyGame {
   private readonly pause = new ArcadePause({
     accent: '#ffe600',
     isPlaying: () => this.state === 'playing' && !!this.player && !this.player.isDead,
-    onOpen: () => this.countdownHandle?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
-    onClose: () => this.countdownHandle?.resume(),
+    onOpen: () => {
+      this.tutorialHandle?.pause();
+      this.countdownHandle?.pause();     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    },
+    onClose: () => {
+      this.tutorialHandle?.resume();
+      this.countdownHandle?.resume();
+    },
     onRestart: () => this.retryFromResult(),
   });
 
@@ -100,6 +106,16 @@ class StreetBBoyGame {
   private hordeAlerted: boolean = false;
   private score: number = 0;
   private timeLeft: number = 99;
+  /** ゲーム開始前のアクティブチュートリアル中は true(時間は進まず、開始地点で自由に操作を試せる) */
+  private inTutorial = false;
+  private tutorialLastStep = -1;
+  private tutorialMoveDist = 0;
+  private tutorialActionDone = false;
+  private tutorialActionDelay = 0;
+  private tutorialStepSpawned = -1;
+  private tutorialBox: StreetObstacle | null = null;
+  private tutorialEnemy: SecurityBot | null = null;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
   /** ステージ開始前の 3・2・1・GO! の間は true(時間が進まず、操作できない) */
   private countingDown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
@@ -381,6 +397,7 @@ class StreetBBoyGame {
         tagline: 'スピンで蹴散らす爆走ダンスアクション！',
         startButtonLabel: 'スタート',
         promptLabel: 'PRESS START / ENTER / 画面クリック',
+        startKeys: ['Enter', 'Space'],
         onStart: () => {
           this.sound.init();
           this.startGame();
@@ -396,7 +413,8 @@ class StreetBBoyGame {
     this.titleDancer = new Player();
     this.titleDancer.reset(2.2, 0);
     this.titleDancer.isGrounded = true;
-    this.titleDancer.mesh.position.z = TITLE_DANCER_Z;
+    this.titleDancer.animateBreakdanceDemo(0, 0);
+    this.titleDancer.mesh.position.set(this.titleDancer.x, this.titleDancer.y, TITLE_DANCER_Z);
     this.scene.add(this.titleDancer.mesh);
 
     // 主人公を照らすドラマチックなフロントスポットライト
@@ -473,7 +491,8 @@ class StreetBBoyGame {
       this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
       this.scene.add(this.player.mesh);
     }
-    this.camera.position.set(STAGE_SPAWN.x, 2.5, 13.0);
+    this.camera.position.set(STAGE_SPAWN.x + 3.0, 3.2, 13.0);
+    this.camera.lookAt(this.camera.position.x + 0.5, this.camera.position.y - 0.8, 0);
 
     this.hud.showTitle(false);
     this.hud.showRanking(false);
@@ -489,7 +508,11 @@ class StreetBBoyGame {
       this.state = 'playing';
       mountPlayGuide();
       this.hud.showDemoBanner(false);
-      this.beginStageCountdown();
+      if (this.currentStage === 1) {
+        this.beginTutorial();
+      } else {
+        this.beginStageCountdown();
+      }
       this.sound.startBgm();
       this.sound.setGoldMode(false);
     }
@@ -513,7 +536,7 @@ class StreetBBoyGame {
 
   /** ボットの操作を入力に差し込む。右へ進めない状態が3秒続いたら、少し先の上空へ移して落とす。 */
   private applyBenchBot(input: InputState, dt: number): InputState {
-    if (this.state !== 'playing' || !this.player || this.countingDown) return input;
+    if (this.state !== 'playing' || !this.player || this.countingDown || this.inTutorial) return input;
     this.benchClock += dt;
     const x = this.player.x;
     if (x > this.benchBestX + 0.5) {
@@ -548,6 +571,10 @@ class StreetBBoyGame {
       window.clearTimeout(this.respawnTimer);
       this.respawnTimer = null;
     }
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
+    this.cleanupTutorialProps();
     this.countdownHandle?.cancel();
     this.countingDown = false;
     if (this.player) {
@@ -564,6 +591,7 @@ class StreetBBoyGame {
     this.cameraShakeIntensity = 0;
     this.hud.hideCombo();
     this.hud.setHordeWarning(0);
+    this.hud.setInvincibleBorder(false);
     this.sound.setGoldMode(false);
   }
 
@@ -590,7 +618,8 @@ class StreetBBoyGame {
     if (this.player) {
       this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
     }
-    this.camera.position.set(STAGE_SPAWN.x, 2.5, 13.0);
+    this.camera.position.set(STAGE_SPAWN.x + 3.0, 3.2, 13.0);
+    this.camera.lookAt(this.camera.position.x + 0.5, this.camera.position.y - 0.8, 0);
 
     this.state = 'playing';
     this.stateTimer = 0;
@@ -606,6 +635,78 @@ class StreetBBoyGame {
         this.sound.playShoot();
       }
     };
+  }
+
+  private cleanupTutorialProps(): void {
+    if (this.tutorialBox) {
+      this.scene.remove(this.tutorialBox.mesh);
+      this.tutorialBox = null;
+    }
+    if (this.tutorialEnemy) {
+      this.scene.remove(this.tutorialEnemy.mesh);
+      this.tutorialEnemy = null;
+    }
+  }
+
+  private spawnTutorialStepProps(stepIdx: number): void {
+    this.cleanupTutorialProps();
+    if (!this.player) return;
+    if (stepIdx === 3) {
+      this.player.spinCooldown = 0;
+      // すぐ目の前に段ボール箱と敵を重ならない間隔で設置（スピン攻撃で吹き飛ばす体験）
+      const px = this.player.x;
+      const dir = px > 2.2 ? -1 : px < 0.2 ? 1 : (this.player.isFacingRight ? 1 : -1);
+      this.player.isFacingRight = dir === 1;
+      const boxX = px + dir * 1.25;
+      const enemyX = px + dir * 2.65;
+      this.tutorialBox = new StreetObstacle(boxX, 0, 'cardboard');
+      this.tutorialEnemy = new SecurityBot(enemyX, 0, 0);
+      this.scene.add(this.tutorialBox.mesh, this.tutorialEnemy.mesh);
+    }
+  }
+
+  /** ステージ1開始前: 時間を止めたまま、開始地点で実際にギミックや敵にアクションを当てて覚えるチュートリアル */
+  private beginTutorial(): void {
+    this.hud.hideCenterBanner();
+    this.hud.setGameplayHUDVisible(false);
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialMoveDist = 0;
+    this.tutorialActionDone = false;
+    this.tutorialActionDelay = 0;
+    this.tutorialStepSpawned = -1;
+    this.cleanupTutorialProps();
+    this.tutorialHandle?.cancel();
+    const handle = startArcadeTutorial({
+      accentColor: '#ffea00',
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右に動く' },
+        { indices: [14], keyLabel: 'A', label: '左に動く' },
+        { indices: [0], keyLabel: 'Space', label: 'ジャンプ' },
+        { indices: [2], keyLabel: 'X', label: 'スピン攻撃で敵と箱を壊す' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        this.tutorialLastStep = -1;
+        this.tutorialMoveDist = 0;
+        this.tutorialActionDone = false;
+        this.tutorialActionDelay = 0;
+        this.tutorialStepSpawned = -1;
+        this.cleanupTutorialProps();
+        this.hud.setGameplayHUDVisible(true);
+        if (this.player) {
+          this.player.reset(STAGE_SPAWN.x, STAGE_SPAWN.y);
+        }
+        this.camera.position.set(STAGE_SPAWN.x + 3.0, 3.2, 13.0);
+        this.camera.lookAt(this.camera.position.x + 0.5, this.camera.position.y - 0.8, 0);
+        this.stage?.resetHorde(8);
+        this.beginStageCountdown();
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
   }
 
   /** 「STAGE n」を出したまま 3・2・1・GO! を数え、GO! まで時間を止めて操作を受け付けない。 */
@@ -651,7 +752,7 @@ class StreetBBoyGame {
     // 2. State Machine Update
     switch (this.state) {
       case 'title':
-        this.updateTitle(dt, timestamp, inputState);
+        this.updateTitle(dt, timestamp);
         break;
 
       case 'attract_demo':
@@ -697,7 +798,7 @@ class StreetBBoyGame {
   // -------------------------------------------------------------
   // TITLE UPDATE
   // -------------------------------------------------------------
-  private updateTitle(dt: number, time: number, input: InputState): void {
+  private updateTitle(dt: number, time: number): void {
     this.stateTimer += dt;
 
     if (this.stage) {
@@ -714,12 +815,6 @@ class StreetBBoyGame {
     const camSwayY = Math.cos(this.stateTimer * 0.8) * 0.04;
     this.camera.position.set(2.2 + camSwayX, 1.1 + camSwayY, 4.5 + TITLE_DANCER_Z);
     this.camera.lookAt(2.2, 0.8, TITLE_DANCER_Z);
-
-    // Start on action
-    if (input.startPressed || input.jumpPressed) {
-      this.sound.init();
-      this.startGame();
-    }
   }
 
   // -------------------------------------------------------------
@@ -805,6 +900,12 @@ class StreetBBoyGame {
       return;
     }
 
+    // チュートリアル中: 敵・大群・死亡判定・タイマーを完全に止め、開始地点の地面上だけで安全に自機を動かす
+    if (this.inTutorial) {
+      this.updateTutorial(dt, time, input);
+      return;
+    }
+
     // Time countdown
     this.timeLeft -= dt;
     this.hud.updateTime(this.timeLeft);
@@ -826,6 +927,160 @@ class StreetBBoyGame {
     }
 
     this.runPhysicsAndCollisions(dt, time, input);
+  }
+
+  /**
+   * チュートリアル専用の安全な自機＆練習ギミック更新。
+   * 開始地点(x: -1.5〜4.5, y: 0)の床の上で、左右移動・ジャンプ・敵と箱のスピン撃破を実物で体験させる。
+   */
+  private updateTutorial(dt: number, time: number, input: InputState): void {
+    if (!this.player || !this.stage) return;
+
+    const started = this.tutorialHandle?.isStarted() ?? false;
+    const stepIdx = this.tutorialHandle?.currentStepIndex() ?? -1;
+    const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+    if (stepIdx !== this.tutorialLastStep) {
+      this.tutorialLastStep = stepIdx;
+      this.tutorialMoveDist = 0;
+      this.tutorialActionDone = false;
+      this.tutorialActionDelay = 0;
+    } else if (!stepReady) {
+      this.tutorialMoveDist = 0;
+    }
+
+    if (started && stepIdx !== this.tutorialStepSpawned) {
+      this.tutorialStepSpawned = stepIdx;
+      this.spawnTutorialStepProps(stepIdx);
+    }
+
+    const allowJump = started && (stepIdx !== 2 || (stepReady && !this.tutorialActionDone));
+    const allowSpin = started && (stepIdx !== 3 || (stepReady && !this.tutorialActionDone));
+    const activeInput: InputState = started
+      ? {
+          ...input,
+          jump: allowJump ? input.jump : false,
+          jumpPressed: allowJump ? input.jumpPressed : false,
+          jumpReleased: allowJump ? input.jumpReleased : false,
+          spinPressed: allowSpin ? input.spinPressed : false,
+        }
+      : {
+          ...input,
+          left: false,
+          right: false,
+          down: false,
+          jump: false,
+          jumpPressed: false,
+          jumpReleased: false,
+          spinPressed: false,
+        };
+
+    if (activeInput.spinPressed && this.player.triggerSpin()) {
+      this.sound.playSpin();
+      this.stage.particleSystem.spawnShockwave(this.player.x, this.player.y);
+      this.triggerCameraShake(0.15, 0.15);
+    }
+
+    const { spawnedSmoke, jumped } = this.player.update(dt, activeInput);
+    if (jumped) {
+      this.sound.playJump();
+      if (stepReady && stepIdx === 2) {
+        this.tutorialActionDone = true;
+      }
+    }
+    if (spawnedSmoke) {
+      this.stage.particleSystem.spawnSmoke(this.player.x, this.player.y);
+    }
+
+    // 開始地点の安全範囲にクランプし、地面(y=0)で着地させる
+    this.player.x = Math.max(-1.5, Math.min(4.5, this.player.x));
+    if (this.player.y <= 0) {
+      this.player.y = 0;
+      this.player.vy = 0;
+      this.player.isGrounded = true;
+    }
+    this.player.mesh.position.set(this.player.x, this.player.y, 0);
+
+    const pBox = this.player.getAABB();
+    const spinAttackBox = this.player.isSpinning
+      ? { x: pBox.x - 2.6, y: pBox.y, w: pBox.w + 5.2, h: pBox.h + 0.2 }
+      : null;
+
+    if (this.tutorialBox && !this.tutorialBox.isDestroyed) {
+      if (spinAttackBox && this.checkAABB(spinAttackBox, this.tutorialBox.getAABB())) {
+        this.tutorialBox.isDestroyed = true;
+        this.sound.playSmash();
+        this.stage.particleSystem.spawnObstacleDebris(this.tutorialBox.x, this.tutorialBox.y, this.tutorialBox.type);
+        this.scene.remove(this.tutorialBox.mesh);
+        this.triggerCameraShake(0.14, 0.15);
+      }
+    }
+
+    if (this.tutorialEnemy) {
+      if (!this.tutorialEnemy.isDead) {
+        if (spinAttackBox && this.checkAABB(spinAttackBox, this.tutorialEnemy.getAABB())) {
+          this.tutorialEnemy.defeat(this.player.isFacingRight ? 8 : -8, 10);
+          this.sound.playSmash();
+          this.stage.particleSystem.spawnSparkles(this.tutorialEnemy.x, this.tutorialEnemy.y + 0.5, 12, 0xff1a1a);
+          this.triggerCameraShake(0.22, 0.2);
+        }
+      } else {
+        this.tutorialEnemy.update(dt, this.player.x);
+      }
+    }
+
+    this.stage.update(dt, time * 0.001, this.camera.position.x);
+    this.updateCamera(dt);
+
+    if (!stepReady) return;
+
+    // 現在のステップだけを順番に判定し、アクションのアニメーションが見えてから次へ進める
+    if (stepIdx === 0) {
+      if (activeInput.right && this.player.vx > 0.5) {
+        this.tutorialMoveDist += this.player.vx * dt;
+        if (this.tutorialMoveDist >= 1.8) {
+          this.tutorialMoveDist = 0;
+          this.tutorialHandle?.advance(0);
+        }
+      }
+    } else if (stepIdx === 1) {
+      if (activeInput.left && this.player.vx < -0.5) {
+        this.tutorialMoveDist += Math.abs(this.player.vx) * dt;
+        if (this.tutorialMoveDist >= 1.8) {
+          this.tutorialMoveDist = 0;
+          this.tutorialHandle?.advance(1);
+        }
+      }
+    } else if (stepIdx === 2) {
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.38) {
+          this.tutorialHandle?.advance(2);
+        }
+      }
+    } else if (stepIdx === 3) {
+      // ステップ3中に万一離れて空振りした場合は目の前に重ならない間隔で再配置して必ず当たるようにする
+      if (activeInput.spinPressed) {
+        const hitBox = this.tutorialBox?.isDestroyed ?? false;
+        const hitEnemy = this.tutorialEnemy?.isDead ?? false;
+        if (!hitBox && !hitEnemy && this.tutorialBox && this.tutorialEnemy) {
+          const px = this.player.x;
+          const dir = px > 2.2 ? -1 : px < 0.2 ? 1 : (this.player.isFacingRight ? 1 : -1);
+          this.tutorialBox.x = px + dir * 1.25;
+          this.tutorialBox.mesh.position.x = this.tutorialBox.x;
+          this.tutorialEnemy.x = px + dir * 2.65;
+          this.tutorialEnemy.mesh.position.x = this.tutorialEnemy.x;
+        }
+      }
+      if ((this.tutorialBox?.isDestroyed ?? false) || (this.tutorialEnemy?.isDead ?? false)) {
+        this.tutorialActionDone = true;
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.42) {
+          this.tutorialHandle?.advance(3);
+        }
+      }
+    }
   }
 
   // -------------------------------------------------------------

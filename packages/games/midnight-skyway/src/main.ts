@@ -29,6 +29,7 @@ import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAna
 import { replayBarrier } from '../../../shared/arcadeReplay';
 import { waitFramesSettled } from '../../../shared/shaderCompile';
 import { PadEdge, readPad, startPadLoop } from '../../../shared/arcadePad';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { audio } from './audio';
 import { createNet } from './net/skywayNet';
 import { OnlineRace } from './net/OnlineRace';
@@ -319,6 +320,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   let onlineStatus: PublicStatus | null = null;
 
   let lastWarnSec = -1;   // the last whole second for which the low-time beep sounded
+  let inTutorial = false;
+  let tutorialHandle: ArcadeTutorialHandle | null = null;
+  let tutorialLastStep = -1;
+  let tutorialStepHoldSec = 0;
+  const tutKeys = new Set<string>();
+  window.addEventListener('keydown', (e) => tutKeys.add(e.code));
+  window.addEventListener('keyup', (e) => tutKeys.delete(e.code));
+  window.addEventListener('blur', () => tutKeys.clear());
 
   /** 一緒に走るゴースト(そのコースのランキング1位で、ゴーストが保存されているもの)。null ならペースボットが走る。オンライン対戦では使わない。 */
   let ghostPick: { id: string; rank: number } | null = null;
@@ -330,8 +339,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     ghostPick = first ? { id: first.id!, rank: first.rank } : null;
   };
 
+  const resetAndPrepareSolo = (devStart: number | null) => {
+    driveScene.devStartProgress = devStart;
+    driveScene.respawnCar();
+    if (driveScene.carController) {
+      driveScene.carController.canDrive = false;
+    }
+    timeAttack.initCourse(currentMapId, currentCar.specs.name);
+    driveHUD.resetSectors();
+    raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
+  };
+
   const restartRace = (changeBgm = false) => {
+    tutorialHandle?.cancel();
+    tutorialHandle = null;
+    inTutorial = false;
+    tutorialLastStep = -1;
+    tutorialStepHoldSec = 0;
+    driveHUD.setGameplayHUDVisible(true);
     pendingFinish = null;
+    driveHUD.hideCountdown();
     driveHUD.hideFinishStamp();
     driveHUD.hideResultModal();
     driveHUD.hidePauseModal();
@@ -342,14 +369,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     bgm.duck(1);
     sfx.startEngine();
     const devStart = !online && !benchParam('scene') && !isPreviewMode ? DEV_START_PROGRESS : null;
-    driveScene.devStartProgress = devStart;
-    driveScene.respawnCar();
-    if (driveScene.carController) {
-      driveScene.carController.canDrive = false;
-    }
-    timeAttack.initCourse(currentMapId, currentCar.specs.name);
-    driveHUD.resetSectors();
-    raceDirector.prepare(currentMapInstance, currentMapId, currentCar);
+    resetAndPrepareSolo(devStart);
     reportDeepAnalytics('progression_update', {
       vehicle: currentCar.specs.name,
       mode: online ? 'オンライン' : 'ひとり',
@@ -359,6 +379,38 @@ window.addEventListener('DOMContentLoaded', async () => {
     reportRoundStart({ map: currentMapId, car: currentCar.specs.name, mode: online ? 'オンライン' : 'ひとり' });
     syncBestTimeDisplay();
     if (online) return;                                      // オンライン: 全員のロードが揃って go が来てから始める
+    if (!isPreviewMode && !benchAutoDrive && benchRivals === 0 && devStart === null) {
+      inTutorial = true;
+      tutorialLastStep = -1;
+      tutorialStepHoldSec = 0;
+      driveHUD.setGameplayHUDVisible(false);
+      if (driveScene.carController) {
+        driveScene.carController.canDrive = false;
+      }
+      const handle = startArcadeTutorial({
+        accentColor: boostThemeFor(currentCar).hud,
+        steps: [
+          { indices: [0], keyLabel: 'W', label: 'アクセル' },
+          { indices: [15], keyLabel: 'D', label: '右にハンドルを切る' },
+          { indices: [14], keyLabel: 'A', label: '左にハンドルを切る' },
+          { indices: [1], keyLabel: 'Space', label: 'ドリフト' },
+        ],
+        onComplete: () => {
+          inTutorial = false;
+          tutorialHandle = null;
+          tutorialLastStep = -1;
+          tutorialStepHoldSec = 0;
+          driveHUD.setGameplayHUDVisible(true);
+          bgm.rewind();
+          resetAndPrepareSolo(null);
+          timeAttack.startCountdown();
+        },
+      });
+      if (inTutorial) {
+        tutorialHandle = handle;
+      }
+      return;
+    }
     timeAttack.startCountdown();
     if (devStart !== null) timeAttack.devStartAt(devStart, DEV_SECTOR_MS);
   };
@@ -529,7 +581,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Safe helper to move player car back to garage turntable
   const returnCarToGarage = () => {
+    tutorialHandle?.cancel();
+    tutorialHandle = null;
+    inTutorial = false;
+    driveHUD.setGameplayHUDVisible(true);
     pendingFinish = null;
+    driveHUD.hideCountdown();
     driveHUD.hideFinishStamp();
     sfx.stopEngine();
     bgm.duck(1);
@@ -582,6 +639,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onPauseChange: (paused) => {
       if (online) return;                                    // オンライン中は他の人が走っているので止まらない
+      if (paused) tutorialHandle?.pause();
+      else tutorialHandle?.resume();
       const changed = driveScene.paused !== paused;
       driveScene.paused = paused;                        // the pause menu really freezes the game
       sfx.setEngineSuspended(paused);
@@ -603,6 +662,35 @@ window.addEventListener('DOMContentLoaded', async () => {
   const remoteMarkersPool: { x: number; z: number; color: number }[] = [];
   driveScene.callbacks.onFxUpdate = (speed, boost) => driveHUD.setFx(speed, boost);
   driveScene.callbacks.onProgressUpdate = (fraction, speedKmH, dt) => {
+    if (inTutorial) {
+      const started = tutorialHandle?.isStarted() ?? false;
+      if (driveScene.carController) {
+        driveScene.carController.canDrive = started;
+      }
+      const pad = driveHUD.isMenuOpen() ? null : readPad();
+      const step = tutorialHandle?.currentStepIndex() ?? -1;
+      const stepReady = tutorialHandle?.isStepReady() ?? false;
+      if (step !== tutorialLastStep || !stepReady) {
+        tutorialLastStep = step;
+        tutorialStepHoldSec = 0;
+      }
+      if (stepReady) {
+        if (step === 0 && (tutKeys.has('KeyW') || tutKeys.has('ArrowUp') || !!pad?.buttons[0])) {
+          tutorialStepHoldSec += dt;
+          if (tutorialStepHoldSec >= 0.35) tutorialHandle?.advance(0);
+        } else if (step === 1 && (tutKeys.has('KeyD') || tutKeys.has('ArrowRight') || !!pad?.right)) {
+          tutorialStepHoldSec += dt;
+          if (tutorialStepHoldSec >= 0.32) tutorialHandle?.advance(1);
+        } else if (step === 2 && (tutKeys.has('KeyA') || tutKeys.has('ArrowLeft') || !!pad?.left)) {
+          tutorialStepHoldSec += dt;
+          if (tutorialStepHoldSec >= 0.32) tutorialHandle?.advance(2);
+        } else if (step === 3 && (tutKeys.has('Space') || !!pad?.buttons[1])) {
+          tutorialStepHoldSec += dt;
+          if (tutorialStepHoldSec >= 0.35) tutorialHandle?.advance(3);
+        }
+      }
+      return;
+    }
     timeAttack.update(dt, fraction, speedKmH);
     raceDirector.update(fraction);
     const cc = driveScene.carController;
@@ -895,6 +983,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       sfx.timeUp();
     }
     const colors = new Map<number, number>(online.players.map((p) => [p.id, p.car.body]));
+    driveHUD.hideCountdown();
     driveHUD.hideFinishStamp();
     driveScene.setResultView(true);
     onlineHUD.showResults(m.entries, online.you, m.done, colors, m.endsInMs);

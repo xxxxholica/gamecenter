@@ -102,8 +102,8 @@ export class InputManager {
     // Down (Narrow Formation)
     if (this.keyboard.isDown('KeyS') || this.keyboard.isDown('ArrowDown')) narrow = true;
 
-    // Action (Enter)
-    if (this.keyboard.isDown('Enter')) action = true;
+    // Action (Enter / Space)
+    if (this.keyboard.isDown('Enter') || this.keyboard.isDown('Space')) action = true;
 
     // 2. Gamepad API Polling
     let hasPad = false;

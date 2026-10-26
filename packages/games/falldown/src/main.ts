@@ -13,6 +13,7 @@ import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
@@ -130,6 +131,14 @@ const guideMenu = () => mountArcadeGuide({ moveLabel: '選択', buttons: [{ indi
 
 // ---------------- 状態 ----------------
 let paused = false;
+let inTutorial = false;
+let tutorialLastStep = -1;
+let tutorialMoveDist = 0;
+let tutorialActionDone = false;
+let tutorialActionDelay = 0;
+let tutorialLastX = 4;
+let tutorialStepPrepared = -1;
+let tutorialHandle: ArcadeTutorialHandle | null = null;
 let warnTimer = 0;
 let rumbleTimer = 0;
 let lastLives = START_LIVES;
@@ -145,6 +154,9 @@ const titleScreen = new ArcadeTitleScreen({
 });
 
 function showTitle() {
+  tutorialHandle?.cancel();
+  tutorialHandle = null;
+  inTutorial = false;
   closeResult();
   fxQueue.length = 0;
   hitstop = 0;
@@ -163,10 +175,19 @@ function showTitle() {
 
 function startGame() {
   sound.unlock();
+  tutorialHandle?.cancel();
+  tutorialHandle = null;
+  inTutorial = false;
+  tutorialLastStep = -1;
+  tutorialMoveDist = 0;
+  tutorialActionDone = false;
+  tutorialActionDelay = 0;
+  tutorialStepPrepared = -1;
   closeResult();
   fxQueue.length = 0;
   hitstop = 0;
   slowmo = 0;
+  ui.popups.innerHTML = '';
   titleScreen.hide();
   game.start(BENCH ? BENCH_SEED : undefined);
   reportRoundStart();
@@ -196,14 +217,117 @@ function startGame() {
     const guide = document.getElementById('agc-guide');
     if (guide) guide.style.display = 'none';
   } else {
-    ui.hud.classList.remove('hidden');
     guidePlay();
-    showBanner('スタート', 'normal', 'start');
+    beginTutorial();
   }
   sound.tempo = 112;
   sound.start();
   sound.startBgm();
   lastLives = -1;
+}
+
+function prepareTutorialStep(stepIdx: number) {
+  const p = game.player;
+  const w = game.world;
+  const col = p.col;
+  const row = p.row;
+  if (stepIdx === 0 || stepIdx === 2) {
+    // 最初から上3段(y = 0, -1, -2)を1つの色で統一し、その下(y = -3)に破壊不能の黒曜石を配置する
+    for (let x = 0; x < W; x++) {
+      w.place('color', 0, x, 0, 1);
+      w.place('color', 0, x, -1, 1);
+      w.place('color', 0, x, -2, 1);
+      w.place('bedrock', 0, x, -3, 1);
+      w.place('color', (x + 1) % 4, x, -4, 1);
+      w.place('hard', 0, x, -5, 3);
+    }
+    w.recompute();
+  } else if (stepIdx === 3) {
+    // 上3段を掘り抜いて着地した足元(row - 1)が黒曜石になっていることを保証する
+    for (let x = 0; x < W; x++) {
+      w.place('bedrock', 0, x, row - 1, 1);
+      w.place('color', (x + 1) % 4, x, row - 2, 1);
+      w.place('hard', 0, x, row - 3, 3);
+    }
+    w.recompute();
+  } else if (stepIdx === 4) {
+    // 破壊不能のデモが終了したら、足元の黒曜石の段を爆弾ブロックに変えて周囲ごと爆破させる
+    for (let x = 0; x < W; x++) {
+      w.place('bomb', 0, x, row - 1, 1);
+      w.place('color', (x + 1) % 4, x, row - 2, 1);
+      w.place('hard', 0, x, row - 3, 3);
+    }
+    w.recompute();
+  } else if (stepIdx === 5) {
+    // すぐ隣に酸素カプセル(air)を置いて満タン回復を体験させる（HUDはチュートリアル完了まで非表示のまま）
+    game.air = 45;
+    for (let x = 0; x < W; x++) {
+      if (!w.isSolid(x, row - 1)) w.place('hard', 0, x, row - 1, 3);
+      if (x !== col) w.place('air', 0, x, row, 1);
+    }
+  }
+}
+
+function beginTutorial() {
+  ui.hud.classList.add('hidden');
+  ui.depthTag.classList.add('hidden');
+  ui.banner.classList.remove('show');
+  inTutorial = true;
+  tutorialLastStep = -1;
+  tutorialMoveDist = 0;
+  tutorialActionDone = false;
+  tutorialActionDelay = 0;
+  tutorialLastX = game.player.x;
+  tutorialHandle?.cancel();
+  prepareTutorialStep(0);
+  tutorialStepPrepared = 0;
+
+  const handle = startArcadeTutorial({
+    accentColor: ACCENT,
+    steps: [
+      { indices: [15], keyLabel: 'D', label: '右に動く' },
+      { indices: [14], keyLabel: 'A', label: '左に動く' },
+      { indices: [0], keyLabel: 'Space', label: '同色ブロックを掘る' },
+      { indices: [0], keyLabel: 'Space', label: '紫の岩を叩く' },
+      { indices: [0], keyLabel: 'Space', label: '爆弾ブロックを爆破する' },
+      { indices: [14, 15], keyLabel: 'A / D', label: '酸素カプセルを拾う' },
+    ],
+    onComplete: () => {
+      inTutorial = false;
+      tutorialHandle = null;
+      tutorialLastStep = -1;
+      tutorialMoveDist = 0;
+      tutorialActionDone = false;
+      tutorialActionDelay = 0;
+      tutorialStepPrepared = -1;
+      if (!BENCH && !PREVIEW) {
+        // チュートリアル中に掘った地形や酸素量を、完了・スキップ問わず初期状態にリセットして本番開始
+        fxQueue.length = 0;
+        hitstop = 0;
+        slowmo = 0;
+        ui.popups.innerHTML = '';
+        game.start();
+        if (DEBUG) {
+          game.debug = true;
+          game.world.breakAll = true;
+          game.player.fastDig = true;
+          const d = Number(new URLSearchParams(location.search).get('d')) || 0;
+          if (d > 0) {
+            game.player.reset(4, 1 - d);
+            game.maxDepth = d;
+          }
+        }
+        view.clearLabels();
+        view.snapCamera(game);
+      }
+      ui.hud.classList.remove('hidden');
+      showBanner('スタート', 'normal', 'start');
+      lastLives = -1;
+    },
+  });
+  if (inTutorial) {
+    tutorialHandle = handle;
+  }
 }
 
 /** バナーの見出しの前に付けるアイコン(currentColorで塗る) */
@@ -513,7 +637,7 @@ function setStyle(el: HTMLElement, prop: 'width' | 'minWidth' | 'transform', val
 }
 
 function updateHud(dt: number) {
-  if (game.phase === 'title') return;
+  if (game.phase === 'title' || inTutorial) return;
   // 目盛り板に重ねた表示ボックス: プレイヤーの深さに追従して、高さをデジタル表示する
   setText(ui.depth, String(game.depth));
   const tag = view.rulerTagPos(1 - game.player.y);
@@ -612,13 +736,20 @@ new ArcadePause({
   isPlaying: () => game.phase === 'playing' && !resultOpen,
   onOpen: () => {
     paused = true;
+    tutorialHandle?.pause();
     sound.stopBgm();
   },
   onClose: () => {
     paused = false;
+    tutorialHandle?.resume();
     sound.startBgm();
   },
-  onRestart: () => startGame(),
+  onRestart: () => {
+    tutorialHandle?.cancel();
+    tutorialHandle = null;
+    inTutorial = false;
+    startGame();
+  },
 });
 
 // ---------------- リザルト (共通メニュー + 共通ランキング) ----------------
@@ -759,9 +890,103 @@ function frame(now: number) {
   hitstop = Math.max(0, hitstop - dt);
 
   if (!paused) {
-    game.update(gameDt, inp);
-    handleEvents();
-    rumbleCheck(dt);
+    if (inTutorial) {
+      const started = tutorialHandle?.isStarted() ?? false;
+      const stepIdx = tutorialHandle?.currentStepIndex() ?? -1;
+      const stepReady = tutorialHandle?.isStepReady() ?? false;
+      if (stepIdx !== tutorialLastStep) {
+        tutorialLastStep = stepIdx;
+        tutorialMoveDist = 0;
+        tutorialActionDone = false;
+        tutorialActionDelay = 0;
+      } else if (!stepReady) {
+        tutorialMoveDist = 0;
+      }
+      if (started && stepIdx !== tutorialStepPrepared) {
+        tutorialStepPrepared = stepIdx;
+        prepareTutorialStep(stepIdx);
+      }
+      const allowDig = started && stepReady && !tutorialActionDone && (stepIdx === 2 || stepIdx === 3 || stepIdx === 4);
+      const activeInp: FrameInput = !started
+        ? { ...inp, dx: 0, dy: 0, dig: false, digPressed: false }
+        : allowDig && inp.digPressed
+          ? { ...inp, dx: 0, dy: -1, dig: true, digPressed: true }
+          : { ...inp, dy: allowDig && inp.dx === 0 ? -1 : inp.dy, dig: false, digPressed: false };
+      if (stepIdx < 5) {
+        game.air = MAX_AIR;
+      } else {
+        game.air = Math.max(30, game.air);
+      }
+      game.invuln = 2.0;
+      game.time = 0;
+      game.update(gameDt, activeInp);
+      const brokeBlock = game.events.some((e) => e.type === 'break');
+      const clanked = game.events.some((e) => e.type === 'clank');
+      const exploded = game.events.some((e) => e.type === 'explode');
+      const gotCapsule = game.events.some((e) => e.type === 'capsule');
+      const dx = game.player.x - tutorialLastX;
+      tutorialLastX = game.player.x;
+      if (stepReady) {
+        if (stepIdx === 0) {
+          if (activeInp.dx > 0) {
+            tutorialMoveDist += Math.max(0, dx) + gameDt * 2.0;
+            if (tutorialMoveDist >= 0.70) {
+              tutorialMoveDist = 0;
+              tutorialHandle?.advance(0);
+            }
+          }
+        } else if (stepIdx === 1) {
+          if (activeInp.dx < 0) {
+            tutorialMoveDist += Math.max(0, -dx) + gameDt * 2.0;
+            if (tutorialMoveDist >= 0.70) {
+              tutorialMoveDist = 0;
+              tutorialHandle?.advance(1);
+            }
+          }
+        } else if (stepIdx === 2) {
+          if (brokeBlock) tutorialActionDone = true;
+          if (tutorialActionDone) {
+            tutorialActionDelay += rawDt;
+            if (tutorialActionDelay >= 0.45 && game.player.state === 'ground') {
+              tutorialHandle?.advance(2);
+            }
+          }
+        } else if (stepIdx === 3) {
+          if (clanked) {
+            tutorialActionDone = true;
+          } else if (activeInp.digPressed && !tutorialActionDone) {
+            prepareTutorialStep(3);
+          }
+          if (tutorialActionDone) {
+            tutorialActionDelay += rawDt;
+            if (tutorialActionDelay >= 0.42) tutorialHandle?.advance(3);
+          }
+        } else if (stepIdx === 4) {
+          if (exploded) {
+            tutorialActionDone = true;
+          } else if (activeInp.digPressed && !tutorialActionDone) {
+            prepareTutorialStep(4);
+          }
+          if (tutorialActionDone) {
+            tutorialActionDelay += rawDt;
+            if (tutorialActionDelay >= 0.50 && game.player.state === 'ground') {
+              tutorialHandle?.advance(4);
+            }
+          }
+        } else if (stepIdx === 5) {
+          if (gotCapsule || game.air >= MAX_AIR - 1) tutorialActionDone = true;
+          if (tutorialActionDone) {
+            tutorialActionDelay += rawDt;
+            if (tutorialActionDelay >= 0.40) tutorialHandle?.advance(5);
+          }
+        }
+      }
+      handleEvents();
+    } else {
+      game.update(gameDt, inp);
+      handleEvents();
+      rumbleCheck(dt);
+    }
   }
   view.render(paused ? 0 : dt, game);
   updateHud(dt);

@@ -239,6 +239,7 @@ export class ArcadeTitleScreen {
   private isStarting: boolean = false;
   private armAt: number = 0;
   private animFrameId: number | null = null;
+  private startTimerId: number | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(options: ArcadeTitleScreenOptions) {
@@ -330,7 +331,11 @@ export class ArcadeTitleScreen {
     // スタート時のホワイトフラッシュ / フェード演出
     this.overlay.classList.add('ats-hidden');
 
-    setTimeout(() => {
+    if (this.startTimerId !== null) {
+      window.clearTimeout(this.startTimerId);
+    }
+    this.startTimerId = window.setTimeout(() => {
+      this.startTimerId = null;
       this.hide();
       this.options.onStart();
     }, 240);
@@ -370,8 +375,14 @@ export class ArcadeTitleScreen {
 
   public hide(): void {
     this.isVisible = false;
+    this.isStarting = false;
     this.overlay.classList.add('ats-hidden');
     this.overlay.style.display = 'none';
+
+    if (this.startTimerId !== null) {
+      window.clearTimeout(this.startTimerId);
+      this.startTimerId = null;
+    }
 
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);

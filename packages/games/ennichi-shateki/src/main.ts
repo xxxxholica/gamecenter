@@ -21,6 +21,7 @@ import { ENNICHI_ROUND_SECONDS, ENNICHI_EXTENSION_SECONDS } from '../../../share
 const SLUG = 'ennichi-shateki';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { compileInParallel, waitFramesSettled } from '../../../shared/shaderCompile';
@@ -69,14 +70,30 @@ class ArcadeCorkShooter {
   private readonly pause = new ArcadePause({
     accent: '#ff4d4f',
     isPlaying: () => this.state === 'playing',
-    onOpen: () => this.countdownHandle?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
-    onClose: () => this.countdownHandle?.resume(),
+    onOpen: () => {
+      this.tutorialHandle?.pause();
+      this.countdownHandle?.pause();     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+    },
+    onClose: () => {
+      this.tutorialHandle?.resume();
+      this.countdownHandle?.resume();
+    },
     onRestart: () => {
+      this.cancelPreGameTimers();
       this.state = 'results'; // startGame は、プレイ中だと何もしないので、先に外す
       this.prizePileManager.cleanup(this.scene);
       this.startGame();
     },
   });
+  /** ゲーム開始前のアクティブチュートリアル中は true(時間は進まず、照準移動や射撃を試せる) */
+  private inTutorial = false;
+  private tutorialLastStep = -1;
+  private tutorialAimDist = 0;
+  private tutorialActionDone = false;
+  private tutorialActionDelay = 0;
+  private tutorialLastAimX = 0;
+  private tutorialLastAimY = 0.05;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
   /** 開始前の 3・2・1・GO! の間は true(時間が進まず、撃てない) */
   private offlineCountdown = false;
   private countdownHandle: ArcadeCountdownHandle | null = null;
@@ -355,9 +372,48 @@ class ArcadeCorkShooter {
 
   // --- STATE TRANSITIONS ---
 
-  private enterTitle() {
+  private cancelPreGameTimers() {
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
     this.countdownHandle?.cancel();
+    this.countdownHandle = null;
     this.offlineCountdown = false;
+  }
+
+  private resetMatchState(shufflePrizes: boolean) {
+    this.prizePileManager.cleanup(this.scene);
+    this.prizePileManager.reset();
+    this.score = 0;
+    this.timeLeft = ENNICHI_ROUND_SECONDS;
+    this.totalDefeatedCount = 0;
+    this.maxComboSeen = 0;
+    this.shotsNormal = 0;
+    this.shotsExplosive = 0;
+    this.darumaDropCount = 0;
+    this.bombCooldown = 0;
+    this.comboCount = 0;
+    this.comboTimer = 0;
+    this.lastScoreMilestone = 0;
+    this.lastTickInt = ENNICHI_ROUND_SECONDS;
+    this.screenShake = 0;
+    this.restockQueue = [];
+    this.gun.reset();
+    this.corkSystem.reset();
+    if (shufflePrizes) shuffleShelfLayout(this.prizes);
+    this.resetAllPrizes();
+    this.dynamicTargets.reset();
+    this.ammo = this.MAX_AMMO;
+    this.reloadTimer = 0;
+    this.extensionUsed = 0;
+    this.comboBonusTier = 0;
+    this.input.setAim(0, 0.05);
+    this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
+    this.hud.updateInGame(this.score, this.timeLeft, 1.0, 0);
+  }
+
+  private enterTitle() {
+    this.cancelPreGameTimers();
     sounds.stopBgm();
     this.prizePileManager.cleanup(this.scene);
     this.state = 'title';
@@ -400,53 +456,62 @@ class ArcadeCorkShooter {
     if (this.state === 'playing') return;
     reportRoundStart();
 
+    this.cancelPreGameTimers();
     this.arcadeTitleScreen?.hide();
     sounds.init();
     sounds.playTaiko();
     sounds.startBgm();
 
     this.state = 'playing';
-    mountPlayGuide();
-    this.prizePileManager.cleanup(this.scene);
-    this.prizePileManager.reset();
     this.stateTimer = 0;
-    this.score = 0;
-    this.timeLeft = ENNICHI_ROUND_SECONDS;
-    this.totalDefeatedCount = 0;
-    this.maxComboSeen = 0;
-    this.shotsNormal = 0;
-    this.shotsExplosive = 0;
-    this.darumaDropCount = 0;
-    this.bombCooldown = 0;
-    this.comboCount = 0;
-    this.comboTimer = 0;
-    this.lastScoreMilestone = 0;
-    this.lastTickInt = ENNICHI_ROUND_SECONDS;
-    this.screenShake = 0;
-    this.restockQueue = [];
-
+    mountPlayGuide();
     this.stall.titleRifleGroup.visible = false;
     this.gun.group.visible = true;
-    this.gun.reset();
-    this.corkSystem.reset();
-    // 毎回、同じ段の中で景品の並びを入れ替える(高得点の景品は上段のまま)
-    shuffleShelfLayout(this.prizes);
-    this.resetAllPrizes();
-    this.dynamicTargets.reset();
-    this.ammo = this.MAX_AMMO;
-    this.reloadTimer = 0;
-    this.extensionUsed = 0;
-    this.comboBonusTier = 0;
-    this.hud.updateAmmo(this.ammo, this.MAX_AMMO, false);
-
     this.camera.position.set(0, 1.48, 2.15);
     this.camera.lookAt(0, 1.25, -0.6);
-    this.input.setAim(0, 0.05);
-
     this.hud.setMode('playing');
-    this.hud.updateInGame(this.score, this.timeLeft, 1.0, 0);
+    this.resetMatchState(true);
 
-    // 開始ボタンを押した直後にいきなり始まらないよう、3・2・1・GO! を挟む
+    // 開始ボタンを押した直後にまずアクティブチュートリアルを実施し、その後に 3・2・1・GO! を挟む
+    this.beginTutorial();
+  }
+
+  private beginTutorial() {
+    this.hud.setGameplayHUDVisible(false);
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialAimDist = 0;
+    this.tutorialActionDone = false;
+    this.tutorialActionDelay = 0;
+    this.tutorialLastAimX = this.input.aimX;
+    this.tutorialLastAimY = this.input.aimY;
+    this.tutorialHandle?.cancel();
+
+    const handle = startArcadeTutorial({
+      accentColor: '#ff4d4f',
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右にねらう' },
+        { indices: [14], keyLabel: 'A', label: '左にねらう' },
+        { indices: [12], keyLabel: 'W', label: '上にねらう' },
+        { indices: [13], keyLabel: 'S', label: '下にねらう' },
+        { indices: [0], keyLabel: 'Space', label: '通常弾で景品を落とす' },
+        { indices: [1, 2], keyLabel: 'X', label: 'バクダン弾で吹き飛ばす' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        // チュートリアル中に撃った弾や倒した景品・スコアを初期状態に戻して本番カウントダウンへ
+        this.resetMatchState(false);
+        this.hud.setGameplayHUDVisible(true);
+        this.beginCountdown();
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
+  }
+
+  private beginCountdown() {
     this.offlineCountdown = true;
     this.countdownHandle?.cancel();
     this.countdownHandle = startArcadeCountdown({
@@ -466,6 +531,7 @@ class ArcadeCorkShooter {
   }
 
   private enterResults() {
+    this.cancelPreGameTimers();
     // ベンチ: 倒した景品が台に降って積もる演出(物理)まで測る。全部落ちきって静まるまで、およそ8秒。
     // その間はランダム入力の Enter で結果画面を進めないよう、操作の受け付けも遅らせる
     const benchPile = benchParam('scene') === 'play';
@@ -767,6 +833,11 @@ class ArcadeCorkShooter {
 
   // Active Gameplay Loop
   private updatePlaying(dt: number, elapsed: number, inputState: ReturnType<ArcadeInput['update']>) {
+    if (this.inTutorial) {
+      this.updateTutorial(dt, elapsed, inputState);
+      return;
+    }
+
     // 1. Time countdown
     if (!this.offlineCountdown) {
       this.timeLeft -= dt;
@@ -834,6 +905,135 @@ class ArcadeCorkShooter {
       sounds.playTimeUp();
       this.enterResults();
       return;
+    }
+  }
+
+  private updateTutorial(dt: number, elapsed: number, inputState: ReturnType<ArcadeInput['update']>) {
+    const started = this.tutorialHandle?.isStarted() ?? false;
+    const stepIdx = this.tutorialHandle?.currentStepIndex() ?? -1;
+    const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+
+    if (!started) {
+      this.input.setAim(0, 0.05);
+      this.tutorialLastAimX = 0;
+      this.tutorialLastAimY = 0.05;
+    }
+
+    if (stepIdx !== this.tutorialLastStep) {
+      this.tutorialLastStep = stepIdx;
+      this.tutorialAimDist = 0;
+      this.tutorialActionDone = false;
+      this.tutorialActionDelay = 0;
+      if (stepIdx === 0 && this.input.aimX > 0.45) {
+        this.input.setAim(0, this.input.aimY);
+      } else if (stepIdx === 1 && this.input.aimX < -0.45) {
+        this.input.setAim(0, this.input.aimY);
+      } else if (stepIdx === 2 && this.input.aimY > 0.45) {
+        this.input.setAim(this.input.aimX, 0.05);
+      } else if (stepIdx === 3 && this.input.aimY < -0.45) {
+        this.input.setAim(this.input.aimX, 0.05);
+      } else if (stepIdx === 4 || stepIdx === 5) {
+        this.shotsNormal = 0;
+        this.shotsExplosive = 0;
+        this.totalDefeatedCount = 0;
+      }
+      this.tutorialLastAimX = this.input.aimX;
+      this.tutorialLastAimY = this.input.aimY;
+    } else if (!stepReady) {
+      this.tutorialAimDist = 0;
+    }
+
+    const dx = this.input.aimX - this.tutorialLastAimX;
+    const dy = this.input.aimY - this.tutorialLastAimY;
+    this.tutorialLastAimX = this.input.aimX;
+    this.tutorialLastAimY = this.input.aimY;
+
+    this.updateAimPlane();
+    this.hud.updateCrosshair(this.input.aimX, this.input.aimY, true, false);
+    this.gun.update(dt, elapsed, this.camera, this.aimTargetWorld, true);
+
+    // チュートリアル中は弾切れ・クールダウンなしですぐ撃てるようにする
+    this.ammo = this.MAX_AMMO;
+    this.reloadTimer = 0;
+
+    if (started && stepReady && stepIdx === 4) {
+      if (inputState.shootNormalJustPressed) {
+        const targetPrize = this.prizes.find((p) => !p.isDefeated && !p.isFalling && p.config.shelfIndex <= 1) || this.prizes.find((p) => !p.isDefeated && !p.isFalling);
+        if (targetPrize) {
+          this.aimTargetWorld.copy(targetPrize.currentPos);
+          this.aimTargetWorld.y += targetPrize.config.height * 0.55;
+        }
+        this.tryShootNormal();
+        if (targetPrize) {
+          targetPrize.pitchVelocity += 9.5;
+        }
+      }
+    } else if (started && stepReady && stepIdx === 5) {
+      if (inputState.shootExplosiveJustPressed) {
+        this.bombCooldown = 0;
+        const targetPrize = this.prizes.find((p) => !p.isDefeated && !p.isFalling);
+        if (targetPrize) {
+          this.aimTargetWorld.copy(targetPrize.currentPos);
+          this.aimTargetWorld.y += targetPrize.config.height * 0.45;
+        }
+        this.tryShootExplosive();
+      }
+    }
+
+    if (!stepReady) return;
+
+    if (stepIdx === 0) {
+      if (dx > 0.001) {
+        this.tutorialAimDist += dx;
+        if (this.tutorialAimDist >= 0.22 || this.input.aimX >= 0.9) {
+          this.tutorialAimDist = 0;
+          this.tutorialHandle?.advance(0);
+        }
+      }
+    } else if (stepIdx === 1) {
+      if (dx < -0.001) {
+        this.tutorialAimDist += Math.abs(dx);
+        if (this.tutorialAimDist >= 0.22 || this.input.aimX <= -0.9) {
+          this.tutorialAimDist = 0;
+          this.tutorialHandle?.advance(1);
+        }
+      }
+    } else if (stepIdx === 2) {
+      if (dy > 0.001) {
+        this.tutorialAimDist += dy;
+        if (this.tutorialAimDist >= 0.18 || this.input.aimY >= 0.9) {
+          this.tutorialAimDist = 0;
+          this.tutorialHandle?.advance(2);
+        }
+      }
+    } else if (stepIdx === 3) {
+      if (dy < -0.001) {
+        this.tutorialAimDist += Math.abs(dy);
+        if (this.tutorialAimDist >= 0.18 || this.input.aimY <= -0.9) {
+          this.tutorialAimDist = 0;
+          this.tutorialHandle?.advance(3);
+        }
+      }
+    } else if (stepIdx === 4) {
+      if (this.shotsNormal > 0 && (this.totalDefeatedCount > 0 || this.prizes.some((p) => p.isFalling || p.isDefeated))) {
+        this.tutorialActionDone = true;
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.45) {
+          this.tutorialHandle?.advance(4);
+        }
+      }
+    } else if (stepIdx === 5) {
+      if (this.shotsExplosive > 0 && (this.corkSystem.explosions.length > 0 || this.screenShake > 0.35)) {
+        this.tutorialActionDone = true;
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.50) {
+          this.tutorialHandle?.advance(5);
+        }
+      }
     }
   }
 

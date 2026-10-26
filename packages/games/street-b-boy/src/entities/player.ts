@@ -240,7 +240,7 @@ export class Player {
     this.prevY = y;
     this.vx = 0;
     this.vy = 0;
-    this.isGrounded = false;
+    this.isGrounded = y === 0;
     this.isFacingRight = true;
     this.isCrouching = false;
     this.isSpinning = false;
@@ -257,8 +257,20 @@ export class Player {
     this.mesh.visible = true;
     this.mesh.rotation.set(0, 0, 0);
     this.mesh.position.set(x, y, 0);
+    this.hipGroup.rotation.order = 'XYZ';
     this.hipGroup.position.set(0, 0, 0);
     this.hipGroup.rotation.set(0, 0, 0);
+    this.torso.rotation.set(0, 0, 0);
+    this.leftArm.rotation.set(0, 0, 0);
+    this.rightArm.rotation.set(0, 0, 0);
+    this.leftLeg.rotation.set(0, 0, 0);
+    this.rightLeg.rotation.set(0, 0, 0);
+    this.headGroup.position.set(0, 1.35, 0);
+    this.headGroup.rotation.set(0, 0, 0);
+    this.demoPose = {};
+    this.demoYaw = 0;
+    this.demoSpinRate = 0;
+    this.animatePlayer(0);
   }
 
   public triggerSpin(): boolean {
@@ -630,11 +642,12 @@ export class Player {
       osc.rz = s * 0.02;
     }
 
-    // ポーズをスムージング（フェーズ切替で瞬間移動しない）
-    const k = 1 - Math.exp(-dt * 12);
+    // ポーズをスムージング（初回フレームは初期ポーズを即座に適用し、フェーズ切替では瞬間移動しない）
     const p = this.demoPose;
+    const isFirstPose = Object.keys(p).length === 0;
+    const k = isFirstPose ? 1 : 1 - Math.exp(-dt * 12);
     for (const key in target) {
-      p[key] = p[key] ?? 0;
+      p[key] = p[key] ?? target[key];
       p[key] += (target[key] - p[key]) * k;
     }
     const v = (key: string): number => p[key] + (osc[key] ?? 0);

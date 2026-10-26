@@ -23,6 +23,7 @@ import { ResultScreen } from '../ui/ResultScreen';
 import { mountArcadeGuide, ArcadeGuideOptions } from '../../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../../shared/arcadeTitleScreen';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../../shared/arcadeCountdown';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../../shared/arcadeTutorial';
 import { returnToHub } from '../../../../shared/homeReturn';
 import { ArcadePause } from '../../../../shared/arcadePause';
 import { reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../../shared/arcadeAnalytics';
@@ -113,6 +114,7 @@ export class GameEngine {
     this.pickupPool.clear();
     this.particleSystem.clear();
     this.damageNumbers.clear();
+    this.screenEffects = new ScreenEffects();
     this.waveDirector.reset();
     this.playerCleared5Min = false;
     this.cameraX = 0;
@@ -138,9 +140,20 @@ export class GameEngine {
   private readonly pauseUi = new ArcadePause({
     accent: '#00f0ff',
     isPlaying: () => (this.state === 'PLAYING' || this.state === 'LEVEL_UP') && this.dyingTimer <= 0,
-    onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
-    onClose: () => this.countdown?.resume(),
-    onRestart: () => this.beginMatch(),
+    onOpen: () => {
+      this.countdown?.pause();     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+      this.tutorialHandle?.pause();
+    },
+    onClose: () => {
+      this.countdown?.resume();
+      this.tutorialHandle?.resume();
+    },
+    onRestart: () => {
+      this.tutorialHandle?.cancel();
+      this.tutorialHandle = null;
+      this.inTutorial = false;
+      this.beginMatch();
+    },
   });
 
   // アナリティクス: タイトルから開くメニュー画面に入ったら、場面として知らせる
@@ -207,6 +220,10 @@ export class GameEngine {
       }
 
       case 'PLAYING': {
+        if (this.inTutorial) {
+          this.updateTutorial(dt, inputState);
+          break;
+        }
         if (this.countingDown) break;
 
         if (inputState.pause && this.dyingTimer <= 0) {
@@ -968,10 +985,59 @@ export class GameEngine {
   // 試合開始前の 3・2・1・GO!。終わるまで世界は止まり、操作も受け付けない。
   private countingDown = false;
   private countdown: ArcadeCountdownHandle | null = null;
+  private inTutorial = false;
+  private tutorialLastStep = -1;
+  private tutorialStepHoldSec = 0;
+  private tutorialActionDone = false;
+  private tutorialStep4BaseSwords = 2;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
 
   private beginMatch() {
     this.initMatch();
     this.state = 'PLAYING';
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
+    this.tutorialLastStep = -1;
+    this.tutorialStepHoldSec = 0;
+    this.tutorialActionDone = false;
+    this.countdown?.cancel();
+    this.countingDown = false;
+    this.beginTutorial();
+  }
+
+  private beginTutorial() {
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialStepHoldSec = 0;
+    this.tutorialActionDone = false;
+    this.tutorialStep4BaseSwords = 2;
+    const handle = startArcadeTutorial({
+      accentColor: '#00f0ff',
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右に動く' },
+        { indices: [14], keyLabel: 'A', label: '左に動く' },
+        { indices: [12], keyLabel: 'W', label: '上に動く' },
+        { indices: [13], keyLabel: 'S', label: '下に動く' },
+        { indices: [14, 15], keyLabel: 'W / A / S / D', label: '剣を拾ってブレードを増やす' },
+        { indices: [3, 5], keyLabel: 'Space', label: 'ソードストームで敵を一掃' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        this.tutorialLastStep = -1;
+        this.tutorialStepHoldSec = 0;
+        this.tutorialActionDone = false;
+        this.initMatch();
+        this.startMatchCountdown();
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
+  }
+
+  private startMatchCountdown() {
     reportRoundStart();
     this.countingDown = true;
     this.countdown?.cancel();
@@ -983,6 +1049,96 @@ export class GameEngine {
         if (benchParam('scene') === 'play' || this.benchAuto) benchReady('play-start');
       },
     });
+  }
+
+  private updateTutorial(dt: number, inputState: InputState) {
+    if (inputState.pause) {
+      this.sound.sfx.playMenuConfirm();
+      this.pauseUi.show();
+      return;
+    }
+
+    const started = this.tutorialHandle?.isStarted() ?? false;
+    const step = this.tutorialHandle?.currentStepIndex() ?? -1;
+    const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+    if (step !== this.tutorialLastStep) {
+      this.tutorialLastStep = step;
+      this.tutorialStepHoldSec = 0;
+      this.tutorialActionDone = false;
+      this.tutorialStep4BaseSwords = this.player.swordSystem.swordCount;
+    } else if (!stepReady && !this.tutorialActionDone) {
+      this.tutorialStepHoldSec = 0;
+      if (step === 4) {
+        this.tutorialStep4BaseSwords = this.player.swordSystem.swordCount;
+      }
+    }
+
+    const activeInput: InputState = started
+      ? inputState
+      : { ...inputState, moveX: 0, moveY: 0, special: false };
+
+    if (step === 4) {
+      // 近くに剣アイテムがなければすぐそばに出す
+      const hasSwordNearby = this.pickupPool.getActiveItems().some(
+        (item) => item.type === 'SWORD_ITEM' && Math.hypot(item.x - this.player.x, item.y - this.player.y) < 320
+      );
+      if (!hasSwordNearby) {
+        this.pickupPool.spawn(this.player.x + 110, this.player.y, 'SWORD_ITEM');
+      }
+    } else if (step === 5) {
+      this.player.specialGauge = 100;
+      this.player.isSpecialReady = true;
+      if (stepReady && !this.tutorialActionDone && activeInput.special) {
+        this.player.activateSpecial(
+          this.enemyGrid,
+          this.sound,
+          this.particleSystem,
+          this.screenEffects,
+          this.damageNumbers
+        );
+        this.tutorialActionDone = true;
+      }
+    }
+
+    // チュートリアル中も本番と同様に敵・CPU・アイテム回収を動かす（プレイヤーは無敵＆レベルアップ画面は抑止）
+    this.player.hp = this.player.maxHp;
+    this.player.invulnerableTimer = 1.0;
+    this.player.exp = 0;
+    const savedGameTime = this.waveDirector.gameTime;
+    this.updatePlayingWorld(dt, activeInput);
+    this.waveDirector.gameTime = Math.min(savedGameTime + dt, 20);
+    if (this.state === 'LEVEL_UP') {
+      this.state = 'PLAYING';
+    }
+
+    if (!stepReady) return;
+
+    if (step === 0) {
+      if (activeInput.moveX > 0.3) this.tutorialStepHoldSec += dt;
+      if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(0);
+    } else if (step === 1) {
+      if (activeInput.moveX < -0.3) this.tutorialStepHoldSec += dt;
+      if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(1);
+    } else if (step === 2) {
+      if (activeInput.moveY < -0.3) this.tutorialStepHoldSec += dt;
+      if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(2);
+    } else if (step === 3) {
+      if (activeInput.moveY > 0.3) this.tutorialStepHoldSec += dt;
+      if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(3);
+    } else if (step === 4) {
+      if (this.player.swordSystem.swordCount > this.tutorialStep4BaseSwords) {
+        this.tutorialActionDone = true;
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialStepHoldSec += dt;
+        if (this.tutorialStepHoldSec >= 0.38) this.tutorialHandle?.advance(4);
+      }
+    } else if (step === 5) {
+      if (this.tutorialActionDone) {
+        this.tutorialStepHoldSec += dt;
+        if (this.tutorialStepHoldSec >= 0.50) this.tutorialHandle?.advance(5);
+      }
+    }
   }
 
   // ベンチマーク(?bench=1&scene=full): 5分間を最後まで通す(大群・ボス3体・残り45秒の総攻撃まで)。
@@ -1042,6 +1198,11 @@ export class GameEngine {
     this.sound.setSilent(this.state === 'TITLE');
 
     if (this.state === 'TITLE') {
+      this.tutorialHandle?.cancel();
+      this.tutorialHandle = null;
+      this.inTutorial = false;
+      this.countdown?.cancel();
+      this.countingDown = false;
       // 試合から戻ってきたときは、デモ用に新しい試合を用意し直す
       if (prev !== null) {
         this.demoTime = 0;
@@ -1164,6 +1325,10 @@ export class GameEngine {
 
     // --- Screen Overlays (Flash, HUD, Modals) ---
     this.screenEffects.renderOverlay(ctx, width, height);
+
+    if (this.inTutorial) {
+      return;
+    }
 
     // In-game HUD
     this.hud.render(

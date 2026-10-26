@@ -178,6 +178,17 @@ export class ArcadeHUD {
     }
   }
 
+  public setGameplayHUDVisible(visible: boolean) {
+    const d = visible ? 'flex' : 'none';
+    this.scoreEl.style.display = d;
+    this.timerEl.style.display = d;
+    this.ammoEl.style.display = d;
+    this.bottomCenterEl.style.display = d;
+    if (!visible) {
+      this.comboEl.style.display = 'none';
+    }
+  }
+
 
   // Render Game Results Screen
   public renderResults(

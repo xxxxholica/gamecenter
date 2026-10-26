@@ -83,6 +83,13 @@ export class Bgm {
     this.eng.whenRunning(() => this.startNext());
   }
 
+  /** 再生中の曲を冒頭(0秒)に巻き戻す(チュートリアル終了後に本番カウントダウンへ入る時など) */
+  public rewind(): void {
+    if (this.run) {
+      this.run.el.currentTime = 0;
+    }
+  }
+
   /** BGMを止める(対戦のロード中など、曲を流さない間) */
   public stop(): void {
     this.syncIndex = null;

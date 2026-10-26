@@ -1263,6 +1263,45 @@ export class ObstacleManager {
     }
   }
 
+  public spawnTutorialObstacle(type: ObstacleType, lane: LaneIndex, z: number): Obstacle | null {
+    if (type === ObstacleType.GIMMICK_JUMP || type === ObstacleType.GIMMICK_SLIDE || type === ObstacleType.GIMMICK_BOMB) {
+      let group: THREE.Group = new THREE.Group();
+      const boundingBox = new THREE.Box3();
+      if (type === ObstacleType.GIMMICK_JUMP) {
+        group = this.createJumpGimmickArea();
+        boundingBox.min.set(-4.9, 0, z - 0.7);
+        boundingBox.max.set(4.9, 0.95, z + 0.7);
+      } else if (type === ObstacleType.GIMMICK_SLIDE) {
+        group = this.createSlideGimmickArea();
+        boundingBox.min.set(-4.9, 1.15, z - 0.3);
+        boundingBox.max.set(4.9, 7.5, z + 0.3);
+      } else {
+        group = this.createBombGimmickArea();
+        boundingBox.min.set(-4.9, 0, z - 0.8);
+        boundingBox.max.set(4.9, 5.5, z + 0.8);
+      }
+      group.position.set(0, 0, z);
+      this.scene.add(group);
+      const obs: Obstacle = {
+        group,
+        type,
+        lane: 1,
+        z,
+        isDestroyed: false,
+        hasDodged: false,
+        boundingBox,
+      };
+      this.obstacles.push(obs);
+      return obs;
+    }
+    this.createAndAddObstacle(type, lane, z);
+    const created = this.obstacles[this.obstacles.length - 1] ?? null;
+    if (created && created.type === ObstacleType.TEACHER) {
+      created.moveSpeed = 0; // チュートリアル中は指定レーンに立たせる
+    }
+    return created;
+  }
+
   private createAndAddObstacle(type: ObstacleType, lane: LaneIndex, z: number): void {
     let group: THREE.Group;
     const x = LANE_COORDINATES[lane];

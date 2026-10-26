@@ -22,6 +22,7 @@ import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
@@ -35,6 +36,7 @@ const LAUNCH_WINDOW_SEC = 1.8;
 export type GameState =
   | 'TITLE'
   | 'LEVEL_SELECT'
+  | 'TUTORIAL'
   | 'COUNTDOWN'
   | 'RUNNING'
   | 'WALL_CRASH'
@@ -51,6 +53,14 @@ export class Game {
 
   public state: GameState = 'TITLE';
   private countdown: ArcadeCountdownHandle | null = null;
+  private inTutorial = false;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
+  private tutorialLastStep = -1;
+  private tutorialMoveDist = 0;
+  private tutorialActionDone = false;
+  private tutorialActionDelay = 0;
+  private tutorialStepPrepared = -1;
+  private tutorialLastX = 0;
   public crowd: StudentCrowd;
   public world: WorldManager;
   public effects: EffectsManager;
@@ -91,8 +101,6 @@ export class Game {
   private flightBoostsLeft: number = 0;
   public ringsHit: number = 0;
   private pickupsCollected = 0;
-  private reqTextElem: HTMLElement | null = null;
-  private stageTextElem: HTMLElement | null = null;
   private roundIntroBanner: HTMLElement | null = null;
   private roundIntroHeadline: HTMLElement | null = null;
   private roundIntroSub: HTMLElement | null = null;
@@ -109,6 +117,7 @@ export class Game {
 
   // HUD Elements
   private hudElem: HTMLElement | null = null;
+  private hudTopBarElem: HTMLElement | null = null;
   private taniCounterElem: HTMLElement | null = null;
   private creditsBoxElem: HTMLElement | null = null;
   private bonusHudElem: HTMLElement | null = null;
@@ -204,6 +213,7 @@ export class Game {
   private cacheDOMElements(): void {
     this.hudElem = document.getElementById('hud');
     if (this.hudElem) this.hudElem.style.display = 'none';
+    this.hudTopBarElem = document.querySelector('.hud-top-bar') as HTMLElement | null;
     this.taniCounterElem = document.getElementById('tani-counter');
     this.creditsBoxElem = document.getElementById('hud-credits-box');
     this.bonusHudElem = document.getElementById('bonus-multiplier-hud');
@@ -216,8 +226,6 @@ export class Game {
     this.finalMultElem = document.getElementById('final-multiplier-display');
     this.finalScoreElem = document.getElementById('final-score-display');
     this.finalRingElem = document.getElementById('final-ring-display');
-    this.reqTextElem = document.getElementById('req-text');
-    this.stageTextElem = document.getElementById('stage-text');
     this.roundIntroBanner = document.getElementById('round-intro-banner');
     this.roundIntroHeadline = document.getElementById('round-intro-headline');
     this.roundIntroSub = document.getElementById('round-intro-sub');
@@ -316,13 +324,18 @@ export class Game {
 
   /** タイトル画面に戻る */
   public showTitleScreen(): void {
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
     this.countdown?.cancel();
     this.hideRoundIntroBanner();
+    this.showLaunchTiming(false);
     this.state = 'TITLE';
     this.resultMenu.close();
     this.levelSelect.hide();
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');
+    if (this.hudTopBarElem) this.hudTopBarElem.style.display = '';
     if (this.hudElem) this.hudElem.style.display = 'none';
     this.arcadeTitleScreen?.show();
     this.showTitleGuide();
@@ -374,6 +387,9 @@ export class Game {
 
   /** 小学生 → 中学生 → 高専生 の3ステージ通しプレイを最初から始める */
   public startGame(): void {
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
     this.totalScore = 0;
     this.stageScores = [];
     const startIdx = this.benchScene === 'run' ? Math.max(0, LEVEL_ORDER.indexOf(this.level)) : 0;
@@ -381,7 +397,188 @@ export class Game {
     sound.init();
     sound.playCoin();
 
+    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    if (!this.benchScene && !isPreview) {
+      this.beginTutorial();
+      return;
+    }
+
     this.startStage(startIdx);
+  }
+
+  private beginTutorial(): void {
+    this.countdown?.cancel();
+    this.hideRoundIntroBanner();
+    this.arcadeTitleScreen?.hide();
+    this.levelSelect.hide();
+    this.resultMenu.close();
+    this.failScreen?.classList.add('hidden');
+    this.successScreen?.classList.add('hidden');
+    this.bonusHudElem?.classList.add('hidden');
+    this.showLaunchTiming(false);
+    this.showRunGuide(true);
+    if (this.hudTopBarElem) this.hudTopBarElem.style.display = 'none';
+    if (this.hudElem) this.hudElem.style.display = 'block';
+
+    this.state = 'TUTORIAL';
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialMoveDist = 0;
+    this.tutorialActionDone = false;
+    this.tutorialActionDelay = 0;
+    this.prepareTutorialStep(0);
+    this.tutorialStepPrepared = 0;
+
+    const handle = startArcadeTutorial({
+      accentColor: '#00e676',
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右に動く' },
+        { indices: [14], keyLabel: 'A', label: '左に動く' },
+        { indices: [0], keyLabel: 'Space', label: 'タイミングよく飛ぶ' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        this.tutorialLastStep = -1;
+        this.tutorialMoveDist = 0;
+        this.tutorialActionDone = false;
+        this.tutorialActionDelay = 0;
+        this.tutorialStepPrepared = -1;
+        this.showLaunchTiming(false);
+        if (this.hudTopBarElem) this.hudTopBarElem.style.display = '';
+        this.startStage(0);
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
+  }
+
+  private prepareTutorialStep(stepIdx: number): void {
+    if (stepIdx === 0) {
+      this.level = 'elementary';
+      this.graduationRequirement = 124;
+      this.world.reset(124, 'elementary');
+      for (const g of this.world.gates) {
+        g.leftGate.mesh.visible = false;
+        g.rightGate.mesh.visible = false;
+      }
+      for (const o of this.world.obstacles) o.mesh.visible = false;
+      for (const p of this.world.pickups) p.mesh.visible = false;
+      this.effects.clearAll();
+      this.playerZ = -12;
+      this.currentCredits = 16;
+      this.crowd.reset(16);
+      this.crowd.groupX = 0;
+      this.crowd.groupZ = this.playerZ;
+      this.crowd.updateRunning(0, 0);
+      this.tutorialLastX = 0;
+      const crowdScale = Math.min(4.5, Math.sqrt(this.currentCredits) * 0.3);
+      this.camPos.set(0, 5.2 + crowdScale * 0.6, this.playerZ + 8.5 + crowdScale * 1.1);
+      this.camLookAt.set(0, 1.4, this.playerZ - 12.0);
+      this.showLaunchTiming(false);
+    } else if (stepIdx === 2) {
+      this.world.hideBossWall();
+      this.playerZ = this.world.bossWallZ - 1.5;
+      this.currentCredits = 20;
+      this.crowd.reset(20);
+      this.crowd.groupX = 0;
+      this.crowd.groupZ = this.playerZ;
+      this.crowd.updateRunning(0, 0);
+      this.bonusTimer = 0;
+      this.launchQuality = 0;
+      this.launchPressed = false;
+      this.launchLockedAt = 0;
+      this.camPos.set(7.0, 4.5, this.world.bossWallZ + 12.0);
+      this.camLookAt.set(0, 2.0, this.world.bossWallZ - 20.0);
+      this.showLaunchTiming(true);
+      this.showBonusGuide('launch');
+    }
+  }
+
+  private updateTutorial(dt: number, input: ReturnType<typeof inputManager.poll>): void {
+    const started = this.tutorialHandle?.isStarted() ?? false;
+    const stepIdx = this.tutorialHandle?.currentStepIndex() ?? -1;
+    const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+    if (stepIdx !== this.tutorialLastStep) {
+      this.tutorialLastStep = stepIdx;
+      this.tutorialMoveDist = 0;
+      this.tutorialActionDone = false;
+      this.tutorialActionDelay = 0;
+    } else if (!stepReady) {
+      this.tutorialMoveDist = 0;
+    }
+    if (started && stepIdx !== this.tutorialStepPrepared) {
+      this.tutorialStepPrepared = stepIdx;
+      this.prepareTutorialStep(stepIdx);
+    }
+
+    if (stepIdx === 0 || stepIdx === 1) {
+      const moveX = started ? input.moveX : 0;
+      this.crowd.groupZ = this.playerZ;
+      this.crowd.updateRunning(dt, moveX);
+      const crowdScale = Math.min(4.5, Math.sqrt(this.currentCredits) * 0.3);
+      const camDist = 8.5 + crowdScale * 1.1;
+      const camHeight = 5.2 + crowdScale * 0.6;
+      this.camPos.set(this.crowd.groupX * 0.45, camHeight, this.playerZ + camDist);
+      this.camLookAt.set(this.crowd.groupX * 0.25, 1.4, this.playerZ - 12.0);
+
+      const dx = this.crowd.groupX - this.tutorialLastX;
+      this.tutorialLastX = this.crowd.groupX;
+      if (stepReady) {
+        if (stepIdx === 0 && moveX > 0) {
+          this.tutorialMoveDist += Math.max(0, dx) + dt * 2.2;
+          if (this.tutorialMoveDist >= 1.1) {
+            this.tutorialMoveDist = 0;
+            this.tutorialHandle?.advance(0);
+          }
+        } else if (stepIdx === 1 && moveX < 0) {
+          this.tutorialMoveDist += Math.max(0, -dx) + dt * 2.2;
+          if (this.tutorialMoveDist >= 1.1) {
+            this.tutorialMoveDist = 0;
+            this.tutorialHandle?.advance(1);
+          }
+        }
+      }
+    } else if (stepIdx === 2) {
+      if (!this.tutorialActionDone) {
+        this.bonusTimer += dt;
+        const pos = this.launchCursorPos(this.bonusTimer);
+        this.setLaunchCursor(pos);
+        this.crowd.groupZ = this.playerZ;
+        this.crowd.updateRunning(dt, 0);
+        this.camPos.lerp(this.crashCamPos.set(7.0, 4.5, this.world.bossWallZ + 12.0), dt * 5.0);
+        this.camLookAt.lerp(this.crashCamLook.set(0, 2.0, this.world.bossWallZ - 20.0), dt * 5.0);
+
+        if (started && stepReady && input.actionJustPressed) {
+          this.launchPressed = true;
+          this.tutorialActionDone = true;
+          this.tutorialActionDelay = 0;
+          const d = Math.abs(pos - LAUNCH_ZONE_CENTER);
+          this.launchQuality = d <= LAUNCH_ZONE_HALF ? 1 : Math.max(0.35, 1 - (d - LAUNCH_ZONE_HALF) / 0.5);
+          const label = this.launchQuality >= 1 ? 'PERFECT!!' : this.launchQuality >= 0.6 ? 'GOOD' : 'JUMP!';
+          const resultEl = document.getElementById('launch-timing-result');
+          if (resultEl) resultEl.textContent = label;
+          this.flightBoost = 1.0 + 0.7 * this.launchQuality;
+          sound.playShootRocket();
+          sound.playCatapultLaunch();
+          inputManager.rumble(400, 0.8, 0.8);
+          this.effects.shake(0.5, 0.35);
+          this.crowd.launchFlight(this.flightBoost);
+        }
+      } else {
+        const { furthestZ } = this.crowd.updateFlight(dt);
+        this.camPos.lerp(this.crashCamPos.set(8.5, 6.5, furthestZ + 16.0), dt * 6.0);
+        this.camLookAt.lerp(this.crashCamLook.set(0, 2.0, furthestZ - 12.0), dt * 6.0);
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.45) {
+          this.showLaunchTiming(false);
+        }
+        if (this.tutorialActionDelay >= 0.80) {
+          this.tutorialHandle?.advance(2);
+        }
+      }
+    }
   }
 
   /** 指定ステージ(0: 小学校 / 1: 中学校 / 2: 高専)を開始する */
@@ -398,6 +595,7 @@ export class Game {
     this.bonusHudElem?.classList.add('hidden');
     this.showLaunchTiming(false);
     this.showRunGuide(false);
+    if (this.hudTopBarElem) this.hudTopBarElem.style.display = '';
     if (this.hudElem) this.hudElem.style.display = 'block';
 
     sound.playStartJingle();
@@ -451,8 +649,6 @@ export class Game {
     });
     reportRoundStart({ stage: this.stageIndex + 1, difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
     this.effects.clearAll();
-    if (this.reqTextElem) this.reqTextElem.textContent = `要件 ${this.graduationRequirement}`;
-    if (this.stageTextElem) this.stageTextElem.textContent = LEVELS[this.level].schoolName;
 
     this.updateHUD();
   }
@@ -529,13 +725,20 @@ export class Game {
   private readonly pause = new ArcadePause({
     accent: '#00e676',
     isPlaying: () =>
+      this.state === 'TUTORIAL' ||
       this.state === 'COUNTDOWN' ||
       this.state === 'RUNNING' ||
       this.state === 'WALL_CRASH' ||
       this.state === 'BONUS_LAUNCH' ||
       this.state === 'BONUS_FLIGHT',
-    onOpen: () => this.countdown?.pause(),     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
-    onClose: () => this.countdown?.resume(),
+    onOpen: () => {
+      this.countdown?.pause();     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
+      this.tutorialHandle?.pause();
+    },
+    onClose: () => {
+      this.countdown?.resume();
+      this.tutorialHandle?.resume();
+    },
     onRestart: () => this.startGame(),
   });
 
@@ -552,6 +755,9 @@ export class Game {
 
     // State machine(ポーズ中は進めない)
     switch (this.pause.isOpen ? 'PAUSED' : this.state) {
+      case 'TUTORIAL':
+        this.updateTutorial(dt, input);
+        break;
       case 'COUNTDOWN':
         // カウントダウンの経過に合わせて暗幕をなめらかに晴らす
         this.countdownElapsed += dt;
@@ -915,9 +1121,14 @@ export class Game {
     if (!box) return;
     box.classList.toggle('hidden', !show);
     if (show) {
-      // 押すボタンをアイコンで示す(左下のガイドにも出す)
-      const label = box.querySelector('.launch-timing-label');
-      if (label) label.innerHTML = `${buttonIconHtml([0])} タイミングよくジャンプ`;
+      // 押すボタンをアイコンで示す(左下のガイドにも出す。チュートリアル中は上部バナーと重複しないよう隠す)
+      const label = box.querySelector('.launch-timing-label') as HTMLElement | null;
+      if (label) {
+        label.style.display = this.inTutorial ? 'none' : '';
+        if (!this.inTutorial) {
+          label.innerHTML = `${buttonIconHtml([0])} タイミングよくジャンプ`;
+        }
+      }
       const zone = document.getElementById('launch-timing-zone');
       if (zone) {
         zone.style.left = `${(LAUNCH_ZONE_CENTER - LAUNCH_ZONE_HALF) * 100}%`;

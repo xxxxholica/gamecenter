@@ -620,7 +620,7 @@
       flex-direction: column;
       justify-content: center;
       gap: 20px;
-      padding: 22px 26px;
+      padding: 22px 22px;
       background: #fffbeb;
       border: 1.5px solid #fde68a;
       border-radius: 12px;
@@ -634,7 +634,8 @@
     .star-guide-head {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      white-space: nowrap;
     }
 
     .star-guide-icon {
@@ -655,16 +656,18 @@
     .star-guide-label {
       display: inline-flex;
       align-items: baseline;
-      gap: 6px;
+      gap: 5px;
       font-family: var(--hand-font);
       font-weight: 700;
       letter-spacing: 0.03em;
       line-height: 1.25;
+      white-space: nowrap;
     }
 
     .star-guide-label-name {
-      font-size: 1.62rem;
+      font-size: clamp(1.24rem, 2.1vw, 1.56rem);
       color: #b45309;
+      white-space: nowrap;
     }
 
     .star-guide-label-name.is-pink {
@@ -672,8 +675,9 @@
     }
 
     .star-guide-label-sub {
-      font-size: 1.24rem;
+      font-size: clamp(1.0rem, 1.65vw, 1.2rem);
       color: #334155;
+      white-space: nowrap;
     }
 
     .star-guide-checklist {

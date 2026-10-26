@@ -21,6 +21,7 @@ import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
@@ -91,7 +92,12 @@ class Game {
   private readonly pause = new ArcadePause({
     accent: '#ffd23f',
     isPlaying: () => this.state === GameState.PLAYING,
-    onRestart: () => this.startWithCountdown(),
+    onOpen: () => this.tutorialHandle?.pause(),
+    onClose: () => this.tutorialHandle?.resume(),
+    onRestart: () => {
+      this.cancelPreGameSequence();
+      this.startWithCountdown();
+    },
   });
   private lastDeathCause = ''; // 分析用: 直近の死因(ぶつかった障害物の種類)
   private arcadeTitleScreen!: ArcadeTitleScreen;
@@ -131,6 +137,14 @@ class Game {
   private usedInvincibleItem: boolean = false;
 
   // カウントダウン演出用
+  /** ゲーム開始前のアクティブチュートリアル中は true(時間は進まず、その場で基本操作を試せる) */
+  private inTutorial: boolean = false;
+  private tutorialLastStep: number = -1;
+  private tutorialActionDone: boolean = false;
+  private tutorialActionDelay: number = 0;
+  private tutorialStepSpawned: number = -1;
+  private tutorialTargetObs: Obstacle | null = null;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
   private isCountingDown: boolean = false;
   private countdownTimer: number = 0;
   private countdownStep: number = 0;
@@ -382,7 +396,20 @@ class Game {
     }
   }
 
+  private cancelPreGameSequence(): void {
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
+    this.isPreChase = false;
+    this.isCountingDown = false;
+    if (this.chaseTeacher) {
+      this.scene.remove(this.chaseTeacher.group);
+      this.chaseTeacher = null;
+    }
+  }
+
   private showTitle(): void {
+    this.cancelPreGameSequence();
     this.state = GameState.TITLE;
     this.uiManager.setGameState(GameState.TITLE);
     this.arcadeTitleScreen?.show();
@@ -480,7 +507,7 @@ class Game {
    * その演出が終わり次第カウントダウン（3, 2, 1, GO）へと繋げる。
    */
   private startWithCountdown(): void {
-    if (this.isCountingDown || this.isPreChase) return;
+    if (this.isCountingDown || this.isPreChase || this.inTutorial) return;
     this.arcadeTitleScreen?.hide();
     this.soundSystem.unlock();
 
@@ -533,8 +560,360 @@ class Game {
     this.uiManager.setGameState(GameState.PLAYING);
     this.soundSystem.stopBgm();
 
-    // 6. カウントダウンより先に「追われる」導入演出を再生
-    this.beginPreChase();
+    // 6. ゲーム開始前のアクティブチュートリアルを開始（完了・スキップ後に「追われる」導入演出→カウントダウンへ）
+    this.beginTutorial();
+  }
+
+  /**
+   * ゲーム開始前: 時間とタイマーを止めたまま、廊下で実際にギミックや無敵アイテムを体験するアクティブチュートリアル
+   */
+  private beginTutorial(): void {
+    this.uiManager.setHUDVisible(false);
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialActionDone = false;
+    this.tutorialActionDelay = 0;
+    this.tutorialStepSpawned = -1;
+    this.tutorialTargetObs = null;
+    this.tutorialHandle?.cancel();
+
+    this.camera.position.set(0, 1.55, 0);
+    this.camera.rotation.set(0, 0, 0);
+    this.camera.lookAt(0, 1.51, -25);
+    this.camera.fov = 78;
+    this.camera.updateProjectionMatrix();
+
+    this.fpArms.reset();
+    this.fpArms.group.visible = true;
+    this.fpArms.update(0, 0, 0, false, false, this.bombStock);
+
+    const handle = startArcadeTutorial({
+      accentColor: '#ffb100',
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右のレーンへ移動' },
+        { indices: [14], keyLabel: 'A', label: '左のレーンへ移動' },
+        { indices: [12], keyLabel: 'W', label: 'ジャンプで飛び越える' },
+        { indices: [13], keyLabel: 'S', label: 'スライディングでくぐる' },
+        { indices: [0], keyLabel: 'Space', label: '攻撃で障害物を壊す' },
+        { indices: [14, 15], keyLabel: 'A / D', label: '無敵アイテムで先生を飛ばす' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        this.tutorialLastStep = -1;
+        this.tutorialActionDone = false;
+        this.tutorialActionDelay = 0;
+        this.tutorialStepSpawned = -1;
+        this.tutorialTargetObs = null;
+        this.clearProjectiles();
+        this.clearPowerUps();
+        this.particleSystem.clearAll();
+        this.obstacleManager.reset();
+        this.corridor.reset();
+        this.corridor.update(0, 0);
+        this.player.reset();
+        this.uiManager.triggerInvincibleEnd();
+        this.usedInvincibleItem = false;
+        this.scoreData.score = 0;
+        this.scoreData.combo = 0;
+        this.scoreData.maxCombo = 0;
+        this.scoreData.distance = 0;
+        this.scoreData.destroyedCount = 0;
+        this.scoreData.dodgedSignsCount = 0;
+        this.fpArms.group.visible = false;
+        this.bombStock = 3;
+        this.bombReloadTimer = 0;
+        this.uiManager.updateHUD(
+          0,
+          0,
+          this.scoreData.timeRemaining,
+          Math.round(this.START_SPEED * 3.6),
+          this.bombStock,
+          1.0
+        );
+        this.uiManager.setHUDVisible(true);
+        this.beginPreChase();
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
+  }
+
+  private spawnTutorialStepTarget(stepIdx: number): void {
+    this.obstacleManager.reset();
+    this.clearPowerUps();
+    this.clearProjectiles();
+    this.tutorialTargetObs = null;
+    const pz = this.player.group.position.z;
+    const lane = this.player.lane;
+
+    if (stepIdx === 2) {
+      this.tutorialTargetObs = this.obstacleManager.spawnTutorialObstacle(ObstacleType.GIMMICK_JUMP, 1, pz - 14);
+    } else if (stepIdx === 3) {
+      this.tutorialTargetObs = this.obstacleManager.spawnTutorialObstacle(ObstacleType.GIMMICK_SLIDE, 1, pz - 14);
+    } else if (stepIdx === 4) {
+      this.tutorialTargetObs = this.obstacleManager.spawnTutorialObstacle(ObstacleType.GIMMICK_BOMB, 1, pz - 16);
+    } else if (stepIdx === 5) {
+      const puLane = lane === 1 ? 2 : 1;
+      const pu = new PowerUp(LANE_COORDINATES[puLane], 1.15, pz - 10, puLane);
+      this.powerUps.push(pu);
+      this.scene.add(pu.mesh);
+      this.tutorialTargetObs = this.obstacleManager.spawnTutorialObstacle(ObstacleType.TEACHER, puLane, pz - 22);
+    }
+  }
+
+  /**
+   * チュートリアル専用の自機＆ギミック更新。
+   * 実際に廊下を走りながらジャンプ・スライディング・攻撃破壊・無敵アイテムでの先生粉砕を体験させる。
+   */
+  private updateTutorial(dt: number, input: GameInputState): void {
+    const started = this.tutorialHandle?.isStarted() ?? false;
+    const stepIdx = this.tutorialHandle?.currentStepIndex() ?? -1;
+    const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+    if (stepIdx !== this.tutorialLastStep) {
+      this.tutorialLastStep = stepIdx;
+      this.tutorialActionDone = false;
+      this.tutorialActionDelay = 0;
+    }
+    const allowStepAction = started && stepReady && !this.tutorialActionDone;
+    const activeInput: GameInputState = started
+      ? {
+          ...input,
+          laneLeft: stepIdx === 1 || stepIdx === 5 ? (allowStepAction ? input.laneLeft : false) : input.laneLeft,
+          laneRight: stepIdx === 0 || stepIdx === 5 ? (allowStepAction ? input.laneRight : false) : input.laneRight,
+          jump: stepIdx === 2 ? (allowStepAction ? input.jump : false) : input.jump,
+          slide: stepIdx === 3 ? (allowStepAction ? input.slide : false) : input.slide,
+          attack: stepIdx === 4 ? (allowStepAction ? input.attack : false) : input.attack,
+          shootShuriken: stepIdx === 4 ? (allowStepAction ? input.shootShuriken : false) : input.shootShuriken,
+          throwBomb: stepIdx === 4 ? (allowStepAction ? input.throwBomb : false) : input.throwBomb,
+        }
+      : {
+          ...input,
+          laneLeft: false,
+          laneRight: false,
+          jump: false,
+          slide: false,
+          attack: false,
+          shootShuriken: false,
+          throwBomb: false,
+        };
+
+    if (started && stepIdx !== this.tutorialStepSpawned) {
+      this.tutorialStepSpawned = stepIdx;
+      this.spawnTutorialStepTarget(stepIdx);
+    }
+
+    let movedLeft = false;
+    let movedRight = false;
+    if (activeInput.laneLeft) {
+      if (this.player.moveLeft()) {
+        movedLeft = true;
+        this.soundSystem.playStep();
+      } else if (stepIdx === 1) {
+        movedLeft = true;
+        this.soundSystem.playStep();
+      }
+    }
+    if (activeInput.laneRight) {
+      if (this.player.moveRight()) {
+        movedRight = true;
+        this.soundSystem.playStep();
+      } else if (stepIdx === 0) {
+        movedRight = true;
+        this.soundSystem.playStep();
+      }
+    }
+
+    if (activeInput.jump) {
+      if (this.player.jump()) {
+        this.soundSystem.playJump();
+        if (stepIdx === 2 && this.tutorialTargetObs && this.player.group.position.z - this.tutorialTargetObs.z > 6.2) {
+          this.tutorialTargetObs.z = this.player.group.position.z - 5.5;
+          this.tutorialTargetObs.group.position.z = this.tutorialTargetObs.z;
+          this.tutorialTargetObs.boundingBox.min.z = this.tutorialTargetObs.z - 0.5;
+          this.tutorialTargetObs.boundingBox.max.z = this.tutorialTargetObs.z + 0.5;
+        }
+      }
+    }
+
+    if (activeInput.slide && !this.player.isSliding && !this.player.isJumping) {
+      this.soundSystem.playSlide();
+      if (stepIdx === 3 && this.tutorialTargetObs && this.player.group.position.z - this.tutorialTargetObs.z > 6.2) {
+        this.tutorialTargetObs.z = this.player.group.position.z - 5.0;
+        this.tutorialTargetObs.group.position.z = this.tutorialTargetObs.z;
+        this.tutorialTargetObs.boundingBox.min.z = this.tutorialTargetObs.z - 0.5;
+        this.tutorialTargetObs.boundingBox.max.z = this.tutorialTargetObs.z + 0.5;
+      }
+    }
+
+    if (activeInput.attack || activeInput.shootShuriken || activeInput.throwBomb) {
+      this.performRandomAttack();
+    }
+
+    // ステップ2以降は前方の障害物・アイテムへ向かって走る（各ギミックの手前で止まって入力待ちできるようにする）
+    let moveSpeed = started && stepIdx >= 2 ? 15.0 : 0;
+    if (stepIdx === 2 && this.tutorialTargetObs && !this.tutorialActionDone && !this.player.isJumping) {
+      if (this.player.group.position.z - this.tutorialTargetObs.z <= 5.8) {
+        moveSpeed = 0;
+      }
+    } else if (stepIdx === 3 && this.tutorialTargetObs && !this.tutorialActionDone && !this.player.isSliding) {
+      if (this.player.group.position.z - this.tutorialTargetObs.z <= 5.5) {
+        moveSpeed = 0;
+      }
+    } else if (stepIdx === 4 && this.tutorialTargetObs && !this.tutorialTargetObs.isDestroyed) {
+      if (this.player.group.position.z - this.tutorialTargetObs.z <= 8.5) {
+        moveSpeed = 0;
+      }
+    } else if (stepIdx === 5 && !this.player.isInvincible) {
+      const pu = this.powerUps[0];
+      if (pu && !pu.isCollected && this.player.group.position.z - pu.mesh.position.z <= 3.5 && this.player.lane !== pu.lane) {
+        moveSpeed = 0;
+      }
+    }
+    this.player.group.position.z -= moveSpeed * dt;
+
+    this.player.update(dt, 15, activeInput.slide || (stepIdx === 3 && this.tutorialActionDone));
+    if (this.player.isSliding) {
+      this.particleSystem.spawnSlideParticles(this.player.group.position);
+    }
+
+    const pz = this.player.group.position.z;
+    this.corridor.update(pz, dt);
+
+    // パワーアップ更新＆回収
+    this.powerUpClock += dt;
+    const playerBox = this.player.getBoundingBox();
+    for (const p of this.powerUps) {
+      p.update(dt, this.powerUpClock);
+      if (!p.isCollected && playerBox.intersectsBox(p.boundingBox)) {
+        p.isCollected = true;
+        this.player.triggerInvincible(10.0);
+        this.soundSystem.playPowerUpCollect();
+        this.particleSystem.spawnPowerUpBurst(p.mesh.position);
+        this.triggerScreenShake(0.6, 0.35);
+      }
+    }
+    this.updateInvincibleEffects();
+
+    // 投擲物と障害物の衝突判定
+    this.updateProjectiles(dt);
+    const target = this.tutorialTargetObs;
+    if (target && !target.isDestroyed) {
+      // ステップ5で先生が別レーンにいる場合もプレイヤーのレーンに合わせて正面でぶつかれるようにする
+      if (stepIdx === 5 && target.type === ObstacleType.TEACHER) {
+        const targetX = LANE_COORDINATES[this.player.lane];
+        target.group.position.x += (targetX - target.group.position.x) * Math.min(1, dt * 10);
+        const curX = target.group.position.x;
+        target.boundingBox.min.set(curX - 0.75, 0, target.z - 0.6);
+        target.boundingBox.max.set(curX + 0.75, 2.8, target.z + 0.6);
+      }
+      for (const card of this.wordCards) {
+        if (
+          !card.isDead &&
+          (card.boundingBox.intersectsBox(target.boundingBox) ||
+            (target.type === ObstacleType.GIMMICK_BOMB && card.mesh.position.z <= target.z + 0.8))
+        ) {
+          card.isDead = true;
+          if (target.type === ObstacleType.GIMMICK_BOMB) {
+            this.destroyObstacle(target, false);
+          } else {
+            this.particleSystem.spawnDeskBreak(card.mesh.position);
+          }
+        }
+      }
+      for (let i = this.dictionaryBombs.length - 1; i >= 0; i--) {
+        const bomb = this.dictionaryBombs[i];
+        if (
+          !bomb.isExploded &&
+          (bomb.boundingBox.intersectsBox(target.boundingBox) ||
+            (target.type === ObstacleType.GIMMICK_BOMB && bomb.mesh.position.z <= target.z + 0.8))
+        ) {
+          bomb.mesh.position.z = target.z;
+          bomb.isExploded = true;
+          this.triggerBombExplosion(bomb.mesh.position, bomb.blastRadius);
+          this.scene.remove(bomb.mesh);
+          this.dictionaryBombs.splice(i, 1);
+        }
+      }
+    }
+
+    this.particleSystem.update(dt, pz, 0.6);
+    this.fpArms.update(
+      dt,
+      this.player.runCycle,
+      15,
+      this.player.isSliding,
+      this.player.isJumping,
+      this.bombStock
+    );
+    this.updateCamera(dt);
+
+    if (!stepReady) return;
+
+    // 現在のステップだけを順番に判定し、アクションのアニメーションが見えてから次へ進める
+    if (stepIdx === 0) {
+      if (movedRight) this.tutorialActionDone = true;
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.28) this.tutorialHandle?.advance(0);
+      }
+    } else if (stepIdx === 1) {
+      if (movedLeft) this.tutorialActionDone = true;
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.28) this.tutorialHandle?.advance(1);
+      }
+    } else if (stepIdx === 2 && target) {
+      if (!this.tutorialActionDone && pz < target.z) {
+        if (this.player.posY >= 0.45 || this.player.isJumping) {
+          this.soundSystem.playSignDodge();
+          this.tutorialActionDone = true;
+        } else {
+          this.spawnTutorialStepTarget(2);
+        }
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.30) this.tutorialHandle?.advance(2);
+      }
+    } else if (stepIdx === 3 && target) {
+      if (!this.tutorialActionDone && pz < target.z) {
+        if (this.player.isSliding) {
+          this.soundSystem.playSignDodge();
+          this.tutorialActionDone = true;
+        } else {
+          this.spawnTutorialStepTarget(3);
+        }
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.30) this.tutorialHandle?.advance(3);
+      }
+    } else if (stepIdx === 4 && target) {
+      if (target.isDestroyed) this.tutorialActionDone = true;
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.40) this.tutorialHandle?.advance(4);
+      }
+    } else if (stepIdx === 5 && target) {
+      if (!this.tutorialActionDone) {
+        if (playerBox.intersectsBox(target.boundingBox)) {
+          if (this.player.isInvincible) {
+            this.destroyObstacle(target, false, true);
+            this.tutorialActionDone = true;
+          } else {
+            this.spawnTutorialStepTarget(5);
+          }
+        } else if (pz < target.z - 2) {
+          this.spawnTutorialStepTarget(5);
+        }
+      }
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.45) this.tutorialHandle?.advance(5);
+      }
+    }
   }
 
   /**
@@ -910,6 +1289,13 @@ class Game {
     }
 
     this.checkAttractMode(input);
+
+    // ゲーム開始前のアクティブチュートリアル中
+    if (this.inTutorial) {
+      this.updateTutorial(rawDelta, input);
+      this.renderFrame();
+      return;
+    }
 
     // カウントダウン前「追われる」導入演出の実行中
     if (this.isPreChase) {
@@ -1950,14 +2336,18 @@ class Game {
       this.invincibleLight.intensity = 4.0 + Math.sin(this.powerUpClock * 10) * 1.2;
 
       this.particleSystem.spawnInvincibleTrail(this.player.group.position);
-      this.uiManager.updateInvincibleTimer(this.player.getInvincibleRemaining());
+      if (!this.inTutorial) {
+        this.uiManager.updateInvincibleTimer(this.player.getInvincibleRemaining());
+      }
     } else if (this.wasInvincible) {
       if (this.invincibleLight) {
         this.scene.remove(this.invincibleLight);
         this.invincibleLight = null;
       }
-      this.uiManager.triggerInvincibleEnd();
-      this.soundSystem.playInvincibleEnd();
+      if (!this.inTutorial) {
+        this.uiManager.triggerInvincibleEnd();
+        this.soundSystem.playInvincibleEnd();
+      }
     }
 
     this.wasInvincible = isInvincible;

@@ -34,6 +34,7 @@ import { readGamepads } from '../../../shared/gamepadFrame';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 
 installHomeReturn();
 // リザルトで無操作が続いたらタイトルへ戻る
@@ -849,7 +850,7 @@ function readInput(): Input {
   inp.down = keys.has('ArrowDown') || keys.has('KeyS');
   const kp = (...codes: string[]) => codes.some((c) => keyPressed.has(c));
   inp.rotate = kp('KeyW');
-  inp.item = kp('Enter');
+  inp.item = kp('Enter', 'Space');
   inp.confirm = kp('Enter');
   inp.cancel = kp('Backspace');
   keyPressed.clear();
@@ -919,6 +920,11 @@ const SOLO_COUNTDOWN = 3;
 let soloCountdown = 0;
 let soloGo = 0;
 let soloCountSec = 0;
+let inTutorial = false;
+let tutorialLastStep = -1;
+let tutorialActionDone = false;
+let tutorialActionDelay = 0;
+let tutorialHandle: ArcadeTutorialHandle | null = null;
 let activeEvent: EventKind | null = null;
 const EVENT_WARN_TIME = 10; // 予兆(縁が赤く点滅して、ラベルが残り秒数を数える時間)
 const WARN_BEEP_AT = [0, 7, 8, 9]; // 予兆の警告音を鳴らす、予兆開始からの経過秒(最初と、残り3・2・1秒)
@@ -949,7 +955,9 @@ world.addEventListener('preStep', () => {
   if (current && !currentReleased) {
     const b = current.body;
     const vx = Math.max(-14, Math.min(14, (targetX - b.position.x) * 22));
-    b.velocity.set(vx, -fallSpeed(), 0);
+    const hoverY = (tutorialHandle?.currentStepIndex() ?? -1) === 4 ? 7.2 : camY + 1.5;
+    const vy = inTutorial && !fastDrop && !glueArmed ? Math.max(-6, Math.min(6, (hoverY - b.position.y) * 10)) : -fallSpeed();
+    b.velocity.set(vx, vy, 0);
     const err = wrapAngle(targetAngle - angleOf(b));
     b.angularVelocity.set(0, 0, Math.max(-16, Math.min(16, err * 20)));
   }
@@ -1451,7 +1459,7 @@ function renderItems(): void {
 }
 
 function renderHud(): void {
-  setDisplay(elHud, state === 'title' || state === 'menu' ? 'none' : 'block');
+  setDisplay(elHud, state === 'title' || state === 'menu' || inTutorial ? 'none' : 'block');
   renderMatchHud();
 
   // 残機: 左から MAX_DROPS 個。落とした数だけ右から消える
@@ -1525,6 +1533,9 @@ function clearBlocks(): void {
 }
 
 function showTitle(): void {
+  tutorialHandle?.cancel();
+  tutorialHandle = null;
+  inTutorial = false;
   closeResult();
   modeSelect.hide();
   leaveOnline();
@@ -2044,7 +2055,7 @@ function renderMatchHud(): void {
   if (show && match && !match.started) {
     const sec = Math.ceil((match.startAt - net.serverNow()) / 1000);
     count = Number.isFinite(sec) ? String(Math.max(1, sec)) : '';
-  } else if (mode === 'solo' && state === 'playing' && !isPreview) {
+  } else if (mode === 'solo' && state === 'playing' && !isPreview && !inTutorial) {
     // ランキング挑戦のスタート前: 3・2・1 のあと、少しだけ GO! を出す
     if (soloCountdown > 0) count = String(Math.ceil(soloCountdown));
     else if (soloGo > 0) count = 'GO!';
@@ -2134,6 +2145,16 @@ function startGame(): void {
   renderItems();
   state = 'playing';
   stateTime = 0;
+  tutorialHandle?.cancel();
+  tutorialHandle = null;
+  inTutorial = false;
+  tutorialLastStep = -1;
+  tutorialActionDone = false;
+  tutorialActionDelay = 0;
+  if (mode === 'solo' && !isPreview && !benchSolo) {
+    beginTutorial();
+    return;
+  }
   soloCountdown = mode === 'solo' && !isPreview ? SOLO_COUNTDOWN : 0;
   if (!isPreview) reportRoundStart({ mode: mode === 'online' ? 'オンライン' : 'ひとり' });
   soloGo = 0;
@@ -2141,6 +2162,232 @@ function startGame(): void {
   if (!isPreview) {
     guidePlay();
     beep(520, 0.12, 'square', 0.07);
+  }
+}
+
+function beginTutorial(): void {
+  inTutorial = true;
+  tutorialLastStep = -1;
+  tutorialActionDone = false;
+  tutorialActionDelay = 0;
+  items = [];
+  renderItems();
+  spawnPiece();
+  if (current) {
+    current.body.position.set(0, camY + 1.5, 0);
+  }
+  renderHud();
+  const handle = startArcadeTutorial({
+    accentColor: ACCENT,
+    steps: [
+      { indices: [15], keyLabel: 'D', label: 'ブロックを右に動かす' },
+      { indices: [14], keyLabel: 'A', label: 'ブロックを左に動かす' },
+      { indices: [0, 2], keyLabel: 'W', label: 'ブロックを回転させる' },
+      { indices: [13], keyLabel: 'S', label: 'ブロックを積む' },
+      { indices: [1, 3], keyLabel: 'Space', label: 'ツタでブロックを固定する' },
+      { indices: [1, 3], keyLabel: 'Space', label: 'セメントで全体を固める' },
+    ],
+    onComplete: () => {
+      inTutorial = false;
+      tutorialHandle = null;
+      tutorialLastStep = -1;
+      tutorialActionDone = false;
+      tutorialActionDelay = 0;
+      clearBlocks();
+      resetRunState();
+      resetPieceBag();
+      nextIndex = randomPieceIndex();
+      nextIndex2 = randomPieceIndex();
+      renderNext();
+      renderItems();
+      eventTimer = 30;
+      spawnTimer = 0.4;
+      stateTime = 0;
+      soloCountdown = SOLO_COUNTDOWN;
+      soloGo = 0;
+      soloCountSec = 0;
+      reportRoundStart({ mode: 'ひとり' });
+      guidePlay();
+      renderHud();
+      beep(520, 0.12, 'square', 0.07);
+    },
+  });
+  if (inTutorial) {
+    tutorialHandle = handle;
+  }
+}
+
+function setupTutorialTower(withFallingPiece: boolean): void {
+  clearBlocks();
+  current = null;
+  currentReleased = false;
+  glueArmed = false;
+  pendingVine = null;
+  const preset: [number, number, number][] = [
+    [1, 0, 1.0],      // O (黄)
+    [0, 0, 2.5],      // I (シアン)
+    [4, -1.0, 3.75],  // J (青)
+    [3, 1.0, 3.75],   // L (橙)
+  ];
+  for (const [pieceIdx, x, y] of preset) {
+    const blk = createPiece(pieceIdx, x, y);
+    blk.body.type = CANNON.Body.STATIC;
+    blk.body.mass = 0;
+    blk.body.updateMassProperties();
+    blk.body.velocity.setZero();
+    blk.body.angularVelocity.setZero();
+    blk.body.aabbNeedsUpdate = true;
+  }
+  currentHeight = 5.0;
+  if (withFallingPiece) {
+    const falling = createPiece(2, 0, 7.2); // T (紫)
+    falling.body.allowSleep = false;
+    current = falling;
+    currentReleased = false;
+    targetX = 0;
+    targetAngle = 0;
+    falling.body.addEventListener('collide', () => {
+      if (current === falling && !currentReleased) currentReleased = true;
+    });
+  }
+}
+
+function updateTutorial(dt: number, inp: Input): void {
+  const started = tutorialHandle?.isStarted() ?? false;
+  const step = tutorialHandle?.currentStepIndex() ?? -1;
+  const stepReady = tutorialHandle?.isStepReady() ?? false;
+
+  if (step !== tutorialLastStep) {
+    tutorialLastStep = step;
+    tutorialActionDone = false;
+    tutorialActionDelay = 0;
+    if (step === 4) {
+      setupTutorialTower(true);
+      items = ['glue'];
+      renderItems();
+    } else if (step === 5) {
+      if (blocks.length < 4) {
+        setupTutorialTower(false);
+      } else {
+        current = null;
+        currentReleased = false;
+      }
+      items = ['cement'];
+      renderItems();
+    }
+  }
+
+  if (step >= 0 && step < 4) {
+    if (!tutorialActionDone && (!current || currentReleased || current.body.position.y < KILL_Y)) {
+      if (step === 3 && stepReady && currentReleased && current && current.body.position.y >= 0) {
+        // 土台に着地した！
+        const landed = current;
+        current = null;
+        landed.body.velocity.setZero();
+        landed.body.angularVelocity.setZero();
+        beep(180, 0.08, 'triangle', 0.12, -60);
+        tutorialActionDone = true;
+      } else {
+        clearBlocks();
+        current = null;
+        currentReleased = false;
+        spawnPiece();
+        const spawned = current as Block | null;
+        if (spawned) spawned.body.position.set(0, camY + 1.5, 0);
+      }
+    }
+  } else if (step === 4) {
+    if (glueArmed && current && currentReleased) {
+      const landed = current;
+      current = null;
+      glueArmed = false;
+      landed.body.velocity.setZero();
+      landed.body.angularVelocity.setZero();
+      growVines(landed);
+      tutorialActionDone = true;
+    } else if (!tutorialActionDone && !glueArmed && !current) {
+      setupTutorialTower(true);
+      items = ['glue'];
+      renderItems();
+    }
+  }
+
+  if (started && current && !currentReleased) {
+    const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    if (dir !== 0 && step < 4) {
+      if (dir !== moveDir) {
+        targetX += dir * MOVE_STEP;
+        moveRepeat = 0.17;
+      } else {
+        moveRepeat -= dt;
+        if (moveRepeat <= 0) {
+          targetX += dir * MOVE_STEP;
+          moveRepeat = 0.05;
+        }
+      }
+      targetX = Math.max(-MOVE_LIMIT, Math.min(MOVE_LIMIT, targetX));
+    }
+    moveDir = dir;
+    fastDrop = (stepReady && step === 3 && !tutorialActionDone && inp.down) || (step === 4 && glueArmed);
+    if (stepReady && step === 2 && !tutorialActionDone && inp.rotate) {
+      targetAngle -= Math.PI / 2;
+      beep(420, 0.04, 'square', 0.04);
+      tutorialActionDone = true;
+    }
+  } else {
+    fastDrop = false;
+    moveDir = 0;
+  }
+  world.step(1 / 120, dt, 10);
+
+  if (!stepReady) return;
+
+  if (step === 0) {
+    if (inp.right) tutorialActionDone = true;
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.30) tutorialHandle?.advance(0);
+    }
+  } else if (step === 1) {
+    if (inp.left) tutorialActionDone = true;
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.30) tutorialHandle?.advance(1);
+    }
+  } else if (step === 2) {
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.32) tutorialHandle?.advance(2);
+    }
+  } else if (step === 3) {
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.38) tutorialHandle?.advance(3);
+    }
+  } else if (step === 4) {
+    if (!tutorialActionDone && !glueArmed && inp.item) {
+      items = ['glue'];
+      useItem();
+      renderItems();
+    }
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.55) tutorialHandle?.advance(4);
+    }
+  } else if (step === 5) {
+    if (!tutorialActionDone && inp.item) {
+      items = ['cement'];
+      useItem();
+      for (const blk of blocks) {
+        if (!blk.cemented) freezeBlock(blk, 0.7);
+      }
+      renderItems();
+      tutorialActionDone = true;
+    }
+    if (tutorialActionDone) {
+      tutorialActionDelay += dt;
+      if (tutorialActionDelay >= 0.55) tutorialHandle?.advance(5);
+    }
   }
 }
 
@@ -2194,6 +2441,10 @@ let benchItemWait = 0;
 let benchHeightMark = 0;
 
 function updatePlaying(dt: number, inp: Input): void {
+  if (inTutorial) {
+    updateTutorial(dt, inp);
+    return;
+  }
   if (mode === 'solo' && !demoActive && soloCountdown > 0) {
     // スタートの合図を待つ。その間は動かさない
     world.step(1 / 120, dt, 10);
@@ -2362,7 +2613,14 @@ let last = performance.now();
 const pauseSolo = new ArcadePause({
   accent: ACCENT,
   isPlaying: () => state === 'playing' && mode === 'solo' && !demoActive && !isPreview,
-  onRestart: () => startGame(),
+  onOpen: () => tutorialHandle?.pause(),
+  onClose: () => tutorialHandle?.resume(),
+  onRestart: () => {
+    tutorialHandle?.cancel();
+    tutorialHandle = null;
+    inTutorial = false;
+    startGame();
+  },
 });
 new ArcadePause({
   accent: ACCENT,

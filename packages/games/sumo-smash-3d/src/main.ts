@@ -39,6 +39,7 @@ import { createNet, fetchSumoStatus } from './online/net';
 import { WaitScreen } from './online/WaitScreen';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { replayFx, type FxSink } from './online/fx';
+import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
@@ -161,6 +162,11 @@ class SumoGame {
   } | null = null;
   private cancelEntryFlow: (() => void) | null = null;
   private entryBlocked = false;
+  private inTutorial = false;
+  private tutorialLastStep = -1;
+  private tutorialStepHoldSec = 0;
+  private tutorialActionDone = false;
+  private tutorialHandle: ArcadeTutorialHandle | null = null;
   // ベンチマーク(?bench=1&scene=bout&n=2〜4): 全員を CPU が操作して、1試合(二本先取)を最後まで見せる
   private readonly benchScene = benchParam('scene');
   private benchReadySent = false;
@@ -176,7 +182,14 @@ class SumoGame {
   private readonly pauseCpu = new ArcadePause({
     accent: ACCENT,
     isPlaying: () => this.gameState === 'battle' && !!this.cpu && !this.uiManager.isVictoryModalOpen() && !isPreviewMode(),
-    onRestart: () => this.startCpuBattle(),
+    onOpen: () => this.tutorialHandle?.pause(),
+    onClose: () => this.tutorialHandle?.resume(),
+    onRestart: () => {
+      this.tutorialHandle?.cancel();
+      this.tutorialHandle = null;
+      this.inTutorial = false;
+      this.startCpuBattle();
+    },
   });
   private onlineWired = false;
   private onlineYou = 0;
@@ -460,17 +473,8 @@ class SumoGame {
     }
   }
 
-  /**
-   * CPU対戦(百人組手: 1P=自分 vs 1〜100番のCPU力士、最大3体同時降下)。シミュレーションはこのブラウザの中で動かす。
-   */
-  public startCpuBattle() {
-    reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
-    reportRoundStart({ mode: 'CPU対戦' });
-    beginLeaderboardRun('sumo-smash-3d');
-    this.match = null;
+  private initKumiteCpuState() {
     const firstSpec = getKumiteEnemySpec(1);
-    this.showViews(4, ['あなた', firstSpec.name, null, null]);
-    // 最初は slot 0 (自分) と slot 1 (一番富士) の2人が土俵上で向かい合い、slot 2, 3 は上空降下まで待機
     const pose0 = startPose(0, 2);
     const pose1 = startPose(1, 2);
     this.views[0].placeAt(pose0.x, pose0.z, pose0.angle);
@@ -481,12 +485,6 @@ class SumoGame {
     this.views[2].gone = true;
     this.views[3].mesh.visible = false;
     this.views[3].gone = true;
-
-    this.uiManager.setMultiLayout(null);
-    this.uiManager.setRematchEnabled(true);
-    this.uiManager.setMode('pve');
-    this.uiManager.updateEnemyHeader(firstSpec.name, firstSpec.rankLabel);
-    this.prepareBattleScreen();
 
     const sim = new SimWorld(CANNON, {
       count: 4,
@@ -514,13 +512,91 @@ class SumoGame {
       lastEnemyName: firstSpec.name,
       pendingDrops: [],
     };
+    return sim;
+  }
+
+  /**
+   * CPU対戦(百人組手: 1P=自分 vs 1〜100番のCPU力士、最大3体同時降下)。シミュレーションはこのブラウザの中で動かす。
+   */
+  public startCpuBattle() {
+    reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
+    reportRoundStart({ mode: 'CPU対戦' });
+    beginLeaderboardRun('sumo-smash-3d');
+    this.match = null;
+    const firstSpec = getKumiteEnemySpec(1);
+    this.showViews(4, ['あなた', firstSpec.name, null, null]);
+
+    this.uiManager.setMultiLayout(null);
+    this.uiManager.setRematchEnabled(true);
+    this.uiManager.setMode('pve');
+    this.uiManager.updateEnemyHeader(firstSpec.name, firstSpec.rankLabel);
+    this.prepareBattleScreen();
+
+    const sim = this.initKumiteCpuState();
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
+    if (!isPreviewMode() && !this.benchScene) {
+      this.beginTutorial();
+      return;
+    }
     this.roundState = 'standby';
     sim.start();                                              // 「見合って」から。柝・バナーは演出イベントとして最初のフレームで再生される
   }
 
+  private beginTutorial() {
+    if (!this.cpu) return;
+    this.inTutorial = true;
+    this.tutorialLastStep = -1;
+    this.tutorialStepHoldSec = 0;
+    this.tutorialActionDone = false;
+    const { sim } = this.cpu;
+    sim.phase = 'active';
+    sim.phaseTime = 0;
+    for (let i = 0; i < 2; i++) {
+      sim.fighters[i].body.position.y = 0.9;
+      sim.fighters[i].body.velocity.set(0, 0, 0);
+    }
+    const bh = document.getElementById('battle-hud');
+    if (bh) bh.style.display = 'none';
+    const handle = startArcadeTutorial({
+      accentColor: ACCENT,
+      steps: [
+        { indices: [15], keyLabel: 'D', label: '右に動く' },
+        { indices: [14], keyLabel: 'A', label: '左に動く' },
+        { indices: [12, 13], keyLabel: 'W / S', label: '奥・手前に動く' },
+        { indices: [0, 2], keyLabel: 'Space', midText: 'を短く押して', label: '張り手3連打' },
+        { indices: [0, 2], keyLabel: 'Space', midText: 'を長く押して', label: 'ぶちかまし' },
+        { indices: [1, 3], keyLabel: 'K', label: '相手をつかんで投げる' },
+      ],
+      onComplete: () => {
+        this.inTutorial = false;
+        this.tutorialHandle = null;
+        this.tutorialLastStep = -1;
+        this.tutorialStepHoldSec = 0;
+        this.tutorialActionDone = false;
+        if (bh) bh.style.display = '';
+        if (!this.cpu) return;
+        this.particleManager.clear();
+        this.audience.restoreAll();
+        this.dohyo.clearScorches();
+        this.blastedFighters.clear();
+        this.lastRc = -1;
+        this.isRoundActive = false;
+        this.modalShown = false;
+        const freshSim = this.initKumiteCpuState();
+        this.roundState = 'standby';
+        freshSim.start();
+      },
+    });
+    if (this.inTutorial) {
+      this.tutorialHandle = handle;
+    }
+  }
+
   /** 百人組手で敵(slot 1〜3)が土俵下に落ちたときの補充予約 */
   private onKumiteEnemyFell(slot: number) {
-    if (!this.cpu || this.cpu.benchAis) return;
+    if (!this.cpu || this.cpu.benchAis || this.inTutorial) return;
     this.blastedFighters.delete(slot);
     const fallenSpec = this.cpu.slotSpecs[slot];
     if (fallenSpec) {
@@ -645,6 +721,11 @@ class SumoGame {
   }
 
   private showTitle() {
+    this.tutorialHandle?.cancel();
+    this.tutorialHandle = null;
+    this.inTutorial = false;
+    const bh = document.getElementById('battle-hud');
+    if (bh) bh.style.display = '';
     this.cancelEntryFlow?.();
     this.cancelEntryFlow = null;
     this.entryBlocked = false;
@@ -1000,11 +1081,34 @@ class SumoGame {
         banners.forEach((b) => (b as HTMLElement).style.display = 'none');
       } else {
         const raw = this.inputManager.getPlayer1Input();
-        mine = { move: this.toWorldMoveInput(raw), actions: this.toActions(raw) };
+        const tutStarted = !this.inTutorial || (this.tutorialHandle?.isStarted() ?? false);
+        const tutStep = this.inTutorial ? (this.tutorialHandle?.currentStepIndex() ?? -1) : -1;
+        const tutReady = !this.inTutorial || (this.tutorialHandle?.isStepReady() ?? false);
+        if (!tutStarted) {
+          mine = {
+            move: { x: 0, z: 0, isMoving: false },
+            actions: { strikePressed: false, strike: false, strikeReleased: false, grabPressed: false },
+          };
+        } else if (this.inTutorial) {
+          const actions = this.toActions(raw);
+          const allowStrike = tutReady && !this.tutorialActionDone && (tutStep === 3 || tutStep === 4);
+          const allowGrab = tutReady && !this.tutorialActionDone && tutStep === 5;
+          mine = {
+            move: this.toWorldMoveInput(raw),
+            actions: {
+              strikePressed: allowStrike ? actions.strikePressed : false,
+              strike: allowStrike ? actions.strike : false,
+              strikeReleased: allowStrike ? actions.strikeReleased : false,
+              grabPressed: allowGrab ? actions.grabPressed : false,
+            },
+          };
+        } else {
+          mine = { move: this.toWorldMoveInput(raw), actions: this.toActions(raw) };
+        }
       }
       if (!benchAis) {
         // 降下予約中の力士のタイマーを進める
-        if (sim.phase === 'active' && this.cpu.pendingDrops.length > 0) {
+        if (!this.inTutorial && sim.phase === 'active' && this.cpu.pendingDrops.length > 0) {
           const remaining: typeof this.cpu.pendingDrops = [];
           for (const drop of this.cpu.pendingDrops) {
             drop.delay -= dt;
@@ -1016,6 +1120,7 @@ class SumoGame {
           }
           this.cpu.pendingDrops = remaining;
         } else if (
+          !this.inTutorial &&
           sim.phase === 'active' &&
           this.cpu.pendingDrops.length === 0 &&
           this.cpu.nextEnemyNumber <= KUMITE_TOTAL &&
@@ -1029,7 +1134,7 @@ class SumoGame {
         const inputs: (FighterInput | null)[] = [mine];
         for (let s = 1; s < sim.fighters.length; s++) {
           const ef = sim.fighters[s];
-          if (ef.gone || ef.isSkyDropping) {
+          if (ef.gone || ef.isSkyDropping || this.inTutorial) {
             inputs.push(null);
           } else {
             const plan = ais[s].update(dt, sim.fighters[0]);
@@ -1037,6 +1142,84 @@ class SumoGame {
           }
         }
         sim.step(dt, inputs);
+        if (this.inTutorial) {
+          for (let i = 0; i < 2; i++) {
+            const f = sim.fighters[i];
+            f.damagePercent = 0;
+            const r = Math.hypot(f.body.position.x, f.body.position.z);
+            if (r > 6.8) {
+              const sc = 6.8 / r;
+              f.body.position.x *= sc;
+              f.body.position.z *= sc;
+              f.body.velocity.x = 0;
+              f.body.velocity.z = 0;
+            }
+            if (f.body.position.y < 0.85) {
+              f.body.position.y = 0.9;
+              f.body.velocity.y = 0;
+            }
+          }
+          const f0 = sim.fighters[0];
+          const f1 = sim.fighters[1];
+          f0.buchikamashiCooldown = 0;
+          f0.grabCooldown = 0;
+          const raw = this.inputManager.getPlayer1Input();
+          const step = this.tutorialHandle?.currentStepIndex() ?? -1;
+          const stepReady = this.tutorialHandle?.isStepReady() ?? false;
+          if (step !== this.tutorialLastStep || !stepReady) {
+            this.tutorialLastStep = step;
+            this.tutorialStepHoldSec = 0;
+            this.tutorialActionDone = false;
+          }
+          if (step >= 3 && f1.state !== 'hit' && f1.state !== 'grabbed') {
+            const dx = f1.body.position.x - f0.body.position.x;
+            const dz = f1.body.position.z - f0.body.position.z;
+            const dist = Math.hypot(dx, dz);
+            if (dist > 2.0) {
+              const pull = (dist - 1.75) * 0.14;
+              f1.body.position.x -= (dx / dist) * pull;
+              f1.body.position.z -= (dz / dist) * pull;
+              f1.body.velocity.x *= 0.5;
+              f1.body.velocity.z *= 0.5;
+            }
+          }
+          if (stepReady) {
+            if (step === 0) {
+              if (raw.moveX > 0.3) this.tutorialStepHoldSec += dt;
+              if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(0);
+            } else if (step === 1) {
+              if (raw.moveX < -0.3) this.tutorialStepHoldSec += dt;
+              if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(1);
+            } else if (step === 2) {
+              if (Math.abs(raw.moveZ) > 0.3) this.tutorialStepHoldSec += dt;
+              if (this.tutorialStepHoldSec >= 0.32) this.tutorialHandle?.advance(2);
+            } else if (step === 3) {
+              if (f0.state === 'harite' && (f0.attackHitRegistered || f1.state === 'hit')) {
+                this.tutorialActionDone = true;
+              }
+              if (this.tutorialActionDone) {
+                this.tutorialStepHoldSec += dt;
+                if (this.tutorialStepHoldSec >= 0.42) this.tutorialHandle?.advance(3);
+              }
+            } else if (step === 4) {
+              if (f0.state === 'buchikamashi_rush' && (f0.attackHitRegistered || f1.state === 'hit')) {
+                this.tutorialActionDone = true;
+              }
+              if (this.tutorialActionDone) {
+                this.tutorialStepHoldSec += dt;
+                if (this.tutorialStepHoldSec >= 0.40) this.tutorialHandle?.advance(4);
+              }
+            } else if (step === 5) {
+              if (f0.state === 'throw' || (f0.state === 'grab_holding' && f1.state === 'grabbed')) {
+                this.tutorialActionDone = true;
+              }
+              if (this.tutorialActionDone) {
+                this.tutorialStepHoldSec += dt;
+                if (this.tutorialStepHoldSec >= 0.48) this.tutorialHandle?.advance(5);
+              }
+            }
+          }
+        }
       }
       snaps = sim.fighterSnaps();
       wins = sim.wins;

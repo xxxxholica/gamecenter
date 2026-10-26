@@ -514,7 +514,10 @@ export class DriveHUD {
     if (this.bestTimeEl) this.bestTimeEl.textContent = formatted ?? '--:--.---';
   }
 
+  private countdownTimerId = 0;
+
   public showCountdown(step: number | 'GO'): void {
+    window.clearTimeout(this.countdownTimerId);
     this.countdownEl.textContent = String(step);
     this.countdownEl.style.display = 'block';
 
@@ -524,7 +527,7 @@ export class DriveHUD {
 
     if (step === 'GO') {
       this.countdownEl.classList.add('go');
-      window.setTimeout(() => {
+      this.countdownTimerId = window.setTimeout(() => {
         this.hideCountdown();
       }, 900);
     } else {
@@ -533,7 +536,9 @@ export class DriveHUD {
   }
 
   public hideCountdown(): void {
+    window.clearTimeout(this.countdownTimerId);
     this.countdownEl.style.display = 'none';
+    this.countdownEl.classList.remove('go');
   }
 
   // ---- 区間タイム(タイマーの下に常時表示): 通過した区間は確定タイムと基準との差、今の区間は経過時間 ----
@@ -759,6 +764,14 @@ export class DriveHUD {
   /** ゴールのスローモーションの間: 走行中の表示(速度計・ミニマップ)を消して、映像だけを見せる */
   public setFinishing(on: boolean): void {
     this.container.classList.toggle('finishing', on);
+  }
+
+  public setGameplayHUDVisible(visible: boolean): void {
+    const d = visible ? '' : 'none';
+    for (const sel of ['.hud-minimap-arcade', '#hud-timer-arcade', '#hud-band', '#hud-drift']) {
+      const el = this.container.querySelector<HTMLElement>(sel);
+      if (el) el.style.display = d;
+    }
   }
 
   public hideFinishStamp(): void {
