@@ -3,6 +3,8 @@
 // プレイ中のHUDはそのまま表示し、中央に「四角ドット(外枠なし)＋ドット風操作ウィンドウ」、下部中央に「チュートリアルをスキップ」を表示する。
 
 import { buttonIconHtml, initInputModeTracker } from './arcadeGuide';
+import { refreshLeaderboardRunTicket } from './arcadeLeaderboard';
+import { escapeHtml } from './arcadeLeaderboardCore';
 import { readGamepads } from './gamepadFrame';
 
 export interface ArcadeTutorialStep {
@@ -450,14 +452,15 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
     });
 
     const hasButton = step.indices.length > 0 || !!step.keyLabel;
+    const safeKeyLabel = step.keyLabel ? escapeHtml(step.keyLabel) : undefined;
     const badgeHtml =
-      step.indices.length === 0 && step.keyLabel
-        ? `<span class="agc-inline"><span class="agc-btn agc-key">${step.keyLabel}</span></span>`
-        : buttonIconHtml(step.indices, step.keyLabel);
+      step.indices.length === 0 && safeKeyLabel
+        ? `<span class="agc-inline"><span class="agc-btn agc-key">${safeKeyLabel}</span></span>`
+        : buttonIconHtml(step.indices, safeKeyLabel);
     stage.innerHTML = `
       <div class="atut-card${cleared ? ' is-cleared' : ''}">
-        ${hasButton ? `${badgeHtml}<span class="atut-mid">${step.midText ?? 'を押すと'}</span>` : ''}
-        <span class="atut-label">${step.label}</span>
+        ${hasButton ? `${badgeHtml}<span class="atut-mid">${escapeHtml(step.midText ?? 'を押すと')}</span>` : ''}
+        <span class="atut-label">${escapeHtml(step.label)}</span>
       </div>
     `;
     if (!cleared) {
@@ -505,6 +508,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
     if (skipped) {
       playTone(660, 60);
       cleanup();
+      refreshLeaderboardRunTicket();
       options.onComplete(true);
     } else {
       dotEls.forEach((dot) => {
@@ -521,6 +525,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
       playTone(1568.0, 220, 180);
       stepTimer = window.setTimeout(() => {
         cleanup();
+        refreshLeaderboardRunTicket();
         options.onComplete(false);
       }, TUTORIAL_DONE_HOLD_MS);
     }

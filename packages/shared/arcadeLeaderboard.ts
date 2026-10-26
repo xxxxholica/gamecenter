@@ -252,6 +252,12 @@ export function prepareLeaderboardRun(slug: string): Promise<void> {
   return runTicket.promise.then(() => {});
 }
 
+/** チュートリアル完了時など、実プレイ開始の瞬間にチケットの計測開始時刻を取り直す */
+export function refreshLeaderboardRunTicket(): void {
+  if (!runTicket) return;
+  void beginLeaderboardRun(runTicket.slug);
+}
+
 // ゲームのページ(/games/<slug>/)として開かれた時だけ、自動でチケットを取る(ハブ・テストでは何もしない)。
 if (typeof window !== 'undefined' && typeof window.location?.pathname === 'string') {
   const m = /\/games\/([\w-]+)\/?/.exec(window.location.pathname);
