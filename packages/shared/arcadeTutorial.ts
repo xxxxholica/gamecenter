@@ -2,7 +2,7 @@
 // 時間や敵を止めた状態で実際に自機を動かして基本操作を1つずつ順番に覚えるアクティブラーニング・チュートリアル。
 // プレイ中のHUDはそのまま表示し、中央に「四角ドット(外枠なし)＋ドット風操作ウィンドウ」、下部中央に「チュートリアルをスキップ」を表示する。
 
-import { buttonIconHtml, initInputModeTracker } from './arcadeGuide';
+import { buttonIconHtml, initInputModeTracker, renderKeyboardKeysHtml } from './arcadeGuide';
 import { refreshLeaderboardRunTicket } from './arcadeLeaderboard';
 import { escapeHtml } from './arcadeLeaderboardCore';
 import { readGamepads } from './gamepadFrame';
@@ -118,8 +118,9 @@ function injectStyle(): void {
       align-items: center;
       justify-content: center;
       gap: 20px;
-      min-width: min(94vw, 760px);
+      min-width: var(--atut-card-min-w, min(94vw, 920px));
       max-width: 96vw;
+      min-height: var(--atut-card-min-h, 124px);
       padding: 28px 40px;
       box-sizing: border-box;
       border-radius: 0 !important;
@@ -131,6 +132,11 @@ function injectStyle(): void {
         12px 12px 0 #000;
       image-rendering: pixelated;
       animation: atutPixelIn 0.08s steps(2, end) both;
+    }
+    .atut-card.is-measuring {
+      min-width: min(94vw, 840px) !important;
+      min-height: 124px !important;
+      animation: none !important;
     }
     /* 四隅のドット装飾 */
     .atut-card::before,
@@ -307,6 +313,44 @@ const PRE_HELD_EXTRA_DELAY_MS = 380;
 const STEP_CLEAR_HOLD_MS = 850;
 const TUTORIAL_DONE_HOLD_MS = 1050;
 
+function isLeverOnlyStep(step: ArcadeTutorialStep): boolean {
+  return step.indices.length > 0 && step.indices.every((idx) => idx >= 12 && idx <= 15);
+}
+
+function getLeverFallbackKeyLabel(indices: number[]): string {
+  const keys = indices.map((idx) => {
+    if (idx === 12) return 'W';
+    if (idx === 13) return 'S';
+    if (idx === 14) return 'A';
+    if (idx === 15) return 'D';
+    return '';
+  }).filter(Boolean);
+  return keys.length > 0 ? keys.join(' / ') : 'WASD';
+}
+
+function getPadLeverBadgeLabel(step: ArcadeTutorialStep): string {
+  if (step.keyLabel?.toUpperCase().includes('WASD')) return 'レバー';
+  const hasUp = step.indices.includes(12);
+  const hasDown = step.indices.includes(13);
+  const hasLeft = step.indices.includes(14);
+  const hasRight = step.indices.includes(15);
+  if (step.indices.length === 1) {
+    if (hasUp) return 'レバー上';
+    if (hasDown) return 'レバー下';
+    if (hasLeft) return 'レバー左';
+    if (hasRight) return 'レバー右';
+  }
+  if (hasLeft && hasRight && !hasUp && !hasDown) return 'レバー左右';
+  if (hasUp && hasDown && !hasLeft && !hasRight) return 'レバー上下';
+  return 'レバー';
+}
+
+function getPadMidText(step: ArcadeTutorialStep): string {
+  if (step.midText) return step.midText;
+  if (!isLeverOnlyStep(step)) return 'を押すと';
+  return getPadLeverBadgeLabel(step) === 'レバー' ? 'を傾けると' : 'に傾けると';
+}
+
 function getStepKeyboardCodes(step: ArcadeTutorialStep): string[] {
   const codes = new Set<string>();
   for (const idx of step.indices) {
@@ -450,6 +494,53 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
     }, delayMs);
   };
 
+  const buildStepInnerHtml = (step: ArcadeTutorialStep): string => {
+    const hasButton = step.indices.length > 0 || !!step.keyLabel;
+    const safeKeyLabel = step.keyLabel ? escapeHtml(step.keyLabel) : undefined;
+    const leverOnly = isLeverOnlyStep(step);
+    const badgeHtml =
+      step.indices.length === 0 && safeKeyLabel
+        ? `<span class="agc-inline"><span class="agc-btn agc-key">${safeKeyLabel}</span></span>`
+        : leverOnly
+          ? `<span class="agc-inline agc-pad-only"><span class="agc-btn">${escapeHtml(getPadLeverBadgeLabel(step))}</span></span><span class="agc-inline agc-kbd-only">${renderKeyboardKeysHtml(safeKeyLabel ?? getLeverFallbackKeyLabel(step.indices), true)}</span>`
+          : buttonIconHtml(step.indices, safeKeyLabel);
+    const kbdMidText = escapeHtml(step.midText ?? 'を押すと');
+    const padMidText = escapeHtml(getPadMidText(step));
+    const midHtml =
+      kbdMidText === padMidText
+        ? `<span class="atut-mid">${kbdMidText}</span>`
+        : `<span class="atut-mid agc-pad-only">${padMidText}</span><span class="atut-mid agc-kbd-only">${kbdMidText}</span>`;
+    return `
+      ${hasButton ? `${badgeHtml}${midHtml}` : ''}
+      <span class="atut-label">${escapeHtml(step.label)}</span>
+    `;
+  };
+
+  const syncCardDimensions = (): void => {
+    if (paused || !root.isConnected) return;
+    const probeWrap = document.createElement('div');
+    probeWrap.style.cssText =
+      'position:absolute;visibility:hidden;pointer-events:none;left:-9999px;top:0;display:flex;flex-direction:column;align-items:flex-start;';
+    const doneStep: ArcadeTutorialStep = { indices: [], label: 'チュートリアルが完了' };
+    for (const s of [...allSteps, doneStep]) {
+      const card = document.createElement('div');
+      card.className = 'atut-card is-measuring';
+      card.innerHTML = buildStepInnerHtml(s);
+      probeWrap.appendChild(card);
+    }
+    root.appendChild(probeWrap);
+    let maxW = 840;
+    let maxH = 124;
+    for (const el of Array.from(probeWrap.children)) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > maxW) maxW = Math.ceil(rect.width);
+      if (rect.height > maxH) maxH = Math.ceil(rect.height);
+    }
+    probeWrap.remove();
+    root.style.setProperty('--atut-card-min-w', `min(96vw, ${maxW}px)`);
+    root.style.setProperty('--atut-card-min-h', `${maxH}px`);
+  };
+
   const renderCurrentStep = (cleared = false): void => {
     const step = allSteps[currentIdx];
     if (!step) return;
@@ -459,16 +550,9 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
       dot.classList.toggle('is-current', idx === currentIdx && !cleared);
     });
 
-    const hasButton = step.indices.length > 0 || !!step.keyLabel;
-    const safeKeyLabel = step.keyLabel ? escapeHtml(step.keyLabel) : undefined;
-    const badgeHtml =
-      step.indices.length === 0 && safeKeyLabel
-        ? `<span class="agc-inline"><span class="agc-btn agc-key">${safeKeyLabel}</span></span>`
-        : buttonIconHtml(step.indices, safeKeyLabel);
     stage.innerHTML = `
       <div class="atut-card${cleared ? ' is-cleared' : ''}">
-        ${hasButton ? `${badgeHtml}<span class="atut-mid">${escapeHtml(step.midText ?? 'を押すと')}</span>` : ''}
-        <span class="atut-label">${escapeHtml(step.label)}</span>
+        ${buildStepInnerHtml(step)}
       </div>
     `;
     if (!cleared) {
@@ -486,7 +570,14 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
     }
   };
 
+  syncCardDimensions();
   renderCurrentStep(false);
+
+  const onResizeOrInputMode = (): void => {
+    syncCardDimensions();
+  };
+  window.addEventListener('resize', onResizeOrInputMode);
+  window.addEventListener('gamecenter:inputmode', onResizeOrInputMode);
 
   const cleanup = (): void => {
     if (rafId) cancelAnimationFrame(rafId);
@@ -496,6 +587,8 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('keyup', onKeyUp, true);
     window.removeEventListener('blur', onBlur);
+    window.removeEventListener('resize', onResizeOrInputMode);
+    window.removeEventListener('gamecenter:inputmode', onResizeOrInputMode);
     heldCodes.clear();
     document.body?.classList.remove('is-arcade-tutorial-active');
     root.remove();
@@ -675,6 +768,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
       if (!finished) {
         root.style.display = '';
         document.body?.classList.add('is-arcade-tutorial-active');
+        syncCardDimensions();
         if (stepTimerCallback && remainingStepTimerMs > 0) {
           scheduleStepTimer(remainingStepTimerMs, stepTimerCallback);
         }

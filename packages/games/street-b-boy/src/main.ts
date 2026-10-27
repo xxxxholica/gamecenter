@@ -10,7 +10,7 @@ import { INITIAL_LIVES, stageClearBonus } from './world/rewards';
 import { CollisionDebugOverlay, DebugShape } from './engine/collision';
 import { HudManager } from './ui/hud';
 import { CassetteTape, StageBlock, StreetObstacle } from './entities/objects';
-import { SecurityBot, SurveillanceDrone } from './entities/enemies';
+import { EnemyProjectile, SecurityBot, SurveillanceDrone } from './entities/enemies';
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { mountArcadeGuide, buttonIconHtml } from '../../../shared/arcadeGuide';
@@ -115,6 +115,7 @@ class StreetBBoyGame {
   private tutorialStepSpawned = -1;
   private tutorialBox: StreetObstacle | null = null;
   private tutorialEnemy: SecurityBot | null = null;
+  private tutorialProj: EnemyProjectile | null = null;
   private tutorialHandle: ArcadeTutorialHandle | null = null;
   /** ステージ開始前の 3・2・1・GO! の間は true(時間が進まず、操作できない) */
   private countingDown = false;
@@ -646,6 +647,28 @@ class StreetBBoyGame {
       this.scene.remove(this.tutorialEnemy.mesh);
       this.tutorialEnemy = null;
     }
+    if (this.tutorialProj) {
+      this.scene.remove(this.tutorialProj.mesh);
+      this.tutorialProj = null;
+    }
+  }
+
+  private spawnTutorialLaser(): void {
+    if (!this.player || !this.tutorialEnemy) return;
+    if (this.tutorialProj) {
+      this.scene.remove(this.tutorialProj.mesh);
+      this.tutorialProj = null;
+    }
+    const dirToPlayer = this.player.x < this.tutorialEnemy.x ? -1 : 1;
+    this.tutorialEnemy.mesh.rotation.y = dirToPlayer > 0 ? 0 : Math.PI;
+    this.tutorialProj = new EnemyProjectile(
+      this.tutorialEnemy.x + dirToPlayer * 0.7,
+      0.68,
+      dirToPlayer * 6.2,
+      0
+    );
+    this.scene.add(this.tutorialProj.mesh);
+    this.sound.playShoot();
   }
 
   private spawnTutorialStepProps(stepIdx: number): void {
@@ -662,6 +685,17 @@ class StreetBBoyGame {
       this.tutorialBox = new StreetObstacle(boxX, 0, 'cardboard');
       this.tutorialEnemy = new SecurityBot(enemyX, 0, 0);
       this.scene.add(this.tutorialBox.mesh, this.tutorialEnemy.mesh);
+    } else if (stepIdx === 4) {
+      this.player.spinCooldown = 0;
+      // 少し離れた位置に敵を配置し、飛んでくるレーザーをスピンで跳ね返して倒す体験
+      const px = this.player.x;
+      const dir = px > 1.8 ? -1 : 1;
+      this.player.isFacingRight = dir === 1;
+      const enemyX = px + dir * 3.8;
+      this.tutorialEnemy = new SecurityBot(enemyX, 0, 0);
+      this.tutorialEnemy.mesh.rotation.y = dir === 1 ? Math.PI : 0;
+      this.scene.add(this.tutorialEnemy.mesh);
+      this.spawnTutorialLaser();
     }
   }
 
@@ -683,7 +717,8 @@ class StreetBBoyGame {
         { indices: [15], keyLabel: 'D', label: '右に動く' },
         { indices: [14], keyLabel: 'A', label: '左に動く' },
         { indices: [0], keyLabel: 'Space', label: 'ジャンプ' },
-        { indices: [2], keyLabel: 'X', label: 'スピン攻撃で敵と箱を壊す' },
+        { indices: [2], keyLabel: 'X', label: '敵と箱を壊す' },
+        { indices: [2], keyLabel: 'X', label: 'レーザーを跳ね返す' },
       ],
       onComplete: () => {
         this.inTutorial = false;
@@ -954,10 +989,12 @@ class StreetBBoyGame {
     }
 
     const allowJump = started && (stepIdx !== 2 || (stepReady && !this.tutorialActionDone));
-    const allowSpin = started && (stepIdx !== 3 || (stepReady && !this.tutorialActionDone));
+    const allowSpin = started && ((stepIdx !== 3 && stepIdx !== 4) || (stepReady && !this.tutorialActionDone));
     const activeInput: InputState = started
       ? {
           ...input,
+          left: stepIdx === 4 ? false : input.left,
+          right: stepIdx === 4 ? false : input.right,
           jump: allowJump ? input.jump : false,
           jumpPressed: allowJump ? input.jumpPressed : false,
           jumpReleased: allowJump ? input.jumpReleased : false,
@@ -1017,7 +1054,7 @@ class StreetBBoyGame {
 
     if (this.tutorialEnemy) {
       if (!this.tutorialEnemy.isDead) {
-        if (spinAttackBox && this.checkAABB(spinAttackBox, this.tutorialEnemy.getAABB())) {
+        if (stepIdx === 3 && spinAttackBox && this.checkAABB(spinAttackBox, this.tutorialEnemy.getAABB())) {
           this.tutorialEnemy.defeat(this.player.isFacingRight ? 8 : -8, 10);
           this.sound.playSmash();
           this.stage.particleSystem.spawnSparkles(this.tutorialEnemy.x, this.tutorialEnemy.y + 0.5, 12, 0xff1a1a);
@@ -1025,6 +1062,49 @@ class StreetBBoyGame {
         }
       } else {
         this.tutorialEnemy.update(dt, this.player.x);
+      }
+    }
+
+    if (stepIdx === 4 && this.tutorialProj) {
+      this.tutorialProj.update(dt);
+      const projBox = this.tutorialProj.getAABB();
+      if (!this.tutorialProj.isDeflected) {
+        // スピン攻撃中（またはレーザー接近中にスピン入力）でレーザーを跳ね返す
+        const deflectBox = { x: pBox.x - 1.6, y: pBox.y - 0.2, w: pBox.w + 3.2, h: pBox.h + 0.6 };
+        if (this.player.isSpinning && (this.checkAABB(deflectBox, projBox) || activeInput.spinPressed)) {
+          const dirToEnemy = this.tutorialEnemy && this.tutorialEnemy.x < this.player.x ? -1 : 1;
+          if (!this.checkAABB(deflectBox, projBox)) {
+            this.tutorialProj.x = this.player.x + dirToEnemy * 0.85;
+            this.tutorialProj.mesh.position.x = this.tutorialProj.x;
+          }
+          this.tutorialProj.deflect();
+          this.tutorialProj.vx = dirToEnemy * 13.5;
+          this.sound.playDeflect();
+          this.stage.particleSystem.spawnSparkles(this.tutorialProj.x, this.tutorialProj.y, 12, 0x00f0ff);
+          this.triggerCameraShake(0.2, 0.15);
+        } else if (
+          this.tutorialProj.isDead ||
+          this.checkAABB(pBox, projBox) ||
+          Math.abs(this.tutorialProj.x - this.player.x) > 5.2
+        ) {
+          // チュートリアル中は被弾してもミスにせず、すぐ次のレーザーを発射して何度でも練習できるようにする
+          this.stage.particleSystem.spawnSparks(this.tutorialProj.x, this.tutorialProj.y, 5);
+          this.spawnTutorialLaser();
+        }
+      } else if (this.tutorialEnemy && !this.tutorialEnemy.isDead) {
+        if (
+          this.checkAABB(projBox, this.tutorialEnemy.getAABB()) ||
+          Math.abs(this.tutorialProj.x - this.tutorialEnemy.x) < 0.7
+        ) {
+          const launchDir = this.tutorialProj.vx >= 0 ? 1 : -1;
+          this.tutorialEnemy.defeat(launchDir * 8, 9);
+          this.scene.remove(this.tutorialProj.mesh);
+          this.tutorialProj = null;
+          this.sound.playSmash();
+          this.stage.particleSystem.spawnSparkles(this.tutorialEnemy.x, this.tutorialEnemy.y + 0.5, 14, 0x00f0ff);
+          this.triggerCameraShake(0.22, 0.2);
+          this.tutorialActionDone = true;
+        }
       }
     }
 
@@ -1078,6 +1158,13 @@ class StreetBBoyGame {
         this.tutorialActionDelay += dt;
         if (this.tutorialActionDelay >= 0.42) {
           this.tutorialHandle?.advance(3);
+        }
+      }
+    } else if (stepIdx === 4) {
+      if (this.tutorialActionDone) {
+        this.tutorialActionDelay += dt;
+        if (this.tutorialActionDelay >= 0.45) {
+          this.tutorialHandle?.advance(4);
         }
       }
     }
