@@ -16,7 +16,9 @@ export interface PrizeBreakdownEntry {
 }
 
 interface PhysicsItem {
-  mesh: THREE.Group;
+  mesh: THREE.Group | null;
+  sourceMesh: THREE.Group;
+  scale: number;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   rot: THREE.Euler;
@@ -75,8 +77,16 @@ export class ResultsPrizePileManager {
     this.sparkleMats = [0xffd700, 0xff3b30, 0x00e5ff, 0xffffff, 0xff9500].map((color) => new THREE.MeshBasicMaterial({ color }));
   }
 
-  /** 結果画面の照明を、強さ0で先にシーンへ置く(ゲーム開始時に1度だけ呼ぶ)。結果画面で光を足すと、全ての材質のシェーダーが作り直されて、画面が止まる */
+  /** 結果画面の照明と商品台を、先にシーンへ置く(ゲーム開始時に1度だけ呼ぶ)。結果画面で光や材質を足すとシェーダーやバッファの初期化で画面が止まる */
   public prepareLights(scene: THREE.Scene): void {
+    if (!this.deskMesh) {
+      this.deskMesh = this.buildDeskTable();
+      this.deskMesh.visible = false;
+      this.containerGroup.add(this.deskMesh);
+    }
+    if (!this.containerGroup.parent) {
+      scene.add(this.containerGroup);
+    }
     if (this.lightGroup) return;
     this.lightGroup = new THREE.Group();
     this.spotlight = new THREE.SpotLight(0xffeedd, 0, 7.0, Math.PI / 2.8, 0.5, 1.1);
@@ -87,6 +97,15 @@ export class ResultsPrizePileManager {
     this.lanternFill.position.set(0, 2.4, 1.2);
     this.lightGroup.add(this.spotlight, this.spotlight.target, this.ambientFill, this.lanternFill);
     scene.add(this.lightGroup);
+  }
+
+  /** シェーダ事前コンパイル中に商品台も対象に含めるためのヘルパー */
+  public duringCompile(): () => void {
+    const prevVisible = this.deskMesh ? this.deskMesh.visible : false;
+    if (this.deskMesh) this.deskMesh.visible = true;
+    return () => {
+      if (this.deskMesh) this.deskMesh.visible = prevVisible;
+    };
   }
 
   private setLights(on: boolean): void {
@@ -178,16 +197,11 @@ export class ResultsPrizePileManager {
     this.cleanup(scene);
     this.isActive = true;
     this.timer = 0;
-    this.containerGroup = new THREE.Group();
-    this.containerGroup.position.x = this.offsetX;
-    scene.add(this.containerGroup);
 
-    // 1. Build lightweight Japanese festival display table (商品台 / 赤毛氈) on counter
-    this.deskMesh = this.buildDeskTable();
-    this.containerGroup.add(this.deskMesh);
-
-    // 2・3. 照明(机を狙う暖色のスポットと、背景を明るく保つ補助光)。足さずに、置いてある照明の強さを上げる
+    // 1・2・3. 商品台と照明を先に用意した状態で表示・点灯する(結果画面遷移時のメッシュ生成・クローン集中によるフレーム落ちを防ぐ)
     this.prepareLights(scene);
+    this.containerGroup.position.x = this.offsetX;
+    if (this.deskMesh) this.deskMesh.visible = true;
     if (this.lightGroup) this.lightGroup.position.x = this.offsetX;
     this.setLights(true);
 
@@ -209,18 +223,6 @@ export class ResultsPrizePileManager {
       const sourceMesh = this.findSourceMesh(item.type, prizes, dynamicTargets);
       if (!sourceMesh) return;
 
-      const cloned = sourceMesh.clone(true);
-      cloned.scale.set(scale, scale, scale);
-
-      // Disable any point lights on cloned UFO
-      cloned.traverse((child) => {
-        if (child instanceof THREE.PointLight) {
-          child.intensity = 0;
-        }
-      });
-      cloned.visible = false;
-      this.containerGroup.add(cloned);
-
       const props = this.getItemPhysicsProps(item.type, scale);
 
       // Centered drop spawn position directly above the desk table
@@ -229,14 +231,11 @@ export class ResultsPrizePileManager {
       const spawnY = 2.45 + (index % 4) * 0.09 + Math.random() * 0.12;
       const startPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
 
-      cloned.position.copy(startPos);
-
       const rot = new THREE.Euler(
         Math.random() * Math.PI * 2,
         Math.random() * Math.PI * 2,
         Math.random() * Math.PI * 2
       );
-      cloned.rotation.copy(rot);
 
       const angVel = new THREE.Vector3(
         (Math.random() - 0.5) * 3.5,
@@ -245,7 +244,9 @@ export class ResultsPrizePileManager {
       );
 
       this.items.push({
-        mesh: cloned,
+        mesh: null,
+        sourceMesh,
+        scale,
         pos: startPos,
         vel: new THREE.Vector3(
           (Math.random() - 0.5) * 0.20,
@@ -419,7 +420,18 @@ export class ResultsPrizePileManager {
         if (!item.hasSpawned) {
           if (this.timer >= item.spawnDelay) {
             item.hasSpawned = true;
-            item.mesh.visible = true;
+            const cloned = item.sourceMesh.clone(true);
+            cloned.scale.set(item.scale, item.scale, item.scale);
+            cloned.traverse((child) => {
+              if (child instanceof THREE.PointLight) {
+                child.intensity = 0;
+              }
+            });
+            cloned.position.copy(item.pos);
+            cloned.rotation.copy(item.rot);
+            cloned.visible = true;
+            this.containerGroup.add(cloned);
+            item.mesh = cloned;
           } else {
             continue;
           }
@@ -541,8 +553,10 @@ export class ResultsPrizePileManager {
 
           if (isOutOfSight && item.pos.y < this.DESK_SURFACE_Y + item.radius) {
             item.isDespawned = true;
-            item.mesh.visible = false;
-            this.containerGroup.remove(item.mesh);
+            if (item.mesh) {
+              item.mesh.visible = false;
+              this.containerGroup.remove(item.mesh);
+            }
           }
         }
       }
@@ -634,7 +648,7 @@ export class ResultsPrizePileManager {
 
     // Sync 3D transforms
     for (const item of this.items) {
-      if (item.hasSpawned && !item.isDespawned) {
+      if (item.hasSpawned && !item.isDespawned && item.mesh) {
         item.mesh.position.copy(item.pos);
         item.mesh.rotation.copy(item.rot);
       }
@@ -659,7 +673,7 @@ export class ResultsPrizePileManager {
   }
 
   // Cleanup all 3D meshes and lights when leaving results screen
-  public cleanup(scene: THREE.Scene) {
+  public cleanup(_scene: THREE.Scene) {
     this.isActive = false;
 
     for (const p of this.sparkles) {
@@ -668,12 +682,15 @@ export class ResultsPrizePileManager {
     this.sparkles = [];
     this.setLights(false);
 
+    for (const item of this.items) {
+      if (item.mesh) {
+        this.containerGroup.remove(item.mesh);
+      }
+    }
     this.items = [];
 
-    if (this.containerGroup.parent) {
-      scene.remove(this.containerGroup);
+    if (this.deskMesh) {
+      this.deskMesh.visible = false;
     }
-    this.containerGroup.clear();
-    this.deskMesh = null;
   }
 }

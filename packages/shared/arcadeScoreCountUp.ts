@@ -66,7 +66,8 @@ export function countUpText(el: HTMLElement, finalText: string, options: CountUp
     if (stopped) return;
     const ratio = Math.min(1, Math.max(0, (now - t0 - delay) / duration));
     if (ratio >= 1) return finish();
-    el.textContent = formatProgress(1 - Math.pow(1 - ratio, 3));
+    const next = formatProgress(1 - Math.pow(1 - ratio, 3));
+    if (el.textContent !== next) el.textContent = next;
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);

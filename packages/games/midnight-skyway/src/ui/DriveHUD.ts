@@ -330,6 +330,15 @@ export class DriveHUD {
       this.events.onReturnToTitle();
     });
 
+    const initModalMenu = (modal: HTMLElement, colors: string[]) => {
+      const buttons = this.menuButtons(modal);
+      const items = buttons.map((button, i) => ({ button, color: colors[i] ?? colors[0] }));
+      setupResultMenu(buttons[0]?.parentElement ?? null, items);
+      applyResultMenuFocus(items, 0);
+    };
+    initModalMenu(this.resultModalEl, ['#e2b05e', '#8fd3a6', this.accent]);
+    initModalMenu(this.pauseModalEl, [this.accent]);
+
     // モーダルボタンのマウスホバーとパッドフォーカスを同期
     const bindHoverFocus = (modal: HTMLElement) => {
       const btns = modal.querySelectorAll<HTMLButtonElement>('button');

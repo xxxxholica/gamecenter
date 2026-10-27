@@ -178,6 +178,7 @@ export class Audience {
 
     // タイルをまとめて1つのインスタンスメッシュにする
     this.floorTiles = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), ringMatTatami, this.tileBase.length);
+    this.floorTiles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.floorTiles.receiveShadow = true;
     const m = new THREE.Matrix4();
     this.tileBase.forEach((tb, i) => {
@@ -220,7 +221,6 @@ export class Audience {
     roofGeo.scale(1.0, 1.0, 1.25);
     const roofMesh = new THREE.Mesh(roofGeo, roofMat);
     roofMesh.position.y = roofHeight * 0.5;
-    roofMesh.castShadow = true;
     yaneGroup.add(roofMesh);
 
     const woodGeos: THREE.BufferGeometry[] = [];
@@ -424,10 +424,10 @@ export class Audience {
     const torsoGeo = new THREE.BoxGeometry(0.44, 0.52, 0.32);
     torsoGeo.translate(0, 0.42, -0.02);
     // 4. 頭部（顔）
-    const headGeo = new THREE.SphereGeometry(0.16, 12, 10);
+    const headGeo = new THREE.SphereGeometry(0.16, 8, 6);
     headGeo.translate(0, 0.78, 0.02);
     // 5. 髪（ヘアスタイル）
-    const hairGeo = new THREE.SphereGeometry(0.165, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+    const hairGeo = new THREE.SphereGeometry(0.165, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55);
     hairGeo.translate(0, 0.79, 0.02);
 
     // マテリアル
@@ -443,11 +443,9 @@ export class Audience {
     this.torsoInstanced = new THREE.InstancedMesh(torsoGeo, torsoMat, this.totalCount);
     this.headInstanced = new THREE.InstancedMesh(headGeo, headMat, this.totalCount);
     this.hairInstanced = new THREE.InstancedMesh(hairGeo, hairMat, this.totalCount);
-
-    this.zabutonInstanced.receiveShadow = true;
-    this.legsInstanced.castShadow = true;
-    this.torsoInstanced.castShadow = true;
-    this.headInstanced.castShadow = true;
+    for (const im of [this.zabutonInstanced, this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced]) {
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    }
 
     // カラーパレット
     // 服の色（画像にあるような多彩で生き生きとした客席の服色）
@@ -689,11 +687,9 @@ export class Audience {
     }
 
     if (updated) {
-      // 更新した区画だけをGPUへ送る
       for (const mesh of [this.torsoInstanced, this.headInstanced, this.hairInstanced]) {
         const attr = mesh.instanceMatrix;
         attr.clearUpdateRanges();
-        attr.addUpdateRange(start * 16, (end - start) * 16);
         attr.needsUpdate = true;
       }
     }
@@ -954,6 +950,7 @@ export class Audience {
     if (this.flyers.length === 0) return;
 
     const personMeshes = [this.legsInstanced, this.torsoInstanced, this.headInstanced, this.hairInstanced];
+    const dirtyMeshes = new Set<THREE.InstancedMesh>();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
 
@@ -972,8 +969,7 @@ export class Audience {
           f.part === 'person' ? personMeshes : f.part === 'tile' ? [this.floorTiles] : [this.zabutonInstanced];
         for (const m of targets) {
           m.setMatrixAt(f.index, this.zeroMatrix);
-          m.instanceMatrix.addUpdateRange(f.index * 16, 16);
-          m.instanceMatrix.needsUpdate = true;
+          dirtyMeshes.add(m);
         }
         this.flyers.splice(k, 1);
         continue;
@@ -986,12 +982,15 @@ export class Audience {
       this.flyMatrix.copy(this.flyDummy.matrix);
 
       const targets =
-          f.part === 'person' ? personMeshes : f.part === 'tile' ? [this.floorTiles] : [this.zabutonInstanced];
+        f.part === 'person' ? personMeshes : f.part === 'tile' ? [this.floorTiles] : [this.zabutonInstanced];
       for (const m of targets) {
         m.setMatrixAt(f.index, this.flyMatrix);
-        m.instanceMatrix.addUpdateRange(f.index * 16, 16);
-        m.instanceMatrix.needsUpdate = true;
+        dirtyMeshes.add(m);
       }
+    }
+    for (const m of dirtyMeshes) {
+      m.instanceMatrix.clearUpdateRanges();
+      m.instanceMatrix.needsUpdate = true;
     }
   }
 }

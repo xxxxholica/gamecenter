@@ -255,7 +255,7 @@ class ArcadeCorkShooter {
    * 読み込みから約 1 秒後の前の画面の片付け)が済み、画面が落ち着いてから知らせる(waitFramesSettled)。
    */
   private async startRendering(): Promise<void> {
-    await compileInParallel(this.renderer, this.scene, this.camera, null);
+    await compileInParallel(this.renderer, this.scene, this.camera, null, () => this.prizePileManager.duringCompile());
     this.renderingReady = true;
     this.animate(0);
     if (this.state === 'title') {
@@ -589,10 +589,10 @@ class ArcadeCorkShooter {
     this.prizePileManager.startPile(this.scene, this.prizes, this.dynamicTargets);
 
     const breakdown = this.prizePileManager.getDefeatedBreakdown();
-    this.hud.setMode('results');
     this.hud.renderResults(this.score, this.totalDefeatedCount, isNewRecord, breakdown);
+    this.updateResultFocus();
+    this.hud.setMode('results');
     this.hud.updateCrosshair(0, 0, false);
-    window.setTimeout(() => this.updateResultFocus(), 60);
   }
 
   private resetAllPrizes() {

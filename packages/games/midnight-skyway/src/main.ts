@@ -195,6 +195,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Preload GLTF binary models before scene initialization
   await replayBarrier('boot-load', preloadGlbCars());   // (操作のリプレイ: 読み込みが終わった所を、記録と揃える)
+  if (typeof document !== 'undefined' && document.fonts?.load) {
+    await document.fonts.load("400 96px 'Dela Gothic One'", '0123456789:.').catch(() => {});
+  }
 
   // 起動の各段階(ガレージ・車・走行シーン・マップ・シェーダ準備)を続けて行うと、1 回で 1 秒以上画面が止まる
   // (Firefox: 約1.2秒。Windows の Chrome: ガレージ〜マップ作りまでの 1 回だけで 0.8〜1.35 秒)。

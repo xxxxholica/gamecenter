@@ -1039,11 +1039,9 @@ html, body {
   -webkit-text-stroke: 2.5px rgba(255, 255, 255, 0.95);
   text-shadow: none;
   transform: skewX(-9deg);
-  filter:
-    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.88))
-    drop-shadow(0 0 18px rgba(var(--hud-accent-rgb, 82, 217, 255), 0.55));
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.88));
   animation: timeColorWave 2.2s linear infinite;
-  will-change: transform, opacity, background-position;
+  will-change: transform, opacity;
 }
 @keyframes timeColorWave {
   from { background-position: 0 0; }
@@ -1185,7 +1183,6 @@ html, body {
   -webkit-text-stroke: 4px rgba(0, 0, 0, 0.92);
   paint-order: stroke fill;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.85));
 }
 .res-rank .ri-txt { font-family: var(--hud-sans); font-size: 19px; }
 

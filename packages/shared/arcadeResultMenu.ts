@@ -62,6 +62,9 @@ function injectStyle(): void {
       box-shadow: 0 0 18px var(--rm-color, #ffe600) !important;
       font-weight: 900 !important;
     }
+    .rm-col > .rm-btn:not(.rm-active) > .rm-icon {
+      display: none !important;
+    }
     /* 画面が低いときは余白を削って収める */
     @media (max-height: 520px) {
       .rm-col { gap: 4px !important; }
@@ -69,6 +72,10 @@ function injectStyle(): void {
     }
   `;
   document.head.appendChild(style);
+}
+
+if (typeof document !== 'undefined' && document.head) {
+  injectStyle();
 }
 
 export interface ResultMenuItem {
@@ -86,6 +93,12 @@ export function setupResultMenu(container: HTMLElement | null, items: ResultMenu
     button.classList.add('rm-btn');
     button.style.setProperty('--rm-color', color);
     button.setAttribute('tabindex', '-1');
+    if (!button.querySelector(':scope > .rm-icon')) {
+      const span = document.createElement('span');
+      span.className = 'rm-icon';
+      span.innerHTML = buttonIconHtml([0]);
+      button.insertBefore(span, button.firstChild);
+    }
   }
 }
 
@@ -95,14 +108,11 @@ export function applyResultMenuFocus(items: ResultMenuItem[], focusIndex: number
     if (!button) return;
     const focused = i === focusIndex;
     button.classList.toggle('rm-active', focused);
-    const icon = button.querySelector(':scope > .rm-icon');
-    if (focused && !icon) {
+    if (focused && !button.querySelector(':scope > .rm-icon')) {
       const span = document.createElement('span');
       span.className = 'rm-icon';
       span.innerHTML = buttonIconHtml([0]);
       button.insertBefore(span, button.firstChild);
-    } else if (!focused && icon) {
-      icon.remove();
     }
   });
 }
