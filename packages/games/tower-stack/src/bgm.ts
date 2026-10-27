@@ -1,6 +1,7 @@
 // プレイ中・メニュー中のBGM(Web Audio で作るので、音源ファイルは要らない)。
 // 4小節(C - Am - F - G)を繰り返す。メニューは静かなアルペジオとパッド、プレイ中はそこにドラムとメロディが加わる。
-import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+import { createWhiteNoiseBuffer, syncStepSequencer } from '../../../shared/audioUtils';
+import { hasServerClockSync, sharedServerNow } from '../../../shared/online/onlineStatus';
 
 export type BgmScene = 'menu' | 'play';
 
@@ -33,6 +34,8 @@ export class Bgm {
   private scene: BgmScene = 'menu';
   private nextTime = 0;
   private step = 0;
+  private anchorMs = 0;
+  public lastSyncDriftSec = 0;
 
   constructor(private readonly getContext: () => AudioContext | null) {}
 
@@ -49,8 +52,17 @@ export class Bgm {
     this.master = ctx.createGain();
     this.master.gain.value = MASTER;
     this.master.connect(ctx.destination);
-    this.nextTime = ctx.currentTime + 0.1;
+    this.nextTime = hasServerClockSync() ? 0 : ctx.currentTime + 0.1;
     if (ctx.state === 'suspended') void ctx.resume();
+  }
+
+  /** 拍・小節の基準となるサーバー時刻(ms)を設定する(0で待機画面共通クロック、match.startAtで試合開始時に小節頭を揃える) */
+  setAnchor(anchorMs: number): void {
+    if (!Number.isFinite(anchorMs)) return;
+    if (this.anchorMs !== anchorMs) {
+      this.anchorMs = anchorMs;
+      this.nextTime = 0;
+    }
   }
 
   setScene(scene: BgmScene): void {
@@ -61,8 +73,24 @@ export class Bgm {
   tick(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (ctx.state !== 'running') { this.nextTime = ctx.currentTime + 0.1; return; }
-    if (this.nextTime < ctx.currentTime) this.nextTime = ctx.currentTime + 0.05;
+    if (ctx.state !== 'running') { this.nextTime = hasServerClockSync() ? 0 : ctx.currentTime + 0.1; return; }
+    if (hasServerClockSync()) {
+      const sync = syncStepSequencer(
+        ctx.currentTime,
+        this.nextTime,
+        this.step,
+        sharedServerNow(),
+        STEP,
+        64,
+        this.anchorMs,
+        0.04,
+      );
+      this.step = sync.step;
+      this.nextTime = sync.nextTime;
+      this.lastSyncDriftSec = sync.driftSec;
+    } else if (this.nextTime < ctx.currentTime) {
+      this.nextTime = ctx.currentTime + 0.05;
+    }
     while (this.nextTime < ctx.currentTime + LOOKAHEAD) {
       this.play(this.step, this.nextTime);
       this.step = (this.step + 1) % 64;

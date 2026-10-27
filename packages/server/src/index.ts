@@ -82,7 +82,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
     for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
-    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }).end(JSON.stringify({ games }));
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }).end(JSON.stringify({ now: Date.now(), games }));
     return;
   }
   res.writeHead(404).end();

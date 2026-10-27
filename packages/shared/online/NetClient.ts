@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type { CoreClientMsg, CoreServerMsg } from './core';
+import { recordServerClockSample, sharedServerNow } from './onlineStatus';
 
 const HEARTBEAT_MS = 10000;
 /** 接続直後に短い間隔で打つ回数。 */
@@ -39,9 +40,9 @@ export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: s
     this.game = game;
   }
 
-  /** サーバー時刻(ms)。 */
+  /** サーバー時刻(ms)。WebSocket の hello 応答前は /online-status で合わせた共有時計を使う。 */
   public serverNow(): number {
-    return Date.now() + this.offset;
+    return this.syncSamples.length > 0 ? Date.now() + this.offset : sharedServerNow();
   }
 
   /** 接続が切れた時(コード付き)。戻り値で解除。 */
@@ -103,10 +104,12 @@ export class NetClient<S extends { t: string } = CoreServerMsg, C extends { t: s
   private dispatch(msg: S | CoreServerMsg): void {
     const m = msg as CoreServerMsg;
     if (m.t === 'hello') {
-      const rtt = Date.now() - m.c;
-      this.syncSamples.push({ rtt, offset: m.now + rtt / 2 - Date.now() });
+      const now = Date.now();
+      const rtt = now - m.c;
+      this.syncSamples.push({ rtt, offset: m.now + rtt / 2 - now });
       if (this.syncSamples.length > SYNC_WINDOW) this.syncSamples.shift();
       this.offset = this.syncSamples.reduce((best, x) => (x.rtt < best.rtt ? x : best)).offset;
+      recordServerClockSample(rtt, m.now, now);
       this.open = m.open;
     } else if (m.t === 'status') {
       this.open = m.open;

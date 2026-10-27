@@ -1767,6 +1767,7 @@ function onModeSelected(id: string): void {
 
 function enterOnlineWait(): void {
   state = 'menu';
+  bgm.setAnchor(0);
   wireOnline();
   if (!waitScreen) {
     waitScreen = new WaitScreen(net, {
@@ -1797,6 +1798,7 @@ function wireOnline(): void {
   net.on('go', (m) => {
     if (!match) return;
     match.startAt = m.startAt;
+    bgm.setAnchor(m.startAt);
   });
   net.on('states', (m) => {
     if (!match) return;
@@ -1947,6 +1949,7 @@ function retryOnline(): void {
 
 /** オンラインの途中だった場合の片付け。ひとりで遊んでいるときは何も起きない */
 function leaveOnline(): void {
+  bgm.setAnchor(0);
   waitScreen?.hide();
   rivalStages.clear();
   match = null;
@@ -2636,7 +2639,7 @@ function frame(now: number): void {
   stateTime += dt;
   const inp = benchSolo && state === 'playing' ? demoInput(dt) : readInput();
   if (inp.left || inp.right || inp.up || inp.down || inp.rotate || inp.item || inp.confirm || inp.cancel) bgm.unlock(); // アケコンの操作も、最初の操作として扱う
-  bgm.setScene(state === 'playing' && !demoActive ? 'play' : 'menu');
+  bgm.setScene(state === 'playing' && !demoActive && (mode !== 'online' || !!match?.started) ? 'play' : 'menu');
   bgm.tick();
 
   if (state === 'playing') {

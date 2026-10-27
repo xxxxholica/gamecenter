@@ -425,7 +425,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const goTime = goAt + GO_COUNTDOWN_MS;
     online.goTime = goTime;
     // BGM: 部屋の乱数の種で全員が同じ曲を選び、カウントダウンの開始(goAt)を曲の頭にそろえる
-    bgm.playSynced(online.seed, performance.now() + (goAt - net.serverNow()));
+    bgm.playSynced(online.seed, performance.now() + (goAt - net.serverNow()), goAt, () => net.serverNow());
     timeAttack.startCountdownSynced(goTime - net.serverNow(), () => goTime - net.serverNow());
   };
 
@@ -1155,8 +1155,12 @@ window.addEventListener('DOMContentLoaded', async () => {
       const seq = ++raceStartSeq;
       pauseAfterLoading = false;
       stopTitleCarCycle();
-      if (online) bgm.stop();                 // 対戦は、全員の出走に合わせて、同じ曲を同じ位置から流す(tryStartOnlineCountdown)
-      else bgm.play('race', true);
+      if (online) {
+        bgm.stop();                 // 対戦は、全員の出走に合わせて、同じ曲を同じ位置から流す(tryStartOnlineCountdown)
+        bgm.preloadSynced(online.seed);
+      } else {
+        bgm.play('race', true);
+      }
       lobby.hide();
       titleScreen.hide();
       modeSelectScreen.hide();

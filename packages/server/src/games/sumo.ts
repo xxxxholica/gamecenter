@@ -112,7 +112,7 @@ export class SumoGame implements GameModule<null> {
     this.acc = 0;
     this.lastSnapAt = 0;
     this.tick = setInterval(() => this.onTick(), 1000 / 60);
-    return { t: 'go' };
+    return { t: 'go', at: Date.now() };
   }
 
   onPlayMessage(m: Member<null>, msg: Msg): void {

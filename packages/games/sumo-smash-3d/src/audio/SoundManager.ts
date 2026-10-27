@@ -14,6 +14,7 @@ export class SoundManager {
   private bgmGain: GainNode | null = null;
   private static readonly BGM_VOLUME = 0.3;
   private wantedTrack: BgmTrack | null = null;
+  private bgmAnchorMs: number = 0;
 
   constructor() {
     // ブラウザは最初の操作がないと音を出せない。最初の操作で音声を有効にする
@@ -36,7 +37,14 @@ export class SoundManager {
       this.bgmGain.connect(this.ctx.destination);
       this.bgm = new SumoBgm(this.ctx, this.bgmGain);
     }
+    this.bgm!.setAnchor(this.bgmAnchorMs);
     this.bgm!.start(this.wantedTrack);
+  }
+
+  /** BGMの拍・小節の基準となるサーバー時刻(ms)を設定する(0で待機画面共通クロック) */
+  public setBgmAnchor(anchorMs: number) {
+    this.bgmAnchorMs = anchorMs;
+    this.bgm?.setAnchor(anchorMs);
   }
 
   /** BGMを流す(同じ曲なら何もしない) */

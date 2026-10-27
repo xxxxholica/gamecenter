@@ -5,8 +5,9 @@
  *  - battle: 速い太鼓と低音、三味線風のリフ。calm にすると太鼓と低音だけ(仕切りや決着の間)
  */
 
-import { createWhiteNoiseBuffer } from '../../../../shared/audioUtils';
+import { createWhiteNoiseBuffer, syncStepSequencer } from '../../../../shared/audioUtils';
 import { audioRandom } from '../../../../shared/arcadeReplay';   // 音の乱数は、操作の記録・再生で追う乱数と分ける
+import { hasServerClockSync, sharedServerNow } from '../../../../shared/online/onlineStatus';
 
 export type BgmTrack = 'menu' | 'battle';
 
@@ -32,6 +33,8 @@ export class SumoBgm {
   private nextTime: number = 0;
   private step: number = 0;
   private loop: number = 0;
+  private anchorMs: number = 0;
+  public lastSyncDriftSec: number = 0;
 
   constructor(ctx: AudioContext, out: GainNode) {
     this.ctx = ctx;
@@ -41,16 +44,25 @@ export class SumoBgm {
     this.noiseBuffer = createWhiteNoiseBuffer(ctx, 1.0);
   }
 
+  public setAnchor(anchorMs: number) {
+    if (!Number.isFinite(anchorMs)) return;
+    if (this.anchorMs !== anchorMs) {
+      this.anchorMs = anchorMs;
+      this.nextTime = 0;
+    }
+  }
+
   public start(track: BgmTrack) {
     if (this.running && this.track === track) return;
     this.track = track;
     this.step = 0;
     this.loop = 0;
-    this.nextTime = this.ctx.currentTime + 0.08;
+    this.nextTime = hasServerClockSync() ? 0 : this.ctx.currentTime + 0.08;
     if (!this.running) {
       this.running = true;
       this.timer = window.setInterval(() => this.schedule(), 25);
     }
+    this.schedule();
   }
 
   public stop() {
@@ -72,8 +84,26 @@ export class SumoBgm {
 
   private schedule() {
     if (!this.running) return;
-    // ブラウザがタブを止めている間にたまった分は捨てる(一気に鳴らさない)
-    if (this.nextTime < this.ctx.currentTime - 0.3) this.nextTime = this.ctx.currentTime + 0.05;
+    if (hasServerClockSync()) {
+      const totalStep = (this.loop % 2) * 32 + this.step;
+      const sync = syncStepSequencer(
+        this.ctx.currentTime,
+        this.nextTime,
+        totalStep,
+        sharedServerNow(),
+        this.stepSec,
+        64,
+        this.anchorMs,
+        0.04,
+      );
+      this.step = sync.step % 32;
+      this.loop = Math.floor(sync.step / 32) % 2;
+      this.nextTime = sync.nextTime;
+      this.lastSyncDriftSec = sync.driftSec;
+    } else if (this.nextTime < this.ctx.currentTime - 0.3) {
+      // ブラウザがタブを止めている間にたまった分は捨てる(一気に鳴らさない)
+      this.nextTime = this.ctx.currentTime + 0.05;
+    }
     while (this.nextTime < this.ctx.currentTime + 0.12) {
       if (this.track === 'battle') this.playBattleStep(this.step, this.nextTime);
       else this.playMenuStep(this.step, this.nextTime);
@@ -81,7 +111,7 @@ export class SumoBgm {
       this.step++;
       if (this.step >= 32) {
         this.step = 0;
-        this.loop++;
+        this.loop = (this.loop + 1) % 2;
       }
     }
   }

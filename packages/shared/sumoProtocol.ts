@@ -74,7 +74,7 @@ export type ServerMsg =
   | { t: 'room'; you: number; phase: RoomPhase; players: PlayerInfo[]; countdownEnd: number | null }
   /** 開始の合図。players の並びが力士の番号(1番目が東方 蒼天龍、2番目が西方 紅炎山 …)。 */
   | { t: 'start'; players: PlayerInfo[] }
-  | { t: 'go' }
+  | { t: 'go'; at?: number }
   | ({ t: 'snap' } & SnapMsgBody)
   /** 試合が終わった。w=勝った人の番号(誰もいなければ null)、s=得点 */
   | { t: 'results'; w: number | null; s: number[] }
