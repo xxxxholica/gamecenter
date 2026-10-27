@@ -172,7 +172,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     hasScore: true,
     maxScore: 3_000_000,
     minRunMs: 15_000,
-    maxScorePerSec: 3_000,
+    maxScorePerSec: 12_000,
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
@@ -180,9 +180,9 @@ const DEFS: Record<string, GameLeaderboardDef> = {
   'ennichi-shateki': {
     slug: 'ennichi-shateki',
     hasScore: true,
-    maxScore: 200_000,                // サーバーの対戦側 MAX_SCORE と同じ
+    maxScore: 800_000,                // 金だるまの永続倍率加算・時計延長込みの上限
     minRunMs: ENNICHI_ROUND_SECONDS * 1000, // 基本30秒。延長を獲得しないプレイも受け付ける
-    maxScorePerSec: 6_000,
+    maxScorePerSec: 20_000,
     scoreOrder: 'desc',
     unit: 'g',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} g` : '0 g'),
@@ -201,7 +201,8 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'tani-runner-124',
     hasScore: true,
     maxScore: 30_000_000,
-    minRunMs: 10_000,
+    minRunMs: 15_000,
+    maxScorePerSec: 500_000,
     scoreOrder: 'desc',
     unit: '単位',
     formatScore: (score) => (score > 0 ? `${Math.floor(score)} 単位` : '0 単位'),
@@ -222,7 +223,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'school-corridor-runner',
     hasScore: true,
     maxScore: 50_000_000,
-    minRunMs: 10_000,
+    minRunMs: 3_000,
     maxScorePerSec: 40_000,
     scoreOrder: 'desc',
     unit: 'pts',
@@ -232,7 +233,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'survivor-score-battle',
     hasScore: true,
     maxScore: 20_000_000,
-    minRunMs: 20_000,
+    minRunMs: 5_000,
     maxScorePerSec: 30_000,
     scoreOrder: 'desc',
     unit: 'pts',
@@ -242,7 +243,7 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     slug: 'tower-stack',
     hasScore: true,
     maxScore: 100_000,                // 1000m(オンラインの MAX_HEIGHT は400m)
-    minRunMs: 10_000,
+    minRunMs: 3_000,
     maxScorePerSec: 4_000,
     scoreOrder: 'desc',
     unit: 'm',

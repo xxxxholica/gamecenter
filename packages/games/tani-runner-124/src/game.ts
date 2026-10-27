@@ -270,6 +270,19 @@ export class Game {
       if (btn) {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (id === 'title-success-btn' && this.state === 'STAGE_CLEAR' && this.totalScore > 0) {
+            const score = this.totalScore;
+            runHighScoreEntryFlow({
+              slug: 'tani-runner-124',
+              score,
+              modal: { title: '卒業名簿', scoreDisplay: `${score} 単位`, themeClass: 'theme-tani', delayMs: 0 },
+              setBlocked: (blocked) => this.resultMenu.setLocked(blocked),
+              onName: (name) => RankingStore.add(score, name),
+              onRank: (rank) => { if (rank === null) this.showTitleScreen(); },
+              onClosed: () => this.showTitleScreen(),
+            });
+            return;
+          }
           this.showTitleScreen();
         });
       }
@@ -647,7 +660,9 @@ export class Game {
       difficulty: LEVELS[this.level].label,
       extraStats: { stage: this.stageIndex + 1, requirement: this.graduationRequirement },
     });
-    reportRoundStart({ stage: this.stageIndex + 1, difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
+    if (stageIndex === 0 || this.benchScene === 'run') {
+      reportRoundStart({ stage: this.stageIndex + 1, difficulty: LEVELS[this.level].label, requirement: this.graduationRequirement });
+    }
     this.effects.clearAll();
 
     this.updateHUD();

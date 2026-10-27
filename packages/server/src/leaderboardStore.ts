@@ -28,6 +28,10 @@ import {
 
 /** ゴースト(走行の軌跡)を保存できるゲーム */
 const GHOST_GAMES = new Set(['midnight-skyway']);
+/** クリアスター・完全制覇スターに対応するゲーム */
+const STAR_GAMES = new Set(['street-b-boy', 'school-corridor-runner', 'falldown', 'cyber-2d-fighter-3d', 'sumo-smash-3d']);
+/** 全制覇(上限スコア到達時)にのみクリア印が付くゲーム */
+const MAX_SCORE_CLEAR_GAMES = new Set(['cyber-2d-fighter-3d', 'sumo-smash-3d']);
 const GHOST_STRIDE = 5;
 const GHOST_SAMPLE_MS = 100;
 const GHOST_MAX_SAMPLES = 7200;                    // 12分
@@ -352,6 +356,9 @@ export class LeaderboardStore {
       ghost = g;
     }
 
+    const canClear = STAR_GAMES.has(slug) && (!MAX_SCORE_CLEAR_GAMES.has(slug) || score === def.maxScore);
+    const cleared = canClear && input.cleared === true ? true : undefined;
+    const perfect = cleared && input.perfect === true ? true : undefined;
     const entry: StoredEntry = {
       id: crypto.randomUUID(),
       rank: 0,
@@ -360,8 +367,8 @@ export class LeaderboardStore {
       formattedScore: def.formatScore(score),
       date: today(),
       extra: sanitizeLeaderboardExtra(input.extra),
-      cleared: input.cleared === true ? true : undefined,
-      perfect: input.perfect === true ? true : undefined,
+      cleared,
+      perfect,
       ghost,
       replay: parseReplayRef(input.replay),
     };

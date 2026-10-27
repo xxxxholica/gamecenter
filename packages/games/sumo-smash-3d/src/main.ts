@@ -17,7 +17,7 @@ import {
 import { installHomeReturn, returnToHub } from '../../../shared/homeReturn';
 import { ArcadePause } from '../../../shared/arcadePause';
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
-import { beginLeaderboardRun, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
+import { prepareLeaderboardRun, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { runHighScoreEntryFlow, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
@@ -521,7 +521,7 @@ class SumoGame {
   public startCpuBattle() {
     reportDeepAnalytics('progression_update', { mode: 'CPU対戦' });
     reportRoundStart({ mode: 'CPU対戦' });
-    beginLeaderboardRun('sumo-smash-3d');
+    void prepareLeaderboardRun('sumo-smash-3d');
     this.match = null;
     const firstSpec = getKumiteEnemySpec(1);
     this.showViews(4, ['あなた', firstSpec.name, null, null]);

@@ -126,7 +126,7 @@ function normalizeEntries(def: GameLeaderboardDef, list: unknown): LeaderboardEn
         date: typeof item.date === 'string' ? item.date.slice(0, 10) : '',
         extra: typeof item.extra === 'string' ? Array.from(item.extra).slice(0, 30).join('') : undefined,   // 素のまま(HTMLに入れる側が escapeHtml する)
         cleared: item.cleared === true ? true : undefined,
-        perfect: item.perfect === true ? true : undefined,
+        perfect: item.cleared === true && item.perfect === true ? true : undefined,
         dev: dev ?? (role === '開発者' ? true : undefined),
         role,
       };
@@ -255,6 +255,7 @@ export function prepareLeaderboardRun(slug: string): Promise<void> {
 /** チュートリアル完了時など、実プレイ開始の瞬間にチケットの計測開始時刻を取り直す */
 export function refreshLeaderboardRunTicket(): void {
   if (!runTicket) return;
+  if (!runTicket.atLoad && !runTicket.failed && Date.now() - runTicket.startedAt < 1000) return;
   void beginLeaderboardRun(runTicket.slug);
 }
 
