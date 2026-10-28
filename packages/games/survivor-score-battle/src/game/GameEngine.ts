@@ -1020,7 +1020,7 @@ export class GameEngine {
         { indices: [12], keyLabel: 'W', label: '上に動く' },
         { indices: [13], keyLabel: 'S', label: '下に動く' },
         { indices: [12, 13, 14, 15], keyLabel: 'WASD', label: '剣を拾ってブレードを増やす' },
-        { indices: [3, 5], keyLabel: 'Space', label: 'ソードストームで敵を一掃' },
+        { indices: [3, 4, 5, 7], keyLabel: 'Space', label: 'ソードストームで敵を一掃' },
       ],
       onComplete: () => {
         this.inTutorial = false;

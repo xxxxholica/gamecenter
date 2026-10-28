@@ -72,7 +72,7 @@ const guideResult = () => mountArcadeGuide({
   moveLabel: '選択',
   buttons: [
     { indices: [0], label: '決定' },
-    { indices: [1], label: '終了' },
+    { indices: [1], label: 'タイトルへ' },
   ],
   showHomeHint: true,
   backLabel: 'タイトルへ',
@@ -866,11 +866,9 @@ class SumoGame {
 
     if (padConfirm || this.inputManager.isKeyTriggered('Enter')) {
       this.uiManager.confirmCurrentResultSelection();
-    } else if (this.inputManager.isKeyTriggered('Backspace')) {
+    } else if (padExit || this.inputManager.isKeyTriggered('Backspace')) {
       this.uiManager.hideVictoryModal();
       this.returnToTitle();
-    } else if (padExit) {
-      returnToHub();
     }
   }
 

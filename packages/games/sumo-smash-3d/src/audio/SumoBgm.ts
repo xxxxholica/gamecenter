@@ -84,6 +84,10 @@ export class SumoBgm {
 
   private schedule() {
     if (!this.running) return;
+    if (this.ctx.state !== 'running') {
+      this.nextTime = hasServerClockSync() ? 0 : this.ctx.currentTime + 0.08;
+      return;
+    }
     if (hasServerClockSync()) {
       const totalStep = (this.loop % 2) * 32 + this.step;
       const sync = syncStepSequencer(

@@ -12,11 +12,17 @@ import {
   trackGameClose,
   trackGameLaunch,
 } from '../../shared/arcadeAnalytics';
-import { hideHubLoading, showHubLoading, waitNextPaint } from '../../shared/hubLoadingOverlay';
+import {
+  HUB_LOADING_HIDDEN_EVENT,
+  MIN_HUB_LOADING_MS,
+  hideHubLoading,
+  showHubLoading,
+  waitNextPaint,
+} from '../../shared/hubLoadingOverlay';
 
 const CLOSE_MESSAGE = 'gamecenter:close-game';
-/** 一瞬だけチラつくのを防ぐための「読み込み中」の最小表示時間(ms) */
-const MIN_LOADING_MS = 250;
+/** 「読み込み中」の最小表示時間(ms) */
+const MIN_LOADING_MS = MIN_HUB_LOADING_MS;
 /** 万が一ゲーム側から phase 通知が来なかった場合のフォールバック(load 後の ms) */
 const LOAD_FALLBACK_MS = 10000;
 
@@ -72,6 +78,7 @@ function revealGameFrame(seq: number): void {
     void waitNextPaint().then(() => {
       if (seq !== frameSeq || closing) return;
       hideHubLoading();
+      frame?.contentWindow?.postMessage({ type: HUB_LOADING_HIDDEN_EVENT }, window.location.origin);
       frame?.focus();
       frame?.contentWindow?.focus();
     });
@@ -102,11 +109,9 @@ export function openGameFrame(url: string, closed: () => void | Promise<void>, g
     el.src = url;
     el.setAttribute('allow', 'fullscreen; gamepad; autoplay; keyboard-map');
     el.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;background:#000';
-    // 読み込めたらフォーカスと入力計測をつなぎ、万が一 phase が届かない場合のフォールバックタイマーを置く
+    // 読み込めたら入力計測をつなぎ、万が一 phase が届かない場合のフォールバックタイマーを置く(フォーカスは読み込み画面が閉じてから渡す)
     el.addEventListener('load', () => {
       if (seq !== frameSeq) return;
-      el.focus();
-      el.contentWindow?.focus();
       // iframe内のキー・タッチ入力は親windowに届かないので、計測の対象に加える
       attachGameInputSource(el.contentWindow);
       clearFallbackTimer();

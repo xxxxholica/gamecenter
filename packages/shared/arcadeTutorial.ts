@@ -383,6 +383,7 @@ function getStepKeyboardCodes(step: ArcadeTutorialStep): string[] {
       else if (tok === 'SPACE') { codes.add('Space'); }
       else if (tok === 'ENTER') { codes.add('Enter'); }
       else if (tok === 'SHIFT') { codes.add('ShiftLeft'); codes.add('ShiftRight'); }
+      else if (/^[A-Z]$/.test(tok)) { codes.add(`Key${tok}`); }
     }
   }
   return Array.from(codes);

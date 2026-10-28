@@ -16,6 +16,7 @@ import { handleLeaderboardRequest } from './leaderboardApi.ts';
 import { AnalyticsStore } from './analyticsStore.ts';
 import { ReplayStore } from './replayStore.ts';
 import { ReplayTickets } from './replayTickets.ts';
+import { AdLogoStore, handleAdLogosRequest } from './adLogos.ts';
 import { GAME_FACTORIES } from './games/index.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
@@ -55,6 +56,8 @@ if (PROXY_SECRET && PROXY_SECRET.length >= 16 && !REPLAY_ORIGIN) {
 }
 const replayTickets = new ReplayTickets();
 setTimeout(sweepReplays, 60 * 1000).unref();
+const AD_LOGOS_DIR = process.env.AD_LOGOS_DIR ?? path.join(path.dirname(ANALYTICS_FILE), 'logos');
+const adLogos = new AdLogoStore(AD_LOGOS_DIR, 2000, process.env.AD_LOGOS_START_ON === '1');
 
 /** リバースプロキシ(ループバック)経由の時だけ X-Forwarded-For を信用する。 */
 function clientIp(req: http.IncomingMessage): string {
@@ -78,7 +81,9 @@ const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllo
 
 // 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
 const server = http.createServer((req, res) => {
-  if (handleLeaderboardRequest(req, res, clientIp(req), leaderboard, originAllowed, analytics, replays, replayTickets)) return;
+  const ip = clientIp(req);
+  if (handleAdLogosRequest(req, res, ip, adLogos)) return;
+  if (handleLeaderboardRequest(req, res, ip, leaderboard, originAllowed, analytics, replays, replayTickets)) return;
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
     for (const h of hosts.values()) games[h.id] = { open: h.open, players: h.room.size, max: h.game.maxPlayers, phase: h.room.phase };
@@ -92,7 +97,7 @@ server.on('upgrade', (req, socket, head) => connections.handleUpgrade(req, socke
 // アイドル切断・無応答の回収と、レート表の掃除。
 setInterval(() => connections.sweep(), 5000);
 
-const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics, replays, replayTickets, REPLAY_ORIGIN);
+const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics, replays, replayTickets, REPLAY_ORIGIN, adLogos);
 startControl(CONTROL_SOCKET, controlHandlers);
 startAdminWeb(ADMIN_PORT, '127.0.0.1', PROXY_SECRET, ADMIN_USER, ADMIN_PASS, controlHandlers);
 

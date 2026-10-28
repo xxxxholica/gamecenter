@@ -495,7 +495,7 @@ class ArcadeCorkShooter {
         { indices: [12], keyLabel: 'W', label: '上にねらう' },
         { indices: [13], keyLabel: 'S', label: '下にねらう' },
         { indices: [0], keyLabel: 'Space', label: '通常弾で景品を落とす' },
-        { indices: [1, 2], keyLabel: 'X', label: 'バクダン弾で吹き飛ばす' },
+        { indices: [1, 2, 7], keyLabel: 'X', label: 'バクダン弾で吹き飛ばす' },
       ],
       onComplete: () => {
         this.inTutorial = false;
@@ -552,7 +552,7 @@ class ArcadeCorkShooter {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了', keyLabel: 'X / Shift' },
+        { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',
@@ -1075,8 +1075,6 @@ class ArcadeCorkShooter {
         }
       } else if (inputState.cancelJustPressed) {
         this.enterTitle();
-      } else if (inputState.shootExplosiveJustPressed) {
-        returnToHub();
       }
     }
   }

@@ -1324,11 +1324,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
   });
 
-  // Race-time arcade pad buttons (X: camera / START: pause). Lever + A (drive, handbrake) are read by CarController;
+  // Race-time arcade pad buttons (Y: front camera). Lever + A/B (drive, handbrake) are read by CarController;
   // the pause/result menus are driven by DriveHUD. Polled every frame so presses made on other screens never carry over.
   const racePad = new PadEdge();
   let menuWasOpen = false;
-  startPadLoop(racePad, (p) => {
+  startPadLoop(racePad, () => {
     const menuOpen = driveHUD.isMenuOpen();
     // The frame a menu closes, its confirming press must not also act as a race button
     const ignore = menuOpen || menuWasOpen;
@@ -1347,7 +1347,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     // Y: 押している間だけ車の前からの視点
     driveScene.setFrontViewPad(!!readPad().buttons[3]);
-    if (p.any(9)) driveHUD.togglePause(true);
   });
 
   // Dev hooks

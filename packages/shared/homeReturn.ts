@@ -8,7 +8,229 @@ import { flushReplay, getReplayMode } from './arcadeReplay';
 import { readGamepads } from './gamepadFrame';
 import { installBench } from './arcadeBench';
 import { isBenchEnabled } from './arcadeBenchCore';
-import { showHubLoading } from './hubLoadingOverlay';
+import { HUB_LOADING_HIDDEN_EVENT, isHubLoadingVisible, showHubLoading } from './hubLoadingOverlay';
+
+interface TrackedAudioContext {
+  ctx: AudioContext;
+  nativeResume: () => Promise<void>;
+  nativeSuspend: () => Promise<void>;
+  wantResume: boolean;
+}
+
+let audioGateInstalled = false;
+const trackedContexts: TrackedAudioContext[] = [];
+const deferredAudios = new Map<HTMLAudioElement, Array<() => void>>();
+let nativeMediaPlay: (() => Promise<void>) | null = null;
+let unmuteWatchTimer: number | null = null;
+
+function flushLoadingAudioGate(): void {
+  if (isHubLoadingVisible()) return;
+  if (unmuteWatchTimer !== null) {
+    window.clearInterval(unmuteWatchTimer);
+    unmuteWatchTimer = null;
+  }
+  for (const entry of trackedContexts) {
+    if (entry.wantResume && (entry.ctx.state as string) !== 'closed') {
+      void entry
+        .nativeResume()
+        .then(() => {
+          try {
+            entry.ctx.dispatchEvent(new Event('statechange'));
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {});
+    }
+  }
+  if (nativeMediaPlay && deferredAudios.size > 0) {
+    const playFn = nativeMediaPlay;
+    const entries = Array.from(deferredAudios.entries());
+    deferredAudios.clear();
+    for (const [el, resolvers] of entries) {
+      try {
+        if (el.currentTime > 0 && el.currentTime < 5) {
+          el.currentTime = 0;
+        }
+      } catch {
+        /* ignore */
+      }
+      const p = playFn.call(el);
+      if (p && typeof p.then === 'function') {
+        void p.then(
+          () => resolvers.forEach((r) => r()),
+          () => resolvers.forEach((r) => r()),
+        );
+      } else {
+        resolvers.forEach((r) => r());
+      }
+    }
+  }
+}
+
+function ensureUnmuteWatcher(): void {
+  if (typeof window === 'undefined' || unmuteWatchTimer !== null) return;
+  unmuteWatchTimer = window.setInterval(() => {
+    if (!isHubLoadingVisible()) {
+      flushLoadingAudioGate();
+    }
+  }, 50);
+}
+
+function trackAudioContextInstance(ctx: AudioContext): void {
+  if (trackedContexts.some((e) => e.ctx === ctx)) return;
+  const nativeResume = ctx.resume.bind(ctx);
+  const nativeSuspend = ctx.suspend.bind(ctx);
+  const stateDesc =
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'state') ??
+    Object.getOwnPropertyDescriptor(AudioContext.prototype, 'state');
+  const nativeStateGetter = stateDesc?.get;
+
+  const entry: TrackedAudioContext = {
+    ctx,
+    nativeResume,
+    nativeSuspend,
+    wantResume: true,
+  };
+  trackedContexts.push(entry);
+
+  if (nativeStateGetter) {
+    try {
+      Object.defineProperty(ctx, 'state', {
+        configurable: true,
+        enumerable: true,
+        get(): AudioContextState {
+          const real = nativeStateGetter.call(ctx) as AudioContextState;
+          if (real === 'closed') return 'closed';
+          if (isHubLoadingVisible()) return 'suspended';
+          return real;
+        },
+      });
+    } catch {
+      /* 環境により定義できない場合はそのまま */
+    }
+  }
+
+  ctx.resume = () => {
+    entry.wantResume = true;
+    if (isHubLoadingVisible()) {
+      ensureUnmuteWatcher();
+      return Promise.resolve();
+    }
+    return entry.nativeResume();
+  };
+
+  ctx.suspend = () => {
+    entry.wantResume = false;
+    return entry.nativeSuspend();
+  };
+
+  ctx.addEventListener('statechange', () => {
+    if (isHubLoadingVisible()) {
+      const realState = nativeStateGetter ? (nativeStateGetter.call(ctx) as AudioContextState) : ctx.state;
+      if (realState === 'running') {
+        void entry.nativeSuspend().catch(() => {});
+      }
+      ensureUnmuteWatcher();
+    }
+  });
+
+  if (isHubLoadingVisible()) {
+    void entry.nativeSuspend().catch(() => {});
+    ensureUnmuteWatcher();
+  }
+}
+
+/**
+ * 読み込み画面(オーバーレイ)が表示されている間、ゲームのBGMや効果音が先行して鳴り出さないように待機させ、
+ * 読み込み画面が閉じた瞬間に冒頭から再生を開始させる。
+ */
+export function installLoadingAudioGate(): void {
+  if (audioGateInstalled || typeof window === 'undefined') return;
+  audioGateInstalled = true;
+
+  const win = window as unknown as {
+    AudioContext?: typeof AudioContext;
+    webkitAudioContext?: typeof AudioContext;
+  };
+  const NativeAC = win.AudioContext || win.webkitAudioContext;
+  if (NativeAC) {
+    const WrappedAudioContext = function (this: AudioContext, options?: AudioContextOptions): AudioContext {
+      const ctx = options !== undefined ? new NativeAC(options) : new NativeAC();
+      trackAudioContextInstance(ctx);
+      return ctx;
+    } as unknown as typeof AudioContext;
+    WrappedAudioContext.prototype = NativeAC.prototype;
+    Object.setPrototypeOf(WrappedAudioContext, NativeAC);
+    if (win.AudioContext) win.AudioContext = WrappedAudioContext;
+    if (win.webkitAudioContext) win.webkitAudioContext = WrappedAudioContext;
+  }
+
+  for (const NodeCtor of [
+    typeof OscillatorNode !== 'undefined' ? OscillatorNode : undefined,
+    typeof AudioBufferSourceNode !== 'undefined' ? AudioBufferSourceNode : undefined,
+  ]) {
+    if (NodeCtor?.prototype?.start) {
+      const origStart = NodeCtor.prototype.start;
+      NodeCtor.prototype.start = function (this: AudioScheduledSourceNode, ...args: [number?, number?, number?]): void {
+        if (isHubLoadingVisible()) {
+          try {
+            this.disconnect();
+          } catch {
+            /* ignore */
+          }
+        }
+        return origStart.apply(this, args as [number?]);
+      };
+    }
+  }
+
+  if (typeof HTMLMediaElement !== 'undefined' && HTMLMediaElement.prototype) {
+    const origPlay = HTMLMediaElement.prototype.play;
+    const origPause = HTMLMediaElement.prototype.pause;
+    nativeMediaPlay = origPlay;
+
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
+      const isAudio = typeof HTMLAudioElement !== 'undefined' && this instanceof HTMLAudioElement;
+      if (isAudio && isHubLoadingVisible()) {
+        ensureUnmuteWatcher();
+        return new Promise<void>((resolve) => {
+          const list = deferredAudios.get(this) ?? [];
+          list.push(resolve);
+          deferredAudios.set(this, list);
+        });
+      }
+      if (isAudio) {
+        deferredAudios.delete(this);
+      }
+      return origPlay.call(this);
+    };
+
+    HTMLMediaElement.prototype.pause = function (this: HTMLMediaElement): void {
+      if (typeof HTMLAudioElement !== 'undefined' && this instanceof HTMLAudioElement) {
+        const resolvers = deferredAudios.get(this);
+        if (resolvers) {
+          deferredAudios.delete(this);
+          resolvers.forEach((r) => r());
+        }
+      }
+      return origPause.call(this);
+    };
+  }
+
+  window.addEventListener(HUB_LOADING_HIDDEN_EVENT, () => {
+    flushLoadingAudioGate();
+  });
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    const type = (e.data as { type?: string } | null)?.type;
+    if (type === HUB_LOADING_HIDDEN_EVENT) {
+      flushLoadingAudioGate();
+    }
+  });
+}
+
+installLoadingAudioGate();
 
 const SELECT_BUTTON = 8;
 // games/<slug>/ 配下からルートへは2階層上
@@ -57,6 +279,8 @@ function mapSelectToBackspace(): void {
 }
 
 export function installHomeReturn(): void {
+  installLoadingAudioGate();
+
   // ?bench=1 のときだけ、フレーム時間・WebGL・GC の計測を有効にする(通常は何もしない)
   installBench();
 

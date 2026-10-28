@@ -22,7 +22,7 @@ const START = ['Enter', 'NumpadEnter'];
 export class Input {
   private keys = new Set<string>();
   private pressed = new Set<string>();
-  private prevPad = { action: false, start: false };
+  private prevPad = { action: false, confirm: false, cancel: false, start: false };
   /** 横入力の優先（後から押した方） */
   private lastHorizontal = 0;
 
@@ -58,7 +58,7 @@ export class Input {
 
     // ---- ゲームパッド / アケコン ----
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    let padAction = false, padStart = false;
+    let padAction = false, padConfirm = false, padCancel = false, padStart = false;
     let padDx = 0, padDy = 0;
     for (const p of pads) {
       if (!p) continue;
@@ -70,16 +70,20 @@ export class Input {
       if (b(12) || ay < -0.5) { dy = 1; padDy = 1; }
       if (b(13) || ay > 0.5) { dy = -1; padDy = -1; }
       if (b(0) || b(1) || b(2) || b(3) || b(5) || b(7)) padAction = true;
+      if (b(0) || b(2) || b(3) || b(5) || b(7)) padConfirm = true;
+      if (b(1)) padCancel = true;
       if (b(9)) padStart = true;
     }
     if (padAction) {
       dig = true;
-      if (!this.prevPad.action) { digPressed = true; start = true; anyPressed = true; }
+      if (!this.prevPad.action) { digPressed = true; anyPressed = true; }
     }
+    if (padConfirm && !this.prevPad.confirm) { start = true; anyPressed = true; }
+    if (padCancel && !this.prevPad.cancel) { cancel = true; anyPressed = true; }
     if (padStart && !this.prevPad.start) { start = true; anyPressed = true; }
 
     // SELECT(button 8) 長押しでホームへ戻る処理は共通の installHomeReturn()（main.ts）が担当
-    this.prevPad = { action: padAction, start: padStart };
+    this.prevPad = { action: padAction, confirm: padConfirm, cancel: padCancel, start: padStart };
     this.pressed.clear();
     return { dx, dy, dig, digPressed, start, cancel, anyPressed, padDx, padDy };
   }

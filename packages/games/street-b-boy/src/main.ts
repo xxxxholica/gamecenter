@@ -337,7 +337,7 @@ class StreetBBoyGame {
       moveLabel: '選択',
       buttons: [
         { indices: [0], label: '決定' },
-        { indices: [1], label: '終了', keyLabel: 'J / K / X' },
+        { indices: [1], label: 'タイトルへ' },
       ],
       showHomeHint: true,
       backLabel: 'タイトルへ',
@@ -360,9 +360,9 @@ class StreetBBoyGame {
       if (this.resultMenuFocus === 0) this.retryFromResult();
       else if (this.resultMenuFocus === 1) this.setupTitleScene();
       else returnToHub();
-    } else if (input.spinPressed) {
-      // Bボタン: 終了
-      returnToHub();
+    } else if (input.cancelPressed) {
+      // Bボタン / Backspace: タイトルへ戻る
+      this.setupTitleScene();
     }
   }
 
@@ -717,8 +717,8 @@ class StreetBBoyGame {
         { indices: [15], keyLabel: 'D', label: '右に動く' },
         { indices: [14], keyLabel: 'A', label: '左に動く' },
         { indices: [0], keyLabel: 'Space', label: 'ジャンプ' },
-        { indices: [2], keyLabel: 'X', label: '敵と箱を壊す' },
-        { indices: [2], keyLabel: 'X', label: 'レーザーを跳ね返す' },
+        { indices: [1, 2, 3], keyLabel: 'X', label: '敵と箱を壊す' },
+        { indices: [1, 2, 3], keyLabel: 'X', label: 'レーザーを跳ね返す' },
       ],
       onComplete: () => {
         this.inTutorial = false;
@@ -886,6 +886,7 @@ class StreetBBoyGame {
       startPressed: false,
       anyActionPressed: false,
       confirmPressed: false,
+      cancelPressed: false,
       menuNav: [],
       lastInputTime: 0
     };
@@ -1762,7 +1763,7 @@ class StreetBBoyGame {
       const dummyInput: InputState = {
         left: false, right: false, down: false, jump: false,
         jumpPressed: false, jumpReleased: false, spinPressed: false,
-        startPressed: false, anyActionPressed: false, confirmPressed: false, menuNav: [], lastInputTime: 0
+        startPressed: false, anyActionPressed: false, confirmPressed: false, cancelPressed: false, menuNav: [], lastInputTime: 0
       };
       this.player.update(dt, dummyInput);
     }

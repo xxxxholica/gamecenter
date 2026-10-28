@@ -84,6 +84,39 @@ export interface ResultMenuItem {
   color: string;
 }
 
+function extractButtonLabel(button: HTMLElement): string {
+  const labelEl = button.querySelector<HTMLElement>(':scope > .rm-label');
+  if (labelEl) return (labelEl.textContent ?? '').trim();
+  let text = '';
+  for (const node of Array.from(button.childNodes)) {
+    if (
+      node.nodeType === Node.ELEMENT_NODE &&
+      ((node as Element).classList.contains('rm-icon') || (node as Element).classList.contains('aa-suffix'))
+    ) {
+      continue;
+    }
+    text += node.textContent ?? '';
+  }
+  return text.trim();
+}
+
+/** ボタンのラベル文言だけを書き換える(.rm-icon の A / Enter アイコンは保持する)。 */
+export function setResultMenuButtonLabel(button: HTMLElement | null, label: string): void {
+  if (!button) return;
+  button.dataset.label = label;
+  let labelEl = button.querySelector<HTMLElement>(':scope > .rm-label');
+  if (labelEl) {
+    labelEl.textContent = label;
+    return;
+  }
+  const iconEl = button.querySelector<HTMLElement>(':scope > .rm-icon');
+  const suffixEl = button.querySelector<HTMLElement>(':scope > .aa-suffix');
+  labelEl = document.createElement('span');
+  labelEl.className = 'rm-label';
+  labelEl.textContent = label;
+  button.replaceChildren(...(iconEl ? [iconEl, labelEl] : [labelEl]), ...(suffixEl ? [suffixEl] : []));
+}
+
 /** ボタンを縦並びメニューとして整える(コンテナに rm-col、各ボタンに rm-btn)。 */
 export function setupResultMenu(container: HTMLElement | null, items: ResultMenuItem[]): void {
   injectStyle();
@@ -93,11 +126,26 @@ export function setupResultMenu(container: HTMLElement | null, items: ResultMenu
     button.classList.add('rm-btn');
     button.style.setProperty('--rm-color', color);
     button.setAttribute('tabindex', '-1');
-    if (!button.querySelector(':scope > .rm-icon')) {
-      const span = document.createElement('span');
-      span.className = 'rm-icon';
-      span.innerHTML = buttonIconHtml([0]);
-      button.insertBefore(span, button.firstChild);
+    const currentLabel = extractButtonLabel(button);
+    button.dataset.label = currentLabel;
+    let iconSpan = button.querySelector<HTMLElement>(':scope > .rm-icon');
+    if (!iconSpan) {
+      iconSpan = document.createElement('span');
+      iconSpan.className = 'rm-icon';
+      iconSpan.innerHTML = buttonIconHtml([0]);
+    }
+    let labelSpan = button.querySelector<HTMLElement>(':scope > .rm-label');
+    if (!labelSpan) {
+      const suffixSpan = button.querySelector<HTMLElement>(':scope > .aa-suffix');
+      labelSpan = document.createElement('span');
+      labelSpan.className = 'rm-label';
+      labelSpan.textContent = currentLabel;
+      button.replaceChildren(iconSpan, labelSpan, ...(suffixSpan ? [suffixSpan] : []));
+    } else {
+      labelSpan.textContent = currentLabel;
+      if (!iconSpan.isConnected) {
+        button.insertBefore(iconSpan, button.firstChild);
+      }
     }
   }
 }

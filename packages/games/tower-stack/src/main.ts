@@ -11,7 +11,7 @@ import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../.
 import { BestMarker } from './bestMarker';
 import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
-import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
+import { setupResultMenu, applyResultMenuFocus, setResultMenuButtonLabel, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import { MenuNav } from '../../../shared/arcadeMenuNav';
 import { watchResultAutoReturn } from '../../../shared/arcadeAutoAction';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
@@ -60,7 +60,7 @@ const guidePlay = () => mountArcadeGuide({
   buttons: [
     { indices: [0, 2], label: '回転', keyLabel: 'W' },
     { indices: [13], label: '落とす', keyLabel: 'S' },
-    { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Enter' },
+    { indices: [1, 3], label: 'アイテムを使う', keyLabel: 'Space' },
   ],
   showHomeHint: true, backLabel: 'ポーズ',
 });
@@ -1450,7 +1450,7 @@ function renderItems(): void {
   const hint = $('item-hint');
   if (items[0]) {
     // (ボタン) ○○を使用
-    hint.innerHTML = `${buttonIconHtml([1], 'Enter')}<span class="ih-icon ${items[0]}"><svg viewBox="0 0 32 32">${ITEM_ICON[items[0]]}</svg></span><small>${ITEM_INFO[items[0]].desc}</small>`;
+    hint.innerHTML = `${buttonIconHtml([1, 3], 'Space')}<span class="ih-icon ${items[0]}"><svg viewBox="0 0 32 32">${ITEM_ICON[items[0]]}</svg></span><small>${ITEM_INFO[items[0]].desc}</small>`;
   }
   hint.classList.toggle('show', !!items[0]);
   const st: string[] = [];
@@ -1563,8 +1563,7 @@ const elResultTitle = document.querySelector('.result-title') as HTMLElement;
 /** リザルトの見出し(ひとりで遊んだとき / オンライン対戦)を切り替える */
 function setResultTexts(title: string, retry: string): void {
   elResultTitle.textContent = title;
-  const btn = resultItems[0].button;
-  if (btn) btn.textContent = retry;
+  setResultMenuButtonLabel(resultItems[0].button, retry);
 }
 resultItems.forEach((it, i) => it.button?.addEventListener('click', () => { if (resultOpen && !nameEntryOpen) resultActions[i](); }));
 let resultFocus = 0;

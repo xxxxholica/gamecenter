@@ -32,6 +32,18 @@ export const ADMIN_HTML = `<!doctype html>
     <div id="games" class="server-games-container"></div>
   </section>
 
+  <section class="card" id="ads-card">
+    <div class="card-head">
+      <h2>ローディング広告</h2>
+      <span id="ads-state" class="state">OFF</span>
+    </div>
+    <div id="ads-summary" class="stats"></div>
+    <div class="row">
+      <button id="ads-on-btn" class="primary">ONにする</button>
+      <button id="ads-off-btn">OFFにする</button>
+    </div>
+  </section>
+
   <!-- アナリティクス ボード -->
   <section class="card" id="analytics-card">
     <div class="card-head">
@@ -1004,6 +1016,10 @@ export const ADMIN_JS = `
   var DEATH_MAP_GEOMETRY = ${JSON.stringify(deathMapGeometry)};   // 死亡マップの背景(実際のゲームのマップ。npm run deathmap で作る)
   var gamesEl = document.getElementById('games');
   var summaryEl = document.getElementById('summary');
+  var adsStateEl = document.getElementById('ads-state');
+  var adsSummaryEl = document.getElementById('ads-summary');
+  var adsOnBtn = document.getElementById('ads-on-btn');
+  var adsOffBtn = document.getElementById('ads-off-btn');
 
   var HEADERS = { 'X-Requested-With': 'online-admin' };
   var TITLES = { 'cyber-2d-fighter-3d': 'サイバー２Dファイター３D', 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
@@ -1205,6 +1221,19 @@ export const ADMIN_JS = `
       ['オンライン参加者', String(total)],
       ['総WebSocket接続', String(s.clients)],
     ]);
+    var ads = s.ads || { enabled: false, count: 0 };
+    if (adsStateEl) {
+      adsStateEl.textContent = ads.enabled ? 'ON' : 'OFF';
+      adsStateEl.className = 'state' + (ads.enabled ? ' open' : '');
+    }
+    if (adsSummaryEl) {
+      setStats(adsSummaryEl, [
+        ['広告表示', ads.enabled ? 'ON' : 'OFF', '', ads.enabled],
+        ['登録ロゴ数', String(ads.count), '件', ads.count > 0],
+      ]);
+    }
+    if (adsOnBtn) adsOnBtn.disabled = !!ads.enabled;
+    if (adsOffBtn) adsOffBtn.disabled = !ads.enabled;
   }
 
   // ==========================================
@@ -2353,6 +2382,16 @@ export const ADMIN_JS = `
   document.getElementById('stop-all').addEventListener('click', function () {
     if (window.confirm('全ゲームを閉鎖し、参加者を全員切断します。よろしいですか？')) act('/admin/api/close?game=all');
   });
+  if (adsOnBtn) {
+    adsOnBtn.addEventListener('click', function () {
+      act('/admin/api/ads?on=1');
+    });
+  }
+  if (adsOffBtn) {
+    adsOffBtn.addEventListener('click', function () {
+      act('/admin/api/ads?on=0');
+    });
+  }
   document.getElementById('logout').addEventListener('click', function () {
     fetch('/admin/logout', { method: 'POST', headers: HEADERS, cache: 'no-store', credentials: 'same-origin' })
       .then(function () { location.href = '/admin/login'; });

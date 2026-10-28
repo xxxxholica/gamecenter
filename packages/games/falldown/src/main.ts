@@ -127,7 +127,15 @@ const guidePlay = () => mountArcadeGuide({
   showHomeHint: true,
   backLabel: 'ポーズ',
 });
-const guideMenu = () => mountArcadeGuide({ moveLabel: '選択', buttons: [{ indices: [0], label: '決定' }], showHomeHint: true });
+const guideMenu = () => mountArcadeGuide({
+  moveLabel: '選択',
+  buttons: [
+    { indices: [0], label: '決定' },
+    { indices: [1], label: 'タイトルへ' },
+  ],
+  showHomeHint: true,
+  backLabel: 'タイトルへ',
+});
 
 // ---------------- 状態 ----------------
 let paused = false;

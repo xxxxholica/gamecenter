@@ -13,6 +13,8 @@ export interface InputState {
   startPressed: boolean;
   /** メニュー確定: Enter / アケコンA (W・矢印上のジャンプでは確定しない) */
   confirmPressed: boolean;
+  /** メニュー戻る: Backspace / アケコンB */
+  cancelPressed: boolean;
   /** メニュー移動(押した瞬間。上・左 = -1 / 下・右 = +1) */
   menuNav: number[];
   anyActionPressed: boolean;
@@ -79,6 +81,7 @@ export class InputManager {
     let gJumpReleased = false;
     let gSpinPressed = false;
     let gStartPressed = false;
+    let gCancelPressed = false;
     let gAnyPressed = false;
     let padNavX = 0;
     let padNavY = 0;
@@ -129,6 +132,7 @@ export class InputManager {
       if (!bJump && prevJump) gJumpReleased = true;
       if (bSpin && !prevSpin) gSpinPressed = true;
       if (bStart && !prevStart) gStartPressed = true;
+      if (gp.buttons[1]?.pressed && !this.prevGamepadButtons[1]) gCancelPressed = true;
 
       // Any gamepad button pressed
       for (let i = 0; i < gp.buttons.length; i++) {
@@ -165,6 +169,7 @@ export class InputManager {
       spinPressed: kSpinPressed || gSpinPressed,
       startPressed: kStartPressed,
       confirmPressed: this.keysJustPressed.has('Enter') || gJumpPressed,
+      cancelPressed: this.keysJustPressed.has('Backspace') || gCancelPressed,
       menuNav: this.menuNav.take(),
       anyActionPressed: anyAction,
       lastInputTime: this.lastInputTime

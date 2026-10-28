@@ -19,6 +19,7 @@
     "deathmap": "node scripts/gen-deathmap.mjs",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "deploy:server": "node scripts/deploy-server.mjs",
+    "ads:prepare": "node scripts/prepare-ad-logos.mjs",
     "check:hygiene": "node scripts/check-hygiene.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },

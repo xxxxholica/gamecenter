@@ -40,6 +40,7 @@ export class ArcadeInput {
   private prevPadNormal: boolean = false;
   private prevPadExplosive: boolean = false;
   private prevPadStart: boolean = false;
+  private prevPadCancel: boolean = false;
 
   // Mouse
   private mouseLeftPressed: boolean = false;
@@ -163,6 +164,7 @@ export class ArcadeInput {
     let padNormalPressed = false;
     let padExplosivePressed = false;
     let padStartPressed = false;
+    let padCancelPressed = false;
     let hasAnyInput = false;
     let padNavX = 0;
     let padNavY = 0;
@@ -239,6 +241,9 @@ export class ArcadeInput {
       if (pad.buttons[1]?.pressed || pad.buttons[2]?.pressed || pad.buttons[7]?.pressed) {
         padExplosivePressed = true;
         hasAnyInput = true;
+      }
+      if (pad.buttons[1]?.pressed) {
+        padCancelPressed = true;
       }
 
       for (let b = 0; b < pad.buttons.length; b++) {
@@ -319,7 +324,10 @@ export class ArcadeInput {
       (this.mouseLeftPressed && !this.prevMouseLeft) ||
       this.touchJustTapped;
     const isKeyCancel = this.keyboard.isDown('Backspace');
-    const cancelJustPressed = this.keyboard.pressed.has('Backspace') || (isKeyCancel && !this.prevCancelKey);
+    const cancelJustPressed =
+      this.keyboard.pressed.has('Backspace') ||
+      (isKeyCancel && !this.prevCancelKey) ||
+      (padCancelPressed && !this.prevPadCancel);
 
     this.prevNormalKey = isKeyNormal;
     this.prevExplosiveKey = isKeyExplosive;
@@ -328,6 +336,7 @@ export class ArcadeInput {
     this.prevPadNormal = padNormalPressed;
     this.prevPadExplosive = padExplosivePressed;
     this.prevPadStart = padStartPressed;
+    this.prevPadCancel = padCancelPressed;
     this.prevMouseLeft = this.mouseLeftPressed;
     this.prevMouseRight = this.mouseRightPressed;
     this.mouseLeftJustPressed = false;
@@ -371,6 +380,7 @@ export class ArcadeInput {
     this.prevPadNormal = false;
     this.prevPadExplosive = false;
     this.prevPadStart = false;
+    this.prevPadCancel = false;
     this.prevMouseLeft = false;
     this.prevMouseRight = false;
     this.rapidFireTimer = 0;

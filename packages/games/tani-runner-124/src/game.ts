@@ -17,6 +17,7 @@ import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
 import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
+import { setResultMenuButtonLabel } from '../../../shared/arcadeResultMenu.ts';
 import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
 import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
@@ -380,7 +381,7 @@ export class Game {
     mountArcadeGuide({
       moveLabel: phase === 'flight' ? '移動' : undefined,
       keyMoveKeys: 'A / D',
-      buttons: [{ indices: [0, 1, 7], label: phase === 'launch' ? 'ジャンプ' : '加速', keyLabel: 'Enter' }],
+      buttons: [{ indices: [0, 1, 7], label: phase === 'launch' ? 'ジャンプ' : '加速', keyLabel: 'Space' }],
       showHomeHint: true,
       backLabel: 'ポーズ',
     });
@@ -1141,7 +1142,7 @@ export class Game {
       if (label) {
         label.style.display = this.inTutorial ? 'none' : '';
         if (!this.inTutorial) {
-          label.innerHTML = `${buttonIconHtml([0])} タイミングよくジャンプ`;
+          label.innerHTML = `${buttonIconHtml([0], 'Space')} タイミングよくジャンプ`;
         }
       }
       const zone = document.getElementById('launch-timing-zone');
@@ -1292,7 +1293,7 @@ export class Game {
     const primaryBtn = document.getElementById('retry-success-btn');
     const titleBtn = document.getElementById('title-success-btn');
     if (primaryBtn && nextLevel) {
-      primaryBtn.textContent = `${LEVELS[nextLevel].schoolName}に進む`;
+      setResultMenuButtonLabel(primaryBtn, `${LEVELS[nextLevel].schoolName}に進む`);
       primaryBtn.dataset.autoSeconds = '5';
       delete primaryBtn.dataset.autoDisabled;
     }
@@ -1385,7 +1386,7 @@ export class Game {
     const primaryBtn = document.getElementById('retry-success-btn');
     const titleBtn = document.getElementById('title-success-btn');
     if (primaryBtn) {
-      primaryBtn.textContent = '再挑戦';
+      setResultMenuButtonLabel(primaryBtn, '再挑戦');
       primaryBtn.dataset.autoDisabled = '1';
       delete primaryBtn.dataset.autoSeconds;
     }

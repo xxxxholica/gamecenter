@@ -382,7 +382,14 @@ function shouldRecordFetch(input: RequestInfo | URL): boolean {
   try {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
     if (url.origin !== location.origin) return false;
-    if (url.pathname.startsWith('/api/analytics/') || url.pathname.startsWith('/api/replay/')) return false;
+    if (
+      url.pathname.startsWith('/api/analytics/') ||
+      url.pathname.startsWith('/api/replay/') ||
+      url.pathname === '/api/ads' ||
+      url.pathname.startsWith('/api/ads/')
+    ) {
+      return false;
+    }
     return url.pathname.startsWith('/api/') || url.pathname === '/online-status';
   } catch {
     return false;
@@ -392,7 +399,12 @@ function shouldRecordFetch(input: RequestInfo | URL): boolean {
 function isTelemetry(input: RequestInfo | URL): boolean {
   try {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
-    return url.pathname.startsWith('/api/analytics/') || url.pathname.startsWith('/api/replay/');
+    return (
+      url.pathname.startsWith('/api/analytics/') ||
+      url.pathname.startsWith('/api/replay/') ||
+      url.pathname === '/api/ads' ||
+      url.pathname.startsWith('/api/ads/')
+    );
   } catch {
     return false;
   }

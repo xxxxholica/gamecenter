@@ -3,7 +3,7 @@ import { speedGaugeSvg, angleOf, SPEED_MAX, SPEED_RED, SPEED_WARN, SEG_COUNT } f
 import { STAGES } from './stages';
 import { TIMER_SOLID_SVG } from './icons';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
-import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
+import { setupResultMenu, applyResultMenuFocus, setResultMenuButtonLabel } from '../../../../shared/arcadeResultMenu';
 import { returnToHub } from '../../../../shared/homeReturn';
 import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
 import * as THREE from 'three';
@@ -952,8 +952,9 @@ export class DriveHUD {
     for (const id of ['pause-btn-title', 'res-btn-title']) {
       const el = document.getElementById(id);
       if (!el) continue;
-      el.dataset.label ??= el.textContent ?? '';
-      el.textContent = on ? 'ロビーへ戻る' : el.dataset.label;
+      const defaultLabel = el.dataset.label ?? (id === 'pause-btn-title' ? 'ゲームを終了' : 'タイトルに戻る');
+      el.dataset.label = defaultLabel;
+      setResultMenuButtonLabel(el, on ? 'ロビーへ戻る' : defaultLabel);
     }
     if (!on) this.remoteMarkers = [];
   }
