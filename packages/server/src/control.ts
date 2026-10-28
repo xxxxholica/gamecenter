@@ -12,7 +12,7 @@ import { RANDOM } from './vote.ts';
 export const DEFAULT_SOCKET = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'control.sock');   // data/ はサービスが書き込める唯一の場所
 
 /** 開放時間のランダムは、この中(分)から開放した時に1回だけ選ぶ。 */
-export const RANDOM_MINUTES = [60, 120, 180, 360];
+export const RANDOM_MINUTES = [60, 120, 180, 360, 720, 1440, 2880];
 
 /** 不正なURL(`GET http://[bad/` など)でも例外にならないURLパース。失敗は null。 */
 export function safeUrl(raw: string | undefined): URL | null {
@@ -64,10 +64,10 @@ export interface ControlHandlers {
 }
 
 /**
- * /open?game=&minutes=&<設定のキー>=<値> を読む。minutes は 'random' も可(1・2・3・6時間から1回選ぶ)。
+ * /open?game=&minutes=&<設定のキー>=<値> を読む。minutes は 'random' も可(1・2・3・6・12・24・48時間から1回選ぶ)。
  * game 以外のキーは、すべてゲーム固有の設定として渡す(不正な値はゲーム側が無視する)。
  */
-export function parseOpenOptions(url: URL, maxMinutes = 24 * 60): { game: string; opts: OpenOptions } {
+export function parseOpenOptions(url: URL, maxMinutes = 48 * 60): { game: string; opts: OpenOptions } {
   const raw = url.searchParams.get('minutes') ?? '0';
   const minutes = raw === RANDOM ? RANDOM_MINUTES[Math.floor(Math.random() * RANDOM_MINUTES.length)] : Number(raw);
   const config: Record<string, string> = {};
