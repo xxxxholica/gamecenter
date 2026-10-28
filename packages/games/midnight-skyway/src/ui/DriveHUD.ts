@@ -5,6 +5,7 @@ import { TIMER_SOLID_SVG } from './icons';
 import { countUpText } from '../../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
 import { returnToHub } from '../../../../shared/homeReturn';
+import { reportDeepAnalytics } from '../../../../shared/arcadeAnalytics';
 import * as THREE from 'three';
 import { setText, setDisplay } from '../../../../shared/hudDom';
 import { MapBase } from '../maps/MapBase';
@@ -294,21 +295,21 @@ export class DriveHUD {
     this.pauseModalEl = document.getElementById('hud-pause-modal')!;
 
     // Pause modal buttons
-    document.getElementById('pause-btn-resume')?.addEventListener('click', () => this.hidePauseModal());
+    document.getElementById('pause-btn-resume')?.addEventListener('click', () => this.hidePauseModal('resume'));
     document.getElementById('pause-btn-retry')?.addEventListener('click', () => {
-      this.hidePauseModal();
+      this.hidePauseModal('restart');
       this.events.onRetry();
     });
     document.getElementById('pause-btn-map')?.addEventListener('click', () => {
-      this.hidePauseModal();
+      this.hidePauseModal('exit');
       this.events.onChangeMap();
     });
     document.getElementById('pause-btn-car')?.addEventListener('click', () => {
-      this.hidePauseModal();
+      this.hidePauseModal('exit');
       this.events.onChangeCar();
     });
     document.getElementById('pause-btn-title')?.addEventListener('click', () => {
-      this.hidePauseModal();
+      this.hidePauseModal('exit');
       returnToHub(); // 他のゲームのポーズと同じく、「ゲームを終了」はホームへ戻る
     });
 
@@ -821,17 +822,23 @@ export class DriveHUD {
   }
 
   public showPauseModal(): void {
+    if (this.isPauseOpen) return;
     this.isPauseOpen = true;
     this.pauseModalEl.style.display = 'flex';
     this.syncPadMenu(0);
+    reportDeepAnalytics('pause', { action: 'open' });
     this.events.onPauseChange?.(true);
   }
 
-  public hidePauseModal(): void {
+  public hidePauseModal(action: 'resume' | 'restart' | 'exit' = 'resume'): void {
+    const wasOpen = this.isPauseOpen;
     this.isPauseOpen = false;
     this.pauseModalEl.style.display = 'none';
     this.syncPadMenu();
-    this.events.onPauseChange?.(false);
+    if (wasOpen) {
+      reportDeepAnalytics('pause', { action });
+      this.events.onPauseChange?.(false);
+    }
   }
 
   /** True while the pause or result menu is up (the arcade pad then drives the menu instead of the car). */

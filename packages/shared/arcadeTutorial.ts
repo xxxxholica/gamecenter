@@ -2,6 +2,7 @@
 // 時間や敵を止めた状態で実際に自機を動かして基本操作を1つずつ順番に覚えるアクティブラーニング・チュートリアル。
 // プレイ中のHUDはそのまま表示し、中央に「四角ドット(外枠なし)＋ドット風操作ウィンドウ」、下部中央に「チュートリアルをスキップ」を表示する。
 
+import { getGamePhase, refreshRoundStartTime, reportPhase } from './arcadeAnalytics';
 import { buttonIconHtml, initInputModeTracker, renderKeyboardKeysHtml } from './arcadeGuide';
 import { refreshLeaderboardRunTicket } from './arcadeLeaderboard';
 import { escapeHtml } from './arcadeLeaderboardCore';
@@ -424,6 +425,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
   injectStyle();
   initInputModeTracker();
   document.body?.classList.add('is-arcade-tutorial-active');
+  if (getGamePhase() !== 'playing') reportPhase('playing');
 
   const root = document.createElement('div');
   root.className = 'atut-overlay';
@@ -610,6 +612,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
       playTone(660, 60);
       cleanup();
       refreshLeaderboardRunTicket();
+      refreshRoundStartTime();
       options.onComplete(true);
     } else {
       dotEls.forEach((dot) => {
@@ -627,6 +630,7 @@ export function startArcadeTutorial(options: ArcadeTutorialOptions): ArcadeTutor
       stepTimer = window.setTimeout(() => {
         cleanup();
         refreshLeaderboardRunTicket();
+        refreshRoundStartTime();
         options.onComplete(false);
       }, TUTORIAL_DONE_HOLD_MS);
     }

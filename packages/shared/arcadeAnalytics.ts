@@ -389,6 +389,17 @@ export class FpsTracker {
     this.rafId = requestAnimationFrame(loop);
   }
 
+  /** 初期ロード完了時(最初の画面が出た瞬間)に呼び出し、シェーダコンパイル等のロード中のスパイクをプレイ中のFPS集計から除外する */
+  reset(): void {
+    if (!this.active) return;
+    this.startTime = performance.now();
+    this.lastTime = this.startTime;
+    this.frameCount = 0;
+    this.droppedFrames = 0;
+    this.frameTimes = [];
+    this.activeMs = 0;
+  }
+
   stop(): PerformanceMetrics {
     this.active = false;
     if (typeof cancelAnimationFrame === 'function' && this.rafId) {
@@ -406,7 +417,7 @@ export class FpsTracker {
     if (this.frameTimes.length > 0) {
       const sorted = [...this.frameTimes].sort((a, b) => b - a); // 降順 (大きいdelta = 低fps)
       const worstDelta = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.05))]; // 95% tile
-      minFps = worstDelta > 0 ? Math.round((1000 / worstDelta) * 10) / 10 : avgFps;
+      minFps = worstDelta > 0 ? Math.min(avgFps, Math.round((1000 / worstDelta) * 10) / 10) : avgFps;
     }
 
     const droppedFrameRate = this.frameCount > 0 ? Math.round((this.droppedFrames / this.frameCount) * 100) / 100 : 0;
@@ -444,11 +455,16 @@ export class InputTracker {
   attachWindow(win: Window): void {
     if (!this.active || !this.onKey || !this.onTouch || !this.onBlur) return;
     try {
-      win.addEventListener('keydown', this.onKey, { passive: true });
-      win.addEventListener('touchstart', this.onTouch, { passive: true });
+      win.addEventListener('keydown', this.onKey, { capture: true, passive: true });
+      win.addEventListener('touchstart', this.onTouch, { capture: true, passive: true });
       win.addEventListener('blur', this.onBlur);
       this.extraWindows.push(win);
     } catch { /* クロスオリジンなどで触れない場合は無視 */ }
+  }
+
+  /** ポーズ画面が実際に開かれた回数を記録する(メニュー戻る等の Backspace や名前入力の P と混同しない) */
+  recordPause(): void {
+    if (this.active) this.pauseCount++;
   }
 
   start(): void {
@@ -463,7 +479,6 @@ export class InputTracker {
     this.onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       this.keyCount++;
-      if (e.key === 'p' || e.key === 'P' || e.key === 'Backspace') this.pauseCount++;
     };
     this.onTouch = () => {
       this.touchCount++;
@@ -472,8 +487,8 @@ export class InputTracker {
       this.blurCount++;
     };
 
-    window.addEventListener('keydown', this.onKey, { passive: true });
-    window.addEventListener('touchstart', this.onTouch, { passive: true });
+    window.addEventListener('keydown', this.onKey, { capture: true, passive: true });
+    window.addEventListener('touchstart', this.onTouch, { capture: true, passive: true });
     window.addEventListener('blur', this.onBlur);
 
     // アケコンのボタンを押した回数(押した瞬間だけ数える)。キーを1回押しただけで「キーボード」にならないよう、回数で比べる
@@ -496,13 +511,13 @@ export class InputTracker {
 
   stop(): InputMetrics {
     this.active = false;
-    if (this.onKey) window.removeEventListener('keydown', this.onKey);
-    if (this.onTouch) window.removeEventListener('touchstart', this.onTouch);
+    if (this.onKey) window.removeEventListener('keydown', this.onKey, true);
+    if (this.onTouch) window.removeEventListener('touchstart', this.onTouch, true);
     if (this.onBlur) window.removeEventListener('blur', this.onBlur);
     for (const win of this.extraWindows) {
       try {
-        if (this.onKey) win.removeEventListener('keydown', this.onKey);
-        if (this.onTouch) win.removeEventListener('touchstart', this.onTouch);
+        if (this.onKey) win.removeEventListener('keydown', this.onKey, true);
+        if (this.onTouch) win.removeEventListener('touchstart', this.onTouch, true);
         if (this.onBlur) win.removeEventListener('blur', this.onBlur);
       } catch { /* ignore */ }
     }
@@ -553,6 +568,9 @@ export function attachGlobalErrorTracker(gameId?: string): void {
   hookWindowErrors((data) => void sendAnalyticsEvent('client_error', { gameId, data }));
 }
 
+let framedFpsTracker: FpsTracker | null = null;
+let framedInitialPhaseSeen = false;
+
 /**
  * ハブのiframe内のゲームから、親(ハブ)へエラーとFPSを中継する。
  * iframe内のエラーは親windowには届かず、親のrequestAnimationFrameはゲームの描画を測れないため、ゲーム側で拾って渡す。
@@ -571,13 +589,19 @@ function relayFramedTelemetry(): void {
 
   const fps = new FpsTracker();
   fps.start();
-  const sample = () => post('perf_sample', { performance: fps.getMetrics() });
+  framedFpsTracker = fps;
+  framedInitialPhaseSeen = false;
+  const sample = () => {
+    const metrics = fps.getMetrics();
+    if ((metrics.avgFps ?? 0) > 0) post('perf_sample', { performance: metrics });
+  };
   untrackedInterval(() => {
     if (document.visibilityState === 'visible') sample();
   }, PERF_SAMPLE_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') sample();
   });
+  window.addEventListener('pagehide', sample);
 }
 
 // ==========================================
@@ -596,6 +620,10 @@ export function reportDeepAnalytics(type: string, data?: Record<string, unknown>
   else if (type === 'round_start') gameSidePhase = 'playing';
   else if (type === 'progression_update' && (data?.result === 'gameover' || data?.result === 'clear')) gameSidePhase = 'result';
   else if (type === 'pause') gameSidePhase = data?.action === 'open' ? 'paused' : data?.action === 'resume' ? 'playing' : gameSidePhase;
+  if (!framedInitialPhaseSeen && (type === 'phase' || type === 'round_start')) {
+    framedInitialPhaseSeen = true;
+    framedFpsTracker?.reset();
+  }
   // 操作のリプレイ: 記録では照合点として残し、再生では記録と突き合わせる
   replayCheckpoint(type, data);
   // ベンチマーク有効時は、ゲームの進行(ステージ・ウェーブなど)を計測のマークにして、カクつきがどの場面で起きたか分かるようにする
@@ -604,6 +632,12 @@ export function reportDeepAnalytics(type: string, data?: Record<string, unknown>
   );
   if (window.parent && window.parent !== window) {
     try {
+      if (framedFpsTracker && (type === 'progression_update' || type === 'pause' || type === 'exit' || type === 'phase')) {
+        const metrics = framedFpsTracker.getMetrics();
+        if ((metrics.avgFps ?? 0) > 0) {
+          window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType: 'perf_sample', data: { performance: metrics } }, window.location.origin);
+        }
+      }
       window.parent.postMessage({ type: GAME_ANALYTICS_MESSAGE, subType: type, data }, window.location.origin);
     } catch { /* 親に届けられなくても、ゲームは止めない */ }
     return;
@@ -633,6 +667,11 @@ export function reportRoundStart(detail?: Record<string, unknown>): void {
   reportDeepAnalytics('round_start', detail);
 }
 
+/** チュートリアル完了時など、ラウンド番号を増やさずに本編の開始時刻だけを今に合わせ直す */
+export function refreshRoundStartTime(): void {
+  reportDeepAnalytics('round_timer_reset');
+}
+
 /**
  * 死亡地点(脱落・失敗した場所)を知らせる。管理画面の死亡地点マップに点として出る。
  * map: 図の種類(ゲームの中で、同じ座標で描ける単位。ステージ・コースごとに分ける)。x・y: その図の上の位置(ゲームの座標のままでよい)
@@ -654,8 +693,12 @@ export function reportExit(via?: string): void {
  */
 export function applyDeepAnalytics(type: string, data: Record<string, unknown> | undefined, gameId: string | undefined): void {
   if (type === 'perf_sample') {
-    const perf = data?.performance;
-    if (perf && typeof perf === 'object') reportedPerformance = perf as PerformanceMetrics;
+    const perf = data?.performance as PerformanceMetrics | undefined;
+    if (perf && typeof perf === 'object' && (perf.avgFps ?? 0) > 0) reportedPerformance = perf;
+    return;
+  }
+  if (type === 'round_timer_reset') {
+    if (roundStartedAt !== null) roundStartedAt = Date.now();
     return;
   }
   if (type === 'progression_update') {
@@ -679,6 +722,7 @@ export function applyDeepAnalytics(type: string, data: Record<string, unknown> |
   if (type === 'pause') {
     // 開いた: 場面を paused に。閉じた(再開): 開く前の場面に戻す。やり直し・終了は、そのあとの round_start・exit で分かる
     if (data?.action === 'open') {
+      activeInputTracker?.recordPause();
       phaseBeforePause = currentPhase;
       setPhase('paused', currentPhase ? { from: currentPhase.name } : undefined, gameId);
     } else if (data?.action === 'resume' && phaseBeforePause) {
@@ -753,7 +797,10 @@ function setPhase(name: string, detail: Record<string, unknown> | undefined, gam
   if (currentPhase && currentPhase.name === name && JSON.stringify(currentPhase.detail ?? null) === JSON.stringify(detail ?? null)) return;
   const now = Date.now();
   const first = loadMs === undefined;
-  if (first) loadMs = now - activePlay.startedAt;
+  if (first) {
+    loadMs = now - activePlay.startedAt;
+    activeFpsTracker?.reset();
+  }
   currentPhase = { name, detail, at: now };
   sendPlayEvent('phase_change', { phase: name, ...(detail ? { detail } : {}), ...(first ? { loadMs } : {}) }, gameId);
 }
@@ -763,7 +810,10 @@ function startRound(detail: Record<string, unknown> | undefined, gameId: string 
   roundNo++;
   roundStartedAt = Date.now();
   phaseBeforePause = null;
-  if (loadMs === undefined) loadMs = roundStartedAt - activePlay.startedAt;
+  if (loadMs === undefined) {
+    loadMs = roundStartedAt - activePlay.startedAt;
+    activeFpsTracker?.reset();
+  }
   currentPhase = { name: 'playing', detail, at: roundStartedAt };
   sendPlayEvent('round_start', detail ? { detail } : undefined, gameId);
 }
