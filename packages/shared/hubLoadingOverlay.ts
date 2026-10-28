@@ -2,6 +2,8 @@
 // 背景はホーム(ハブ)と同じ方眼メモ帳+落書きを使い、中央に白いボックスを置き、
 // 画面下部には「広告」ラベルと /api/ads から取得した広告ロゴをランダムで表示する。
 
+import { trackAdImpression } from './arcadeAnalytics';
+
 const AD_FILENAME_RE = /^logo-[0-9]{2,3}(?:-[a-z0-9]+)*\.webp$/;
 
 /** 「読み込み中」画面の最低表示時間(ms) */
@@ -29,7 +31,26 @@ let adImgEl: HTMLImageElement | null = null;
 let adLogos: string[] = [];
 let adFetchPromise: Promise<string[]> | null = null;
 let lastPickedLogo = '';
+let activeAdLogo = '';
+let activeAdStartedAt = 0;
+let pagehideHooked = false;
 const preloadedImages = new Map<string, HTMLImageElement>();
+
+/** 表示中の広告ロゴがあれば、表示していた秒数を計測して送信する */
+function flushActiveAdImpression(beacon = false): void {
+  if (!activeAdLogo || activeAdStartedAt <= 0) {
+    activeAdLogo = '';
+    activeAdStartedAt = 0;
+    return;
+  }
+  const logo = activeAdLogo;
+  const elapsedSec = (performance.now() - activeAdStartedAt) / 1000;
+  activeAdLogo = '';
+  activeAdStartedAt = 0;
+  if (elapsedSec > 0) {
+    trackAdImpression(logo, elapsedSec, beacon);
+  }
+}
 
 /** リプレイ記録の乱数列を消費しない乱数 */
 function nextRandom(): number {
@@ -87,6 +108,7 @@ export function preloadHubAdLogos(): Promise<string[]> {
 
 function applyRandomAdLogo(): void {
   if (!adWrapEl || !adImgEl) return;
+  flushActiveAdImpression(false);
   if (adLogos.length === 0) {
     adWrapEl.classList.add('is-empty');
     adImgEl.removeAttribute('src');
@@ -104,6 +126,10 @@ function applyRandomAdLogo(): void {
 
   adImgEl.src = `/api/ads/${encodeURIComponent(chosen)}`;
   adWrapEl.classList.remove('is-empty');
+  if (overlayEl?.classList.contains('is-visible')) {
+    activeAdLogo = chosen;
+    activeAdStartedAt = performance.now();
+  }
 }
 
 function ensureOverlay(): HTMLDivElement {
@@ -238,8 +264,16 @@ function ensureOverlay(): HTMLDivElement {
   adWrapEl = overlayEl.querySelector<HTMLDivElement>('.hlo-ad');
   adImgEl = overlayEl.querySelector<HTMLImageElement>('.hlo-ad-img');
   adImgEl?.addEventListener('error', () => {
+    activeAdLogo = '';
+    activeAdStartedAt = 0;
     adWrapEl?.classList.add('is-empty');
   });
+  if (!pagehideHooked && typeof window !== 'undefined') {
+    pagehideHooked = true;
+    window.addEventListener('pagehide', () => {
+      flushActiveAdImpression(true);
+    });
+  }
 
   document.body.appendChild(overlayEl);
   return overlayEl;
@@ -249,15 +283,16 @@ function ensureOverlay(): HTMLDivElement {
 export function showHubLoading(): void {
   const el = ensureOverlay();
   const wasVisible = el.classList.contains('is-visible');
+  el.classList.add('is-visible');
   void preloadHubAdLogos();
   if (!wasVisible) {
     applyRandomAdLogo();
   }
-  el.classList.add('is-visible');
 }
 
 /** 「読み込み中」画面をフェードアウトして閉じる */
 export function hideHubLoading(): void {
+  flushActiveAdImpression(false);
   if (!overlayEl) return;
   overlayEl.classList.remove('is-visible');
   if (typeof window !== 'undefined') {

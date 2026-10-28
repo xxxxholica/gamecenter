@@ -1103,3 +1103,18 @@ export function trackScoreSubmit(
     },
   });
 }
+
+/** ローディング画面の広告表示実績(どの広告ロゴが何秒間表示されたか)を記録 */
+export function trackAdImpression(logo: string, durationSec: number, beacon = false): void {
+  if (!logo || typeof logo !== 'string') return;
+  if (typeof durationSec !== 'number' || !Number.isFinite(durationSec) || durationSec <= 0) return;
+  const roundedSec = Math.round(durationSec * 100) / 100;
+  if (roundedSec <= 0) return;
+  void sendAnalyticsEvent('ad_impression', {
+    beacon,
+    data: {
+      logo,
+      durationSec: roundedSec,
+    },
+  });
+}
