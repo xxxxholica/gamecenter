@@ -24,6 +24,7 @@ function note(degree: number, octave = 0): number {
 export class SumoBgm {
   private ctx: AudioContext;
   private out: GainNode;
+  private fadeGain: GainNode;
   private noiseBuffer: AudioBuffer;
 
   private track: BgmTrack = 'menu';
@@ -33,15 +34,70 @@ export class SumoBgm {
   private nextTime: number = 0;
   private step: number = 0;
   private loop: number = 0;
+  private syncEnabled: boolean = false;
   private anchorMs: number = 0;
+  private serverNowFn: (() => number) | null = null;
+  private syncFadeTimer: number | null = null;
   public lastSyncDriftSec: number = 0;
 
   constructor(ctx: AudioContext, out: GainNode) {
     this.ctx = ctx;
-    this.out = out;
+    this.fadeGain = ctx.createGain();
+    this.fadeGain.gain.value = 1.0;
+    this.fadeGain.connect(out);
+    this.out = this.fadeGain;
 
     // ノイズ(太鼓の打面・笛の息づかい用)を1回だけ作っておく
     this.noiseBuffer = createWhiteNoiseBuffer(ctx, 1.0);
+  }
+
+  public setOnlineSync(enabled: boolean, anchorMs: number = 0, serverNowFn?: () => number) {
+    if (!enabled) {
+      if (this.syncFadeTimer !== null) {
+        clearTimeout(this.syncFadeTimer);
+        this.syncFadeTimer = null;
+      }
+      this.syncEnabled = false;
+      this.anchorMs = 0;
+      this.serverNowFn = null;
+      const t = this.ctx.currentTime;
+      this.fadeGain.gain.cancelScheduledValues(t);
+      this.fadeGain.gain.setValueAtTime(Math.max(0.0001, this.fadeGain.gain.value), t);
+      this.fadeGain.gain.exponentialRampToValueAtTime(1.0, t + 0.15);
+      return;
+    }
+
+    this.serverNowFn = serverNowFn ?? null;
+    const cleanAnchor = Number.isFinite(anchorMs) ? anchorMs : 0;
+
+    if (!this.syncEnabled) {
+      if (this.running && this.ctx.state === 'running') {
+        if (this.syncFadeTimer !== null) clearTimeout(this.syncFadeTimer);
+        const t = this.ctx.currentTime;
+        const cur = Math.max(0.0001, this.fadeGain.gain.value);
+        this.fadeGain.gain.cancelScheduledValues(t);
+        this.fadeGain.gain.setValueAtTime(cur, t);
+        this.fadeGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+        this.syncFadeTimer = window.setTimeout(() => {
+          this.syncFadeTimer = null;
+          this.syncEnabled = true;
+          this.anchorMs = cleanAnchor;
+          this.nextTime = 0;
+          this.schedule();
+          const t2 = this.ctx.currentTime;
+          this.fadeGain.gain.cancelScheduledValues(t2);
+          this.fadeGain.gain.setValueAtTime(0.0001, t2);
+          this.fadeGain.gain.exponentialRampToValueAtTime(1.0, t2 + 0.38);
+        }, 390);
+      } else {
+        this.syncEnabled = true;
+        this.anchorMs = cleanAnchor;
+        this.nextTime = 0;
+      }
+    } else if (this.anchorMs !== cleanAnchor) {
+      this.anchorMs = cleanAnchor;
+      this.nextTime = 0;
+    }
   }
 
   public setAnchor(anchorMs: number) {
@@ -52,12 +108,16 @@ export class SumoBgm {
     }
   }
 
+  private get canSync(): boolean {
+    return this.syncEnabled && (this.serverNowFn !== null || hasServerClockSync());
+  }
+
   public start(track: BgmTrack) {
     if (this.running && this.track === track) return;
     this.track = track;
     this.step = 0;
     this.loop = 0;
-    this.nextTime = hasServerClockSync() ? 0 : this.ctx.currentTime + 0.08;
+    this.nextTime = this.canSync ? 0 : this.ctx.currentTime + 0.08;
     if (!this.running) {
       this.running = true;
       this.timer = window.setInterval(() => this.schedule(), 25);
@@ -67,6 +127,10 @@ export class SumoBgm {
 
   public stop() {
     this.running = false;
+    if (this.syncFadeTimer !== null) {
+      clearTimeout(this.syncFadeTimer);
+      this.syncFadeTimer = null;
+    }
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
@@ -85,16 +149,17 @@ export class SumoBgm {
   private schedule() {
     if (!this.running) return;
     if (this.ctx.state !== 'running') {
-      this.nextTime = hasServerClockSync() ? 0 : this.ctx.currentTime + 0.08;
+      this.nextTime = this.canSync ? 0 : this.ctx.currentTime + 0.08;
       return;
     }
-    if (hasServerClockSync()) {
+    if (this.canSync) {
+      const serverNow = this.serverNowFn ? this.serverNowFn() : sharedServerNow();
       const totalStep = (this.loop % 2) * 32 + this.step;
       const sync = syncStepSequencer(
         this.ctx.currentTime,
         this.nextTime,
         totalStep,
-        sharedServerNow(),
+        serverNow,
         this.stepSec,
         64,
         this.anchorMs,

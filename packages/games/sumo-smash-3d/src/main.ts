@@ -909,7 +909,7 @@ class SumoGame {
 
   private enterOnlineWait() {
     this.gameState = 'menu';
-    this.soundManager.setBgmAnchor(0);
+    this.soundManager.setOnlineSync(true, 0, () => this.net.serverNow());
     this.armInput();
     this.wireOnline();
     if (!this.waitScreen) {
@@ -977,7 +977,7 @@ class SumoGame {
   /** 全員のロードが揃った。サーバーが仕切りを始めるので、その状態が届くのを待つ。 */
   private onOnlineGo(at?: number) {
     if (!this.match || this.gameState !== 'battle' || this.roundState !== 'waiting') return;
-    this.soundManager.setBgmAnchor(at ?? this.net.serverNow());
+    this.soundManager.setOnlineSync(true, at ?? this.net.serverNow(), () => this.net.serverNow());
     this.roundState = 'standby';
   }
 
@@ -999,7 +999,7 @@ class SumoGame {
   private showOnlineVictory(winner: number, wins: number[], me: number) {
     this.modalShown = true;
     this.soundManager.playTaiko();
-    this.soundManager.setBgmAnchor(0);
+    this.soundManager.setOnlineSync(false);
     this.soundManager.playBgm('menu');
     this.menuNav.clear();
     this.armInput(600);
@@ -1016,7 +1016,7 @@ class SumoGame {
 
   /** オンラインの途中だった場合の片付け。オフラインでは何も起きない。 */
   private leaveOnline() {
-    this.soundManager.setBgmAnchor(0);
+    this.soundManager.setOnlineSync(false);
     this.waitScreen?.hide();
     this.match?.dispose();
     this.match = null;

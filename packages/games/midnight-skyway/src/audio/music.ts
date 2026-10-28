@@ -53,9 +53,11 @@ export class Bgm {
   /** 次に曲を始める時の、曲の途中から始める位置(秒) */
   private syncOffset = 0;
   private syncTimer = 0;
-  /** 現在の同期再生の基準となるサーバー時刻(ms)。null のとき menu はサーバー時計が同期済みなら 0 を基準にループ同期 */
+  /** 現在の同期再生の基準となるサーバー時刻(ms)。null のとき onlineWaiting が true なら 0 を基準にループ同期 */
   private syncAnchorServerMs: number | null = null;
   private serverNowFn: (() => number) | null = null;
+  /** オンライン対戦の待機画面に入っている間だけ true(タイトル・モード選択・オフラインでは同期しない) */
+  private onlineWaiting = false;
   /** 対戦ロード中に事前デコード・バッファリングしておく Audio 要素 */
   private preloaded: { src: string; el: HTMLAudioElement } | null = null;
   /** 計測・診断用: 直近の同期ドリフト(秒) */
@@ -97,7 +99,10 @@ export class Bgm {
   public play(pool: 'menu' | 'race', forceChange: boolean = false): void {
     this.syncIndex = null;
     this.syncAnchorServerMs = null;
-    this.serverNowFn = null;
+    if (pool !== 'menu' || !this.onlineWaiting) {
+      this.onlineWaiting = false;
+      this.serverNowFn = null;
+    }
     window.clearTimeout(this.syncTimer);
     // メニュー曲は1曲(cosmic-drift)なので、すでに menu が再生中なら途切れさせない(待機画面との同期も維持する)
     if (this.pool === pool && this.run && (!forceChange || pool === 'menu')) return;
@@ -105,6 +110,46 @@ export class Bgm {
     this.pool = pool;
     this.fadeOutRun(0.45);
     this.eng.whenRunning(() => this.startNext());
+  }
+
+  /**
+   * オンライン対戦の待機画面に入った時だけメニューBGMをサーバー時刻へ同期させる。
+   * すでに流れている音楽がある場合はフェードアウトさせてから、同期位置へ合わせてフェードインする。
+   */
+  public setOnlineWaiting(active: boolean, serverNowFn?: () => number): void {
+    if (!active) {
+      this.onlineWaiting = false;
+      if (this.pool === 'menu') {
+        this.serverNowFn = null;
+        if (this.run && !this.run.disposed) {
+          this.run.el.playbackRate = 1.0;
+        }
+      }
+      return;
+    }
+    const nextNowFn = serverNowFn ?? (hasServerClockSync() ? sharedServerNow : null);
+    if (this.onlineWaiting) {
+      this.serverNowFn = nextNowFn;
+      return;
+    }
+    this.onlineWaiting = true;
+    this.serverNowFn = nextNowFn;
+    if (this.pool === 'menu' && this.run && !this.run.disposed) {
+      const r = this.run;
+      this.seekSmooth(
+        r,
+        () => {
+          const dur = r.el.duration;
+          const nowFn = this.serverNowFn ?? (hasServerClockSync() ? sharedServerNow : null);
+          if (!nowFn || !Number.isFinite(dur) || dur <= 0) return r.el.currentTime;
+          const elapsed = nowFn() / 1000;
+          return ((elapsed % dur) + dur) % dur;
+        },
+        0.38,
+        0.38,
+        true,
+      );
+    }
   }
 
   /** 再生中の曲を冒頭(0秒)に巻き戻す(チュートリアル終了後に本番カウントダウンへ入る時など) */
@@ -116,6 +161,7 @@ export class Bgm {
 
   /** BGMを止める(対戦のロード中など、曲を流さない間) */
   public stop(): void {
+    this.onlineWaiting = false;
     this.syncIndex = null;
     this.syncAnchorServerMs = null;
     this.serverNowFn = null;
@@ -261,8 +307,9 @@ export class Bgm {
     const applyInitialPositionAndPlay = () => {
       if (run.disposed || this.run !== run) return;
       let targetOffset = offset;
-      if (isMenu && hasServerClockSync() && Number.isFinite(el.duration) && el.duration > 0) {
-        const elapsed = sharedServerNow() / 1000;
+      if (isMenu && this.onlineWaiting && (this.serverNowFn || hasServerClockSync()) && Number.isFinite(el.duration) && el.duration > 0) {
+        const nowMs = this.serverNowFn ? this.serverNowFn() : sharedServerNow();
+        const elapsed = nowMs / 1000;
         targetOffset = ((elapsed % el.duration) + el.duration) % el.duration;
       } else if (this.syncAnchorServerMs !== null && this.serverNowFn) {
         targetOffset = Math.max(0, (this.serverNowFn() - this.syncAnchorServerMs) / 1000);
@@ -312,17 +359,23 @@ export class Bgm {
   }
 
   /**
-   * 再生中の曲を「ぶちっ」というクリックノイズなしで滑らかに指定位置へシークする。
+   * 再生中の曲をフェードアウトさせてから指定位置へシークし、フェードインで滑らかに入れ替える。
    */
-  private seekSmooth(run: Run, targetSec: number): void {
-    if (run.disposed || run.seeking || this.run !== run) return;
+  private seekSmooth(
+    run: Run,
+    targetSecOrFn: number | (() => number),
+    fadeOutSec = 0.045,
+    fadeInSec = 0.06,
+    force = false,
+  ): void {
+    if (run.disposed || (run.seeking && !force) || this.run !== run) return;
     run.seeking = true;
     const ctx = this.eng.ctx;
     const t = ctx.currentTime;
     const curGain = Math.max(0.0001, run.out.gain.value);
     run.out.gain.cancelScheduledValues(t);
     run.out.gain.setValueAtTime(curGain, t);
-    run.out.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    run.out.gain.exponentialRampToValueAtTime(0.0001, t + fadeOutSec);
 
     window.setTimeout(() => {
       if (run.disposed || this.run !== run) return;
@@ -335,22 +388,23 @@ export class Bgm {
         const t2 = ctx.currentTime;
         run.out.gain.cancelScheduledValues(t2);
         run.out.gain.setValueAtTime(0.0001, t2);
-        run.out.gain.exponentialRampToValueAtTime(Math.max(0.0001, run.track.gain), t2 + 0.06);
+        run.out.gain.exponentialRampToValueAtTime(Math.max(0.0001, run.track.gain), t2 + fadeInSec);
         run.seeking = false;
       };
       run.el.addEventListener('seeked', finish, { once: true });
-      window.setTimeout(finish, 90);
+      window.setTimeout(finish, Math.max(90, Math.round(fadeInSec * 300)));
       try {
+        const targetSec = typeof targetSecOrFn === 'function' ? targetSecOrFn() : targetSecOrFn;
         const dur = run.el.duration;
         run.el.currentTime = Number.isFinite(dur) && dur > 0 ? Math.min(Math.max(0, targetSec), dur - 0.05) : Math.max(0, targetSec);
       } catch {
         finish();
       }
-    }, 48);
+    }, Math.round((fadeOutSec + 0.01) * 1000));
   }
 
   /**
-   * 待機画面(menu)およびオンライン対戦中(race)に、サーバー時刻とのズレを PLL (playbackRate 微調整) で継続補正する。
+   * 待機画面(menu かつ onlineWaiting)およびオンライン対戦中(race)に、サーバー時刻とのズレを PLL (playbackRate 微調整) で継続補正する。
    */
   private tickSyncPll(): void {
     const r = this.run;
@@ -366,8 +420,8 @@ export class Bgm {
       serverNow = this.serverNowFn ? this.serverNowFn() : hasServerClockSync() ? sharedServerNow() : null;
       anchorMs = this.syncAnchorServerMs;
       loop = false;
-    } else if (this.pool === 'menu' && hasServerClockSync()) {
-      serverNow = sharedServerNow();
+    } else if (this.pool === 'menu' && this.onlineWaiting && (this.serverNowFn || hasServerClockSync())) {
+      serverNow = this.serverNowFn ? this.serverNowFn() : sharedServerNow();
       anchorMs = 0;
       loop = true;
     }

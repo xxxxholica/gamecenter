@@ -35,9 +35,20 @@ export class Bgm {
   private nextTime = 0;
   private step = 0;
   private anchorMs = 0;
+  private syncEnabled = false;
+  private serverNowFn: (() => number) | null = null;
+  private syncFadeTimer: number | null = null;
   public lastSyncDriftSec = 0;
 
   constructor(private readonly getContext: () => AudioContext | null) {}
+
+  private get canSync(): boolean {
+    return this.syncEnabled && (this.serverNowFn !== null || hasServerClockSync());
+  }
+
+  private serverNow(): number {
+    return this.serverNowFn ? this.serverNowFn() : sharedServerNow();
+  }
 
   /** 最初の操作のあとに呼ぶ(ブラウザは操作の前には音を出せない)。音を出す準備をして、鳴らし始める */
   unlock(): void {
@@ -52,8 +63,68 @@ export class Bgm {
     this.master = ctx.createGain();
     this.master.gain.value = MASTER;
     this.master.connect(ctx.destination);
-    this.nextTime = hasServerClockSync() ? 0 : ctx.currentTime + 0.1;
+    this.nextTime = this.canSync ? 0 : ctx.currentTime + 0.1;
     if (ctx.state === 'suspended') void ctx.resume();
+  }
+
+  /**
+   * オンライン待機画面・対戦中のサーバー時刻同期の有効/無効を切り替える。
+   * タイトル・モード選択からオンライン待機画面へ入った時は、再生中のBGMをフェードアウトしてから
+   * 同期位置に合わせ、フェードインで入れ替える。
+   */
+  setOnlineSync(enabled: boolean, anchorMs = 0, serverNowFn?: () => number): void {
+    if (serverNowFn) this.serverNowFn = serverNowFn;
+    const cleanAnchor = Number.isFinite(anchorMs) ? anchorMs : 0;
+    if (!enabled) {
+      if (this.syncFadeTimer !== null) {
+        window.clearTimeout(this.syncFadeTimer);
+        this.syncFadeTimer = null;
+      }
+      this.syncEnabled = false;
+      this.anchorMs = 0;
+      if (this.ctx && this.master) {
+        const now = this.ctx.currentTime;
+        this.master.gain.cancelScheduledValues(now);
+        this.master.gain.setValueAtTime(MASTER, now);
+      }
+      return;
+    }
+    if (this.syncEnabled) {
+      if (this.anchorMs !== cleanAnchor) {
+        this.anchorMs = cleanAnchor;
+        this.nextTime = 0;
+      }
+      return;
+    }
+    if (this.ctx && this.ctx.state === 'running' && this.master) {
+      if (this.syncFadeTimer !== null) {
+        window.clearTimeout(this.syncFadeTimer);
+        this.syncFadeTimer = null;
+      }
+      const fadeSec = 0.38;
+      const now = this.ctx.currentTime;
+      const curGain = Math.max(0.0001, this.master.gain.value || MASTER);
+      this.master.gain.cancelScheduledValues(now);
+      this.master.gain.setValueAtTime(curGain, now);
+      this.master.gain.linearRampToValueAtTime(0.0001, now + fadeSec);
+      this.syncFadeTimer = window.setTimeout(() => {
+        this.syncFadeTimer = null;
+        this.syncEnabled = true;
+        this.anchorMs = cleanAnchor;
+        this.nextTime = 0;
+        this.tick();
+        if (this.ctx && this.master) {
+          const t = this.ctx.currentTime;
+          this.master.gain.cancelScheduledValues(t);
+          this.master.gain.setValueAtTime(0.0001, t);
+          this.master.gain.linearRampToValueAtTime(MASTER, t + fadeSec);
+        }
+      }, Math.round(fadeSec * 1000) + 10);
+      return;
+    }
+    this.syncEnabled = true;
+    this.anchorMs = cleanAnchor;
+    this.nextTime = 0;
   }
 
   /** 拍・小節の基準となるサーバー時刻(ms)を設定する(0で待機画面共通クロック、match.startAtで試合開始時に小節頭を揃える) */
@@ -73,13 +144,13 @@ export class Bgm {
   tick(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (ctx.state !== 'running') { this.nextTime = hasServerClockSync() ? 0 : ctx.currentTime + 0.1; return; }
-    if (hasServerClockSync()) {
+    if (ctx.state !== 'running') { this.nextTime = this.canSync ? 0 : ctx.currentTime + 0.1; return; }
+    if (this.canSync) {
       const sync = syncStepSequencer(
         ctx.currentTime,
         this.nextTime,
         this.step,
-        sharedServerNow(),
+        this.serverNow(),
         STEP,
         64,
         this.anchorMs,

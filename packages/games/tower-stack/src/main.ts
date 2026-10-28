@@ -1766,7 +1766,7 @@ function onModeSelected(id: string): void {
 
 function enterOnlineWait(): void {
   state = 'menu';
-  bgm.setAnchor(0);
+  bgm.setOnlineSync(true, 0, () => net.serverNow());
   wireOnline();
   if (!waitScreen) {
     waitScreen = new WaitScreen(net, {
@@ -1797,7 +1797,7 @@ function wireOnline(): void {
   net.on('go', (m) => {
     if (!match) return;
     match.startAt = m.startAt;
-    bgm.setAnchor(m.startAt);
+    bgm.setOnlineSync(true, m.startAt, () => net.serverNow());
   });
   net.on('states', (m) => {
     if (!match) return;
@@ -1899,6 +1899,7 @@ function onOnlineResults(entries: ResultEntry[]): void {
     else stopPlaying('試合終了', '');
   }
   // 結果を受け取ったら接続は閉じる(開いたままにして負荷をかけない)。もう一度遊ぶときに接続し直す
+  bgm.setOnlineSync(false);
   net.close();
 }
 
@@ -1948,7 +1949,7 @@ function retryOnline(): void {
 
 /** オンラインの途中だった場合の片付け。ひとりで遊んでいるときは何も起きない */
 function leaveOnline(): void {
-  bgm.setAnchor(0);
+  bgm.setOnlineSync(false);
   waitScreen?.hide();
   rivalStages.clear();
   match = null;

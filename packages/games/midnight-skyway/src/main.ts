@@ -871,6 +871,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   /** 待機画面から退出してモード選択へ戻る(接続も切る: 開いたままにして負荷をかけない)。 */
   const leaveOnlineLobby = () => {
     sfx.uiBack();
+    bgm.setOnlineWaiting(false);
     net.send({ t: 'leave' });
     onlineRoom = null;
     onlineCoursePicked = null;
@@ -882,6 +883,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   /** 接続エラー時などにオンラインから退出してタイトルへ戻る。 */
   const leaveOnlineToTitle = (msg?: string) => {
     sfx.uiBack();
+    bgm.setOnlineWaiting(false);
     returnCarToGarage();
     net.send({ t: 'leave' });
     onlineRoom = null;
@@ -1042,6 +1044,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   const flow = new GameFlowManager({
     onEnterTitle: () => {
+      bgm.setOnlineWaiting(false);
       bgm.play('menu', true);                                // タイトルに戻るたびに別の曲
       lobby.hide();
       modeSelectScreen.hide();
@@ -1058,6 +1061,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onEnterModeSelect: () => {
       stopTitleCarCycle();
+      bgm.setOnlineWaiting(false);
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -1076,6 +1080,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onEnterCarSelect: () => {
       stopTitleCarCycle();
+      bgm.setOnlineWaiting(false);
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -1092,6 +1097,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onEnterMapSelect: () => {
       stopTitleCarCycle();
+      bgm.setOnlineWaiting(false);
       bgm.play('menu');
       lobby.hide();
       titleScreen.hide();
@@ -1108,6 +1114,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onEnterOnlineLobby: () => {
       stopTitleCarCycle();
+      bgm.setOnlineWaiting(false);
       bgm.play('menu');
       titleScreen.hide();
       modeSelectScreen.hide();
@@ -1143,6 +1150,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     onEnterOnlineWait: () => {
       stopTitleCarCycle();
       bgm.play('menu');
+      bgm.setOnlineWaiting(true, () => net.serverNow());
       titleScreen.hide();
       modeSelectScreen.hide();
       carSelectScreen.hide();
