@@ -1540,9 +1540,9 @@ export const ADMIN_JS = `
   // マップを持つゲームだけを、マップ(ステージ・コース)ごとに全部並べる(選ぶ操作はない)。
   var DEATHMAP_ORDER = ['street-b-boy', 'falldown', 'school-corridor-runner', 'tower-stack', 'tani-runner-124', 'midnight-skyway'];
   /** 地点の呼び方(skyway は死亡ではなく、ぶつかった・時間切れになった場所) */
-  var POINT_LABEL = { 'midnight-skyway': '衝突・タイムアップ地点' };
+  var POINT_LABEL = { 'midnight-skyway': '衝突・タイムアップ地点', 'tower-stack': '落下時の高さ', 'tani-runner-124': '脱落・留年地点' };
   var SKYWAY_COURSE_NAMES = { tsukikage_touge: '月影・湯元 峠ダウンヒル', tokyo_climb: '東京クライム' };
-  var DEATHMAP_NOTE = '赤いバツが地点です。バツに合わせると、死因と日時が出ます。';
+  var DEATHMAP_NOTE = '赤いバツ(グラグラタワーは横線)が地点です。合わせると、死因と日時が出ます。';
 
   // バツに合わせた時に、カーソルの横に出す小さな説明(1つを使い回す)
   var deathHover = null;
@@ -1704,6 +1704,8 @@ export const ADMIN_JS = `
       var top = Math.max(20, Math.min(maxY + 4, 500));
       return {
         range: [-geo.moveLimit - 2, geo.moveLimit + 2, geo.killY - 1, top], equal: true, flipY: true, bg: '#0c1a33', minH: 220,
+        hline: [-geo.moveLimit, geo.moveLimit],
+        where: function (d) { return '高さ' + d.y.toFixed(1) + 'm'; },
         draw: function (ctx, P, s) {
           var a = P(-geo.platformHalfW, 0), b = P(geo.platformHalfW, -1);
           ctx.fillStyle = '#7a5236'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);             // 土台
@@ -1713,20 +1715,25 @@ export const ADMIN_JS = `
           ctx.fillStyle = 'rgba(226,232,240,.6)'; ctx.font = "700 11px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif";
           for (var h = 5; h < top; h += 5) { var q = P(geo.moveLimit + 0.3, h); ctx.fillText(h + 'm', q[0], q[1] + 4); var l1 = P(-geo.moveLimit, h), l2 = P(geo.moveLimit, h); ctx.strokeStyle = 'rgba(148,163,184,.12)'; ctx.beginPath(); ctx.moveTo(l1[0], l1[1]); ctx.lineTo(l2[0], l2[1]); ctx.stroke(); }
         },
-        legend: [['#7a5236', '土台'], ['#94a3b8', 'ブロックを動かせる範囲(点線)']],
+        legend: [['#7a5236', '土台'], ['#94a3b8', 'ブロックを動かせる範囲(点線)'], ['#ef4444', 'ブロックを落とした時のタワーの高さ(赤線)']],
       };
     }
     if (gid === 'tani-runner-124') {
-      var end = geo.zones.length ? geo.zones[geo.zones.length - 1][1] : geo.wallDist + 50;
+      var zoneEnd = geo.zones.length ? geo.zones[geo.zones.length - 1][1] : geo.wallDist + 50;
+      var end = maxY > geo.wallDist ? zoneEnd : Math.min(zoneEnd, geo.wallDist + 60);
       var half = geo.trackWidth / 2;
       return {
         range: [0, end, -half - 2, half + 2], aspect: 0.16, bg: '#14532d', minH: 130,
+        // ゲーム側は x=横位置・y=進んだ距離 で送るため、横長のコース図(横=距離・縦=コース幅)に合わせて入れ替える
+        point: function (d) { return [d.y, d.x]; },
+        where: function (d) { return '開始から' + Math.round(d.y) + 'm'; },
         draw: function (ctx, P) {
           var a = P(0, -half), b = P(geo.wallDist, half);
           ctx.fillStyle = '#365314'; ctx.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);             // 走るコース(黒板色)
           var colors = ['#8b0000', '#b22222', '#c71585', '#d2691e', '#b8860b', '#006400', '#1e90ff', '#4b0082'];
           geo.zones.forEach(function (z, i) {                                                     // 壁の先の倍率ゾーン
-            var p = P(z[0], -half - 2), q = P(z[1], half + 2);
+            if (z[0] >= end) return;
+            var p = P(z[0], -half - 2), q = P(Math.min(end, z[1]), half + 2);
             ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(p[0], p[1], q[0] - p[0], q[1] - p[1]);
             ctx.fillStyle = '#fff'; ctx.font = "700 10px 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif"; ctx.fillText(z[2], p[0] + 2, (p[1] + q[1]) / 2 + 3);
           });
@@ -1756,8 +1763,9 @@ export const ADMIN_JS = `
     } else {
       var spanX = Math.max(10, r[1] - r[0]), spanY = Math.max(10, r[3] - r[2]);
       st.deaths.forEach(function (d) {
-        if (d.x >= r[0] - spanX && d.x <= r[1] + spanX) { minX = Math.min(minX, d.x - 1); maxX = Math.max(maxX, d.x + 1); }
-        if (d.y >= r[2] - spanY && d.y <= r[3] + spanY) { minY = Math.min(minY, d.y - 1); maxY = Math.max(maxY, d.y + 1); }
+        var q = spec.point ? spec.point(d) : [d.x, d.y];
+        if (!spec.hline && q[0] >= r[0] - spanX && q[0] <= r[1] + spanX) { minX = Math.min(minX, q[0] - 1); maxX = Math.max(maxX, q[0] + 1); }
+        if (q[1] >= r[2] - spanY && q[1] <= r[3] + spanY) { minY = Math.min(minY, q[1] - 1); maxY = Math.max(maxY, q[1] + 1); }
       });
       cw = st.canvas.clientWidth || 800;
       ch = spec.equal ? cw * (maxY - minY) / (maxX - minX) : cw * (spec.aspect || 0.6);
@@ -1778,22 +1786,35 @@ export const ADMIN_JS = `
     ctx.save();
     spec.draw(ctx, P, sx);
     ctx.restore();
-    // 地点は赤いバツ(背景の赤いもの・暗い所でも見えるよう、黒い縁を付ける)
+    // 地点は赤いバツ(グラグラタワーは高さの横線。背景の赤いもの・暗い所でも見えるよう、黒い縁を付ける)
     st.placed = [];
-    var cross = function (x, y, color, w) {
-      var k = 4.5;
-      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k); ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k); ctx.stroke();
-    };
-    st.deaths.forEach(function (d) {
-      var q = spec.point ? spec.point(d) : [d.x, d.y], p = P(q[0], q[1]);
-      cross(p[0], p[1], 'rgba(0,0,0,.75)', 4.2);
-      cross(p[0], p[1], '#ef4444', 2.2);
-      st.placed.push({ x: p[0], y: p[1], d: d });
-    });
+    if (spec.hline) {
+      var hline = function (x0, x1, y, color, w) {
+        ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      };
+      st.deaths.forEach(function (d) {
+        var p1 = P(spec.hline[0], d.y), p2 = P(spec.hline[1], d.y);
+        hline(p1[0], p2[0], p1[1], 'rgba(0,0,0,.65)', 4.0);
+        hline(p1[0], p2[0], p1[1], '#ef4444', 2.0);
+        st.placed.push({ x0: p1[0], x1: p2[0], y: p1[1], d: d, line: true });
+      });
+    } else {
+      var cross = function (x, y, color, w) {
+        var k = 4.5;
+        ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k); ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k); ctx.stroke();
+      };
+      st.deaths.forEach(function (d) {
+        var q = spec.point ? spec.point(d) : [d.x, d.y], p = P(q[0], q[1]);
+        cross(p[0], p[1], 'rgba(0,0,0,.75)', 4.2);
+        cross(p[0], p[1], '#ef4444', 2.2);
+        st.placed.push({ x: p[0], y: p[1], d: d });
+      });
+    }
   }
 
-  /** 1つのマップ(ステージ・コース)の図。バツに合わせると、死因と日時が出る */
+  /** 1つのマップ(ステージ・コース)の図。バツ(または横線)に合わせると、死因と日時が出る */
   function createMapPanel(gid, mapId, geo, deaths) {
     var spec = mapSpec(gid, mapId, geo, deaths);
     if (!spec) return null;
@@ -1808,7 +1829,10 @@ export const ADMIN_JS = `
     var st = { gid: gid, canvas: canvas, spec: spec, deaths: deaths, placed: [], legend: spec.legend };
     var nearest = function (e) {
       var r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, best = null, bd = 80;
-      st.placed.forEach(function (p) { var d = (p.x - mx) * (p.x - mx) + (p.y - my) * (p.y - my); if (d < bd) { bd = d; best = p.d; } });
+      st.placed.forEach(function (p) {
+        var d = p.line ? (mx >= p.x0 - 6 && mx <= p.x1 + 6 ? (p.y - my) * (p.y - my) : Infinity) : (p.x - mx) * (p.x - mx) + (p.y - my) * (p.y - my);
+        if (d < bd) { bd = d; best = p.d; }
+      });
       return best;
     };
     canvas.addEventListener('mousemove', function (e) {

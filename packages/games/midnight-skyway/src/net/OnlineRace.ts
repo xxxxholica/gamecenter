@@ -5,6 +5,7 @@ import { RemoteCar } from './RemoteCar';
 import { carOverlap } from './carCollision';
 import { audio } from '../audio';
 import { boostThemeFor } from '../core/BoostTheme';
+import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 import type { CarState, ClientMsg, FinishEntry, RacerInfo, ServerMsg } from '../../../../shared/netProtocol';
 import { STATE_HZ } from '../../../../shared/netProtocol';
 
@@ -276,6 +277,8 @@ export class OnlineRace {
           audio.sfx.crash(Math.min(1, closing / 15));
           this.crashCooldown = 0.3;
           cc.bodyPitch += 0.05;
+          const mapId = this.drive.currentMap?.metadata.id;
+          if (mapId && cc.canDrive) reportDeathPoint(`course:${mapId}`, cc.position.x, cc.position.z, '対戦車');
         }
       }
     }

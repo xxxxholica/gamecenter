@@ -323,7 +323,7 @@ export class ArcadeTitleScreen {
     };
   }
 
-  private triggerStart(): void {
+  public triggerStart(): void {
     if (!this.isVisible || this.isStarting) return;
     this.isStarting = true;
     reportDeepAnalytics('title_start');

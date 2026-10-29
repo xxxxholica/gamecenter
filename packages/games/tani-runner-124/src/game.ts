@@ -660,6 +660,7 @@ export class Game {
     this.pickupsCollected = 0;
     reportDeepAnalytics('progression_update', {
       difficulty: LEVELS[this.level].label,
+      maxStage: this.stageIndex + 1,
       extraStats: { stage: this.stageIndex + 1, requirement: this.graduationRequirement },
     });
     if (stageIndex === 0 || this.benchScene === 'run') {
@@ -951,6 +952,9 @@ export class Game {
     // Update total credits:
     // If newTotal > 0, runners continue sprint.
     // If newTotal <= 0, credits hit 0 and all runners are gone.
+    if (newTotal <= 0 && this.state === 'RUNNING' && this.benchScene !== 'run') {
+      reportDeathPoint(`level:${this.level}`, this.crowd.groupX, -gatePair.z, 'ゲートで全滅');
+    }
     this.setCredits(newTotal, delta);
   }
 
@@ -1048,6 +1052,9 @@ export class Game {
   private checkWallEncounter(): void {
     if (this.currentCredits < this.graduationRequirement) {
       // Failed! Not enough credits (全員圧殺・跳ね返り)
+      if (this.benchScene !== 'run') {
+        reportDeathPoint(`level:${this.level}`, this.crowd.groupX, -this.world.bossWallZ, '卒業要件不足', { credits: this.currentCredits, requirement: this.graduationRequirement });
+      }
       sound.stopBgm();
       sound.playObstacleCrash();
       inputManager.rumble(500, 1.0, 0.8);
@@ -1246,10 +1253,12 @@ export class Game {
     reportDeepAnalytics('progression_update', {
       ...(lastStage ? { result: 'clear' as const } : {}),
       difficulty: LEVELS[this.level].label,
-      score: stageScore,
+      maxStage: this.stageIndex + 1,
+      score: this.totalScore,
       itemsCollected: this.pickupsCollected,
       extraStats: {
         stage: this.stageIndex + 1,
+        stageScore,
         totalScore: this.totalScore,
         requirement: this.graduationRequirement,
         creditsAtWall: this.creditsAtWall,
@@ -1319,6 +1328,7 @@ export class Game {
       result: 'gameover',
       deathReason: '卒業要件に届かず留年',
       difficulty: LEVELS[this.level].label,
+      maxStage: this.stageIndex + 1,
       score: this.totalScore,
       itemsCollected: this.pickupsCollected,
       extraStats: {

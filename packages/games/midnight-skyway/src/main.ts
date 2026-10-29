@@ -512,7 +512,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     driveHUD.finishSectors(result.sectors);
     reportDeepAnalytics('progression_update', {
       result: result.timedOut ? 'gameover' : 'clear',
-      ...(result.timedOut ? { deathReason: 'タイムアップ' } : {}),
+      ...(result.timedOut ? { deathReason: 'タイムアップ' } : { score: Math.round(result.totalTimeMs) }),
       vehicle: currentCar.specs.name,
       mode: online ? 'オンライン' : 'ひとり',
       maxStage: currentMapId,

@@ -329,7 +329,8 @@ class ArcadeCorkShooter {
 
       if (this.state === 'title') {
         if (this.stateTimer > 0.35) {
-          void this.onStartPressed();
+          if (this.arcadeTitleScreen) this.arcadeTitleScreen.triggerStart();
+          else this.onStartPressed();
         }
         return;
       }
@@ -580,8 +581,8 @@ class ArcadeCorkShooter {
 
     const finalScore = this.score;
     reportDeepAnalytics('progression_update', {
-      result: 'clear',
-      deathReason: 'タイムアップ',
+      result: finalScore > 0 ? 'clear' : 'gameover',
+      ...(finalScore === 0 ? { deathReason: '景品0個' } : {}),
       score: finalScore,
       maxCombo: this.maxComboSeen,
       enemiesDefeated: this.totalDefeatedCount,
@@ -846,7 +847,8 @@ class ArcadeCorkShooter {
     this.camera.lookAt(0, 1.25, -0.4);
 
     if (this.stateTimer > 0.35 && (inputState.startJustPressed || inputState.shootNormalJustPressed)) {
-      this.onStartPressed();
+      if (this.arcadeTitleScreen) this.arcadeTitleScreen.triggerStart();
+      else this.onStartPressed();
       return;
     }
   }

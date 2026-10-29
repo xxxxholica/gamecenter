@@ -1,5 +1,6 @@
 import { IS_FIREFOX, IS_SAFARI, decodeInWorker, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
 import { benchMark } from '../../../../shared/arcadeBenchTargets';
+import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 import { realNow, untrackedFrame, untrackedTimeout } from '../../../../shared/arcadeReplay';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -871,6 +872,16 @@ if (abs(vNightNor.y) < 0.4) {
       p.x = seg.qx + (p.x - seg.qx) * k;
       p.z = seg.qz + (p.z - seg.qz) * k;
       car.speed *= Math.pow(0.55, dt);                                // light scrape: ~45% per second while touching
+      if (!this.touchingWall && car.canDrive && dt > 0 && Math.abs(car.speed) >= 8) {
+        const now = realNow();
+        if (now - this.lastCrashReport >= 1500) {
+          this.lastCrashReport = now;
+          reportDeathPoint(`course:${this.metadata.id}`, p.x, p.z, '壁・ガードレール');
+        }
+      }
+      this.touchingWall = true;
+    } else if (dist <= this.corridorHalfWidth - 0.15) {
+      this.touchingWall = false;
     }
 
     // Surface height from the road profile + slope-aligned pitch
@@ -916,6 +927,9 @@ if (abs(vNightNor.y) < 0.4) {
     return { slope, kappa: avg(kappa) };
   }
 
+  private touchingWall = false;
+  private lastCrashReport = -Infinity;
+
   public override onRespawn(car: CarController): void {
     if (this.disposed) return;
     // forget where the car was: the tracked position is rate-limited, so after a restart from near the finish line it would
@@ -924,6 +938,7 @@ if (abs(vNightNor.y) < 0.4) {
     this.activePath = 0;
     this.heave = 0;
     this.prevGateD = null;
+    this.touchingWall = false;
     car.groundPitch = 0;
     this.constrainCar(car, 0);                                   // sit on the road surface right now
     car.syncTransform();

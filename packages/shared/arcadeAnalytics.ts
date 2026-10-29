@@ -97,7 +97,23 @@ function getGpuInfo(): { vendor?: string; renderer?: string } {
 
 /** クライアント端末の環境＆ハードウェア情報をディープに収集する */
 export function detectClientDevice(): ClientDevice {
-  if (cachedDevice) return cachedDevice;
+  if (cachedDevice) {
+    if (!cachedDevice.hasGamepad && typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function') {
+      try {
+        const pads = navigator.getGamepads();
+        if (pads) {
+          for (const p of pads) {
+            if (p) {
+              cachedDevice.hasGamepad = true;
+              cachedDevice.gamepadName = p.id;
+              break;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    return cachedDevice;
+  }
   if (typeof window === 'undefined') return {};
 
   const ua = navigator.userAgent || '';

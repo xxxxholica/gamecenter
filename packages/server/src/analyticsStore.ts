@@ -858,11 +858,16 @@ export class AnalyticsStore {
       map[k] = (Object.hasOwn(map, k) ? map[k] : 0) + 1;
     };
 
+    const gamepadSessionIds = new Set<string>();
+    for (const p of this.plays.values()) {
+      if (p.inputDevice === 'gamepad' || p.input?.primaryDevice === 'gamepad') gamepadSessionIds.add(p.sessionId);
+    }
+
     for (const s of this.sessions.values()) {
       if (now - new Date(s.lastActiveAt).getTime() <= activeThresholdMs) {
         activeSessionsNow++;
       }
-      if (s.device?.hasGamepad) gamepadSessions++;
+      if (s.device?.hasGamepad || gamepadSessionIds.has(s.id)) gamepadSessions++;
 
       if (s.device) {
         countKey(hardware.os, s.device.os);
@@ -955,9 +960,16 @@ export class AnalyticsStore {
           countKey(g.maxStages, String(p.progression.maxStage));
         }
       }
+      let countedRoundDeath = false;
       if (p.rounds && p.rounds.length > 0) {
-        for (const r of p.rounds) countKey(g.deathReasons, r.deathReason);
-      } else if (p.progression) {
+        for (const r of p.rounds) {
+          if (r.deathReason) {
+            countKey(g.deathReasons, r.deathReason);
+            countedRoundDeath = true;
+          }
+        }
+      }
+      if (!countedRoundDeath && p.progression) {
         countKey(g.deathReasons, p.progression.deathReason);
       }
     }
