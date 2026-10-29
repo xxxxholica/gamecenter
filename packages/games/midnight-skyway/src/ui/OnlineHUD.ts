@@ -202,7 +202,7 @@ export class OnlineHUD {
         <div class="ohud-stand-grid">${tableRows}</div>
         ${done ? '' : '<div class="ohud-note ohud-countdown"></div>'}
         <div class="hud-arcade-result-buttons">
-          <button id="online-result-leave-btn">タイトルへ戻る</button>
+          <button id="online-result-leave-btn"${done ? '' : ' data-auto-disabled="1"'}>タイトルへ戻る</button>
         </div>
       </div>
     `;

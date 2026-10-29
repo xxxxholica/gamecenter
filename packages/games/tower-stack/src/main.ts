@@ -34,6 +34,7 @@ import { readGamepads } from '../../../shared/gamepadFrame';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { finishPrograms, waitFramesSettled } from '../../../shared/shaderCompile';
 import { createWhiteNoiseBuffer } from '../../../shared/audioUtils';
+import { hasPreviewParam } from '../../../shared/devParams';
 import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 
 installHomeReturn();
@@ -42,7 +43,7 @@ watchResultAutoReturn(['result-btn-title']);
 
 const SLUG = 'tower-stack'; // 共通ランキングでの名前 (packages/shared/arcadeLeaderboardCore.ts に定義)
 const ACCENT = '#ffd166';
-const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+const isPreview = hasPreviewParam();
 
 if (isPreview) {
   const style = document.createElement('style');
@@ -971,10 +972,10 @@ world.addEventListener('preStep', () => {
 function spawnPiece(): void {
   const index = nextIndex;
   nextIndex = nextIndex2;
-  nextIndex2 = randomPieceIndex();
+  nextIndex2 = isPreview ? nextPreviewPieceIndex() : randomPieceIndex();
   // オンライン対戦は画面が広いので、画面の上端ではなくタワーの少し上から落とす
   const top = camY + viewH / 2 + 1;
-  const spawnY = isPreview ? currentHeight + 5.5 : mode === 'online' ? Math.min(top, Math.max(currentHeight, 2) + 9) : top;
+  const spawnY = isPreview ? Math.min(top, Math.max(currentHeight, 2) + 7) : mode === 'online' ? Math.min(top, Math.max(currentHeight, 2) + 9) : top;
   const block = createPiece(index, 0, spawnY);
   block.body.allowSleep = false;
   current = block;
@@ -1486,12 +1487,39 @@ let demoPiece: Block | null = null;
 let demoTarget = 0;
 let demoRot = 0;
 let demoRotTimer = 0;
+/** ?preview 用: 実際のピース(通常ブロック・特殊ピース・いびつなブロック)を崩れにくい順と横位置で積む */
+const PREVIEW_PLAN: readonly [number, number][] = [
+  [0, 0.0],    // I
+  [13, -0.25], // U
+  [4, 0.25],   // J
+  [7, 0.0],    // 車
+  [2, -0.25],  // T
+  [12, 0.25],  // 米俵
+  [16, -0.25], // ring
+  [3, 0.25],   // L
+  [8, 0.0],    // 机
+  [5, -0.25],  // S
+  [1, 0.25],   // O
+  [10, -0.25], // 消火栓
+  [6, 0.25],   // Z
+  [19, 0.0],   // Y
+  [9, 0.0],    // だるま
+];
+let previewPlanCursor = 0;
+let previewTargetCursor = 0;
+function nextPreviewPieceIndex(): number {
+  const [pieceIdx] = PREVIEW_PLAN[previewPlanCursor % PREVIEW_PLAN.length];
+  previewPlanCursor++;
+  return pieceIdx;
+}
 function startDemo(): void {
   clearBlocks();
   resetRunState();
   resetPieceBag();
-  nextIndex = randomPieceIndex();
-  nextIndex2 = randomPieceIndex();
+  previewPlanCursor = 0;
+  previewTargetCursor = 0;
+  nextIndex = isPreview ? nextPreviewPieceIndex() : randomPieceIndex();
+  nextIndex2 = isPreview ? nextPreviewPieceIndex() : randomPieceIndex();
   eventTimer = Infinity; // 邪魔イベントは起こさない
   spawnTimer = 0.8;
   demoPiece = null;
@@ -1503,8 +1531,14 @@ function demoInput(dt: number): Input {
   if (!current || currentReleased) return inp;
   if (demoPiece !== current) {
     demoPiece = current;
-    demoTarget = (Math.random() - 0.5) * (benchScene === 'tall' ? 1.6 : 7);
-    demoRot = Math.floor(Math.random() * 4);
+    if (isPreview) {
+      demoTarget = PREVIEW_PLAN[previewTargetCursor % PREVIEW_PLAN.length][1];
+      previewTargetCursor++;
+      demoRot = 0;
+    } else {
+      demoTarget = (Math.random() - 0.5) * (benchScene === 'tall' ? 1.6 : 7);
+      demoRot = Math.floor(Math.random() * 4);
+    }
     demoRotTimer = 0.15;
   }
   const diff = demoTarget - targetX;
@@ -1519,7 +1553,7 @@ function demoInput(dt: number): Input {
     demoRotTimer = 0.25;
   }
   inp.down = demoRot === 0 && Math.abs(diff) < MOVE_STEP; // 位置が決まったら早く落とす
-  if (benchSolo && items[0]) {
+  if ((benchSolo || isPreview) && items[0]) {
     // ベンチ: 手に入れたアイテムは少し置いてから使う(ツタ・セメント・回復の演出も測る)
     benchItemWait += dt;
     if (benchItemWait > 2) { benchItemWait = 0; inp.item = true; }
@@ -1570,6 +1604,7 @@ let resultFocus = 0;
 let stopCountUp: (() => void) | null = null;
 
 function openResult(_isNew?: boolean): void {
+  if (isPreview) return;
   setResultTexts('GAME OVER', '再挑戦');
   elResultScore.style.display = '';
   resultOpen = true;
@@ -2122,28 +2157,13 @@ function startGame(): void {
   finishPrograms(renderer);   // 起動のあとに作ったシェーダ(ランキングのラベルなど)も、カウントダウンのあいだに使える状態にしておく
   eventTimer = isPreview || mode === 'online' ? Infinity : 30; // オンライン対戦では、おじゃまは相手から飛んでくる
   spawnTimer = 0.4;
-
-  if (isPreview) {
-    const demoBlocks: [number, number, number][] = [
-      [1, 0, 1],        // O (黄)
-      [0, 0, 2.5],      // I (シアン)
-      [4, -1.0, 3.8],   // J (青)
-      [3, 1.0, 3.8],    // L (橙)
-      [2, 0.0, 4.8],    // T (紫)
-      [5, -0.6, 6.0],   // S (緑)
-      [6, 0.8, 6.0],    // Z (赤)
-    ];
-    for (const [i, x, y] of demoBlocks) {
-      freezeBlock(createPiece(i, x, y), 0);
-    }
-    placed = demoBlocks.length;
-    currentHeight = 6.8;
-    camY = 6.0;
-  }
+  demoPiece = null;
 
   resetPieceBag();
-  nextIndex = isPreview ? 0 : randomPieceIndex();
-  nextIndex2 = isPreview ? 1 : randomPieceIndex();
+  previewPlanCursor = 0;
+  previewTargetCursor = 0;
+  nextIndex = isPreview ? nextPreviewPieceIndex() : randomPieceIndex();
+  nextIndex2 = isPreview ? nextPreviewPieceIndex() : randomPieceIndex();
   renderNext();
   renderItems();
   state = 'playing';
@@ -2571,11 +2591,11 @@ function updatePlaying(dt: number, inp: Input): void {
       if (counts) {
         drops++;
         // 死亡地点マップ: どの横位置から、タワーがどの高さの時に落ちたか(タイトルの背景のデモは除く)
-        if (!demoActive && state === 'playing') reportDeathPoint('tower', p.x, currentHeight, `${drops}個目`);
+        if (!demoActive && !isPreview && state === 'playing') reportDeathPoint('tower', p.x, currentHeight, `${drops}個目`);
         shake = 0.35;
         boom();
         if (drops >= MAX_DROPS) {
-          if (demoActive || benchScene === 'tall') {
+          if (demoActive || isPreview || benchScene === 'tall') {
             drops = 0; // タイトルの背景・高層のベンチ: 3個落ちても結果は出さず、数え直してそのまま続ける
             continue;
           }
@@ -2604,11 +2624,12 @@ function updatePlaying(dt: number, inp: Input): void {
     pendingTime = 0;
     pendingMin = Infinity;
   }
-  if (demoActive && (blocks.length > DEMO_MAX_BLOCKS || currentHeight > DEMO_MAX_HEIGHT)) {
-    startDemo(); // 積みすぎ(物理の重さ・描画の増えすぎ)を防ぐため、ここでだけやり直す
+  if ((demoActive || isPreview) && (blocks.length > DEMO_MAX_BLOCKS || currentHeight > DEMO_MAX_HEIGHT)) {
+    if (isPreview) startGame();
+    else startDemo(); // 積みすぎ(物理の重さ・描画の増えすぎ)を防ぐため、ここでだけやり直す
     return;
   }
-  ownMarker.update(demoActive ? 0 : bestHeight, dt); // 背景のデモでは出さない。記録が伸びたら、線とブロックをなめらかに動かす
+  ownMarker.update(demoActive || isPreview ? 0 : bestHeight, dt); // 背景のデモでは出さない。記録が伸びたら、線とブロックをなめらかに動かす
 }
 
 let last = performance.now();
@@ -2637,7 +2658,7 @@ function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   stateTime += dt;
-  const inp = benchSolo && state === 'playing' ? demoInput(dt) : readInput();
+  const inp = (benchSolo || isPreview) && state === 'playing' ? demoInput(dt) : readInput();
   if (inp.left || inp.right || inp.up || inp.down || inp.rotate || inp.item || inp.confirm || inp.cancel) bgm.unlock(); // アケコンの操作も、最初の操作として扱う
   bgm.setScene(state === 'playing' && !demoActive && (mode !== 'online' || !!match?.started) ? 'play' : 'menu');
   bgm.tick();

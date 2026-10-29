@@ -130,7 +130,6 @@ export interface InputState {
   confirm: boolean;
   cancel: boolean;
   special: boolean;
-  pause: boolean;
   leftTap: boolean;
   rightTap: boolean;
   upTap: boolean;

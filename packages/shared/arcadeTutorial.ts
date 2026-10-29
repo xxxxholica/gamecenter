@@ -304,9 +304,9 @@ function playTone(freq: number, durationMs: number, delayMs = 0): void {
 }
 
 function shouldBypassTutorial(): boolean {
-  if (typeof location === 'undefined') return false;
-  const q = location.search;
-  return q.includes('bench') || q.includes('noHud') || q.includes('preview');
+  if (typeof location === 'undefined' || !location.search) return false;
+  const q = new URLSearchParams(location.search);
+  return q.has('bench') || q.has('noHud') || q.has('preview');
 }
 
 const STEP_READY_DELAY_MS = 550;

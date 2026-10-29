@@ -20,7 +20,6 @@ export class InputManager {
   private confirmTriggered: boolean = false;
   private cancelTriggered: boolean = false;
   private specialTriggered: boolean = false;
-  private pauseTriggered: boolean = false;
   private leftTapTriggered: boolean = false;
   private rightTapTriggered: boolean = false;
   private upTapTriggered: boolean = false;
@@ -65,7 +64,6 @@ export class InputManager {
     let confirm = false;
     let cancel = false;
     let special = false;
-    let pause = false;
 
     const rawButtons: boolean[] = [];
     const rawAxes: number[] = [];
@@ -125,12 +123,10 @@ export class InputManager {
       const btnConfirm = rawButtons[0] || rawButtons[2]; // A or X
       const btnCancel = rawButtons[1];                   // B
       const btnSpecial = rawButtons[3] || rawButtons[5] || rawButtons[7] || rawButtons[4]; // Y, RB, RT, LB
-      const btnPause = rawButtons[9];                    // Start(Back = SELECT は Backspace として共通のポーズが受ける)
 
       if (btnConfirm) confirm = true;
       if (btnCancel) cancel = true;
       if (btnSpecial) special = true;
-      if (btnPause) pause = true;
     }
 
     // 2. Keyboard Fallback & Combination
@@ -167,20 +163,14 @@ export class InputManager {
       special = true;
     }
 
-    if (this.keysDown.has('KeyP')) {
-      pause = true;
-    }
-
     // 3. Single-frame Edge Detection (Tap triggers for menus)
     const prevConfirm = this.isActionPressed('confirm');
     const prevCancel = this.isActionPressed('cancel');
     const prevSpecial = this.isActionPressed('special');
-    const prevPause = this.isActionPressed('pause');
 
     this.confirmTriggered = confirm && !prevConfirm;
     this.cancelTriggered = cancel && !prevCancel;
     this.specialTriggered = special && !prevSpecial;
-    this.pauseTriggered = pause && !prevPause;
 
     this.leftTapTriggered = moveX < -0.5 && this.prevMoveX >= -0.5;
     this.rightTapTriggered = moveX > 0.5 && this.prevMoveX <= 0.5;
@@ -198,7 +188,6 @@ export class InputManager {
       confirm: this.confirmTriggered,
       cancel: this.cancelTriggered,
       special: this.specialTriggered,
-      pause: this.pauseTriggered,
       leftTap: this.leftTapTriggered,
       rightTap: this.rightTapTriggered,
       upTap: this.upTapTriggered,
@@ -210,7 +199,7 @@ export class InputManager {
     };
   }
 
-  private isActionPressed(action: 'confirm' | 'cancel' | 'special' | 'pause'): boolean {
+  private isActionPressed(action: 'confirm' | 'cancel' | 'special'): boolean {
     if (action === 'confirm') {
       return (
         this.prevKeysDown.has('Space') ||
@@ -237,12 +226,6 @@ export class InputManager {
         !!this.prevGamepadButtons[5] ||
         !!this.prevGamepadButtons[7] ||
         !!this.prevGamepadButtons[4]
-      );
-    }
-    if (action === 'pause') {
-      return (
-        this.prevKeysDown.has('KeyP') ||
-        !!this.prevGamepadButtons[9]
       );
     }
     return false;

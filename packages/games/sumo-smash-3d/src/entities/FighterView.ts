@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hasPreviewParam } from '../../../../shared/devParams';
 import { CharacterModel, CharacterColors } from './CharacterModel';
 import { SoundManager } from '../audio/SoundManager';
 import { ParticleManager } from '../effects/ParticleManager';
@@ -282,7 +283,7 @@ export class FighterView {
     sprite.scale.set(2.4, 1.2, 1.0);
     sprite.position.set(0, this.markerBaseY, 0);
     sprite.renderOrder = 999;
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = hasPreviewParam();
     if (isPreview) sprite.visible = false;
     return sprite;
   }
@@ -378,7 +379,7 @@ export class FighterView {
       this.overheadMarker.visible = false;
       return;
     }
-    this.overheadMarker.visible = !(typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview')));
+    this.overheadMarker.visible = !hasPreviewParam();
     const canvas = (this.overheadMarker.material.map as THREE.CanvasTexture).image as HTMLCanvasElement;
     const ctx = canvas.getContext('2d')!;
     this.drawMarkerCanvas(ctx, label, this.slot);

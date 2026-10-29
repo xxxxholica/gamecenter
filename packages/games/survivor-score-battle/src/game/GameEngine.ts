@@ -136,7 +136,7 @@ export class GameEngine {
     this.updateLeaderboard();
   }
 
-  /** ポーズ(Backspace / SELECT。P と Start でも開く): 止めて、やり直せる */
+  /** ポーズ(Backspace / SELECT): 止めて、やり直せる */
   private readonly pauseUi = new ArcadePause({
     accent: '#00f0ff',
     isPlaying: () => (this.state === 'PLAYING' || this.state === 'LEVEL_UP') && this.dyingTimer <= 0,
@@ -187,7 +187,7 @@ export class GameEngine {
       }
 
       case 'CONTROLLER_TEST': {
-        if (inputState.cancel || inputState.pause) {
+        if (inputState.cancel) {
           this.sound.sfx.playMenuConfirm();
           this.state = 'TITLE';
         }
@@ -202,7 +202,7 @@ export class GameEngine {
       }
 
       case 'PAUSED': {
-        if (inputState.pause || inputState.confirm) {
+        if (inputState.confirm) {
           this.sound.sfx.playMenuConfirm();
           this.state = 'PLAYING';
         }
@@ -210,7 +210,7 @@ export class GameEngine {
       }
 
       case 'LEVEL_UP': {
-        const chosenCard = this.benchAuto ? this.benchPickCard(dt) : this.levelUpScreen.update(inputState, this.sound);
+        const chosenCard = this.benchAuto ? this.benchPickCard(dt) : this.levelUpScreen.update(inputState, this.sound, dt);
         if (chosenCard) {
           if (!this.benchAuto) reportDeepAnalytics('upgrade_chosen', { card: chosenCard.title, category: chosenCard.category, level: this.player.level, gameSec: Math.floor(this.waveDirector.gameTime) });
           this.applyUpgrade(chosenCard);
@@ -225,12 +225,6 @@ export class GameEngine {
           break;
         }
         if (this.countingDown) break;
-
-        if (inputState.pause && this.dyingTimer <= 0) {
-          this.sound.sfx.playMenuConfirm();
-          this.pauseUi.show();
-          return;
-        }
 
         // Special Attack Trigger
         if (inputState.special && this.player.isSpecialReady && this.player.alive) {
@@ -1052,12 +1046,6 @@ export class GameEngine {
   }
 
   private updateTutorial(dt: number, inputState: InputState) {
-    if (inputState.pause) {
-      this.sound.sfx.playMenuConfirm();
-      this.pauseUi.show();
-      return;
-    }
-
     const started = this.tutorialHandle?.isStarted() ?? false;
     const step = this.tutorialHandle?.currentStepIndex() ?? -1;
     const stepReady = this.tutorialHandle?.isStepReady() ?? false;
@@ -1168,7 +1156,7 @@ export class GameEngine {
     if (banner && banner !== this.benchBanner) benchMark(banner);
     this.benchBanner = banner;
     if (this.waveDirector.gameTime >= 305 && !this.benchFinished) { this.benchFinished = true; benchDone('survival-cleared'); }
-    return { ...real, moveX: Math.cos(t * 0.55), moveY: Math.sin(t * 0.8), special: this.player.isSpecialReady, pause: false };
+    return { ...real, moveX: Math.cos(t * 0.55), moveY: Math.sin(t * 0.8), special: this.player.isSpecialReady };
   }
 
   /** レベルアップの画面を少し見せてから、カードを順番に選ぶ(毎回同じ選び方になる) */

@@ -18,7 +18,15 @@ import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen';
 import { loadRawScores, saveLeaderboardScore } from '../../../shared/arcadeLeaderboard';
 import { ENNICHI_ROUND_SECONDS, ENNICHI_EXTENSION_SECONDS } from '../../../shared/ennichiRules';
 
+import { hasPreviewParam } from '../../../shared/devParams';
+
 const SLUG = 'ennichi-shateki';
+const isPreview = hasPreviewParam();
+if (isPreview) {
+  const style = document.createElement('style');
+  style.textContent = '#ui-layer, #agc-guide, .agc-root, .ats-overlay { display: none !important; }';
+  document.head.appendChild(style);
+}
 import { reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
 import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
@@ -69,7 +77,7 @@ class ArcadeCorkShooter {
   /** ポーズ(Backspace / SELECT): 的当ての最中に止めて、やり直せる */
   private readonly pause = new ArcadePause({
     accent: '#ff4d4f',
-    isPlaying: () => this.state === 'playing',
+    isPlaying: () => this.state === 'playing' && !isPreview,
     onOpen: () => {
       this.tutorialHandle?.pause();
       this.countdownHandle?.pause();     // 3・2・1 の最中も開ける(数字はポーズの間、止まる)
@@ -141,6 +149,10 @@ class ArcadeCorkShooter {
   private titleOrbitAngle: number = 0;
   private lastTickInt: number = 30;
   private screenShake: number = 0;
+  private previewShotTimer: number = 0.25;
+  private previewAimGoalX: number = 0;
+  private previewAimGoalY: number = 0.05;
+  private previewTargetPrize: PrizeEntity | null = null;
 
   // 3D vectors
   private aimTargetWorld: THREE.Vector3 = new THREE.Vector3();
@@ -244,7 +256,7 @@ class ArcadeCorkShooter {
       { id: 'play', label: 'プレイ(ランダム入力)', kind: 'play', params: { scene: 'play' }, input: 'random', seconds: 45 },
     ]);
     // タイトルの benchReady は、シェーダを作り終えて描き始め、画面が落ち着いたあと(startRendering)
-    if (benchParam('scene') === 'play') this.startGame();
+    if (benchParam('scene') === 'play' || isPreview) this.startGame();
   }
 
   /**
@@ -454,23 +466,30 @@ class ArcadeCorkShooter {
 
   private startGame() {
     if (this.state === 'playing') return;
-    reportRoundStart();
+    if (!isPreview) reportRoundStart();
 
     this.cancelPreGameTimers();
     this.arcadeTitleScreen?.hide();
-    sounds.init();
-    sounds.playTaiko();
-    sounds.startBgm();
+    if (!isPreview) {
+      sounds.init();
+      sounds.playTaiko();
+      sounds.startBgm();
+    }
 
     this.state = 'playing';
     this.stateTimer = 0;
-    mountPlayGuide();
+    if (!isPreview) mountPlayGuide();
     this.stall.titleRifleGroup.visible = false;
     this.gun.group.visible = true;
     this.camera.position.set(0, 1.48, 2.15);
     this.camera.lookAt(0, 1.25, -0.6);
     this.hud.setMode('playing');
     this.resetMatchState(true);
+
+    if (isPreview) {
+      this.hud.setGameplayHUDVisible(false);
+      return;
+    }
 
     // 開始ボタンを押した直後にまずアクティブチュートリアルを実施し、その後に 3・2・1・GO! を挟む
     this.beginTutorial();
@@ -531,6 +550,7 @@ class ArcadeCorkShooter {
   }
 
   private enterResults() {
+    if (isPreview) return;
     this.cancelPreGameTimers();
     // ベンチ: 倒した景品が台に降って積もる演出(物理)まで測る。全部落ちきって静まるまで、およそ8秒。
     // その間はランダム入力の Enter で結果画面を進めないよう、操作の受け付けも遅らせる
@@ -839,7 +859,10 @@ class ArcadeCorkShooter {
     }
 
     // 1. Time countdown
-    if (!this.offlineCountdown) {
+    if (isPreview) {
+      this.timeLeft = ENNICHI_ROUND_SECONDS;
+      this.updatePreviewAutoPlay(dt);
+    } else if (!this.offlineCountdown) {
       this.timeLeft -= dt;
       if (this.timeLeft < 0) this.timeLeft = 0;
     }
@@ -1085,6 +1108,45 @@ class ArcadeCorkShooter {
       this.aimTargetWorld.copy(this.aimHit);
     } else {
       this.aimTargetWorld.copy(this.camera.position).addScaledVector(this.raycaster.ray.direction, 3.0);
+    }
+  }
+
+  /** ハブのホバー動画(?preview)用: 棚の景品を次々に狙って撃つ自動プレイ */
+  private updatePreviewAutoPlay(dt: number) {
+    if (!this.previewTargetPrize || this.previewTargetPrize.isDefeated || this.previewTargetPrize.isFalling) {
+      const candidates = this.prizes.filter((p) => !p.isDefeated && !p.isFalling);
+      this.previewTargetPrize = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+    }
+    if (this.previewTargetPrize) {
+      this.aimHit.copy(this.previewTargetPrize.currentPos);
+      this.aimHit.y += this.previewTargetPrize.config.height * 0.5;
+      this.aimHit.project(this.camera);
+      this.previewAimGoalX = Math.max(-0.75, Math.min(0.75, this.aimHit.x));
+      this.previewAimGoalY = Math.max(-0.35, Math.min(0.45, this.aimHit.y));
+    }
+    const lerp = Math.min(1, dt * 8.5);
+    this.input.setAim(
+      this.input.aimX + (this.previewAimGoalX - this.input.aimX) * lerp,
+      this.input.aimY + (this.previewAimGoalY - this.input.aimY) * lerp,
+    );
+    this.previewShotTimer -= dt;
+    if (this.previewShotTimer <= 0 && Math.hypot(this.previewAimGoalX - this.input.aimX, this.previewAimGoalY - this.input.aimY) < 0.14) {
+      this.updateAimPlane();
+      if (this.previewTargetPrize) {
+        this.aimTargetWorld.copy(this.previewTargetPrize.currentPos);
+        this.aimTargetWorld.y += this.previewTargetPrize.config.height * 0.5;
+      }
+      if (this.bombCooldown <= 0 && (this.shotsNormal + this.shotsExplosive) % 4 === 2) {
+        this.tryShootExplosive();
+        this.previewTargetPrize = null;
+        this.previewShotTimer = 0.55;
+      } else if (this.tryShootNormal()) {
+        if (this.previewTargetPrize) this.previewTargetPrize.pitchVelocity += 7.5;
+        this.previewTargetPrize = null;
+        this.previewShotTimer = 0.38;
+      } else {
+        this.previewShotTimer = 0.25;
+      }
     }
   }
 

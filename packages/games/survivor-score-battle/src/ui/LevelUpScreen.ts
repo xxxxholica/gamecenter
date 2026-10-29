@@ -5,13 +5,16 @@ import { SoundManager } from '../audio/SoundManager';
 import { drawIcon } from './Icons';
 
 export class LevelUpScreen {
+  private static readonly AUTO_SELECT_SEC = 15;
   public cards: UpgradeCard[] = [];
   public selectedIndex: number = 0;
   private animTimer: number = 0;
+  private idleTimer: number = 0;
 
   public generateOptions(player: Player): UpgradeCard[] {
     this.selectedIndex = 0;
     this.animTimer = 0;
+    this.idleTimer = 0;
     const cards: UpgradeCard[] = [];
 
     // 1. Check existing weapons that can level up
@@ -186,19 +189,22 @@ export class LevelUpScreen {
     return cards;
   }
 
-  public update(input: InputState, soundManager: SoundManager): UpgradeCard | null {
-    this.animTimer += 0.016;
+  public update(input: InputState, soundManager: SoundManager, dt: number = 0.016): UpgradeCard | null {
+    this.animTimer += dt;
 
     if (input.leftTap) {
       this.selectedIndex = (this.selectedIndex - 1 + this.cards.length) % this.cards.length;
+      this.idleTimer = 0;
       soundManager.sfx.playMenuSelect();
     }
     if (input.rightTap) {
       this.selectedIndex = (this.selectedIndex + 1) % this.cards.length;
+      this.idleTimer = 0;
       soundManager.sfx.playMenuSelect();
     }
 
-    if (input.confirm && this.cards.length > 0) {
+    this.idleTimer += dt;
+    if ((input.confirm || this.idleTimer >= LevelUpScreen.AUTO_SELECT_SEC) && this.cards.length > 0) {
       soundManager.sfx.playMenuConfirm();
       return this.cards[this.selectedIndex];
     }

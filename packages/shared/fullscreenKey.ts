@@ -7,6 +7,16 @@
 
 export const FULLSCREEN_TOGGLE_MESSAGE = 'gamecenter:toggle-fullscreen';
 
+/** 現在フルスクリーン表示中か(Fullscreen API またはブラウザの全画面/キオスク表示)。 */
+export function isFullscreen(): boolean {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return Boolean(
+    doc.fullscreenElement ||
+    doc.webkitFullscreenElement ||
+    (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: fullscreen)').matches),
+  );
+}
+
 export function toggleFullscreen(): void {
   if (window.parent !== window) {
     // ハブのiframeの中: 全画面にするのは親のページ

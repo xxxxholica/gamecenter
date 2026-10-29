@@ -73,10 +73,17 @@ const IDLE_INPUT: FighterInput = {
   actions: { strikePressed: false, strike: false, strikeReleased: false, grabPressed: false },
 };
 
+function isPreviewSearch(): boolean {
+  if (typeof location === 'undefined' || !location.search) return false;
+  if (!location.search.includes('preview') && !location.search.includes('noHud')) return false;
+  const q = new URLSearchParams(location.search);
+  return q.has('noHud') || q.has('preview');
+}
+
 /** i 番目の力士の初期位置(土俵の中心を向く)。2人なら左右、3〜4人なら円周に等間隔。 */
 export function startPose(i: number, n: number): { x: number; z: number; angle: number } {
   const theta = Math.PI + (i * Math.PI * 2) / n;
-  const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+  const isPreview = isPreviewSearch();
   const rad = isPreview ? 1.4 : START_RADIUS;
   const x = Math.round(Math.cos(theta) * rad * 1000) / 1000;
   const z = Math.round(Math.sin(theta) * rad * 1000) / 1000;
@@ -324,7 +331,7 @@ export class SimWorld {
     for (const f of this.fighters) f.body.velocity.set(0, 0, 0);
     this.physicsStep(dt);
 
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = isPreviewSearch();
     const standbyLimit = isPreview ? 0.1 : STANDBY_SEC;
     if (this.phaseTime >= standbyLimit) {
       this.phase = 'active';
@@ -338,7 +345,7 @@ export class SimWorld {
   }
 
   private stepActive(dt: number, inputs: (FighterInput | null)[]): void {
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = isPreviewSearch();
     if (isPreview) {
       for (const f of this.fighters) {
         f.damagePercent = 0;

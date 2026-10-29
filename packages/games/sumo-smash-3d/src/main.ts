@@ -39,6 +39,7 @@ import { createNet, fetchSumoStatus } from './online/net';
 import { WaitScreen } from './online/WaitScreen';
 import { OnlineMatch, type ResultsMsg } from './online/OnlineMatch';
 import { replayFx, type FxSink } from './online/fx';
+import { hasPreviewParam } from '../../../shared/devParams';
 import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
@@ -47,7 +48,7 @@ installHomeReturn();
 watchResultAutoReturn(['result-btn-title']);
 
 const ACCENT = '#e63946';
-const isPreviewMode = () => typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+const isPreviewMode = () => hasPreviewParam();
 
 // 画面左下の共通ボタンガイド(場面ごとに差し替える)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
@@ -1046,7 +1047,7 @@ class SumoGame {
     if (this.cpu) {
       // 1P は自分の操作、slot 1〜3 は CPU(百人組手)
       const { sim, ais, benchAis } = this.cpu;
-      const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+      const isPreview = isPreviewMode();
       let mine: FighterInput;
       if (benchAis) {
         // 全員 CPU: それぞれ、いちばん近い相手を狙う

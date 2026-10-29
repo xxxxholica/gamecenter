@@ -195,7 +195,7 @@ export class HudRenderer {
     cameraX?: number,
     cameraY?: number
   ) {
-    if (typeof location !== 'undefined' && location.search.includes('noHud')) return;
+    if (typeof location !== 'undefined' && location.search && new URLSearchParams(location.search).has('noHud')) return;
     ctx.save();
 
     ctx.textAlign = 'center';

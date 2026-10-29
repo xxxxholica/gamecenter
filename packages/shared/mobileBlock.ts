@@ -9,8 +9,11 @@ export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false;
 
   // URLパラメータでテスト可能 (?mobile=1 で強制モバイル扱い、?mobile=0 で強制PC扱い)
-  if (window.location.search.includes('mobile=1')) return true;
-  if (window.location.search.includes('mobile=0')) return false;
+  if (window.location.search) {
+    const mobileParam = new URLSearchParams(window.location.search).get('mobile');
+    if (mobileParam === '1') return true;
+    if (mobileParam === '0') return false;
+  }
 
   // 1. User Agent / Client Hints 判定
   const ua = navigator.userAgent || '';

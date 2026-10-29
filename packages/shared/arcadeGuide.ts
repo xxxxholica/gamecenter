@@ -432,7 +432,7 @@ function buttonBadge(b: ArcadeGuideButton): HTMLDivElement {
  * 呼び出しは1画面につき1回。すでにカードがあれば入れ替える(ゲームのシーン遷移で再度呼んでも重複しない)。
  */
 export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
-  if (typeof location !== 'undefined' && location.search.includes('noHud')) {
+  if (typeof location !== 'undefined' && location.search && new URLSearchParams(location.search).has('noHud')) {
     return document.createElement('div');
   }
   if (isMobileDevice()) {

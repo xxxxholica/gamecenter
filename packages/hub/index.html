@@ -287,8 +287,8 @@
       pointer-events: none;
     }
 
-    body:not(.pad-mode) .card:hover .card-preview,
-    body.pad-mode .card.selected .card-preview {
+    body:not(.pad-mode) .card:hover .card-preview.is-playing,
+    body.pad-mode .card.selected .card-preview.is-playing {
       opacity: 1;
     }
 
@@ -780,31 +780,6 @@
       transform: translateY(-2px) scale(0.98);
     }
 
-    /* グループを入れ替える時の、画面全体のリフレッシュの動き: 上へ消える → 下から入る。光の帯が画面を走る */
-    #hub-container {
-      transition: opacity 0.38s ease, transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-    #hub-container.refresh-out {
-      opacity: 0;
-      transform: translateY(-28px) scale(0.985);
-    }
-    #hub-container.refresh-in {
-      opacity: 0;
-      transform: translateY(28px) scale(0.985);
-      transition: none;
-    }
-    .hub-sweep {
-      position: fixed;
-      left: 0;
-      right: 0;
-      top: -30vh;
-      height: 30vh;
-      z-index: 50;
-      pointer-events: none;
-      opacity: 0;
-      /* 背景(方眼メモ帳)の色に合わせた帯。通り過ぎる所の絵を、背景の色で消していく */
-      background: linear-gradient(to bottom, rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 70%, rgba(250, 249, 246, 0.98) 100%);
-    }
     /* ページの最下部(全要素のあと)。中身が短くても画面の下端に置く */
     .hub-gpu {
       position: relative;
@@ -819,14 +794,263 @@
     .hub-gpu.warn {
       color: #b91c1c;
     }
-    .hub-sweep.run {
-      animation: hubSweep 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* ===== スクリーンセーバー (無操作待機時に1ゲームずつ全画面で解説表示) ===== */
+    body.screensaver-active {
+      overflow: hidden;
     }
-    @keyframes hubSweep {
-      0% { top: -30vh; opacity: 0; }
-      15% { opacity: 1; }
-      85% { opacity: 1; }
-      100% { top: 100vh; opacity: 0; }
+
+    body.screensaver-active #agc-guide {
+      display: none !important;
+    }
+
+    #screensaver {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+      padding: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.38s ease;
+    }
+
+    #screensaver.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .ss-card {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.12fr 1fr;
+      align-items: stretch;
+      background: #ffffff;
+      border: none;
+      border-radius: 0;
+      overflow: hidden;
+      transition: opacity 0.26s ease;
+    }
+
+    .ss-card.fading {
+      opacity: 0;
+    }
+
+    .ss-preview-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      background: #0f172a;
+      overflow: hidden;
+      border-right: 1px solid #cbd5e1;
+    }
+
+    .ss-preview-wrap .card-badges {
+      top: min(1.8vw, 2.8vh);
+      left: min(1.8vw, 2.8vh);
+      right: min(1.8vw, 2.8vh);
+      gap: min(0.8vw, 1.2vh);
+    }
+
+    .ss-preview-wrap .card-online-pill,
+    .ss-preview-wrap .card-star-pill {
+      font-size: min(1.5vw, 2.4vh);
+      padding: min(0.65vw, 1vh) min(1.4vw, 2.2vh);
+      gap: min(0.6vw, 0.95vh);
+      border-width: 2px;
+    }
+
+    .ss-preview-wrap .card-online-pill::before {
+      width: min(1.9vw, 3vh);
+      height: min(1.9vw, 3vh);
+    }
+
+    .ss-preview-wrap .card-star-pill::before {
+      width: min(2.2vw, 3.4vh);
+      height: min(2.2vw, 3.4vh);
+    }
+
+    .ss-thumb,
+    .ss-video {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .ss-body {
+      padding: min(2.2vw, 3vh) min(2.8vw, 4.2vh);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: min(1.4vw, 2vh);
+      background-color: #faf9f6;
+      background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.25) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.25) 1px, transparent 1px);
+      background-repeat: repeat;
+      background-size: 24px 24px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .ss-info-top {
+      display: flex;
+      flex-direction: column;
+      gap: min(1.1vw, 1.6vh);
+      min-height: 0;
+    }
+
+    .ss-logo-wrap {
+      width: 92%;
+      height: min(14vw, 22vh);
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .ss-logo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: left center;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.22));
+    }
+
+    .ss-body .card-dev {
+      margin-bottom: 0;
+      gap: min(0.75vw, 1.15vh);
+    }
+
+    .ss-body .card-dev-avatar {
+      width: min(3.2vw, 4.8vh);
+      height: min(3.2vw, 4.8vh);
+    }
+
+    .ss-body .card-dev-name {
+      font-size: min(1.75vw, 2.65vh);
+    }
+
+    .ss-desc {
+      font-family: var(--hand-font);
+      font-weight: 600;
+      color: #1e293b;
+      font-size: min(2.05vw, 3.15vh);
+      line-height: 1.58;
+      margin: 0;
+    }
+
+    .ss-body .card-ranking-container {
+      height: auto;
+      padding: min(1.4vw, 2.1vh) min(1.8vw, 2.7vh);
+      background: rgba(255, 255, 255, 0.94);
+      border: 2px solid #cbd5e1;
+      border-radius: min(1.1vw, 1.6vh);
+      box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
+      gap: min(0.8vw, 1.2vh);
+    }
+
+    .ss-body .ranking-header {
+      margin-bottom: min(0.2vw, 0.3vh);
+    }
+
+    .ss-body .ranking-title {
+      font-size: min(1.6vw, 2.45vh);
+    }
+
+    .ss-body .ranking-variant-tag {
+      font-size: min(1.4vw, 2.15vh);
+      padding: min(0.3vw, 0.45vh) min(0.95vw, 1.45vh);
+      border-radius: min(0.5vw, 0.75vh);
+    }
+
+    .ss-body .ranking-rows {
+      gap: min(0.65vw, 1vh);
+    }
+
+    .ss-body .ranking-row {
+      gap: min(1vw, 1.5vh);
+    }
+
+    .ss-body .rank-pos {
+      font-size: min(1.75vw, 2.7vh);
+      width: min(4.8vw, 7.4vh);
+    }
+
+    .ss-body .rank-name {
+      font-size: min(1.8vw, 2.8vh);
+    }
+
+    .ss-body .rank-clear-mark {
+      font-size: min(1.8vw, 2.8vh);
+      margin-left: min(0.4vw, 0.6vh);
+    }
+
+    .ss-body .rank-score {
+      font-size: min(1.8vw, 2.8vh);
+    }
+
+    .ss-body .ranking-unavailable {
+      font-size: min(1.75vw, 2.7vh);
+    }
+
+    @media (max-aspect-ratio: 6 / 5) {
+      .ss-card {
+        grid-template-columns: 1fr;
+        grid-template-rows: 42% 58%;
+      }
+      .ss-preview-wrap {
+        border-right: none;
+        border-bottom: 1px solid #cbd5e1;
+      }
+      .ss-body {
+        padding: 2vh 4vw;
+        gap: 1.2vh;
+      }
+      .ss-logo-wrap {
+        height: 11vh;
+      }
+      .ss-body .card-dev-avatar {
+        width: 3.2vh;
+        height: 3.2vh;
+      }
+      .ss-body .card-dev-name {
+        font-size: 1.8vh;
+      }
+      .ss-desc {
+        font-size: min(3.6vw, 2.1vh);
+        line-height: 1.5;
+      }
+      .ss-body .card-ranking-container {
+        padding: 1.2vh 2.5vw;
+        gap: 0.6vh;
+      }
+      .ss-body .ranking-title {
+        font-size: 1.6vh;
+      }
+      .ss-body .ranking-variant-tag {
+        font-size: 1.5vh;
+      }
+      .ss-body .ranking-rows {
+        gap: 0.5vh;
+      }
+      .ss-body .rank-pos {
+        font-size: 1.8vh;
+        width: 5.5vh;
+      }
+      .ss-body .rank-name,
+      .ss-body .rank-clear-mark,
+      .ss-body .rank-score,
+      .ss-body .ranking-unavailable {
+        font-size: 1.85vh;
+      }
     }
   </style>
 </head>
@@ -834,6 +1058,7 @@
   <div id="hub-container">
     <!-- グループ(遊び方のスタイル)の見出しとゲーム一覧は、main.ts が作る -->
   </div>
+  <div id="screensaver" aria-hidden="true"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

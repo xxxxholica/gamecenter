@@ -384,19 +384,22 @@ h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #0f172a; display: fl
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 .stat .k { font-size: .75rem; font-weight: 700; color: #64748b; letter-spacing: .04em; }
 .stat .v {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 1.55rem;
   font-weight: 900;
   font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1.15;
   color: #0f172a;
 }
 .stat .v.txt { font-size: 1.05rem; line-height: 1.5; font-family: inherit; }
-.stat .v small { font-size: .85rem; font-weight: 700; color: #64748b; margin-left: 2px; }
+.stat .v small { font-size: .85rem; font-weight: 700; color: #64748b; margin-left: 2px; white-space: nowrap; }
 .stat.on .v { color: #059669; }
 .stat.warn .v { color: #dc2626; }
 .stat.warn { border-color: #fecaca; background: #fef2f2; }
@@ -1252,7 +1255,7 @@ export const ADMIN_JS = `
         ['広告表示', ads.enabled ? 'ON' : 'OFF', '', ads.enabled],
         ['登録ロゴ数', String(ads.count), '件', ads.count > 0],
         ['総表示回数', String(adStats.totalImpressions || 0), '回', (adStats.totalImpressions || 0) > 0],
-        ['合計表示時間', fmtSec(totalSec), totalSec >= 60 ? '秒 / ' + formatDuration(totalSec) : '秒'],
+        ['合計表示時間', fmtSec(totalSec), '秒'],
         ['平均表示時間', (adStats.totalImpressions || 0) > 0 ? fmtSec(adStats.avgDurationSec) : '-', (adStats.totalImpressions || 0) > 0 ? '秒/回' : ''],
       ]);
     }
@@ -1978,7 +1981,7 @@ export const ADMIN_JS = `
         ['アクティブ訪問中', String(data.activeSessionsNow), '人', data.activeSessionsNow > 0],
         ['総ゲームプレイ数', String(data.totalPlays)],
         ['総プレイ時間', ((data.totalPlayTimeSec || 0) / 3600).toFixed(1), 'h'],
-        ['広告総表示回数', String(adSum.totalImpressions || 0), '回 / ' + fmtSec(adSum.totalDurationSec || 0) + '秒', (adSum.totalImpressions || 0) > 0],
+        ['広告総表示回数', String(adSum.totalImpressions || 0), '回', (adSum.totalImpressions || 0) > 0],
         ['全体平均FPS', String(data.avgFpsOverall || 60), 'fps'],
         ['パッド利用率', String(Math.round(data.gamepadUserRate * 100)) + '%'],
         ['エラー発生件数', String(data.totalErrors || 0), '件', (data.totalErrors || 0) > 0 ? 'warn' : false],

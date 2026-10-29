@@ -320,7 +320,7 @@ const IDLE_RETURN_MS = 3 * 60 * 1000;
 
 /**
  * 筐体でゲームが放置されたら、ハブへ戻す(次の人がハブから選び直せるように。操作の記録も、そこで区切られる)。
- * プレイ中・オンラインの待合・名前登録の間は数えない。
+ * プレイ中・名前登録の間は数えない(オンラインの待合は相手が来ないまま放置されたら戻す)。
  * (操作の記録・再生で同じ時に戻るよう、記録している入力(キー・クリック・アケコン)とフレームの時計だけで判定する)
  */
 function watchIdleReturn(): void {
@@ -339,7 +339,7 @@ function watchIdleReturn(): void {
     }
     if (pads !== prevPads) { prevPads = pads; touch(); }
     const phase = getGamePhase();
-    if (phase === 'playing' || phase === 'lobby' || phase === 'name_entry') { touch(); return; }
+    if (phase === 'playing' || phase === 'name_entry') { touch(); return; }
     if (performance.now() - last >= limitMs) {
       touch();
       returnToHub();

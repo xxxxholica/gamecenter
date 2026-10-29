@@ -619,6 +619,8 @@ export function reportDeepAnalytics(type: string, data?: Record<string, unknown>
   if (type === 'phase' && typeof data?.phase === 'string') gameSidePhase = data.phase;
   else if (type === 'round_start') gameSidePhase = 'playing';
   else if (type === 'progression_update' && (data?.result === 'gameover' || data?.result === 'clear')) gameSidePhase = 'result';
+  else if (type === 'name_entry_done' && gameSidePhase === 'name_entry') gameSidePhase = 'result';
+  else if (type === 'online_results' || type === 'online_aborted') gameSidePhase = 'result';
   else if (type === 'pause') gameSidePhase = data?.action === 'open' ? 'paused' : data?.action === 'resume' ? 'playing' : gameSidePhase;
   if (!framedInitialPhaseSeen && (type === 'phase' || type === 'round_start')) {
     framedInitialPhaseSeen = true;
@@ -737,6 +739,11 @@ export function applyDeepAnalytics(type: string, data: Record<string, unknown> |
     return;
   }
   sendPlayEvent(type, data, gameId);
+  if (type === 'name_entry_done' && currentPhase?.name === 'name_entry') {
+    setPhase('result', undefined, gameId);
+  } else if (type === 'online_results' || type === 'online_aborted') {
+    setPhase('result', undefined, gameId);
+  }
 }
 
 // ==========================================

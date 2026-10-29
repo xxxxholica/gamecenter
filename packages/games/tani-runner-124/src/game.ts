@@ -23,6 +23,7 @@ import { ArcadePause } from '../../../shared/arcadePause.ts';
 import { ArcadeTitleScreen } from '../../../shared/arcadeTitleScreen.ts';
 import { returnToHub } from '../../../shared/homeReturn.ts';
 import { startArcadeCountdown, type ArcadeCountdownHandle } from '../../../shared/arcadeCountdown';
+import { hasPreviewParam } from '../../../shared/devParams';
 import { startArcadeTutorial, type ArcadeTutorialHandle } from '../../../shared/arcadeTutorial';
 import { reportDeathPoint, reportDeepAnalytics, reportRoundStart } from '../../../shared/arcadeAnalytics';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
@@ -163,7 +164,7 @@ export class Game {
     this.cacheDOMElements();
     this.setupEventListeners();
 
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = hasPreviewParam();
     if (isPreview) {
       const titleElem = document.getElementById('screen-title');
       if (titleElem) titleElem.style.display = 'none';
@@ -411,7 +412,7 @@ export class Game {
     sound.init();
     sound.playCoin();
 
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = hasPreviewParam();
     if (!this.benchScene && !isPreview) {
       this.beginTutorial();
       return;
@@ -828,7 +829,7 @@ export class Game {
   private updateRunning(dt: number, input: ReturnType<typeof inputManager.poll>): void {
     this.playerZ -= this.forwardSpeed * dt;
     this.crowd.groupZ = this.playerZ;
-    const isPreview = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+    const isPreview = hasPreviewParam();
     const mx = isPreview ? Math.sin(performance.now() * 0.003) * 0.4 : input.moveX;
     this.crowd.updateRunning(dt, mx);
     if (isPreview && this.hudElem) this.hudElem.style.display = 'none';

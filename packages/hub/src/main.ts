@@ -1,7 +1,7 @@
-import { games, GameEntry, GROUPS, GroupDef } from './games';
+import { games, GameEntry, GROUPS } from './games';
 import { createArcadeInput } from './arcadeInput';
 import { mountArcadeGuide } from '../../shared/arcadeGuide';
-import { mountFullscreenKey } from '../../shared/fullscreenKey';
+import { isFullscreen, mountFullscreenKey } from '../../shared/fullscreenKey';
 import {
   initFramedHub,
   isFramedHub,
@@ -116,6 +116,7 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 document.addEventListener('click', (e) => {
+  if (Date.now() - screensaverClosedAt < 400) return;
   const mark = (e.target as Element | null)?.closest?.('.rank-clear-mark');
   if (!mark) return;
   const link = mark.closest('.card')?.querySelector<HTMLAnchorElement>('.card-link');
@@ -123,33 +124,35 @@ document.addEventListener('click', (e) => {
 });
 
 let boards: Record<string, LeaderboardEntry[]> = {};
+let latestStatuses: Record<string, PublicStatus> = {};
 
 function entriesFor(slug: string, variantId?: string): LeaderboardEntry[] {
   return padEmptyEntries(GAME_LEADERBOARD_DEFS[slug], boards[getLeaderboardKey(slug, variantId)] ?? [], 5);
 }
 
-// ===== グループ(遊び方のスタイル)の並び =====
+// ===== グループ(遊び方のスタイル)の並びとスクリーンセーバー管理 =====
 const hubContainer = document.querySelector<HTMLElement>('#hub-container')!;
-/** グループの入れ替えの時に、画面を上から下へ走る光の帯 */
-const hubSweep = document.createElement('div');
-hubSweep.className = 'hub-sweep';
-document.body.appendChild(hubSweep);
+const screensaverEl = document.querySelector<HTMLElement>('#screensaver')!;
 
-/**
- * 何も操作しないまま、この時間がたつと、画面の一番上へ戻して、グループを1つ上げる(下のグループが上へ上がり、一番上は一番下へ回る)。
- * 操作(マウス・スクロール・キー・タッチ・アケコン)があれば、数え直す。開いた時は GROUPS の固定の順番。
- */
-const GROUP_ROTATE_IDLE_MS = 30_000;
-/** 最後に操作があった(または、前回入れ替えた)時刻 */
+/** 何も操作しないままこの時間がたつと、1ゲームずつ解説するスクリーンセーバーを表示する */
+const SCREENSAVER_IDLE_MS = 30_000;
+/** スクリーンセーバーで1ゲームあたりを表示する時間 */
+const SCREENSAVER_SLIDE_MS = 10_000;
+
 let lastActivityAt = Date.now();
+let screensaverOpen = false;
+let screensaverIndex = 0;
+let screensaverVariantIndex = 0;
+let screensaverSlideTimer: number | null = null;
+let screensaverFadeTimer: number | null = null;
+let screensaverClosedAt = 0;
+let confirmConsumedByScreensaver = false;
+
 function markActive(): void {
   lastActivityAt = Date.now();
-}
-/** グループを上げた回数(GROUPS の数で一周する) */
-let rotationIndex = 0;
-/** 上げた回数 n に応じた、グループの並び(先頭の n 個が、末尾へ回る) */
-function groupOrderFor(n: number): GroupDef[] {
-  return [...GROUPS.slice(n), ...GROUPS.slice(0, n)];
+  if (screensaverOpen) {
+    closeScreensaver(true);
+  }
 }
 
 // コース/難易度バリアントを持つカードのローテーション管理
@@ -237,19 +240,41 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
 
   const previewVideo = card.querySelector<HTMLVideoElement>('.card-preview');
   if (previewVideo) {
+    const markPlaying = () => {
+      if (!previewVideo.paused && previewVideo.readyState >= 2) {
+        previewVideo.classList.add('is-playing');
+      }
+    };
+    previewVideo.addEventListener('playing', markPlaying);
+    previewVideo.addEventListener('loadeddata', markPlaying);
+    previewVideo.addEventListener('timeupdate', markPlaying);
+    previewVideo.addEventListener('pause', () => previewVideo.classList.remove('is-playing'));
+    previewVideo.addEventListener('emptied', () => previewVideo.classList.remove('is-playing'));
+    previewVideo.addEventListener('error', () => previewVideo.classList.remove('is-playing'));
+
     card.addEventListener('mouseenter', () => {
       if (!document.body.classList.contains('pad-mode')) {
-        previewVideo.currentTime = 0;
-        previewVideo.play().catch(() => {});
+        startCardPreview(previewVideo);
+      }
+    });
+    card.addEventListener('mousemove', () => {
+      if (!document.body.classList.contains('pad-mode') && previewVideo.paused) {
+        startCardPreview(previewVideo);
       }
     });
     card.addEventListener('mouseleave', () => {
-      previewVideo.pause();
-      previewVideo.currentTime = 0;
+      if (!document.body.classList.contains('pad-mode')) {
+        stopCardPreview(previewVideo);
+      }
     });
   }
 
   card.querySelector('.card-link')!.addEventListener('click', (e) => {
+    if (Date.now() - screensaverClosedAt < 400) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (shouldOpenInFrame()) {
       e.preventDefault();
       launchSelected(game.slug);
@@ -316,7 +341,7 @@ function createStarGuideCard(): HTMLDivElement {
   return box;
 }
 
-// 取得したランキングで、全カードの表示を更新する
+// 取得したランキングで、全カードおよびスクリーンセーバーの表示を更新する
 async function refreshBoards() {
   const next = await loadAllLeaderboards();
   // 通信に失敗した時は空で返ってくる。表示中のランキングを、空で消さない
@@ -331,6 +356,15 @@ async function refreshBoards() {
     const variant = def.variants?.[rotator?.variantIndex ?? 0];
     rowsEl.innerHTML = renderRowsHtml(entriesFor(game.slug, variant?.id));
   }
+  if (screensaverOpen) {
+    const ssGame = games[screensaverIndex];
+    const def = ssGame ? GAME_LEADERBOARD_DEFS[ssGame.slug] : undefined;
+    const ssRowsEl = document.getElementById('ss-ranking-rows');
+    if (ssGame && def && def.hasScore && ssRowsEl) {
+      const variant = def.variants?.[screensaverVariantIndex];
+      ssRowsEl.innerHTML = renderRowsHtml(entriesFor(ssGame.slug, variant?.id));
+    }
+  }
 }
 
 // ===== セクション描画 =====
@@ -341,6 +375,7 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
 
   try {
     const statuses = await fetchAllOnlineStatuses();
+    latestStatuses = statuses;
 
     // 再描画前の選択中ゲームのslugを保持（再描画後に選択位置を確実に復元するため）
     const prevSelectedSlug = cards[current]?.dataset.slug;
@@ -348,7 +383,7 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
     // ローテーターを初期化して、グループごとの見出しとカードを作り直す
     rotators.length = 0;
     hubContainer.innerHTML = '';
-    groupOrderFor(rotationIndex).forEach((group) => {
+    GROUPS.forEach((group) => {
       const groupGames = games.filter((g) => g.group === group.id);
       if (groupGames.length === 0) return;
       const section = document.createElement('section');
@@ -381,6 +416,7 @@ async function renderSections(targetSlug?: string | null, shouldScroll = false) 
     if (shouldScroll) {
       scrollCardIntoView(preferredIndex);
     }
+    syncHoveredCardPreview();
   } finally {
     isRendering = false;
   }
@@ -393,6 +429,28 @@ let rotationTimer: number | null = null;
 function rotateVariants() {
   // ゲームを開いている間は、見えないカードを書き換えない(ゲームと同じスレッドで、スタイル計算・再描画が走るのを避ける)
   if (isGameFrameOpen()) return;
+  if (screensaverOpen) {
+    const ssGame = games[screensaverIndex];
+    const def = ssGame ? GAME_LEADERBOARD_DEFS[ssGame.slug] : undefined;
+    if (!ssGame || !def || !def.variants || def.variants.length <= 1) return;
+    const tagEl = document.getElementById('ss-ranking-tag');
+    const rowsEl = document.getElementById('ss-ranking-rows');
+    if (!tagEl || !rowsEl) return;
+
+    rowsEl.classList.add('fading');
+    tagEl.style.opacity = '0';
+
+    setTimeout(() => {
+      if (!screensaverOpen || games[screensaverIndex]?.slug !== ssGame.slug) return;
+      screensaverVariantIndex = (screensaverVariantIndex + 1) % def.variants!.length;
+      const curVariant = def.variants![screensaverVariantIndex];
+      tagEl.textContent = curVariant.label;
+      rowsEl.innerHTML = renderRowsHtml(entriesFor(ssGame.slug, curVariant.id));
+      rowsEl.classList.remove('fading');
+      tagEl.style.opacity = '1';
+    }, 220);
+    return;
+  }
   rotators.forEach((rotator) => {
     const def = GAME_LEADERBOARD_DEFS[rotator.slug];
     if (!def || !def.variants || def.variants.length <= 1) return;
@@ -430,6 +488,48 @@ function stopRotation() {
 // ===== 選択状態管理 =====
 let current = 0;
 
+function startCardPreview(video: HTMLVideoElement | null | undefined) {
+  if (!video) return;
+  if (video.error) {
+    video.load();
+  } else if (video.readyState >= 1 && video.currentTime > 0) {
+    try {
+      video.currentTime = 0;
+    } catch {
+      // シーク不可の状態では無視
+    }
+  }
+  if (video.readyState >= 2) {
+    video.classList.add('is-playing');
+  }
+  video.play().catch(() => {});
+}
+
+function stopCardPreview(video: HTMLVideoElement | null | undefined) {
+  if (!video) return;
+  video.pause();
+  video.classList.remove('is-playing');
+  if (video.readyState >= 1 && video.currentTime > 0) {
+    try {
+      video.currentTime = 0;
+    } catch {
+      // シーク不可の状態では無視
+    }
+  }
+}
+
+function syncHoveredCardPreview() {
+  if (document.body.classList.contains('pad-mode') || screensaverOpen || isGameFrameOpen()) return;
+  for (const card of cards) {
+    const vid = card.querySelector<HTMLVideoElement>('.card-preview');
+    if (card.matches(':hover')) {
+      if (vid && vid.paused) startCardPreview(vid);
+    } else if (vid && !vid.paused) {
+      stopCardPreview(vid);
+    }
+  }
+}
+
 function setPressed(pressed: boolean) {
   cards[current]?.classList.toggle('pressed', pressed);
 }
@@ -457,16 +557,10 @@ function goTo(index: number) {
   cards.forEach((card, i) => card.classList.toggle('selected', i === current));
 
   if (document.body.classList.contains('pad-mode')) {
-    const prevVid = cards[prev]?.querySelector<HTMLVideoElement>('.card-preview');
-    if (prevVid) {
-      prevVid.pause();
-      prevVid.currentTime = 0;
+    if (prev !== current) {
+      stopCardPreview(cards[prev]?.querySelector<HTMLVideoElement>('.card-preview'));
     }
-    const curVid = cards[current]?.querySelector<HTMLVideoElement>('.card-preview');
-    if (curVid) {
-      curVid.currentTime = 0;
-      curVid.play().catch(() => {});
-    }
+    startCardPreview(cards[current]?.querySelector<HTMLVideoElement>('.card-preview'));
   }
 }
 
@@ -476,14 +570,14 @@ function setPadMode(on: boolean) {
   document.body.classList.toggle('pad-mode', on);
   if (wasPadMode !== on) {
     const curVid = cards[current]?.querySelector<HTMLVideoElement>('.card-preview');
-    if (curVid) {
-      if (on) {
-        curVid.currentTime = 0;
-        curVid.play().catch(() => {});
-      } else {
-        curVid.pause();
-        curVid.currentTime = 0;
-      }
+    if (on) {
+      cards.forEach((c, i) => {
+        if (i !== current) stopCardPreview(c.querySelector<HTMLVideoElement>('.card-preview'));
+      });
+      startCardPreview(curVid);
+    } else {
+      stopCardPreview(curVid);
+      syncHoveredCardPreview();
     }
   }
 }
@@ -553,6 +647,7 @@ window.addEventListener('pageshow', (e) => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    closeScreensaver(false);
     stopRotation();
   } else {
     startRotation();
@@ -587,80 +682,228 @@ if (!isFramedHub && !isMobileBlocked) {
       if (!isGameFrameOpen()) setPadMode(true);
     },
     onMove(dx, dy) {
+      if (screensaverOpen) {
+        setPadMode(true);
+        markActive();
+        return;
+      }
       markActive();
       if (!isGameFrameOpen()) moveSelection(dx, dy);
     },
     onConfirmDown() {
+      if (screensaverOpen) {
+        confirmConsumedByScreensaver = true;
+        setPadMode(true);
+        markActive();
+        return;
+      }
       markActive();
       if (isGameFrameOpen()) return;
       setPadMode(true);
       setPressed(true);
     },
     onConfirmUp() {
+      if (confirmConsumedByScreensaver) {
+        confirmConsumedByScreensaver = false;
+        return;
+      }
       if (!isGameFrameOpen()) launchSelected();
     },
   }, isGameFrameOpen);
 }
 
-// 30秒ごとに、下のグループを1つ上げる(一番上のグループは、一番下へ回る)。
-// 作り直さずに、セクションの並びだけを入れ替える(動画も選択も保ったまま)。ゲームを開いている間と、タブが隠れている間は、戻った時に追いつく。
-let isRotating = false;
-/** 操作がないまま一定時間たったら、画面の一番上へ戻して、グループを入れ替える */
-function rotateGroupsIfIdle() {
-  if (isRotating || cards.length === 0 || document.hidden || isGameFrameOpen()) return;
-  if (Date.now() - lastActivityAt < GROUP_ROTATE_IDLE_MS) return;
-  markActive(); // 次は、入れ替えてから、また30秒後
-  rotateGroups();
+// ===== スクリーンセーバー (無操作待機時に1ゲームずつ解説表示) =====
+function buildScreensaverRankingHtml(game: GameEntry): string {
+  const def = GAME_LEADERBOARD_DEFS[game.slug];
+  if (def && def.hasScore) {
+    const hasVariants = def.variants && def.variants.length > 0;
+    const initialVariant = hasVariants ? def.variants![0] : undefined;
+    const entries = entriesFor(game.slug, initialVariant?.id);
+    const variantTagHtml = hasVariants
+      ? `<span class="ranking-variant-tag" id="ss-ranking-tag">${initialVariant!.label}</span>`
+      : '';
+
+    return `
+      <div class="card-ranking-container" data-slug="${game.slug}">
+        <div class="ranking-header">
+          <span class="ranking-title">ランキング</span>
+          ${variantTagHtml}
+        </div>
+        <div class="ranking-rows" id="ss-ranking-rows">
+          ${renderRowsHtml(entries)}
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="card-ranking-container is-disabled" data-slug="${game.slug}">
+      <span class="ranking-unavailable">ランキングは利用不可</span>
+    </div>
+  `;
 }
 
-function rotateGroups() {
-  // 動きを減らす設定の環境では、アニメーションなしで入れ替える
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    applyRotation();
+function applyScreensaverGameContent(game: GameEntry): void {
+  screensaverVariantIndex = 0;
+
+  const onlineBadgeHtml = game.online
+    ? `<div class="card-online-pill" id="ss-online-pill" data-state="${onlineState(latestStatuses[game.slug])}">オンライン対戦</div>`
+    : '';
+  const starBadgeHtml = game.star
+    ? `<div class="card-star-pill">完全制覇に挑戦</div>`
+    : '';
+  const badgesHtml = onlineBadgeHtml || starBadgeHtml
+    ? `<div class="card-badges">${onlineBadgeHtml}${starBadgeHtml}</div>`
+    : '';
+
+  screensaverEl.innerHTML = `
+    <div class="ss-card">
+      <div class="ss-preview-wrap">
+        ${badgesHtml}
+        <img class="ss-thumb" src="${game.thumbnail}" alt="${game.title}のスクリーンショット" />
+        <video class="ss-video" src="previews/${game.slug}.webm" autoplay loop muted playsinline></video>
+      </div>
+      <div class="ss-body">
+        <div class="ss-info-top">
+          ${
+            game.logo
+              ? `<div class="ss-logo-wrap"><img class="ss-logo" src="${game.logo}" alt="${game.title}" /></div>`
+              : `<div class="card-title-en">${game.englishTitle}</div>`
+          }
+          <div class="card-dev">
+            <img class="card-dev-avatar" src="${game.developer.avatar}" alt="" />
+            <span class="card-dev-name">@${game.developer.name}</span>
+          </div>
+          <p class="ss-desc">${game.description}</p>
+        </div>
+        ${buildScreensaverRankingHtml(game)}
+      </div>
+    </div>
+  `;
+
+  const video = screensaverEl.querySelector<HTMLVideoElement>('.ss-video');
+  if (video) {
+    video.play().catch(() => {});
+  }
+}
+
+function renderScreensaverSlide(game: GameEntry, animate: boolean): void {
+  if (screensaverFadeTimer !== null) {
+    clearTimeout(screensaverFadeTimer);
+    screensaverFadeTimer = null;
+  }
+
+  const existingCard = screensaverEl.querySelector<HTMLElement>('.ss-card');
+  if (!animate || !existingCard || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    applyScreensaverGameContent(game);
     return;
   }
 
-  // 画面全体を、一度上へ消して → 一番上へ戻して並びを入れ替え → 下から入ってくる(リフレッシュする動き)。同時に、背景色の帯が画面を走る
-  isRotating = true;
-  hubSweep.classList.remove('run');
-  void hubSweep.offsetWidth; // アニメーションを最初からやり直す
-  hubSweep.classList.add('run');
-  hubContainer.classList.add('refresh-out');
-  window.setTimeout(() => {
-    applyRotation();
-    hubContainer.classList.add('refresh-in'); // 下に置いた状態を、動きなしで作ってから
-    void hubContainer.offsetWidth;
-    hubContainer.classList.remove('refresh-out', 'refresh-in'); // 元の位置へ戻る動き
-    window.setTimeout(() => { isRotating = false; }, 400);
-  }, 380);
+  existingCard.classList.add('fading');
+  screensaverFadeTimer = window.setTimeout(() => {
+    screensaverFadeTimer = null;
+    if (!screensaverOpen) return;
+    applyScreensaverGameContent(game);
+    const newCard = screensaverEl.querySelector<HTMLElement>('.ss-card');
+    if (newCard) {
+      newCard.classList.add('fading');
+      void newCard.offsetWidth;
+      newCard.classList.remove('fading');
+    }
+  }, 240);
 }
 
-function applyRotation() {
-  rotationIndex = (rotationIndex + 1) % GROUPS.length;
-  const sections = new Map(
-    Array.from(hubContainer.querySelectorAll<HTMLElement>('.game-section')).map((el) => [el.dataset.group as string, el]),
-  );
-  groupOrderFor(rotationIndex).forEach((g) => {
-    const el = sections.get(g.id);
-    if (el) hubContainer.appendChild(el);
-  });
+function openScreensaver(): void {
+  if (screensaverOpen || !isFullscreen() || games.length === 0 || document.hidden || isGameFrameOpen()) return;
+  screensaverOpen = true;
 
-  // 画面の一番上へ戻して、選択も、新しい一番上のグループの先頭のカードに移す
-  cards = Array.from(document.querySelectorAll<HTMLDivElement>('.card'));
-  window.scrollTo(0, 0);
-  goTo(0);
+  // 現在選択中のカードのゲームから紹介を開始する
+  const curSlug = cards[current]?.dataset.slug;
+  const idx = curSlug ? games.findIndex((g) => g.slug === curSlug) : -1;
+  if (idx >= 0) screensaverIndex = idx;
+
+  // 背面の一覧カードのプレビュー動画を停止
+  document.querySelectorAll<HTMLVideoElement>('.card-preview').forEach((v) => {
+    stopCardPreview(v);
+  });
+  starTooltip.classList.remove('visible');
+
+  renderScreensaverSlide(games[screensaverIndex], false);
+  screensaverEl.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('screensaver-active');
+  screensaverEl.classList.add('visible');
+
   void refreshBoards();
+
+  if (screensaverSlideTimer !== null) clearInterval(screensaverSlideTimer);
+  screensaverSlideTimer = window.setInterval(() => {
+    if (!screensaverOpen || !isFullscreen() || document.hidden || isGameFrameOpen()) return;
+    screensaverIndex = (screensaverIndex + 1) % games.length;
+    renderScreensaverSlide(games[screensaverIndex], true);
+  }, SCREENSAVER_SLIDE_MS);
+}
+
+function closeScreensaver(focusShowcasedGame: boolean): void {
+  if (!screensaverOpen) return;
+  screensaverOpen = false;
+  screensaverClosedAt = Date.now();
+
+  if (screensaverSlideTimer !== null) {
+    clearInterval(screensaverSlideTimer);
+    screensaverSlideTimer = null;
+  }
+  if (screensaverFadeTimer !== null) {
+    clearTimeout(screensaverFadeTimer);
+    screensaverFadeTimer = null;
+  }
+
+  screensaverEl.classList.remove('visible');
+  screensaverEl.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('screensaver-active');
+
+  const video = screensaverEl.querySelector<HTMLVideoElement>('.ss-video');
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  }
+
+  if (focusShowcasedGame) {
+    const targetSlug = games[screensaverIndex]?.slug;
+    const targetIdx = targetSlug ? cards.findIndex((c) => c.dataset.slug === targetSlug) : -1;
+    if (targetIdx >= 0) {
+      goTo(targetIdx);
+      scrollCardIntoView(targetIdx);
+    }
+  }
+  syncHoveredCardPreview();
+}
+
+function checkScreensaverIdle(): void {
+  if (!isFullscreen()) {
+    if (screensaverOpen) closeScreensaver(false);
+    lastActivityAt = Date.now();
+    return;
+  }
+  if (screensaverOpen || cards.length === 0 || document.hidden || isGameFrameOpen()) return;
+  if (Date.now() - lastActivityAt < SCREENSAVER_IDLE_MS) return;
+  openScreensaver();
 }
 
 // オンライン開催状況の定期更新: 印の状態(点灯・点滅)だけを書き換える。セクションは作り直さないので、並びもスクロール位置も動かない
 async function updateOnlineStatuses() {
   try {
     const statuses = await fetchAllOnlineStatuses();
+    latestStatuses = statuses;
     document.querySelectorAll<HTMLDivElement>('.card').forEach((card) => {
       const slug = card.dataset.slug;
       const pill = card.querySelector<HTMLElement>('.card-online-pill');
       if (slug && pill) pill.dataset.state = onlineState(statuses[slug]);
     });
+    if (screensaverOpen) {
+      const ssGame = games[screensaverIndex];
+      const ssPill = document.getElementById('ss-online-pill');
+      if (ssGame && ssPill) ssPill.dataset.state = onlineState(statuses[ssGame.slug]);
+    }
   } catch {
     // 通信エラー時は無視
   }
@@ -687,10 +930,19 @@ if (!isFramedHub && !isMobileBlocked) {
     }
   }, 5000);
 
-  // 操作がないまま30秒たったかを、1秒ごとに見る
-  setInterval(rotateGroupsIfIdle, 1000);
+  // 操作がないまま30秒たったかを、1秒ごとに見る(フルスクリーン時のみ)
+  setInterval(checkScreensaverIdle, 1000);
 
-  // プレイヤーの操作があれば、入れ替えまでの30秒を数え直す
+  const onFullscreenChange = () => {
+    lastActivityAt = Date.now();
+    if (!isFullscreen() && screensaverOpen) {
+      closeScreensaver(false);
+    }
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // プレイヤーの操作があればスクリーンセーバーを閉じ、待機タイマーを数え直す
   for (const type of ['mousedown', 'wheel', 'keydown', 'touchstart', 'touchmove', 'pointerdown']) {
     window.addEventListener(type, markActive, { passive: true });
   }

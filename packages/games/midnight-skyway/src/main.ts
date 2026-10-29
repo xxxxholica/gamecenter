@@ -63,7 +63,7 @@ const { bgm, sfx } = audio;
 
 // 戻る操作は Backspace(アケコンは SELECT)に統一。Escape は無効
 installHomeReturn();
-watchResultAutoReturn(['res-btn-title']);
+watchResultAutoReturn(['res-btn-title', 'online-result-leave-btn']);
 
 // 画面ごとのアケコンガイド(左下。呼ぶたびに前の画面のカードと入れ替わる)
 const guideTitle = () => mountArcadeGuide({ buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート', keyLabel: 'Enter' }], showHomeHint: true, backLabel: 'ホームへ戻る' });
@@ -721,7 +721,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       driveHUD.setRemoteMarkers(remoteMarkersPool);
     }
   };
-  const isPreviewMode = typeof location !== 'undefined' && (location.search.includes('noHud') || location.search.includes('preview'));
+  const isPreviewMode = typeof location !== 'undefined' && Boolean(location.search) && (() => {
+    const q = new URLSearchParams(location.search);
+    return q.has('noHud') || q.has('preview');
+  })();
   // 撮影用(?preview / ?noHud): HUD とボタンガイドを出さず、車はコースのルートを自動で走る(ハブのサムネイル・プレビュー動画用)
   let previewPilot: AutoPilot | null = null;
   if (isPreviewMode) {

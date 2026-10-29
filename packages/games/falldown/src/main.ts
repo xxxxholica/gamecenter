@@ -198,10 +198,18 @@ function startGame() {
   ui.popups.innerHTML = '';
   titleScreen.hide();
   game.start(BENCH ? BENCH_SEED : undefined);
-  reportRoundStart();
+  if (!PREVIEW) reportRoundStart();
   if (BENCH) {
     game.debug = true;
     const d = Number(benchParam('depth')) || 0;
+    if (d > 0) {
+      game.player.reset(4, 1 - d);
+      game.maxDepth = d;
+      game.layer = difficulty(d).layer;
+    }
+  } else if (PREVIEW) {
+    game.debug = true;
+    const d = Number(new URLSearchParams(location.search).get('d')) || 30;
     if (d > 0) {
       game.player.reset(4, 1 - d);
       game.maxDepth = d;
@@ -211,7 +219,7 @@ function startGame() {
     game.debug = true;
     game.world.breakAll = true;
     game.player.fastDig = true;
-    const d = Number(new URLSearchParams(location.search).get('d')) || (PREVIEW ? 110 : 0);
+    const d = Number(new URLSearchParams(location.search).get('d')) || 0;
     if (d > 0) {
       game.player.reset(4, 1 - d);
       game.maxDepth = d;
@@ -222,6 +230,8 @@ function startGame() {
   if (PREVIEW) {
     ui.hud.classList.add('hidden');
     ui.depthTag.style.display = 'none';
+    ui.banner.style.display = 'none';
+    ui.popups.style.display = 'none';
     const guide = document.getElementById('agc-guide');
     if (guide) guide.style.display = 'none';
   } else {
@@ -392,9 +402,7 @@ const fxQueue: { t: number; fn: () => void }[] = [];
 /** 爆発の瞬間にゲームの進行をほぼ止めて、衝撃を強く見せる残り秒数 */
 /** ハブのホバー動画用(?preview): タイトルを飛ばして、左右に振りながら掘り進む自動プレイ。無敵で、記録は残さない */
 function previewInput(now: number): FrameInput {
-  const t = now / 1000;
-  const s = Math.sin(t * 0.9);
-  return { dx: s > 0.35 ? 1 : s < -0.35 ? -1 : 0, dy: -1, dig: true, digPressed: Math.floor(t * 8) % 2 === 0, start: false, cancel: false, anyPressed: false, padDx: 0, padDy: 0 };
+  return { ...benchBot(game, now), start: false, cancel: false, anyPressed: false, padDx: 0, padDy: 0 };
 }
 
 let hitstop = 0;
