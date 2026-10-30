@@ -10,6 +10,18 @@ export class LevelUpScreen {
   public selectedIndex: number = 1;
   private animTimer: number = 0;
   private idleTimer: number = 0;
+  private warmedUp: boolean = false;
+
+  public warmUp(ctx: CanvasRenderingContext2D, width: number, height: number, player: Player) {
+    if (this.warmedUp) return;
+    this.warmedUp = true;
+    const prevCards = this.cards;
+    const prevSelected = this.selectedIndex;
+    this.generateOptions(player);
+    this.render(ctx, width, height, player.level);
+    this.cards = prevCards;
+    this.selectedIndex = prevSelected;
+  }
 
   public generateOptions(player: Player): UpgradeCard[] {
     this.animTimer = 0;

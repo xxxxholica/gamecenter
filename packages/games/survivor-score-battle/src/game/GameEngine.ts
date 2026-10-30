@@ -88,6 +88,14 @@ export class GameEngine {
     this.optionsScreen = new OptionsScreen();
     this.howToPlayScreen = new HowToPlayScreen();
     this.resultScreen = new ResultScreen();
+    this.arcadeTitle = new ArcadeTitleScreen({
+      slug: 'survivor-score-battle',
+      logoUrl,
+      accentColor: '#00e5ff',
+      tagline: '剣を奪い合う8人サバイバル',
+      startButtonLabel: 'スタート',
+      onStart: () => this.startFromTitle(),
+    });
 
     this.initMatch();
   }
@@ -1271,17 +1279,7 @@ export class GameEngine {
         this.demoTime = 0;
         this.initMatch();
       }
-      if (!this.arcadeTitle) {
-        this.arcadeTitle = new ArcadeTitleScreen({
-          slug: 'survivor-score-battle',
-          logoUrl,
-          accentColor: '#00e5ff',
-          tagline: '剣を奪い合う8人サバイバル',
-          startButtonLabel: 'スタート',
-          onStart: () => this.startFromTitle(),
-        });
-      }
-      this.arcadeTitle.show();
+      this.arcadeTitle?.show();
     } else {
       this.arcadeTitle?.hide();
     }
@@ -1358,6 +1356,7 @@ export class GameEngine {
   public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
     this.syncGuide();
     warmupLocatorSprites(ctx);
+    this.levelUpScreen.warmUp(ctx, width, height, this.player);
     ctx.clearRect(0, 0, width, height);
 
 

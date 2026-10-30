@@ -1,4 +1,4 @@
-import { IS_FIREFOX, IS_SAFARI, decodeInWorker, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
+import { IS_FIREFOX, decodeInWorker, decodeWithImageElement, prewarmStripPool, releaseStripTexture, rememberStripTemplate, uploadInStrips, usesStripUpload } from './textureStrips';
 import { benchMark } from '../../../../shared/arcadeBenchTargets';
 import { reportDeathPoint } from '../../../../shared/arcadeAnalytics';
 import { realNow, untrackedFrame, untrackedTimeout } from '../../../../shared/arcadeReplay';
@@ -268,7 +268,7 @@ export abstract class StreamedCityMap extends MapBase {
     this.loader = new GLTFLoader();
     this.loader.setMeshoptDecoder(MeshoptDecoder);
     if (IS_FIREFOX) decodeWithImageElement(this.loader);   // Firefox は createImageBitmap(オプション付き)のデコードで rAF が止まる(textureStrips.ts)
-    else if (IS_SAFARI) decodeInWorker(this.loader);      // Safari はメインスレッドで展開すると、その間止まる(textureStrips.ts)
+    else decodeInWorker(this.loader);                      // Chrome / Safari もメインスレッドでの JPEG 展開による parse-start のスパイクを防ぐため Worker で展開する
     if (!import.meta.env.DEV) this.pacer = sharedPacer ??= new RequestPacer(this.requestBurst, this.requestIntervalMs);
 
     const initial = this.wanted(this.startPosition.x, this.startPosition.z, this.loadRadius);
@@ -362,7 +362,7 @@ export abstract class StreamedCityMap extends MapBase {
    */
   private schedulePrepareChunk(root: THREE.Object3D, isFar: boolean, instant = false): Promise<void> {
     return new Promise((resolve) => {
-      const carve = this.roadTube ? this.roadTube.carveSteps(root, () => this.prepShouldYield()) : null;
+      const carve = this.roadTube && !isFar ? this.roadTube.carveSteps(root, () => this.prepShouldYield()) : null;
       let carved = carve === null;
       const prep = this.prepareChunkSteps(root, isFar, () => this.prepShouldYield());
       this.prepJobs.push({
@@ -538,12 +538,13 @@ export abstract class StreamedCityMap extends MapBase {
           this.farObjects.set(key, scene);
           benchMark('far-added');
           if (scene.visible) this.startFade(scene, this.fadeMs * 1.5, () => {});
+          await new Promise<void>((r) => untrackedFrame(() => r()));
         } catch (err) {
           console.warn(`[${this.metadata.id}] far chunk failed`, c.file, err);
         }
       }
     };
-    await Promise.all([worker(), worker()]);
+    await worker();
   }
 
   /** Lit material so the city shades under the same sun/sky as the car; casts and receives so buildings ground each other. */
