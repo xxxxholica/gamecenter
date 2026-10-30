@@ -82,27 +82,45 @@ export type WorldEvent =
     }
   | { type: 'life'; x: number; y: number };
 
-/** 深さに応じた難易度パラメータ */
+/** 難しさが上がる深さと、そのとき画面に出す知らせ */
+export const DIFFICULTY_STEPS: readonly { depth: number; text: string }[] = [
+  { depth: 200, text: '酸素の減りが速くなってきた' },
+  { depth: 300, text: 'ブロックが速く落ちてくるようになった' },
+  { depth: 400, text: 'ブロックが硬くなった' },
+  { depth: 450, text: 'ここからが最後の試練' },
+];
+
+/**
+ * 深さに応じた難易度パラメータ。きつくなる要素を深さごとに1つずつ出す。
+ * - 0〜199m：初期状態のまま
+ * - 200m〜：酸素の減りが少しずつ速くなる
+ * - 300m〜：揺れが短く、落下が速くなっていく
+ * - 400m〜：ブロックが硬くなる（宝石2回・岩3回）
+ * - 450m〜：最大の難しさ（宝石3回・岩5回、揺れ0.70秒・落下5.3・酸素の減り9.0）
+ * 200m・300m から上がり始めたものは 450m でちょうど最大になる（途中で跳ね上がらない）。
+ */
 export function difficulty(depth: number) {
   const d = Math.max(0, depth);
   const layer = Math.floor(d / 100);
+  /** a から b にかけて 0→1 に増える割合（a より前は 0、b より後は 1） */
+  const ramp = (a: number, b: number) => Math.min(1, Math.max(0, (d - a) / (b - a)));
   return {
     layer,
-    /** 宝石の硬さ：0〜149m は1、150m〜は2、300m〜は3 */
-    colorHp: Math.min(1 + Math.floor(d / 150), 3),
-    /** 硬い岩の硬さ：2から始まり、150mごとに+1（最大5） */
-    hardHp: Math.min(2 + Math.floor(d / 150), 5),
+    /** 宝石の硬さ：0〜399m は1、400m〜は2、450m〜は3 */
+    colorHp: d < 400 ? 1 : d < 450 ? 2 : 3,
+    /** 硬い岩の硬さ：0〜399m は2、400m〜は3、450m〜は5 */
+    hardHp: d < 400 ? 2 : d < 450 ? 3 : 5,
     hardChance: Math.min(0.03 + d * 0.0005, 0.2),
     /** 爆弾ブロックが出る確率（1マスあたり。浅いところには出ない） */
     bombChance: d < 8 ? 0 : Math.min(0.014 + d * 0.00005, 0.035),
     airChance: Math.max(0.028 - d * 0.00003, 0.011),
     bedrockChance: d < 20 ? 0 : Math.min(0.025 + d * 0.00012, 0.08),
-    /** 酸素の毎秒減少量（最大 100） */
-    airDrain: Math.min(3.0 * (1 + d / 250), 11),
-    /** 支えを失ってから落ち始めるまでの揺れる時間（秒）。浅いと1.1秒、深いほど短く最短0.7秒 */
-    shakeTime: Math.max(1.1 - d * 0.0008, 0.7),
-    /** 落下ブロックの速さ（マス/秒） */
-    fallSpeed: Math.min(3.8 + d * 0.003, 6.5),
+    /** 酸素の毎秒減少量（最大 100）。199m までは 3.0、200m から増えて 450m で 9.0 */
+    airDrain: 3.0 + 6.0 * ramp(200, 450),
+    /** 支えを失ってから落ち始めるまでの揺れる時間（秒）。299m までは 1.1、300m から短くなって 450m で 0.7 */
+    shakeTime: 1.1 - 0.4 * ramp(300, 450),
+    /** 落下ブロックの速さ（マス/秒）。299m までは 3.8、300m から速くなって 450m で 5.3 */
+    fallSpeed: 3.8 + 1.5 * ramp(300, 450),
     /** 横穴（空洞）ができる確率（1行あたり） */
     caveChance: d < 5 ? 0 : 0.16,
     /** 黒曜石の壁（9マス中8マスが黒曜石の行）ができる確率（1行あたり） */
@@ -488,18 +506,18 @@ export class World {
     // 落下
     // 下のマスが空いていることを確かめてから動かすので、着地のときに
     // 下のブロックへめり込んで跳ね返る（ワンバウンドする）ことがない。
-    const speed = difficulty(this.depthForSpeed).fallSpeed;
+    const speed = diff.fallSpeed;
     const groupOf = new Map<Block, FallGroup>();
     for (const g of this.falling) for (const b of g.blocks) groupOf.set(b, g);
     for (const g of [...this.falling]) {
       g.vel = Math.min(g.vel + FALL_ACCEL * dt, speed);
       let move = g.vel * dt;
       let landed = false;
+      const set = new Set(g.blocks);
       while (move > 0) {
         // 次に進むマスの状態：空き / 何かある（着地） / 落下中のブロック（追いかける）
         let blocked = false;
         let cap = 1; // 下の落下ブロックに追いつかない範囲（このマス内の進み具合の上限）
-        const set = new Set(g.blocks);
         for (const b of g.blocks) {
           const by = b.y - 1;
           if (by < this.bottom) { blocked = true; break; }
@@ -618,6 +636,19 @@ export class World {
     if (b.kind === 'color') {
       const u = this.units[b.unit];
       if (u && u.blocks.includes(b)) targets = u.blocks.filter((t) => this.get(t.x, t.y) === t && !t.falling);
+    } else if (b.kind === 'hard') {
+      // 硬い岩を壊すと、上下左右でつながっている硬い岩も、硬さに関係なく一緒に壊れる
+      const stack = [b];
+      while (stack.length) {
+        const c = stack.pop()!;
+        for (const [dx, dy] of DIRS) {
+          const n = this.get(c.x + dx, c.y + dy);
+          if (n && n.kind === 'hard' && !n.falling && !targets.includes(n)) {
+            targets.push(n);
+            stack.push(n);
+          }
+        }
+      }
     }
     const cells = targets.map((t) => ({ x: t.x, y: t.y }));
     for (const t of targets) this.set(t.x, t.y, null);

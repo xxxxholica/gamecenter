@@ -25,6 +25,7 @@ export class Player extends Entity {
   public swordSystem: SwordSystem;
 
   // Stats
+  public static readonly MAX_SCORE = 20_000_000;
   public magnetRadius: number = 180;
   public score: number = 0;
   public kills: number = 0;
@@ -45,6 +46,7 @@ export class Player extends Entity {
   // Ranking
   public rank: number = 1;
   public prevRank: number = 1;
+  private coreGrad: CanvasGradient | null = null;
 
   constructor(x: number, y: number) {
     super(x, y, 22);
@@ -71,7 +73,13 @@ export class Player extends Entity {
     return false;
   }
 
-  public addScore(amount: number, isKill: boolean = false, soundManager?: SoundManager, damageNumbers?: DamageNumbers) {
+  public addScore(
+    amount: number,
+    isKill: boolean = false,
+    soundManager?: SoundManager,
+    damageNumbers?: DamageNumbers,
+    applyCombo: boolean = true
+  ) {
     if (isKill) {
       this.kills += 1;
       this.comboCount += 1;
@@ -99,14 +107,16 @@ export class Player extends Entity {
       }
     }
 
-    // Combo score multiplier
+    // Combo score multiplier (capped at 2.0x to prevent late-game score rate inflation past maxScorePerSec)
     let mult = 1.0;
-    if (this.comboCount >= 100) mult = 3.0;
-    else if (this.comboCount >= 50) mult = 2.0;
-    else if (this.comboCount >= 25) mult = 1.5;
-    else if (this.comboCount >= 10) mult = 1.2;
+    if (applyCombo) {
+      if (this.comboCount >= 100) mult = 2.0;
+      else if (this.comboCount >= 50) mult = 1.7;
+      else if (this.comboCount >= 25) mult = 1.4;
+      else if (this.comboCount >= 10) mult = 1.2;
+    }
 
-    this.score += Math.round(amount * mult);
+    this.score = Math.min(Player.MAX_SCORE, this.score + Math.round(amount * mult));
   }
 
   public addSpecialGauge(
@@ -128,12 +138,16 @@ export class Player extends Entity {
     soundManager: SoundManager,
     particleSystem: ParticleSystem,
     screenEffects: ScreenEffects,
-    damageNumbers: DamageNumbers
+    damageNumbers: DamageNumbers,
+    bulletPool?: BulletPool,
+    onEnemyKilled?: (enemy: Enemy) => void
   ): boolean {
     if (!this.isSpecialReady) return false;
 
     this.specialGauge = 0;
     this.isSpecialReady = false;
+    this.invulnerableTimer = Math.max(this.invulnerableTimer, 2.5);
+    this.heal(35);
 
     // Dramatic Effects
     soundManager.sfx.playSwordStorm();
@@ -147,13 +161,36 @@ export class Player extends Entity {
     particleSystem.emitBurst(this.x, this.y, '#ffd700', 40, 450, 8, 0.8);
     damageNumbers.addPopup(this.x, this.y - 80, 'SWORD STORM', '#ffd700', 42);
 
+    // Clear surrounding enemy projectiles within 900px
+    if (bulletPool) {
+      for (const b of bulletPool.getActiveBullets()) {
+        if (b.active && b.isEnemy) {
+          const dx = b.x - this.x;
+          const dy = b.y - this.y;
+          if (dx * dx + dy * dy <= 900 * 900) {
+            b.active = false;
+          }
+        }
+      }
+    }
+
     // Initial shockwave clearing surrounding enemies
     const victims = enemyGrid.query(this.x, this.y, 800);
     for (const enemy of victims) {
+      if (!enemy.alive) continue;
       const isDead = enemy.takeDamage(1500);
       damageNumbers.addDamage(enemy.x, enemy.y, 1500, true);
       if (isDead) {
-        this.addScore(enemy.scoreValue, true, soundManager, damageNumbers);
+        this.addScore(enemy.scoreValue, true, soundManager, damageNumbers, enemy.type !== 'BOSS');
+        if (onEnemyKilled) onEnemyKilled(enemy);
+      } else {
+        const dx = enemy.x - this.x;
+        const dy = enemy.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.001) {
+          enemy.x += (dx / dist) * 140;
+          enemy.y += (dy / dist) * 140;
+        }
       }
     }
 
@@ -199,6 +236,7 @@ export class Player extends Entity {
     }
 
     // 3. Magnetize Pickups
+    let leveledUp = false;
     const pickups = pickupPool.getActiveItems();
     for (const item of pickups) {
       const dx = this.x - item.x;
@@ -220,8 +258,9 @@ export class Player extends Entity {
           particleSystem.emitBurst(this.x, this.y, '#ffd700', 22, 220, 5, 0.4);
           screenEffects.shake(5);
         } else if (item.type.startsWith('EXP')) {
-          const leveled = this.addExp(item.value, soundManager);
-          if (leveled) return true; // Notify level up!
+          if (this.addExp(item.value, soundManager)) {
+            leveledUp = true;
+          }
         } else if (item.type === 'HEAL') {
           this.heal(item.value);
           soundManager.sfx.playExpPickup();
@@ -250,7 +289,7 @@ export class Player extends Entity {
       particleSystem
     );
 
-    return false;
+    return leveledUp;
   }
 
   public render(ctx: CanvasRenderingContext2D) {
@@ -318,11 +357,14 @@ export class Player extends Entity {
     ctx.fill();
 
     // Inner bright core
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
-    grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(0.4, this.color);
-    grad.addColorStop(1, '#005577');
-    ctx.fillStyle = grad;
+    if (!this.coreGrad) {
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.4, this.color);
+      grad.addColorStop(1, '#005577');
+      this.coreGrad = grad;
+    }
+    ctx.fillStyle = this.coreGrad;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius * 0.75, 0, Math.PI * 2);
     ctx.fill();

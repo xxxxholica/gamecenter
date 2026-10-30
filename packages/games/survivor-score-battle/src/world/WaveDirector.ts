@@ -6,7 +6,7 @@ import { ScreenEffects } from '../effects/ScreenEffects';
 
 export interface WaveEvent {
   timeSeconds: number;
-  type: 'BOSS_SPAWN' | 'ELITE_SWARM' | 'LAST_MINUTE' | 'BERSERKER_HORDE' | 'ARMED_ASSAULT' | 'SURVIVAL_CLEARED';
+  type: 'BOSS_SPAWN' | 'LAST_MINUTE' | 'BERSERKER_HORDE' | 'ARMED_ASSAULT' | 'SURVIVAL_CLEARED';
   bossType?: BossType;
   executed: boolean;
 }
@@ -15,7 +15,7 @@ export class WaveDirector {
   public gameTime: number = 0;
 
   private spawnTimer: number = 0;
-  private nextPeriodicBossTime: number = 660; // 11:00 for first post-10m boss
+  private nextPeriodicBossTime: number = 380;
   public activeBoss: Boss | null = null;
   public warningBannerText: string | null = null;
   public warningBannerTimer: number = 0;
@@ -58,13 +58,8 @@ export class WaveDirector {
     const targetPos = liveContenders[0] || { x: 0, y: 0 };
     const angle = Math.random() * Math.PI * 2;
     const spawnDist = 520;
-    const rawX = targetPos.x + Math.cos(angle) * spawnDist;
-    const rawY = targetPos.y + Math.sin(angle) * spawnDist;
-    const boss = new Boss(
-      Math.max(-1700, Math.min(1700, rawX)),
-      Math.max(-1700, Math.min(1700, rawY)),
-      bossType
-    );
+    const pos = this.resolveSpawnPos(targetPos.x, targetPos.y, angle, spawnDist, 1700);
+    const boss = new Boss(pos.x, pos.y, bossType);
     this.warningBannerText = `ボス ${boss.bossName} 接近`;
     this.warningBannerTimer = 4.0;
     this.activeBoss = boss;
@@ -94,6 +89,10 @@ export class WaveDirector {
         ev.executed = true;
 
         if (ev.type === 'BOSS_SPAWN' && ev.bossType) {
+          // 前のボスがまだ残っている場合は退場させ、ボスが2体重ならないようにする
+          if (this.activeBoss && this.activeBoss.alive) {
+            this.activeBoss.alive = false;
+          }
           bossToSpawn = this.createBoss(ev.bossType, contenders, soundManager, screenEffects);
         } else if (ev.type === 'BERSERKER_HORDE') {
           soundManager.sfx.playBossWarning();
@@ -137,15 +136,18 @@ export class WaveDirector {
     }
 
     // 2. Continuous Enemy Swarm Spawning (Ultra-fast respawn, dense action, smooth 60FPS)
-    const maxEnemies = Math.min(250, Math.floor(75 + (this.gameTime / 60) * 45 + (this.gameTime / 300) * 90));
-    const difficultyMult = 1.05 + Math.min(2.2, (this.gameTime / 140) * 1.15);
+    const bossAlive = !!(this.activeBoss && this.activeBoss.alive);
+    const baseMaxEnemies = Math.min(220, Math.floor(75 + (this.gameTime / 60) * 40 + (this.gameTime / 300) * 75));
+    const maxEnemies = bossAlive ? Math.floor(baseMaxEnemies * 0.65) : baseMaxEnemies;
+    const difficultyMult = 1.0 + Math.min(1.65, (this.gameTime / 150) * 0.9);
 
     this.spawnTimer += dt;
-    // Rapid spawn interval: start at 0.18s, accelerates down to 0.04s for constant intense swarms
-    const spawnInterval = Math.max(
-      0.04,
-      0.18 - Math.min(0.12, (this.gameTime / 90) * 0.12) - (this.gameTime / 300) * 0.02
+    // Rapid spawn interval: slows down slightly while a boss is active so player has room to dodge
+    const baseInterval = Math.max(
+      0.06,
+      0.18 - Math.min(0.10, (this.gameTime / 100) * 0.10) - (this.gameTime / 300) * 0.02
     );
+    const spawnInterval = bossAlive ? Math.max(0.10, baseInterval * 1.35) : baseInterval;
 
     if (this.spawnTimer >= spawnInterval && enemies.length < maxEnemies) {
       this.spawnTimer = 0;
@@ -153,12 +155,29 @@ export class WaveDirector {
       this.spawnWaveBatch(enemies, contenders, difficultyMult);
 
       // If enemy count dropped significantly below cap (e.g. after mass wipe), spawn an extra batch immediately
-      if (enemies.length < maxEnemies - 12) {
+      if (!bossAlive && enemies.length < maxEnemies - 20) {
         this.spawnWaveBatch(enemies, contenders, difficultyMult);
       }
     }
 
     return { spawnBoss: bossToSpawn, isGameOver: false };
+  }
+
+  private resolveSpawnPos(
+    originX: number,
+    originY: number,
+    angle: number,
+    dist: number,
+    limit: number = 1740
+  ): { x: number; y: number } {
+    let dx = Math.cos(angle) * dist;
+    let dy = Math.sin(angle) * dist;
+    if (originX + dx > limit || originX + dx < -limit) dx = -dx;
+    if (originY + dy > limit || originY + dy < -limit) dy = -dy;
+    return {
+      x: Math.max(-limit, Math.min(limit, originX + dx)),
+      y: Math.max(-limit, Math.min(limit, originY + dy)),
+    };
   }
 
   private spawnSpecialCluster(
@@ -174,9 +193,8 @@ export class WaveDirector {
     for (let i = 0; i < count; i++) {
       const angle = baseAngle + (i * Math.PI * 2) / count;
       const dist = 500 + Math.random() * 90;
-      const x = Math.max(-1740, Math.min(1740, target.x + Math.cos(angle) * dist));
-      const y = Math.max(-1740, Math.min(1740, target.y + Math.sin(angle) * dist));
-      enemies.push(new Enemy(x, y, type, 1.3));
+      const pos = this.resolveSpawnPos(target.x, target.y, angle, dist, 1740);
+      enemies.push(new Enemy(pos.x, pos.y, type, 1.3));
     }
   }
 
@@ -188,9 +206,9 @@ export class WaveDirector {
     const liveContenders = contenders.filter((c) => c.alive);
     if (liveContenders.length === 0) return;
 
-    // Pick a contender to spawn enemies around (biased towards player 60% of the time for maximum action)
+    // Pick a contender to spawn enemies around (35% player, 65% distributed across contenders)
     const playerContender = liveContenders.find((c) => (c as any).isPlayer);
-    const target = (playerContender && Math.random() < 0.6)
+    const target = (playerContender && Math.random() < 0.35)
       ? playerContender
       : liveContenders[Math.floor(Math.random() * liveContenders.length)];
 
@@ -199,43 +217,46 @@ export class WaveDirector {
     let type: EnemyType = 'NORMAL';
     const roll = Math.random();
 
-    if (t < 25) {
-      // 0-25s: NORMAL + FAST (俊足タイプが早くも疾走)
-      type = roll < 0.55 ? 'NORMAL' : 'FAST';
+    if (t < 40) {
+      // 0-40s: NORMAL + FAST
+      type = roll < 0.58 ? 'NORMAL' : 'FAST';
     } else if (t < 70) {
-      // 25s-1m10s: 突撃兵が早くも突撃開始！
-      if (roll < 0.35) type = 'NORMAL';
-      else if (roll < 0.68) type = 'FAST';
-      else type = 'BERSERKER'; // 32% 突撃兵！
+      // 40s-1m10s: 突撃兵が参入 (18%)
+      if (roll < 0.45) type = 'NORMAL';
+      else if (roll < 0.82) type = 'FAST';
+      else type = 'BERSERKER';
     } else if (t < 140) {
       // 1m10s-2m20s: 重火器兵と突撃兵が参入！
-      if (roll < 0.22) type = 'NORMAL';
-      else if (roll < 0.45) type = 'FAST';
-      else if (roll < 0.70) type = 'BERSERKER'; // 突撃兵
-      else if (roll < 0.86) type = 'WEAPON_MASTER'; // 重火器兵
+      if (roll < 0.28) type = 'NORMAL';
+      else if (roll < 0.54) type = 'FAST';
+      else if (roll < 0.72) type = 'BERSERKER'; // 18% 突撃兵
+      else if (roll < 0.86) type = 'WEAPON_MASTER'; // 14% 重火器兵
       else type = 'TANK';
     } else if (t < 230) {
       // 2m20s-3m50s: 激戦フェーズ (エリート混成)
-      if (roll < 0.12) type = 'NORMAL';
-      else if (roll < 0.30) type = 'FAST';
-      else if (roll < 0.60) type = 'BERSERKER'; // 突撃兵
-      else if (roll < 0.82) type = 'WEAPON_MASTER'; // 重火器兵
+      if (roll < 0.16) type = 'NORMAL';
+      else if (roll < 0.38) type = 'FAST';
+      else if (roll < 0.60) type = 'BERSERKER'; // 22% 突撃兵
+      else if (roll < 0.80) type = 'WEAPON_MASTER'; // 20% 重火器兵
       else if (roll < 0.90) type = 'TANK';
       else type = 'ELITE';
     } else {
-      // 3m50s〜5m+ (クライマックス & エンドレス): 猛烈な突撃兵・重火器兵・エリートの嵐
-      if (roll < 0.08) type = 'NORMAL';
-      else if (roll < 0.22) type = 'FAST';
-      else if (roll < 0.55) type = 'BERSERKER';
-      else if (roll < 0.80) type = 'WEAPON_MASTER';
+      // 3m50s〜5m+ (クライマックス & エンドレス): 突撃兵・重火器兵・タンク・エリートの混成
+      if (roll < 0.14) type = 'NORMAL';
+      else if (roll < 0.34) type = 'FAST';
+      else if (roll < 0.56) type = 'BERSERKER';
+      else if (roll < 0.76) type = 'WEAPON_MASTER';
+      else if (roll < 0.88) type = 'TANK';
       else type = 'ELITE';
     }
 
-    // Spawn mini clusters for immersive horde feel (3~5 enemies simultaneously)
+    // Spawn mini clusters for immersive horde feel (3~5 enemies simultaneously for normal/fast)
     const clusterCount = type === 'ELITE'
       ? 1
       : type === 'WEAPON_MASTER'
-      ? (Math.random() < 0.6 ? 2 : 1)
+      ? (Math.random() < 0.5 ? 2 : 1)
+      : type === 'BERSERKER'
+      ? (Math.random() < 0.45 ? 2 : 1)
       : type === 'TANK'
       ? (Math.random() < 0.5 ? 3 : 2)
       : Math.floor(3 + Math.random() * 3); // 3~5体同時スポーン
@@ -245,11 +266,8 @@ export class WaveDirector {
 
     for (let i = 0; i < clusterCount; i++) {
       const angle = baseAngle + (i - (clusterCount - 1) / 2) * 0.14;
-      const rawX = target.x + Math.cos(angle) * dist;
-      const rawY = target.y + Math.sin(angle) * dist;
-      const x = Math.max(-1740, Math.min(1740, rawX));
-      const y = Math.max(-1740, Math.min(1740, rawY));
-      enemies.push(new Enemy(x, y, type, difficultyMult));
+      const pos = this.resolveSpawnPos(target.x, target.y, angle, dist, 1740);
+      enemies.push(new Enemy(pos.x, pos.y, type, difficultyMult));
     }
   }
 }

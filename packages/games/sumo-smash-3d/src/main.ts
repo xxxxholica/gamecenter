@@ -501,6 +501,7 @@ class SumoGame {
     f1.bodyScale = firstSpec.scale;
     f1.walkSpeedMult = firstSpec.speedMult;
     f1.knockbackTakenMult = firstSpec.knockbackTakenMult;
+    f1.attackMult = firstSpec.attackMult;
 
     const ais = sim.fighters.map((f) => new SumoAI(f));
     ais[1].setThinkInterval(firstSpec.thinkInterval);
@@ -567,7 +568,7 @@ class SumoGame {
         { indices: [14], keyLabel: 'A', label: '左に動く' },
         { indices: [12, 13], keyLabel: 'W / S', label: '奥・手前に動く' },
         { indices: [0, 2], keyLabel: 'Space', midText: 'を短く押して', label: '張り手3連打' },
-        { indices: [0, 2], keyLabel: 'Space', midText: 'を長く押して', label: 'ぶちかまし' },
+        { indices: [0, 2], keyLabel: 'Space', midText: 'を長く押して', label: '頭突き' },
         { indices: [1, 3], keyLabel: 'K', label: '相手をつかんで投げる' },
       ],
       onComplete: () => {
@@ -672,6 +673,7 @@ class SumoGame {
       bodyScale: spec.scale,
       walkSpeedMult: spec.speedMult,
       knockbackTakenMult: spec.knockbackTakenMult,
+      attackMult: spec.attackMult,
     });
     ais[slot].setThinkInterval(spec.thinkInterval);
     ais[slot].reset();

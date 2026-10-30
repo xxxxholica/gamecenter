@@ -558,7 +558,10 @@ export class GrindRail {
     const postMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
     const positions: number[] = [];
     for (let px = 0.4; px < this.length - 0.3; px += 3.0) positions.push(px);
-    positions.push(this.length - 0.4);
+    const lastPx = this.length - 0.4;
+    if (positions.length === 0 || lastPx - positions[positions.length - 1] > 0.4) {
+      positions.push(lastPx);
+    }
 
     for (const px of positions) {
       const ground = groundAt(this.x + px);
@@ -789,10 +792,13 @@ export class LaserGrid {
   public width: number;
   public beamHeight: number;
   public isIntermittent: boolean;
+  private static readonly SUPPORT_POST_MAT = new THREE.MeshStandardMaterial({ color: 0x2b2f36, metalness: 0.85, roughness: 0.28 });
+  private static readonly SUPPORT_COLLAR_MAT = new THREE.MeshStandardMaterial({ color: 0x1a1c20, emissive: 0xff0033, emissiveIntensity: 0.25, metalness: 0.8 });
   public isActive: boolean = true;
   public beamMesh: THREE.Mesh;
   private animTimer: number = Math.random() * 3.0;
   private nodeMat: THREE.MeshStandardMaterial;
+  private supportsGroup: THREE.Group;
   /** 点滅1周期の秒数(2.5秒 = 96BPMの4拍)。周期を揃えた複数のレーザーは位相(phase)で交互に点滅させる */
   private period: number = 3.6;
   /** 1周期のうち発射している割合。残りは前半が消灯、後半が予告(黄色の点滅) */
@@ -811,9 +817,8 @@ export class LaserGrid {
     this.isIntermittent = isIntermittent;
     this.mesh = new THREE.Group();
 
-    // エミッタはビームの高さに浮かぶ小さな発信器だけ(触れるとミス)。
-    // 地面まで届く背の高い柱は「壁」に見えて紛らわしいので置かない。
-    // 半透明の細い光の筋は位置を示すだけの飾りで、判定はない。
+    // エミッタはビームの高さに配置し、支柱はエミッタから真下の床(または壁面ブラケット・奈落)へ伸ばす。
+    // ビームより上には突き出さないため「跳び越えられない高い壁」には見えない。
     const nodeGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
     const nodeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xff0033, emissiveIntensity: 0.6, metalness: 0.8 });
     this.nodeMat = nodeMat;
@@ -823,13 +828,8 @@ export class LaserGrid {
     rightNode.position.set(width, beamHeight, 0);
     this.mesh.add(leftNode, rightNode);
 
-    const guideGeo = new THREE.BoxGeometry(0.06, beamHeight, 0.06);
-    const guideMat = new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.18 });
-    const leftGuide = new THREE.Mesh(guideGeo, guideMat);
-    leftGuide.position.set(0, beamHeight / 2, 0);
-    const rightGuide = new THREE.Mesh(guideGeo, guideMat);
-    rightGuide.position.set(width, beamHeight / 2, 0);
-    this.mesh.add(leftGuide, rightGuide);
+    this.supportsGroup = new THREE.Group();
+    this.mesh.add(this.supportsGroup);
 
     // Glowing Red Laser Beam
     const beamGeo = new THREE.CylinderGeometry(0.04, 0.04, width, 8);
@@ -840,6 +840,74 @@ export class LaserGrid {
     this.mesh.add(this.beamMesh);
 
     this.mesh.position.set(x, y, 0);
+  }
+
+  private addSupportColumn(px: number, postH: number, postY: number, baseY: number, baseRTop = 0.16, baseRBottom = 0.19): void {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, postH, 8), LaserGrid.SUPPORT_POST_MAT);
+    post.position.set(px, postY, 0);
+    post.castShadow = true;
+    this.supportsGroup.add(post);
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(baseRTop, baseRBottom, 0.07, 12), LaserGrid.SUPPORT_COLLAR_MAT);
+    base.position.set(px, baseY, 0);
+    this.supportsGroup.add(base);
+  }
+
+  /**
+   * 両端のエミッタを支える支柱を生成する。
+   * - 足場やレールがある箇所はその上面まで支柱と台座を伸ばす
+   * - 崩れる足場や穴の上(恒久足場がない箇所)は奈落の底まで支柱を伸ばして片側が宙に浮かないようにする
+   * - 縦穴(dropShaft)内では壁から張り出す水平ブラケットアームで両端を支える
+   */
+  public buildSupports(
+    groundAt: (worldX: number) => number | null,
+    shaft?: { x0: number; x1: number } | null
+  ): void {
+    while (this.supportsGroup.children.length > 0) {
+      const child = this.supportsGroup.children[0] as THREE.Mesh;
+      this.supportsGroup.remove(child);
+      child.geometry?.dispose();
+    }
+
+    const postMat = LaserGrid.SUPPORT_POST_MAT;
+    const collarMat = LaserGrid.SUPPORT_COLLAR_MAT;
+
+    if (shaft && this.x >= shaft.x0 - 0.1 && this.x + this.width <= shaft.x1 + 0.1) {
+      // 縦穴内: 両端の垂直ポスト + 壁から張り出す水平サポートアームと斜めブレース
+      for (const px of [0, this.width]) {
+        this.addSupportColumn(px, this.beamHeight, this.beamHeight / 2, 0.035, 0.15, 0.17);
+      }
+
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(this.width + 0.24, 0.1, 0.14), postMat);
+      arm.position.set(this.width / 2, -0.02, 0);
+      this.supportsGroup.add(arm);
+
+      const leftAnchored = Math.abs(this.x - shaft.x0) < 0.25;
+      const wallLocalX = leftAnchored ? 0 : this.width;
+      const wallPlate = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.28), collarMat);
+      wallPlate.position.set(wallLocalX, -0.22, 0);
+      this.supportsGroup.add(wallPlate);
+
+      const braceLen = Math.hypot(this.width * 0.65, 0.5);
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(braceLen, 0.06, 0.08), postMat);
+      const dir = leftAnchored ? 1 : -1;
+      brace.position.set(wallLocalX + dir * (this.width * 0.325), -0.27, 0);
+      brace.rotation.z = dir * Math.atan2(0.5, this.width * 0.65);
+      this.supportsGroup.add(brace);
+      return;
+    }
+
+    for (const px of [0, this.width]) {
+      const ground = groundAt(this.x + px);
+      if (ground !== null && ground <= this.y + this.beamHeight - 0.05) {
+        const h = (this.y + this.beamHeight) - ground;
+        this.addSupportColumn(px, h, this.beamHeight - h / 2, ground - this.y + 0.035);
+      } else {
+        // 恒久的な足場がない箇所(崩れる足場や奈落の上)は奈落の底まで支柱を伸ばす
+        const abyssDepth = 35;
+        this.addSupportColumn(px, abyssDepth, this.beamHeight - abyssDepth / 2, 0.035);
+      }
+    }
   }
 
   public update(dt: number): void {

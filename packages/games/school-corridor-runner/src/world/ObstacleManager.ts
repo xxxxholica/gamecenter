@@ -53,7 +53,7 @@ export class ObstacleManager {
   private scene: THREE.Scene;
   private obstacles: Obstacle[] = [];
   private coins: Coin[] = [];
-  private nextSpawnZ: number = -30;
+  private nextSpawnZ: number = -52;
   private animClock: number = 0;
   private lastSlalomOpenLane: LaneIndex = 1; // スラローム生成用
 
@@ -793,7 +793,7 @@ export class ObstacleManager {
   /**
    * 毎フレームの障害物更新（先生の横移動 ＆ スポーン）
    */
-  public update(playerZ: number, forwardSpeed: number, dt: number): void {
+  public update(playerZ: number, forwardSpeed: number, dt: number, isCountdown: boolean = false, allowSpawn: boolean = true): void {
     // 1. 生活指導の先生の横移動パトロール更新（机・ロッカー貫通防止 ＆ 定期攻撃）
     for (const obs of this.obstacles) {
       if (obs.isDestroyed) continue;
@@ -843,9 +843,9 @@ export class ObstacleManager {
         }
 
         // 【定期攻撃アクション】プレイヤーの前方にいる時、出席簿を投擲
-        obs.attackTimer = (obs.attackTimer ?? (1.0 + Math.random() * 0.8)) - dt;
+        if (!isCountdown) obs.attackTimer = (obs.attackTimer ?? (1.0 + Math.random() * 0.8)) - dt;
         const distAhead = playerZ - obs.z;
-        if (obs.attackTimer <= 0) {
+        if (obs.attackTimer !== undefined && obs.attackTimer <= 0) {
           obs.attackTimer = 2.0 + Math.random() * 0.8;
           if (distAhead > 10 && distAhead < 50) {
             if (obs.crossArm) {
@@ -863,17 +863,17 @@ export class ObstacleManager {
 
       // 2. 暴走配膳台（CHARGING_CART）の予兆 ＆ 突進
       if (obs.type === ObstacleType.CHARGING_CART) {
-        obs.stateTimer = (obs.stateTimer || 0) + dt;
+        if (!isCountdown) obs.stateTimer = (obs.stateTimer || 0) + dt;
 
         if (obs.actionState === 0) {
           // 予兆中（0.7秒間）: 床の赤い矢印ライン点滅 ＆ 本体ブルブル振動
           if (obs.warningMesh) {
-            obs.warningMesh.visible = Math.sin(obs.stateTimer * 28) > -0.2;
+            obs.warningMesh.visible = Math.sin((obs.stateTimer || 0) * 28) > -0.2;
           }
           const baseX = LANE_COORDINATES[obs.lane];
           obs.group.position.x = baseX + (Math.random() - 0.5) * 0.08;
 
-          if (obs.stateTimer >= 0.7) {
+          if ((obs.stateTimer || 0) >= 0.7) {
             obs.actionState = 1;
             obs.group.position.x = baseX;
             if (obs.warningMesh) obs.warningMesh.visible = false;
@@ -1039,17 +1039,24 @@ export class ObstacleManager {
     const lookAhead = Math.max(95, forwardSpeed * 2.2);
     const spawnTargetZ = playerZ - lookAhead;
 
-    while (this.nextSpawnZ > spawnTargetZ) {
+    while (allowSpawn && this.nextSpawnZ > spawnTargetZ) {
       this.normalSpawnCounter++;
+
+      // 序盤（0〜650m）は1行分抜いた広い間隔（+18mボーナス）から開始し、
+      // 中盤（650〜2000m）を経て、終盤（2000m以降＝残り約25秒）で現行の超高密度へ収束させる
+      const distSpawned = Math.abs(this.nextSpawnZ);
+      const earlyRelief = distSpawned < 650
+        ? 18 * (1 - (distSpawned / 650) * 0.5)   // 0m:+18m -> 650m:+9m
+        : Math.max(0, 9 * (1 - (distSpawned - 650) / 1350)); // 650m:+9m -> 2000m:0m
 
       if (this.normalSpawnCounter >= this.GIMMICK_CYCLE_COUNT) {
         this.spawnGimmickArea(this.nextSpawnZ);
         this.normalSpawnCounter = 0;
-        const gimmickSpacing = Math.max(32, forwardSpeed * 0.52);
+        const gimmickSpacing = Math.max(32, forwardSpeed * 0.52) + earlyRelief;
         this.nextSpawnZ -= gimmickSpacing;
       } else {
         this.spawnObstaclePattern(this.nextSpawnZ, forwardSpeed);
-        const spacing = Math.max(18, forwardSpeed * 0.38) + Math.random() * 8;
+        const spacing = Math.max(18, forwardSpeed * 0.38) + earlyRelief + Math.random() * 8;
         this.nextSpawnZ -= spacing;
       }
     }
@@ -1496,7 +1503,7 @@ export class ObstacleManager {
     }
     this.coins = [];
 
-    this.nextSpawnZ = -30;
+    this.nextSpawnZ = -52;
     this.normalSpawnCounter = 0;
     this.lastSlalomOpenLane = 1;
   }

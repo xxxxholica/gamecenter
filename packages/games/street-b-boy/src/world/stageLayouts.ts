@@ -38,7 +38,7 @@ export function buildStage1(s: Stage): void {
   s.addBlock(new StageBlock(14, 3.2, 'brick'));
 
   // Patrolling enemy first, then a cardboard box to spin through
-  s.addEnemy(new SecurityBot(17.5, 0, 2.0));
+  s.addEnemy(new SecurityBot(18.5, 0, 1.5));
   s.addObstacle(new StreetObstacle(20.5, 0, 'cardboard'));
 
   // Fire hydrant launches to a gold cassette
@@ -54,14 +54,13 @@ export function buildStage1(s: Stage): void {
 
   // Steam Vent & aggressive Skater Dog
   s.addSteamVent(new SteamVent(32, 0));
-  s.addEnemy(new SkaterDog(35, 0, 5));
+  s.addEnemy(new SkaterDog(36, 0, 4));
 
   // Elevated scaffolding platform (一方通行)
   s.addPlatform(36, 2.6, 8, 0.5);
   s.addCassette(new CassetteTape(38, 3.8));
   s.addCassette(new CassetteTape(40, 3.8));
   s.addCassette(new CassetteTape(42, 3.8));
-  s.addEnemy(new SecurityBot(40, 2.6, 2.5));
 
   s.addObstacle(new StreetObstacle(46, 0, 'trash_can'));
 
@@ -70,11 +69,10 @@ export function buildStage1(s: Stage): void {
   s.addPlatform(55, 0, 20.5, 4, true);
   s.addCheckpoint(new Checkpoint(56.5, 0));
 
-  // Stepping subway entrance stairs guarded by Drone & Security Bot
+  // Stepping subway entrance stairs guarded by Drone
   s.addPlatform(58, 1.6, 5, 1.6);
   s.addPlatform(63, 3.0, 5, 3.0);
-  s.addEnemy(new SurveillanceDrone(61, 4.8, 5));
-  s.addEnemy(new SecurityBot(65.5, 3.0, 2.0));
+  s.addEnemy(new SurveillanceDrone(62.5, 4.8, 3.5));
 
   // High secret route blocks
   s.addBlock(new StageBlock(68, 6.2, 'brick'));
@@ -89,8 +87,7 @@ export function buildStage1(s: Stage): void {
   s.addPlatform(82, 0, 30, 4, true);
   s.addCheckpoint(new Checkpoint(83.5, 0));
 
-  s.addEnemy(new SkaterDog(90, 0, 6));
-  s.addEnemy(new SurveillanceDrone(96, 4.5, 6));
+  s.addEnemy(new SkaterDog(91, 0, 4));
 
   // Trash can obstacle & Grind Rail 2
   s.addObstacle(new StreetObstacle(86, 0, 'trash_can'));
@@ -101,7 +98,7 @@ export function buildStage1(s: Stage): void {
   s.addBlock(new StageBlock(99, 3.2, 'question'));
   s.addBlock(new StageBlock(100, 3.2, 'brick'));
 
-  s.addEnemy(new SecurityBot(106, 0, 3));
+  s.addEnemy(new SecurityBot(106, 0, 2.5));
 
   // Subwoofer Bounce Pad before goal!
   s.addSubwoofer(new SubwooferPad(110, 0));
@@ -141,11 +138,9 @@ export function buildStage2(s: Stage): void {
   s.addPlatform(38, 0, 26, 4);
   s.addCheckpoint(new Checkpoint(39.5, 0));
 
-  // SECURITY LASER GRID guarded by Drone!
+  // SECURITY LASER GRID & Skater Dog (separated so laser and enemy do not overlap)
   s.addLaserGrid(new LaserGrid(43, 0, 3.5, 1.15, false));
-  s.addEnemy(new SurveillanceDrone(45, 4.2, 5));
-  s.addEnemy(new SecurityBot(50, 0, 3.5));
-  s.addEnemy(new SkaterDog(56, 0, 5));
+  s.addEnemy(new SkaterDog(56, 0, 4));
 
   // Overhead Walkway (一方通行)
   s.addPlatform(49, 2.6, 7, 0.5);
@@ -153,9 +148,8 @@ export function buildStage2(s: Stage): void {
   s.addBlock(new StageBlock(53, 5.6, 'brick'));
 
   // 線路2 X 64〜76 も奈落。電車の屋根を橋にして渡る(両側の隙間は3.5m)
-  // Parked Subway Train 2: 犬は屋根の上
+  // Parked Subway Train 2: ドローン1体が上空を巡回
   s.addPlatform(67.5, 1.8, 5, 2.8);
-  s.addEnemy(new SkaterDog(70, 1.8, 1.8));
   s.addEnemy(new SurveillanceDrone(70, 4.2, 4));
 
   // Station Platform 3: X 76 to 104
@@ -166,7 +160,7 @@ export function buildStage2(s: Stage): void {
   s.addBlock(new StageBlock(84, 3.2, 'brick'));
   s.addBlock(new StageBlock(86, 3.2, 'question'));
 
-  s.addEnemy(new SecurityBot(88, 0, 3.5));
+  s.addEnemy(new SecurityBot(86, 0, 2.5));
   s.addLaserGrid(new LaserGrid(92, 0, 3.2, 1.15, true));
 
   // Subwoofer Bounce Pad
@@ -181,8 +175,7 @@ export function buildStage2(s: Stage): void {
   // Double Laser Grid: しゃがんで潜る1基と、低い位置を跳び越える1基(高さ2.3では立ったまま下を通れてしまうため)
   s.addLaserGrid(new LaserGrid(123, 0, 3.2, 1.15, true));
   s.addLaserGrid(new LaserGrid(129, 0, 3.2, 0.6, false));
-  s.addEnemy(new SecurityBot(126, 0, 3.0));
-  s.addEnemy(new SkaterDog(134, 0, 5));
+  s.addEnemy(new SkaterDog(134, 0, 3));
 
   s.addPlatform(136, 1.5, 8, 1.5);
   s.addPlatform(144, 3.5, 12, 3.5);
@@ -216,7 +209,7 @@ export function buildStage3(s: Stage): void {
   // Rooftop 2: X 34 to 51 (動く床とめり込まないよう長さを調整)
   s.addPlatform(34, 2.4, 17, 5);
   s.addCheckpoint(new Checkpoint(35.5, 2.4));
-  s.addEnemy(new SkaterDog(40, 2.4, 5));
+  s.addEnemy(new SkaterDog(43, 2.4, 4));
 
   // Grind Rail along rooftop parapet
   s.addGrindRail(new GrindRail(36, 3.6, 8.0));
@@ -225,8 +218,6 @@ export function buildStage3(s: Stage): void {
   s.addPlatform(42, 5.0, 6, 0.6);
   s.addBlock(new StageBlock(44, 8.0, 'question', true));
   s.addBlock(new StageBlock(46, 8.0, 'brick'));
-
-  s.addEnemy(new SecurityBot(48, 2.4, 3));
 
   // Fast Moving Gondola Platform over abyss (めり込みを解消した配置: X 55.5〜62.5)
   s.addMovingPlatform(new MovingPlatform(59, 2.2, 5.0, 3.5, 0, 2.3));
@@ -237,10 +228,9 @@ export function buildStage3(s: Stage): void {
   s.addCheckpoint(new Checkpoint(69.5, 1.5));
   s.addBlock(new StageBlock(74, 4.7, 'question'));
   s.addBlock(new StageBlock(76, 4.7, 'brick'));
-  s.addEnemy(new SecurityBot(75, 1.5, 3));
+  s.addEnemy(new SecurityBot(74, 1.5, 2.5));
   // 低いビーム(しゃがみでは潜れない。ジャンプで越える)
   s.addLaserGrid(new LaserGrid(80, 1.5, 3.2, 0.6, true));
-  s.addEnemy(new SkaterDog(84, 1.5, 5));
 
   // Subwoofer Bounce Pad on Rooftop 3!
   s.addSubwoofer(new SubwooferPad(87, 1.5));
@@ -253,9 +243,8 @@ export function buildStage3(s: Stage): void {
   s.addPlatform(101, 2.0, 23, 5);
   s.addCheckpoint(new Checkpoint(102.5, 2.0));
   s.addObstacle(new StreetObstacle(106, 2.0, 'cardboard'));
-  s.addEnemy(new SkaterDog(108, 2.0, 5));
-  s.addObstacle(new StreetObstacle(112, 2.0, 'cardboard'));
-  s.addEnemy(new SecurityBot(118, 2.0, 3));
+  s.addEnemy(new SkaterDog(110, 2.0, 4));
+  s.addObstacle(new StreetObstacle(115, 2.0, 'cardboard'));
 
   // High Grind Rail into Helipad: 奈落の12mを渡る。ヘリポートの縁(X 136)までつなぐ。
   // 簡単になりすぎないよう、レール上に低いレーザーを置く(しゃがみでは潜れない。ジャンプで跳び越える)
@@ -287,9 +276,8 @@ export function buildStage4(s: Stage): void {
   s.addBlock(new StageBlock(12, 3.2, 'brick'));
 
   s.addFireHydrant(new FireHydrant(15, 0));
-  s.addEnemy(new SkaterDog(16, 0, 5));
+  s.addEnemy(new SkaterDog(17, 0, 3.5));
   s.addObstacle(new StreetObstacle(19, 0, 'cardboard'));
-  s.addEnemy(new SecurityBot(21, 0, 2.5));
 
   // High Neon Speaker Stack with Grind Rail
   s.addPlatform(26, 1.8, 8, 1.8);
@@ -304,17 +292,13 @@ export function buildStage4(s: Stage): void {
   s.addLaserGrid(new LaserGrid(40, 0, 3.5, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
   // 2基目は低いビーム(しゃがみでは潜れない。ジャンプで越える)
   s.addLaserGrid(new LaserGrid(52, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
-  s.addEnemy(new SecurityBot(44, 0, 3));
-  // 2基のレーザーの間で待つ場所にも敵を置く(レーザーの合間に敵をさばく形にする)
-  s.addEnemy(new SkaterDog(49.5, 0, 2.0));
 
   // Gimmick: Steam Vent & High Secret Gold Cassette (一方通行)
   s.addSteamVent(new SteamVent(46, 0));
   s.addPlatform(48, 2.8, 6, 0.6);
   s.addBlock(new StageBlock(50, 5.8, 'question', true));
 
-  s.addEnemy(new SkaterDog(57, 0, 3));
-  s.addEnemy(new SurveillanceDrone(58, 4.6, 5));
+  s.addEnemy(new SurveillanceDrone(58, 4.6, 3.5));
 
   // Fast Moving Gondola Platform over Neon Abyss
   s.addMovingPlatform(new MovingPlatform(64, 2.0, 7.0, 4.5, 0, 2.8));
@@ -327,22 +311,19 @@ export function buildStage4(s: Stage): void {
   s.addBlock(new StageBlock(84, 3.2, 'brick'));
   s.addBlock(new StageBlock(86, 3.2, 'question'));
 
-  s.addEnemy(new SecurityBot(82, 0, 3));
-  s.addEnemy(new SkaterDog(88, 0, 5));
+  s.addEnemy(new SecurityBot(84, 0, 2.5));
 
   // Subwoofer Bounce Pad launch!
   s.addSubwoofer(new SubwooferPad(90, 0));
 
-  // High Grind Rail over dual pulsing lasers (ビート同期・交互点滅)
-  s.addGrindRail(new GrindRail(93, 2.8, 12.0));
-  s.addLaserGrid(new LaserGrid(96, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
-  s.addLaserGrid(new LaserGrid(102.5, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
+  // High Grind Rail over dual pulsing lasers (ビート同期・交互点滅。レールの3m間隔の支柱とレーザーの両端を揃える)
+  s.addGrindRail(new GrindRail(93, 2.8, 12.8));
+  s.addLaserGrid(new LaserGrid(96.4, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
+  s.addLaserGrid(new LaserGrid(102.4, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
 
-  // レール上空のドローン3体。高さ・向き・巡回範囲をずらして、1回のスピンでまとめて落とせないようにする。
-  // 降下後の高さは、低い(レールの高さ) / 高い(頭上、ジャンプで届く) / 低い の順。横に4m離れた2体は同時には届かない
-  s.addEnemy(new SurveillanceDrone(95, 4.2, 2.5, 1));
-  s.addEnemy(new SurveillanceDrone(100.5, 6.2, 4.0, -1));
-  s.addEnemy(new SurveillanceDrone(105, 4.0, 2.5, -1));
+  // レール上空のドローンは入口と出口で移動範囲が重ならない2体に整理
+  s.addEnemy(new SurveillanceDrone(95, 4.2, 2.0, 1));
+  s.addEnemy(new SurveillanceDrone(105, 4.0, 2.0, -1));
 
   // スピーカーの島(X 108〜112): サブウーファーが宙に浮かないよう足場を置く。
   // 島の上のサブウーファーで高く跳ぶと、上空のカセットを取れる。
@@ -428,9 +409,9 @@ export function buildStage5(s: Stage): void {
   s.addLaserGrid(new LaserGrid(149, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
   s.addLaserGrid(new LaserGrid(155, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
   s.addEnemy(new SecurityBot(152, 0, 2.5));
-  s.addGrindRail(new GrindRail(161, 2.8, 12.0));
-  s.addLaserGrid(new LaserGrid(164, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
-  s.addLaserGrid(new LaserGrid(170.5, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
+  s.addGrindRail(new GrindRail(161, 2.8, 12.8));
+  s.addLaserGrid(new LaserGrid(164.4, 0, 3.0, 1.15, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
+  s.addLaserGrid(new LaserGrid(170.4, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
   s.addEnemy(new SurveillanceDrone(165, 4.2, 4));
   s.addEnemy(new SurveillanceDrone(171, 4.4, 4.5));
   s.addObstacle(new StreetObstacle(178, 0, 'cardboard'));
@@ -442,7 +423,7 @@ export function buildStage5(s: Stage): void {
   for (const px of [201, 204.4, 207.8, 211.2]) {
     s.addCrumblingPlatform(new CrumblingPlatform(px, 0, 2.0, SHORT_SHAKE));
   }
-  s.addLaserGrid(new LaserGrid(203, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
+  s.addLaserGrid(new LaserGrid(202.6, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0, duty: LASER_DUTY }));
   s.addLaserGrid(new LaserGrid(208.6, 0, 3.0, 0.6, true, { period: BEAT_PERIOD, phase: 0.5, duty: LASER_DUTY }));
   s.addEnemy(new SurveillanceDrone(206, 4.2, 4, -1));
   s.addCassette(new CassetteTape(205.4, 2.6));
@@ -500,12 +481,12 @@ export function buildStage5(s: Stage): void {
     s.addVerticalLaserTrap(new VerticalLaserTrap(cfg.x, 0, 42, cfg.period, cfg.phase, cfg.speed));
   }
 
-  s.addPlatform(SX - 9, TOP, 9, TOP - 12.5);
+  s.addPlatform(SX - 9, TOP, 9, TOP - 9.5);
   s.addCheckpoint(new Checkpoint(SX - 7.5, TOP));
   // 最上段の台の上空の天井(大ジャンプで右の壁を越えるのを防ぐ)
   s.addPlatform(SX - 9, TOP + 8, 18, 2);
-  // 縦穴の右の壁: 上空での外回りを防ぎ、落下中に縦穴として囲みつつ、着地時に自然に上へ見切れるよう下端を y=12.5 に設定
-  s.addPlatform(SX + 7, TOP + 8, 24, (TOP + 8) - 12.5);
+  // 縦穴の右の壁: 上空での外回りを防ぎ、落下中に縦穴として囲みつつ、着地時に自然に上へ見切れるよう下端を y=9.5 (3本目のレーザー y=10.9 より下)に設定
+  s.addPlatform(SX + 7, TOP + 8, 24, (TOP + 8) - 9.5);
   // 縦穴の底は地上。ゴールのターンテーブルは落ちる先(X SX+3.5)。1面と同じアスファルトの道が右へ続く
   s.addPlatform(SX, 0.0, 34, 4, true, false, true);
   s.addFireHydrant(new FireHydrant(SX + 19, 0));

@@ -304,6 +304,19 @@ body {
   border-color: var(--gold);
 }
 
+.banner.long.show {
+  animation-duration: 3.6s;
+}
+
+.banner .sub {
+  margin-top: 6px;
+  font-family: var(--hud-font);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
 .banner.bad {
   border-color: #e63946;
 }

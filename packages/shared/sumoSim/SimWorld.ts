@@ -171,6 +171,7 @@ export class SimWorld {
       bodyScale?: number;
       walkSpeedMult?: number;
       knockbackTakenMult?: number;
+      attackMult?: number;
     }
   ): void {
     const f = this.fighters[slot];
@@ -182,6 +183,7 @@ export class SimWorld {
       scale: opts?.bodyScale,
       speedMult: opts?.walkSpeedMult,
       knockbackTakenMult: opts?.knockbackTakenMult,
+      attackMult: opts?.attackMult,
     });
   }
 
@@ -534,8 +536,10 @@ export class SimWorld {
         this.fx.push('main', 'blast', bx, 0.8, bz, 0);
         const kimarite = this.determineKimarite(player, f);
         f.leave();
-        player.damagePercent = Math.floor(player.damagePercent * 0.5);
         this.wins[0] = Math.min(this.opts.kumiteTotal, this.wins[0] + 1);
+        // 通常敵撃破時は20%軽減（×0.8）、10体ごとの中ボス撃破時のみ50%軽減（×0.5）
+        const healFactor = this.wins[0] % 10 === 0 ? 0.5 : 0.8;
+        player.damagePercent = Math.floor(player.damagePercent * healFactor);
         this.opts.onEnemyFell?.(slot, f, kimarite);
 
         if (this.wins[0] >= this.opts.kumiteTotal) {

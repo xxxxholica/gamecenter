@@ -22,7 +22,7 @@ export class SwordSystem {
   public baseSize: number = 1.0;
   public sizeMult: number = 1.0;
 
-  public baseRadius: number = 80;
+  public baseRadius: number = 92;
   public radiusMult: number = 1.0;
 
   public orbitAngle: number = 0;
@@ -88,13 +88,14 @@ export class SwordSystem {
     const count = this.swordCount;
     const isStorm = this.isStormActive;
 
-    const size = (isStorm ? 2.2 : 1.0) * this.baseSize * this.sizeMult;
-    const damage = (isStorm ? 2.2 : 1.0) * this.baseDamage * this.damageMult;
+    const size = (isStorm ? 2.0 : 1.0) * this.baseSize * this.sizeMult;
+    const damage = (isStorm ? 2.4 : 1.0) * this.baseDamage * this.damageMult;
     const hitRadius = (isStorm ? 36 : 28) * size;
+    const stormRadiusScale = isStorm ? 1.35 : 1.0;
 
     if (count <= 8) {
       // Single orbit ring
-      const r = this.baseRadius * this.radiusMult + (count > 4 ? (count - 4) * 6 : 0);
+      const r = (this.baseRadius * this.radiusMult + (count > 4 ? (count - 4) * 6 : 0)) * stormRadiusScale;
       for (let i = 0; i < count; i++) {
         const a = this.orbitAngle + (i * Math.PI * 2) / count;
         // Sword center
@@ -117,8 +118,8 @@ export class SwordSystem {
       const innerCount = 6;
       const outerCount = count - innerCount;
 
-      const innerR = (this.baseRadius * this.radiusMult) * 0.75;
-      const outerR = (this.baseRadius * this.radiusMult) * 1.25 + (outerCount > 8 ? 15 : 0);
+      const innerR = (this.baseRadius * this.radiusMult) * 0.75 * stormRadiusScale;
+      const outerR = ((this.baseRadius * this.radiusMult) * 1.25 + (outerCount > 8 ? 15 : 0)) * stormRadiusScale;
 
       // Inner ring
       for (let i = 0; i < innerCount; i++) {
@@ -156,14 +157,17 @@ export class SwordSystem {
   ) {
     const hitboxes = this.getBladeHitboxes(ownerX, ownerY);
     const isStorm = this.isStormActive;
-    const size = (isStorm ? 2.2 : 1.0) * this.baseSize * this.sizeMult;
+    const size = (isStorm ? 2.0 : 1.0) * this.baseSize * this.sizeMult;
 
     ctx.save();
+    if (isStorm && this.swordCount > 10) {
+      ctx.globalAlpha = 0.58;
+    }
 
     // 剣の絵は一度だけ描いておき、毎フレームは貼るだけにする(bladeSprite.ts)
     const m = ctx.getTransform();
     const sprite = getBladeSprite(
-      { glow: isStorm ? '#ffd700' : themeColor, storm: isStorm, size, blur: this.isPlayer && isStorm },
+      { glow: isStorm ? '#ffd700' : themeColor, storm: isStorm, size, blur: false },
       Math.hypot(m.a, m.b),
     );
     const sw = sprite.canvas.width / sprite.pxPerUnit, sh = sprite.canvas.height / sprite.pxPerUnit;

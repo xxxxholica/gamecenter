@@ -895,9 +895,15 @@ export class Stage implements DogTerrain {
     this.scene.add(cp.mesh);
   }
 
-  /** 全ての足場を置き終えた後の仕上げ(レールの支柱など、他の足場の位置に依存するもの) */
+  /** 全ての足場を置き終えた後の仕上げ(レールやレーザーの支柱など、他の足場の位置に依存するもの) */
   private finalizeLevel(): void {
     this.grindRails.forEach((rail) => rail.buildSupports((wx) => this.groundHeightBelow(wx, rail.y)));
+    this.laserGrids.forEach((laser) =>
+      laser.buildSupports(
+        (wx) => this.laserSupportHeightBelow(wx, laser.y + laser.beamHeight),
+        this.dropShaft
+      )
+    );
   }
 
   /** wx の真下にある足場の上面の高さ(maxY 以下で最も高いもの)。無ければ null */
@@ -906,6 +912,17 @@ export class Stage implements DogTerrain {
     for (const p of this.platforms) {
       if (wx >= p.x && wx <= p.x + p.w && p.y <= maxY + 0.05) {
         if (best === null || p.y > best) best = p.y;
+      }
+    }
+    return best;
+  }
+
+  /** レーザーの支柱が乗る面(恒久足場またはレール)の高さ。崩れる足場や穴の上は null を返して奈落まで支柱を伸ばす */
+  private laserSupportHeightBelow(wx: number, maxY: number): number | null {
+    let best = this.groundHeightBelow(wx, maxY);
+    for (const r of this.grindRails) {
+      if (wx >= r.x && wx <= r.x + r.length && r.y <= maxY + 0.05) {
+        if (best === null || r.y > best) best = r.y;
       }
     }
     return best;

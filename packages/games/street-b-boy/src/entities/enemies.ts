@@ -194,7 +194,7 @@ export class SecurityBot extends BaseEnemy {
     let patrolSpeed = 2.8;
 
     // Player alert & shooting AI
-    if (distToPlayer < 14) {
+    if (distToPlayer < 10) {
       patrolSpeed = 4.0;
       if (this.turnCooldown <= 0) {
         this.patrolDir = playerX < this.x ? -1 : 1;
@@ -223,7 +223,7 @@ export class SecurityBot extends BaseEnemy {
     this.mesh.rotation.y = this.patrolDir > 0 ? 0 : Math.PI;
 
     // Siren pulse (faster when player nearby)
-    const freq = distToPlayer < 14 ? 24 : 12;
+    const freq = distToPlayer < 10 ? 24 : 12;
     const pulse = (Math.sin(this.animTimer * freq) > 0) ? 1.2 : 0.2;
     (this.sirenMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
   }
@@ -259,7 +259,7 @@ export interface DogTuning {
 
 /** ステージ1〜4の犬(従来より少しだけ強い) */
 export const DOG_NORMAL: DogTuning = {
-  patrolSpeed: 4.2, chaseSpeed: 8.4, chaseRange: 18, jumpSpeed: 10.5, leash: 6, smartJump: true, edgeSafe: true,
+  patrolSpeed: 4.2, chaseSpeed: 8.0, chaseRange: 11, jumpSpeed: 10.5, leash: 2, smartJump: true, edgeSafe: true,
 };
 
 /** ファイナルの大群の犬。プレイヤーより速く、どこまでも追い、高く跳ぶ */
@@ -271,7 +271,7 @@ export const DOG_HORDE: DogTuning = {
 const DRONE_FIRE_INTERVAL = 1.4;
 const DRONE_LOCKON_DELAY = 0.6;
 const DRONE_TELEGRAPH = 0.35;
-const DRONE_FIRE_RANGE = 12;
+const DRONE_FIRE_RANGE = 9.5;
 const DRONE_SHOT_SPEED = 8.0;
 
 const DOG_GRAVITY = 26;

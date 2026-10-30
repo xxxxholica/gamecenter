@@ -113,10 +113,11 @@ export class SimFighter {
   public name: string;
   public readonly body: CANNONNS.Body;
 
-  // 百人組手用の体格・速度・耐性パラメータ(既定値はすべて1.0)
+  // 百人組手用の体格・速度・耐性・攻撃パラメータ(既定値はすべて1.0)
   public bodyScale = 1.0;
   public walkSpeedMult = 1.0;
   public knockbackTakenMult = 1.0;
+  public attackMult = 1.0;
   /** 空から降下中(着地するまで true) */
   public isSkyDropping = false;
   /** 空から降下して土俵に着地した瞬間のコールバック(着地衝撃波の発生用) */
@@ -241,7 +242,7 @@ export class SimFighter {
     y: number,
     z: number,
     facingAngle: number,
-    opts?: { name?: string; scale?: number; mass?: number; speedMult?: number; knockbackTakenMult?: number },
+    opts?: { name?: string; scale?: number; mass?: number; speedMult?: number; knockbackTakenMult?: number; attackMult?: number },
   ): void {
     if (this.grabbedOpponent) {
       this.grabbedOpponent.grabber = null;
@@ -258,6 +259,7 @@ export class SimFighter {
     this.bodyScale = opts?.scale ?? 1.0;
     this.walkSpeedMult = opts?.speedMult ?? 1.0;
     this.knockbackTakenMult = opts?.knockbackTakenMult ?? 1.0;
+    this.attackMult = opts?.attackMult ?? 1.0;
     this.body.mass = opts?.mass ?? 100;
     this.body.updateMassProperties();
 
@@ -652,11 +654,11 @@ export class SimFighter {
     this.stateTimer = 0;
     this.body.velocity.set(0, 0, 0);
 
-    opponent.damagePercent += 16;
+    opponent.damagePercent += Math.round(16 * this.attackMult);
 
     // ダメージが溜まるほど遠くへ飛ぶ(0%で約2m、100%で約7m)
     const kbMult = 1.0 + opponent.damagePercent / 60.0;
-    const finalImpulse = 920 * KB_THROW * kbMult * opponent.knockbackTakenMult * (opponent.body.mass / 100);
+    const finalImpulse = 920 * KB_THROW * kbMult * this.attackMult * opponent.knockbackTakenMult * (opponent.body.mass / 100);
 
     opponent.body.applyImpulse(new C.Vec3(dirX * finalImpulse, finalImpulse * 0.12, dirZ * finalImpulse), opponent.body.position);
     opponent.state = 'hit';
@@ -1061,7 +1063,8 @@ export class SimFighter {
       this.env.fx.sound('playBuchikamashiHit', chargePower);
     }
 
-    this.damagePercent += baseDamage;
+    const atkMult = attacker ? attacker.attackMult : 1.0;
+    this.damagePercent += Math.round(baseDamage * atkMult);
 
     // 3連バースト中は直前の連撃の速度を軽く減衰させてから新しい衝撃を与える(3発目まで確実に繋がり、締めできっちり吹き飛ぶ)
     if (attacker && attacker.state === 'harite') {
@@ -1079,7 +1082,7 @@ export class SimFighter {
           ? 1.0 + this.damagePercent / 40.0
           : 1.0 + this.damagePercent / 70.0;
     const kbScale = attackType === 'buchikamashi' ? KB_RUSH : KB_HARITE;
-    const finalImpulse = baseImpulse * kbScale * knockbackMultiplier * this.knockbackTakenMult * (this.body.mass / 100);
+    const finalImpulse = baseImpulse * kbScale * knockbackMultiplier * atkMult * this.knockbackTakenMult * (this.body.mass / 100);
     this.body.applyImpulse(new this.env.C.Vec3(hx * finalImpulse, finalImpulse * (inBurstLink ? 0.06 : 0.18), hz * finalImpulse), this.body.position);
 
     this.state = 'hit';

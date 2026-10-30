@@ -324,9 +324,9 @@ export class HudRenderer {
     ctx.font = `900 20px ${UI_FONT}`;
     const spanL = barX - 12 - ctx.measureText('HP').width;
     const spanR = barX + barW + 12 + ctx.measureText('000').width;
-    // 最も幅を取る値(6桁スコア、時刻、READY)が列に収まる最大サイズを求める
+    // 最も幅を取る値(8桁スコア、時刻、READY)が列に収まる最大サイズを求める
     ctx.font = `900 60px ${UI_FONT}`;
-    const refW = Math.max(...['999,999', '00:00', 'READY'].map((t) => ctx.measureText(t).width));
+    const refW = Math.max(...['99,999,999', '00:00', 'READY'].map((t) => ctx.measureText(t).width));
     ctx.restore();
     const colW = (spanR - spanL) / 3;
     const valueSize = Math.max(28, Math.min(80, Math.floor((60 * (colW - 8)) / refW)));

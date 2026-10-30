@@ -1,7 +1,7 @@
 // ===========================================================
 //  ゲーム全体の状態（酸素・残機・スコア・深さ）
 // ===========================================================
-import { World, difficulty, type Kind, type WorldEvent } from './world.ts';
+import { World, difficulty, DIFFICULTY_STEPS, type Kind, type WorldEvent } from './world.ts';
 import { Player, type ControlState, type DigAction } from './player.ts';
 
 export type Phase = 'title' | 'playing' | 'dying' | 'gameover' | 'clear';
@@ -13,6 +13,8 @@ export type GameEvent =
   | { type: 'suffocate'; x: number; y: number }
   | { type: 'score'; x: number; y: number; amount: number; label?: string }
   | { type: 'layer'; layer: number }
+  /** 難しさが上がる深さを越えた（画面に知らせる） */
+  | { type: 'difficulty'; depth: number; text: string }
   | { type: 'landPlayer'; impact: number }
   | { type: 'gameover' }
   | { type: 'clear'; bonus: ClearBonus };
@@ -164,6 +166,9 @@ export class Game {
     const d = this.depth;
     if (d > this.maxDepth) {
       this.score += (d - this.maxDepth) * 5 * (1 + this.layer);
+      for (const s of DIFFICULTY_STEPS) {
+        if (this.maxDepth < s.depth && d >= s.depth && d < GOAL_DEPTH) this.events.push({ type: 'difficulty', depth: s.depth, text: s.text });
+      }
       this.maxDepth = d;
       const layer = difficulty(d).layer;
       if (layer > this.layer && d < GOAL_DEPTH) {

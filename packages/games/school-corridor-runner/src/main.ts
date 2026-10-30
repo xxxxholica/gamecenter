@@ -120,7 +120,6 @@ class Game {
   // 速度大台到達（マイルストーン）演出用
   private speedMilestone150: boolean = false; // 150 km/h
   private speedMilestone200: boolean = false; // 200 km/h
-  private speedMilestone250: boolean = false; // 250 km/h
 
   // 辞書ボムのストック管理
   private bombStock: number = 3;
@@ -552,7 +551,6 @@ class Game {
     this.currentSpeed = this.START_SPEED;
     this.speedMilestone150 = false;
     this.speedMilestone200 = false;
-    this.speedMilestone250 = false;
     this.bombStock = 3;
     this.bombReloadTimer = 0;
 
@@ -1027,7 +1025,7 @@ class Game {
     // ★前方の障害物・コイン・ギミックを即座に事前スポーン＆ロード
     // （カウントダウン開始時に前方の視界がすでに準備できているようにするため。
     //   「追われる」導入演出が終わった直後＝先生が廊下からいなくなった後に行うことで貫通を防ぐ）
-    this.obstacleManager.update(0, this.START_SPEED, 0);
+    this.obstacleManager.update(0, this.START_SPEED, 0, true);
 
     // カメラ位置・姿勢を最初のスタート位置（X:0, Y:1.55, Z:0 正面向き）に即座にロード
     this.camera.position.set(0, 1.55, 0);
@@ -1058,7 +1056,7 @@ class Game {
     this.updateCamera(dt);
 
     // ★カウントダウン中も前方の障害物やコインのアニメーション（自転・浮遊・パトロール）をリアルタイム更新！
-    this.obstacleManager.update(0, this.START_SPEED, dt);
+    this.obstacleManager.update(0, this.START_SPEED, dt, true);
 
     if (this.countdownStep === 0 && this.countdownTimer >= 0.45) {
       this.countdownStep = 1;
@@ -1108,7 +1106,6 @@ class Game {
     this.currentSpeed = this.START_SPEED;
     this.speedMilestone150 = false;
     this.speedMilestone200 = false;
-    this.speedMilestone250 = false;
     this.bombStock = 3;
     this.bombReloadTimer = 0;
     this.shakeIntensity = 0;
@@ -1125,7 +1122,7 @@ class Game {
     this.corridor.update(0, 0);
     this.obstacleManager.reset();
     this.player.reset();
-    this.obstacleManager.update(0, this.START_SPEED, 0);
+    this.obstacleManager.update(0, this.START_SPEED, 0, true);
 
     // カメラ位置・姿勢を最初のスタート位置に初期化
     this.camera.position.set(0, 1.55, 0);
@@ -1347,7 +1344,7 @@ class Game {
     // タイトル画面中も背後の廊下がゆったり奥へとスクロール（夕暮れの廊下ステージを背景に美しく見せる）
     this.titleScrollZ -= 8 * _dt;
     this.corridor.update(this.titleScrollZ, _dt);
-    this.obstacleManager.update(this.titleScrollZ, 8, _dt);
+    this.obstacleManager.update(this.titleScrollZ, 8, _dt, true);
     this.camera.position.set(0, 1.8, this.titleScrollZ + 4.0);
     this.camera.rotation.set(0, 0, 0);
     this.camera.lookAt(0, 1.4, this.titleScrollZ - 20);
@@ -1410,7 +1407,8 @@ class Game {
       this.player.group.position.z += moveZ;
 
       this.corridor.update(this.player.group.position.z, dt);
-      this.obstacleManager.update(this.player.group.position.z, this.currentSpeed, dt);
+      this.obstacleManager.update(this.player.group.position.z, this.currentSpeed, dt, false, this.scoreData.timeRemaining > 3.0);
+      this.updateClearYard();
       this.updateProjectiles(dt);
       this.particleSystem.update(dt, this.player.group.position.z, 0.2);
       this.fpArms.update(dt, 0, 0, false, false, 0);
@@ -1435,13 +1433,13 @@ class Game {
       this.powerUpSpawnIndex++;
     }
 
-    // 2. 連続加速計算（初速32m/sから最高速78m/sまで大幅かつ滑らかに加速）
+    // 2. 連続加速計算（初速25.0m/sから最高速55.6m/sまで滑らかに加速）
     const t = Math.min(1.0, Math.max(0.0, elapsedTime / 90.0));
     // 進行割合カーブ: 前半から小気味よく加速し、後半は加速度的に猛スピード化
     const speedCurve = 0.55 * t + 0.45 * (t * t);
     this.currentSpeed = this.START_SPEED + (this.MAX_SPEED - this.START_SPEED) * speedCurve;
 
-    // 節目（150km/h, 200km/h, 250km/h）での加速警報音 & 画面シェイク
+    // 節目（150km/h, 200km/h）での加速警報音 & 画面シェイク
     const speedKmh = this.currentSpeed * 3.6;
     if (!this.speedMilestone150 && speedKmh >= 150) {
       this.speedMilestone150 = true;
@@ -1453,11 +1451,6 @@ class Game {
       this.soundSystem.playSpeedUp();
       this.triggerScreenShake(0.8, 0.45);
     }
-    if (!this.speedMilestone250 && speedKmh >= 250) {
-      this.speedMilestone250 = true;
-      this.soundSystem.playSpeedUp();
-      this.triggerScreenShake(1.0, 0.55);
-    }
 
     this.soundSystem.setSpeedFactor(this.currentSpeed / this.START_SPEED);
 
@@ -1466,6 +1459,12 @@ class Game {
       this.scoreData.timeRemaining = 0;
       this.beginClearOutro();
       return;
+    }
+
+    // 3.5 残り3秒を切った時点で、新規障害物のスポーンを止め、その奥に「廊下の出口と校庭・校門」を事前配置する
+    if (this.scoreData.timeRemaining <= 3.0 && !this.clearExit) {
+      const zeroTimeZ = this.player.group.position.z - this.currentSpeed * this.scoreData.timeRemaining;
+      this.spawnClearYardAt(zeroTimeZ);
     }
 
     // 4. プレイヤー入力処理
@@ -1515,7 +1514,8 @@ class Game {
 
     // 9. ワールド＆障害物更新
     this.corridor.update(this.player.group.position.z, dt);
-    this.obstacleManager.update(this.player.group.position.z, this.currentSpeed, dt);
+    this.obstacleManager.update(this.player.group.position.z, this.currentSpeed, dt, false, this.scoreData.timeRemaining > 3.0);
+    this.updateClearYard();
 
     // 9.5 無敵パワーアップの更新 ＆ 通過済みクリーンアップ
     this.powerUpClock += dt;
@@ -2570,12 +2570,32 @@ class Game {
     return group;
   }
 
+  /** 基準Z座標の先に廊下の出口・校庭・校門を生成して配置し、廊下を出口位置でクリップする */
+  private spawnClearYardAt(baseZ: number): void {
+    const exitZ = baseZ - this.CLEAR_EXIT_DISTANCE;
+    this.clearExit = this.createClearExit();
+    this.clearExit.position.set(0, 0, exitZ);
+    this.scene.add(this.clearExit);
+    this.corridor.setExitClip(exitZ);
+
+    const gateZ = baseZ - this.CLEAR_GATE_DISTANCE;
+    this.clearGate = this.createSchoolGate();
+    this.clearGate.position.set(0, 0, gateZ);
+    this.scene.add(this.clearGate);
+  }
+
   /**
    * クリア（校門突破）演出の開始。
    * 残存する障害物を一掃して安全なまっすぐな廊下を作り、少し先に校門を配置。
    * プレイヤーはラストスパートでそのまま校門を駆け抜け、演出後にリザルト画面へ。
    */
   private beginClearOutro(): void {
+    // 残り3秒時点で事前生成済みの出口・校門があれば、位置ジャンプが起きないようそのまま引き継ぐ
+    const preSpawnedExit = this.clearExit;
+    const preSpawnedGate = this.clearGate;
+    this.clearExit = null;
+    this.clearGate = null;
+
     // 残っている障害物・コイン・飛び道具を一掃し、安全に校門まで走り抜けられるようにする
     // ※ clearProjectiles() は isClearOutro フラグ自体もリセットしてしまうため、必ず先に呼ぶこと
     this.obstacleManager.reset();
@@ -2585,17 +2605,13 @@ class Game {
     this.clearOutroTimer = 0;
     this.clearGatePassed = false;
 
-    // 廊下を出口で切り落とし、その先に校庭を広げる
-    const exitZ = this.player.group.position.z - this.CLEAR_EXIT_DISTANCE;
-    this.clearExit = this.createClearExit();
-    this.clearExit.position.set(0, 0, exitZ);
-    this.scene.add(this.clearExit);
-    this.corridor.setExitClip(exitZ);
-
-    const gateZ = this.player.group.position.z - this.CLEAR_GATE_DISTANCE;
-    this.clearGate = this.createSchoolGate();
-    this.clearGate.position.set(0, 0, gateZ);
-    this.scene.add(this.clearGate);
+    if (preSpawnedExit && preSpawnedGate) {
+      this.clearExit = preSpawnedExit;
+      this.clearGate = preSpawnedGate;
+      this.corridor.setExitClip(preSpawnedExit.position.z);
+    } else {
+      this.spawnClearYardAt(this.player.group.position.z);
+    }
 
     this.soundSystem.playClearFanfare();
   }

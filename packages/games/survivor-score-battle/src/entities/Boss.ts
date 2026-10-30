@@ -22,34 +22,34 @@ export class Boss extends Enemy {
     switch (bossType) {
       case 'TITAN_MECH':
         this.bossName = 'TITAN';
-        this.maxHp = 16000;
+        this.maxHp = 10000;
         this.radius = 55;
-        this.speed = 125;
+        this.speed = 115;
         this.scoreValue = 7000;
         this.color = '#ff3344';
         break;
       case 'VOID_WYRM':
         this.bossName = 'VOID';
-        this.maxHp = 32000;
-        this.radius = 65;
-        this.speed = 140;
+        this.maxHp = 22000;
+        this.radius = 62;
+        this.speed = 128;
         this.scoreValue = 12000;
         this.color = '#aa00ff';
         break;
       case 'APEX_BEHEMOTH':
         this.bossName = 'APEX';
-        this.maxHp = 75000;
-        this.radius = 75;
-        this.speed = 135;
+        this.maxHp = 35000;
+        this.radius = 70;
+        this.speed = 125;
         this.scoreValue = 18000;
         this.color = '#ffaa00';
         break;
       case 'OMEGA_OVERLORD':
         this.bossName = 'OMEGA';
-        this.maxHp = 140000;
-        this.radius = 85;
-        this.speed = 155;
-        this.scoreValue = 35000;
+        this.maxHp = 45000;
+        this.radius = 76;
+        this.speed = 135;
+        this.scoreValue = 25000;
         this.color = '#ff0055';
         break;
     }
@@ -75,10 +75,10 @@ export class Boss extends Enemy {
     this.phase = hpPct < 0.35 ? 3 : hpPct < 0.7 ? 2 : 1;
 
     // 1. Charge Dash Attack
-    if (this.chargeState === 'NONE' && this.specialTimer >= (this.phase === 3 ? 5.0 : 8.0)) {
+    if (this.chargeState === 'NONE' && this.specialTimer >= (this.phase === 3 ? 5.5 : 8.5)) {
       this.specialTimer = 0;
       this.chargeState = 'WINDUP';
-      this.chargeTimer = 0.8;
+      this.chargeTimer = 1.0;
       const dx = target.x - this.x;
       const dy = target.y - this.y;
       const dist = Math.hypot(dx, dy) || 1;
@@ -93,7 +93,7 @@ export class Boss extends Enemy {
       particleSystem.emitBurst(this.x, this.y, '#ffffff', 3, 100, 3, 0.2);
       if (this.chargeTimer <= 0) {
         this.chargeState = 'DASH';
-        this.chargeTimer = 0.6;
+        this.chargeTimer = 0.55;
         screenEffects.shake(8);
       }
       return;
@@ -101,14 +101,14 @@ export class Boss extends Enemy {
 
     if (this.chargeState === 'DASH') {
       this.chargeTimer -= dt;
-      const dashSpeed = this.speed * 4.5;
+      const dashSpeed = this.speed * 3.0;
       this.vx = this.chargeDirX * dashSpeed;
       this.vy = this.chargeDirY * dashSpeed;
       particleSystem.emitBurst(this.x, this.y, this.color, 4, 150, 6, 0.3);
 
       if (this.chargeTimer <= 0) {
         this.chargeState = 'COOLDOWN';
-        this.chargeTimer = 0.5;
+        this.chargeTimer = 0.6;
         // Shockwave upon stopping dash
         screenEffects.shake(12);
         particleSystem.emitRing(this.x, this.y, this.color, 250, 0.5);
@@ -147,18 +147,18 @@ export class Boss extends Enemy {
     const baseAngle = Math.atan2(dy, dx);
 
     if (this.bossType === 'TITAN_MECH') {
-      // 18-way radial burst
-      const count = 18;
+      // 14-way radial burst
+      const count = 14;
       for (let i = 0; i < count; i++) {
         const angle = (i * Math.PI * 2) / count;
-        const spd = 280;
+        const spd = 250;
         bulletPool.spawn(
           this.x,
           this.y,
           Math.cos(angle) * spd,
           Math.sin(angle) * spd,
           'ENERGY_BLASTER',
-          35,
+          22,
           1,
           9,
           3.5,
@@ -169,20 +169,20 @@ export class Boss extends Enemy {
       }
     } else if (this.bossType === 'VOID_WYRM') {
       // Spiral bullet streams
-      const count = 24;
+      const count = 18;
       const offset = Date.now() * 0.003;
       for (let i = 0; i < count; i++) {
         const angle = (i * Math.PI * 2) / count + offset;
-        const spd = 300;
+        const spd = 265;
         bulletPool.spawn(
           this.x,
           this.y,
           Math.cos(angle) * spd,
           Math.sin(angle) * spd,
           'ENERGY_BLASTER',
-          40,
+          26,
           1,
-          10,
+          9,
           3.5,
           '#aa00ff',
           'boss',
@@ -190,20 +190,20 @@ export class Boss extends Enemy {
         );
       }
     } else if (this.bossType === 'APEX_BEHEMOTH') {
-      // Dual targeted fan waves + 24-way ring
-      const count = 24;
+      // Dual targeted fan waves + 18-way ring
+      const count = 18;
       for (let i = 0; i < count; i++) {
         const angle = (i * Math.PI * 2) / count;
-        const spd = 320;
+        const spd = 275;
         bulletPool.spawn(
           this.x,
           this.y,
           Math.cos(angle) * spd,
           Math.sin(angle) * spd,
           'ENERGY_BLASTER',
-          48,
+          28,
           1,
-          11,
+          10,
           4.0,
           '#ffaa00',
           'boss',
@@ -211,18 +211,18 @@ export class Boss extends Enemy {
         );
       }
       // Targeted cone
-      for (let i = -3; i <= 3; i++) {
-        const angle = baseAngle + i * 0.15;
-        const spd = 420;
+      for (let i = -2; i <= 2; i++) {
+        const angle = baseAngle + i * 0.18;
+        const spd = 350;
         bulletPool.spawn(
           this.x,
           this.y,
           Math.cos(angle) * spd,
           Math.sin(angle) * spd,
           'ENERGY_BLASTER',
-          52,
+          30,
           1,
-          12,
+          10,
           3.0,
           '#ff3300',
           'boss',
@@ -230,22 +230,22 @@ export class Boss extends Enemy {
         );
       }
     } else if (this.bossType === 'OMEGA_OVERLORD') {
-      // Ultimate Climax Bullet Hell: 36-way spiral + high speed sniper beams
-      const count = 36;
-      const offset = Date.now() * 0.005;
+      // Ultimate Climax Bullet Hell: 20-way spiral with navigable gaps
+      const count = 20;
+      const offset = Date.now() * 0.004;
       for (let i = 0; i < count; i++) {
         const angle = (i * Math.PI * 2) / count + offset;
-        const spd = 340;
+        const spd = 280;
         bulletPool.spawn(
           this.x,
           this.y,
           Math.cos(angle) * spd,
           Math.sin(angle) * spd,
           'ENERGY_BLASTER',
-          60,
+          32,
           1,
-          12,
-          4.5,
+          10,
+          4.0,
           '#ff0055',
           'boss',
           true
@@ -259,6 +259,29 @@ export class Boss extends Enemy {
 
     ctx.save();
     ctx.translate(this.x, this.y);
+
+    // Draw directional dash telegraph line during WINDUP so player can dodge
+    if (this.chargeState === 'WINDUP') {
+      const dashDist = this.speed * 3.0 * 0.55 + this.radius;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 40, 80, 0.78)';
+      ctx.lineWidth = this.radius * 0.9;
+      ctx.lineCap = 'round';
+      ctx.setLineDash([18, 12]);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(this.chargeDirX * dashDist, this.chargeDirY * dashDist);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(this.chargeDirX * dashDist, this.chargeDirY * dashDist);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     if (this.flashTimer > 0) {
       ctx.fillStyle = '#ffffff';

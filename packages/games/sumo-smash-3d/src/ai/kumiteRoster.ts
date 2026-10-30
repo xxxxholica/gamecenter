@@ -22,6 +22,8 @@ export interface KumiteEnemySpec {
   speedMult: number;
   /** 被ノックバック倍率 (小さいほど吹き飛びにくい) */
   knockbackTakenMult: number;
+  /** 与えるダメージ・ノックバック倍率 (中ボス・重量級で >1) */
+  attackMult: number;
   /** AIの思考間隔(秒。小さいほど素早く反応する) */
   thinkInterval: number;
   /** 肌色 */
@@ -104,8 +106,8 @@ const MAWASHI_PALETTE = [
 const BOSS_MAWASHI = { hex: 0xc9a227, css: '#ffd166' }; // 黄金まわし
 const FINAL_BOSS_MAWASHI = { hex: 0x7209b7, css: '#ff4d6d' }; // 百獣王・覇王色
 
-// 2体同時降下ラッシュが定期的に発生する開始番号（10体ごとの各区間に2回ずつ: 4〜5, 7〜8, 12〜13, 16〜17, 21〜22, 25〜26, 31〜32, 35〜36, 42〜43, 46〜47, 52〜53, 56〜57, 62〜63, 66〜67, 72〜73, 76〜77, 82〜83, 86〜87, 92〜93, 96〜97）
-const DOUBLE_TRIGGERS = new Set([4, 7, 12, 16, 21, 25, 31, 35, 42, 46, 52, 56, 62, 66, 72, 76, 82, 86, 92, 96]);
+// 2体同時降下ラッシュは廃止し、1体ずつ順番に出現させる
+const DOUBLE_TRIGGERS = new Set<number>([]);
 
 /** 2体同時降下ウェーブに含まれる番号か */
 export function isSimultaneousWaveMember(n: number): boolean {
@@ -141,31 +143,11 @@ export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEn
       mass,
       speedMult: isFinal ? 1.12 : 0.96 + progress * 0.1,
       knockbackTakenMult: isFinal ? 0.62 : Math.max(0.68, 0.84 - progress * 0.14),
+      attackMult: isFinal ? 1.45 : Number((1.25 + progress * 0.20).toFixed(2)),
       thinkInterval: Math.max(0.045, 0.08 - progress * 0.03),
       skinColor: isFinal ? 0xc87d4b : 0xd48e5c,
       mawashiColor: mawashi.hex,
       hairColor: 0x111111,
-      css: mawashi.css,
-    };
-  }
-
-  // 複数同時降下時（2体・3体落ちてくるとき）は中ボス(heavy/boss)にせず、少し弱めの設定にする
-  if (simultaneousCount >= 2 || isSimultaneousWaveMember(n)) {
-    const mawashi = MAWASHI_PALETTE[(n * 2) % MAWASHI_PALETTE.length];
-    const isAgile = n % 3 === 0;
-    return {
-      number: n,
-      rankLabel,
-      name,
-      archetype: isAgile ? 'agile' : 'normal',
-      scale: isAgile ? 0.84 : 0.9 + (n % 2) * 0.04,
-      mass: isAgile ? 74 : 82 + (n % 3) * 3,
-      speedMult: (isAgile ? 1.04 : 0.9) + progress * 0.06,
-      knockbackTakenMult: Math.max(1.16, 1.28 - progress * 0.08),
-      thinkInterval: Math.max(0.085, 0.135 - progress * 0.035),
-      skinColor: SKIN_PALETTE[n % SKIN_PALETTE.length],
-      mawashiColor: mawashi.hex,
-      hairColor: 0x141210,
       css: mawashi.css,
     };
   }
@@ -184,6 +166,7 @@ export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEn
       mass: 80,
       speedMult: 1.24 + progress * 0.14,
       knockbackTakenMult: 1.15 - progress * 0.1,
+      attackMult: 1.0,
       thinkInterval: Math.max(0.05, 0.095 - progress * 0.04),
       skinColor: SKIN_PALETTE[n % SKIN_PALETTE.length],
       mawashiColor: mawashi.hex,
@@ -204,6 +187,7 @@ export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEn
       mass: Math.round(130 + progress * 20),
       speedMult: 0.88 + progress * 0.1,
       knockbackTakenMult: Math.max(0.76, 0.9 - progress * 0.12),
+      attackMult: Number((1.15 + progress * 0.10).toFixed(2)),
       thinkInterval: Math.max(0.055, 0.11 - progress * 0.045),
       skinColor: SKIN_PALETTE[(n + 2) % SKIN_PALETTE.length],
       mawashiColor: mawashi.hex,
@@ -223,6 +207,7 @@ export function getKumiteEnemySpec(num: number, simultaneousCount = 1): KumiteEn
     mass: 98 + (n % 3) * 5,
     speedMult: 0.98 + progress * 0.14,
     knockbackTakenMult: Math.max(0.85, 1.0 - progress * 0.12),
+    attackMult: 1.0,
     thinkInterval: Math.max(0.05, 0.11 - progress * 0.05),
     skinColor: SKIN_PALETTE[n % SKIN_PALETTE.length],
     mawashiColor: mawashi.hex,

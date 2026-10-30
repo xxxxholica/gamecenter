@@ -7,12 +7,11 @@ import { drawIcon } from './Icons';
 export class LevelUpScreen {
   private static readonly AUTO_SELECT_SEC = 15;
   public cards: UpgradeCard[] = [];
-  public selectedIndex: number = 0;
+  public selectedIndex: number = 1;
   private animTimer: number = 0;
   private idleTimer: number = 0;
 
   public generateOptions(player: Player): UpgradeCard[] {
-    this.selectedIndex = 0;
     this.animTimer = 0;
     this.idleTimer = 0;
     const cards: UpgradeCard[] = [];
@@ -186,6 +185,7 @@ export class LevelUpScreen {
     }
 
     this.cards = cards;
+    this.selectedIndex = Math.floor(cards.length / 2);
     return cards;
   }
 

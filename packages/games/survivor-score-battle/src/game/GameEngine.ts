@@ -228,13 +228,7 @@ export class GameEngine {
 
         // Special Attack Trigger
         if (inputState.special && this.player.isSpecialReady && this.player.alive) {
-          this.player.activateSpecial(
-            this.enemyGrid,
-            this.sound,
-            this.particleSystem,
-            this.screenEffects,
-            this.damageNumbers
-          );
+          this.triggerPlayerSpecial();
         }
 
         this.updatePlaying(dt, inputState);
@@ -314,8 +308,13 @@ export class GameEngine {
 
     if (playerLeveled) {
       this.levelUpScreen.generateOptions(this.player);
-      this.state = 'LEVEL_UP';
-      return;
+      if (this.state === 'TITLE') {
+        const cards = this.levelUpScreen.cards;
+        if (cards.length > 0) this.applyUpgrade(cards[Math.floor(Math.random() * cards.length)]);
+      } else {
+        this.state = 'LEVEL_UP';
+        return;
+      }
     }
 
     // 4. Update CPUs
@@ -374,14 +373,15 @@ export class GameEngine {
     // 5.5 Check 5-Minute Survival Milestone Clear
     if (this.waveDirector.gameTime >= 300 && !this.playerCleared5Min && this.player.alive) {
       this.playerCleared5Min = true;
-      this.player.addScore(50000, true, this.sound, this.damageNumbers);
+      this.player.addScore(50000, false, this.sound, this.damageNumbers, false);
       this.damageNumbers.addPopup(this.player.x, this.player.y - 110, '5分間生存クリア +50,000', '#ffd700', 36);
       this.sound.sfx.playSpecialReady();
       this.screenEffects.flash('#00f0ff', 0.8);
       this.screenEffects.shake(20);
     }
 
-    // 6. Update Active Bosses and Enemies
+    // 6. Update Active Bosses and Enemies (movement & AI first)
+    this.enemyGrid.clear();
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       if (!enemy.alive) {
@@ -415,43 +415,13 @@ export class GameEngine {
         enemy.updateAI(dt, closestContender, this.bulletPool);
       }
 
-      // Contender Contact Damage from Enemies
-      for (const c of allContenders) {
-        if (!c.alive) continue;
-        const dx = c.x - enemy.x;
-        const dy = c.y - enemy.y;
-        const combinedR = c.radius + enemy.radius;
-        if (dx * dx + dy * dy <= combinedR * combinedR) {
-          if (c.isPlayer) {
-            if (c.invulnerableTimer > 0) continue;
-            const timeScaling = this.waveDirector.gameTime < 60
-              ? 0.75
-              : 1.0 + Math.min(0.5, ((this.waveDirector.gameTime - 60) / 180) * 0.5);
-            const mobDmg = Math.max(2, Math.round(enemy.attackDamage * timeScaling));
-            const dead = c.takeDamage(mobDmg);
-            c.invulnerableTimer = 0.40;
-            this.sound.sfx.playPlayerHurt();
-            this.screenEffects.shake(12);
-            if (dead) {
-              this.endGame();
-              return;
-            }
-          } else {
-            // CPU contender: has invulnerability frame & takes real damage from swarms
-            const cpu = c as CpuPlayer;
-            if (cpu.invulnerableTimer > 0) continue;
-            const mobDmg = Math.max(1, Math.round(enemy.attackDamage * 0.65));
-            const dead = cpu.takeDamage(mobDmg);
-            cpu.invulnerableTimer = 0.25;
-            if (dead) {
-              this.handleCpuEliminated(cpu, null);
-            }
-          }
-        }
+      if (enemy.alive) {
+        this.enemyGrid.insert(enemy);
       }
     }
 
     // 6.5 Swords Collisions with Enemies & Other Contenders (PvPvE)
+    // Run BEFORE enemy contact damage so swords cut/knockback lunging enemies before they touch the player
     // A. Swords vs Enemies
     for (const c of allContenders) {
       if (!c.alive || !c.swordSystem) continue;
@@ -484,12 +454,67 @@ export class GameEngine {
 
             if (isKilled) {
               if (c.isPlayer) {
-                this.player.addScore(enemy.scoreValue, true, this.sound, this.damageNumbers);
+                this.player.addScore(enemy.scoreValue, true, this.sound, this.damageNumbers, !(enemy instanceof Boss));
               } else {
                 (c as CpuPlayer).addScore(enemy.scoreValue, true);
               }
 
               this.handleEnemyKilledDrops(enemy, c.isPlayer);
+            } else {
+              // Knockback surviving enemy outward from contender
+              const kx = enemy.x - c.x;
+              const ky = enemy.y - c.y;
+              const kDist = Math.hypot(kx, ky);
+              if (kDist > 0.001) {
+                const push = enemy instanceof Boss
+                  ? (c.swordSystem.isStormActive ? 14 : 4)
+                  : (c.swordSystem.isStormActive ? 42 : 16);
+                enemy.x += (kx / kDist) * push;
+                enemy.y += (ky / kDist) * push;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 6.6 Contender Contact Damage from Surviving Enemies
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i];
+      if (!enemy.alive) {
+        this.enemies.splice(i, 1);
+        continue;
+      }
+
+      for (const c of allContenders) {
+        if (!c.alive) continue;
+        const dx = c.x - enemy.x;
+        const dy = c.y - enemy.y;
+        const combinedR = c.radius + enemy.radius;
+        if (dx * dx + dy * dy <= combinedR * combinedR) {
+          if (c.isPlayer) {
+            if (c.invulnerableTimer > 0) continue;
+            const timeScaling = this.waveDirector.gameTime < 60
+              ? 0.75
+              : 1.0 + Math.min(0.5, ((this.waveDirector.gameTime - 60) / 180) * 0.5);
+            const mobDmg = Math.max(2, Math.round(enemy.attackDamage * timeScaling));
+            const dead = this.applyPlayerDamage(mobDmg);
+            c.invulnerableTimer = 0.40;
+            this.sound.sfx.playPlayerHurt();
+            this.screenEffects.shake(12);
+            if (dead) {
+              this.endGame();
+              return;
+            }
+          } else {
+            // CPU contender: has invulnerability frame & takes real damage from swarms
+            const cpu = c as CpuPlayer;
+            if (cpu.invulnerableTimer > 0) continue;
+            const mobDmg = Math.max(1, Math.round(enemy.attackDamage * 0.65));
+            const dead = cpu.takeDamage(mobDmg);
+            cpu.invulnerableTimer = 0.25;
+            if (dead) {
+              this.handleCpuEliminated(cpu, null);
             }
           }
         }
@@ -537,8 +562,8 @@ export class GameEngine {
             cpu.swordSystem.registerHit(this.player);
             const earlyMult = this.waveDirector.gameTime < 60 ? 0.25 : this.waveDirector.gameTime < 120 ? 0.45 : 0.65;
             const dmg = Math.max(1, Math.round(hb.damage * earlyMult));
-            const dead = this.player.takeDamage(dmg);
-            this.player.invulnerableTimer = 0.75;
+            const dead = this.applyPlayerDamage(dmg);
+            this.player.invulnerableTimer = Math.max(this.player.invulnerableTimer, 0.75);
             this.sound.sfx.playPlayerHurt();
             this.screenEffects.shake(10);
             this.damageNumbers.addDamage(this.player.x, this.player.y, dmg, false);
@@ -591,24 +616,41 @@ export class GameEngine {
       if (!b.active) continue;
 
       if (b.isEnemy) {
+        // Deflect enemy bullets with SWORD STORM orbit
+        if (this.player.alive && this.player.swordSystem.isStormActive) {
+          const pdx = b.x - this.player.x;
+          const pdy = b.y - this.player.y;
+          const pDistSq = pdx * pdx + pdy * pdy;
+          const stormOuterR = this.player.swordSystem.baseRadius * this.player.swordSystem.radiusMult * 1.65;
+          if (pDistSq <= stormOuterR * stormOuterR) {
+            b.active = false;
+            this.particleSystem.emitBurst(b.x, b.y, '#ffd700', 3, 90, 2, 0.2);
+            continue;
+          }
+        }
+
         // Enemy bullet hits player or CPUs
         for (const c of allContenders) {
-          if (!c.alive) continue;
+          if (!c.alive || c.invulnerableTimer > 0) continue;
           const dx = c.x - b.x;
           const dy = c.y - b.y;
           const combinedR = c.radius + b.radius;
           if (dx * dx + dy * dy <= combinedR * combinedR) {
             b.active = false;
-            const dead = c.takeDamage(b.damage);
+            const dead = c.isPlayer ? this.applyPlayerDamage(b.damage) : c.takeDamage(b.damage);
             if (c.isPlayer) {
+              c.invulnerableTimer = Math.max(c.invulnerableTimer, 0.50);
               this.sound.sfx.playPlayerHurt();
               this.screenEffects.shake(10);
               if (dead) {
                 this.endGame();
                 return;
               }
-            } else if (dead) {
-              this.handleCpuEliminated(c as CpuPlayer, null);
+            } else {
+              c.invulnerableTimer = 0.15;
+              if (dead) {
+                this.handleCpuEliminated(c as CpuPlayer, null);
+              }
             }
             break;
           }
@@ -627,11 +669,11 @@ export class GameEngine {
               ? (this.waveDirector.gameTime < 60 ? 0.25 : this.waveDirector.gameTime < 120 ? 0.45 : 0.65)
               : 0.7;
             const dmg = Math.max(1, Math.round(b.damage * earlyMult));
-            const dead = c.takeDamage(dmg);
+            const dead = c.isPlayer ? this.applyPlayerDamage(dmg) : c.takeDamage(dmg);
             this.damageNumbers.addDamage(c.x, c.y, dmg, false);
             this.particleSystem.emitBurst(c.x, c.y, b.color, 4, 100, 2, 0.2);
             if (c.isPlayer) {
-              c.invulnerableTimer = 0.75;
+              c.invulnerableTimer = Math.max(c.invulnerableTimer, 0.75);
               this.sound.sfx.playPlayerHurt();
               this.screenEffects.shake(8);
               if (dead) {
@@ -681,7 +723,7 @@ export class GameEngine {
             if (isKilled) {
               if (owner) {
                 if (owner.isPlayer) {
-                  this.player.addScore(enemy.scoreValue, true, this.sound, this.damageNumbers);
+                  this.player.addScore(enemy.scoreValue, true, this.sound, this.damageNumbers, !(enemy instanceof Boss));
                 } else {
                   (owner as CpuPlayer).addScore(enemy.scoreValue, true);
                 }
@@ -715,6 +757,44 @@ export class GameEngine {
     this.hud.update(dt, this.player.isSpecialReady && this.player.alive);
   }
 
+  private triggerPlayerSpecial(): boolean {
+    return this.player.activateSpecial(
+      this.enemyGrid,
+      this.sound,
+      this.particleSystem,
+      this.screenEffects,
+      this.damageNumbers,
+      this.bulletPool,
+      (enemy) => this.handleEnemyKilledDrops(enemy, true)
+    );
+  }
+
+  /** プレイヤー被弾処理（ストーム中の50%軽減 ＆ ゲージ100%時の致死ダメージ自動発動保険） */
+  private applyPlayerDamage(rawDmg: number): boolean {
+    const dmg = this.player.swordSystem.isStormActive
+      ? Math.max(1, Math.round(rawDmg * 0.5))
+      : rawDmg;
+
+    // タイトル背面のデモ中は1フレームに何発当たっても倒れないよう、HPが1残るまでに抑える
+    if (this.state === 'TITLE') {
+      const safeDmg = Math.max(0, Math.min(dmg, this.player.hp - 1));
+      this.player.takeDamage(safeDmg);
+      this.player.alive = true;
+      return false;
+    }
+
+    const dead = this.player.takeDamage(dmg);
+    this.player.comboCount = 0;
+    this.player.comboTimer = 0;
+    if (dead && this.player.isSpecialReady) {
+      this.player.alive = true;
+      this.player.hp = 35;
+      this.triggerPlayerSpecial();
+      return false;
+    }
+    return dead;
+  }
+
   /** 敵撃破時のドロップ・ボス撃破演出（プレイヤー弾/剣・CPU 共通） */
   private handleEnemyKilledDrops(enemy: Enemy, byPlayer: boolean) {
     this.pickupPool.spawn(enemy.x, enemy.y, enemy.expType);
@@ -722,14 +802,14 @@ export class GameEngine {
     // Generous sword drops & special items
     if (enemy.type === 'BERSERKER') {
       if (byPlayer) {
-        this.damageNumbers.addPopup(enemy.x, enemy.y - 40, '突撃兵撃破 +120', '#ff0033', 24);
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 40, `突撃兵撃破 +${enemy.scoreValue}`, '#ff0033', 24);
       }
       if (Math.random() < 0.6) {
         this.pickupPool.spawn(enemy.x, enemy.y, 'SWORD_ITEM');
       }
     } else if (enemy.type === 'WEAPON_MASTER') {
       if (byPlayer) {
-        this.damageNumbers.addPopup(enemy.x, enemy.y - 45, '重火器兵粉砕 +250', '#e000ff', 26);
+        this.damageNumbers.addPopup(enemy.x, enemy.y - 45, `重火器兵粉砕 +${enemy.scoreValue}`, '#e000ff', 26);
       }
       this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 2);
     } else if (enemy.type === 'ELITE') {
@@ -758,7 +838,7 @@ export class GameEngine {
       this.screenEffects.shake(25);
       this.screenEffects.flash('#ffd700', 0.8);
       this.particleSystem.emitRing(enemy.x, enemy.y, '#ffd700', 500, 1.0);
-      this.damageNumbers.addPopup(enemy.x, enemy.y - 60, 'ボス撃破 +5,000', '#ffd700', 36);
+      this.damageNumbers.addPopup(enemy.x, enemy.y - 60, `ボス撃破 +${enemy.scoreValue.toLocaleString()}`, '#ffd700', 36);
       this.pickupPool.spawnSwordBurst(enemy.x, enemy.y, 6);
       this.waveDirector.activeBoss = null;
     }
@@ -823,7 +903,7 @@ export class GameEngine {
 
     if (killer) {
       if (killer.isPlayer) {
-        this.player.addScore(3000, true, this.sound, this.damageNumbers);
+        this.player.addScore(3000, true, this.sound, this.damageNumbers, false);
         this.damageNumbers.addPopup(this.player.x, this.player.y - 70, 'ライバル撃破 +3,000', '#ffd700', 32);
       } else if (killer instanceof CpuPlayer) {
         killer.addScore(3000, true);
@@ -834,7 +914,7 @@ export class GameEngine {
     const aliveCpus = this.cpus.filter((c) => c.alive);
     if (aliveCpus.length === 0 && this.player.alive) {
       this.damageNumbers.addPopup(this.player.x, this.player.y - 90, 'ライバル全滅 +10,000', '#ffd700', 38);
-      this.player.addScore(10000, true, this.sound, this.damageNumbers);
+      this.player.addScore(10000, false, this.sound, this.damageNumbers, false);
       this.sound.sfx.playSpecialReady();
     }
   }
@@ -922,7 +1002,7 @@ export class GameEngine {
       deathReason: !this.player.alive ? 'モンスター被弾' : '時間切れ生存',
       score: this.player.score,
       enemiesDefeated: this.player.kills,
-      maxCombo: this.player.comboCount,
+      maxCombo: this.player.maxCombo,
       extraStats: {
         survivedSec: Math.floor(this.waveDirector.gameTime),
         playerLevel: this.player.level,
@@ -956,15 +1036,10 @@ export class GameEngine {
       moveY: Math.sin(t * 0.8),
     } as InputState;
 
+    this.player.alive = true;
     this.player.hp = this.player.maxHp;
     if (this.player.isSpecialReady) {
-      this.player.activateSpecial(
-        this.enemyGrid,
-        this.sound,
-        this.particleSystem,
-        this.screenEffects,
-        this.damageNumbers
-      );
+      this.triggerPlayerSpecial();
     }
 
     this.updatePlaying(dt, demoInput);

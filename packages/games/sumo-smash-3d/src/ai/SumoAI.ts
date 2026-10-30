@@ -126,9 +126,10 @@ export class SumoAI {
       return;
     }
 
+    const reachScale = Math.max(1.0, me.bodyScale);
     // 相手がタメている: 近づいて張り手で割り込む
     if (opp.state === 'buchikamashi_charge') {
-      if (dist < 1.9) {
+      if (dist < 1.9 * reachScale) {
         this.tapStrike = true;
       } else {
         this.moveToward(toOpp);
@@ -143,7 +144,7 @@ export class SumoAI {
     }
 
     // 近距離
-    if (dist < 2.2) {
+    if (dist < 2.2 * reachScale) {
       const r = Math.random();
       if (r < 0.5) {
         this.tapStrike = true; // 張り手

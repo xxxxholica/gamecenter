@@ -178,6 +178,25 @@ export class Bullet implements HasPosition {
       ctx.lineTo(12, -120);
       ctx.lineTo(0, 0);
       ctx.stroke();
+    } else if (this.type === 'NOVA_BOMB') {
+      const progress = 1 - this.life / this.maxLife;
+      const alpha = Math.max(0.06, (1 - progress * 0.65) * 0.18);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = Math.min(0.75, alpha * 3.8);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.6, 0, Math.PI * 2);
+      ctx.stroke();
     } else {
       // Default glowing orb
       ctx.fillStyle = this.color;

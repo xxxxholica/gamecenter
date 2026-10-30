@@ -97,11 +97,11 @@ export class Enemy extends Entity {
         break;
       case 'ELITE':
         this.radius = 36;
-        this.maxHp = 600 * difficultyMult;
-        this.speed = 128 * Math.min(1.4, Math.sqrt(difficultyMult));
-        this.scoreValue = 600;
+        this.maxHp = 500 * difficultyMult;
+        this.speed = 124 * Math.min(1.35, Math.sqrt(difficultyMult));
+        this.scoreValue = 450;
         this.color = '#ff0055';
-        this.attackDamage = 40;
+        this.attackDamage = 30;
         this.expType = 'EXP_LARGE';
         this.maxChaseDuration = Infinity;
         break;
@@ -111,7 +111,7 @@ export class Enemy extends Entity {
         this.speed = 95;
         this.scoreValue = 5000;
         this.color = '#ff0033';
-        this.attackDamage = 55;
+        this.attackDamage = 34;
         this.expType = 'EXP_LARGE';
         this.maxChaseDuration = Infinity;
         break;
@@ -145,13 +145,13 @@ export class Enemy extends Entity {
 
         if (this.lungeDuration > 0) {
           this.lungeDuration -= dt;
-          moveSpeed = this.speed * 2.1; // 猛烈な突進！
+          moveSpeed = this.speed * 1.65; // 猛烈な突進！
         } else {
           this.lungeTimer += dt;
           if (dist < 320 && this.lungeTimer >= 1.5) {
             this.lungeTimer = 0;
             this.lungeDuration = 0.50; // 突進開始
-            moveSpeed = this.speed * 2.1;
+            moveSpeed = this.speed * 1.65;
           }
         }
 

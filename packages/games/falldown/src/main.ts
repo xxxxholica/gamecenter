@@ -5,7 +5,7 @@ import '../../../shared/arcadeReplayBoot';   // 最初に読み込む: 操作の
 import * as THREE from 'three';
 import { Game, GOAL_DEPTH, MAX_AIR, START_LIVES, type ClearBonus } from './game/game.ts';
 import { View, BLOCK_COLORS, STRATA, strataProgress } from './render/view.ts';
-import { difficulty, W } from './game/world.ts';
+import { difficulty, W, DIFFICULTY_STEPS } from './game/world.ts';
 import { BENCH_SEED, createBenchBot, fallDownBenchTargets } from './bench.ts';
 import { Input, type FrameInput } from './input.ts';
 import { Sound } from './audio.ts';
@@ -356,11 +356,13 @@ const BANNER_ICONS = {
   crush: '<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M12 11v10M12 15l-3 2" fill="none" stroke="#0b0b12" stroke-width="2"/>',
 } as const;
 
-function showBanner(big: string, tone: 'normal' | 'warn' | 'bad' = 'normal', icon?: keyof typeof BANNER_ICONS) {
+function showBanner(big: string, tone: 'normal' | 'warn' | 'bad' = 'normal', icon?: keyof typeof BANNER_ICONS, sub?: string) {
   ui.banner.classList.toggle('warn', tone === 'warn');
   ui.banner.classList.toggle('bad', tone === 'bad');
   const svg = icon ? `<svg class="banner-icon" viewBox="0 0 24 24" fill="currentColor">${BANNER_ICONS[icon]}</svg>` : '';
-  ui.banner.innerHTML = `<div class="big">${svg}${big}</div>`;
+  ui.banner.innerHTML = `<div class="big">${svg}${big}</div>` + (sub ? `<div class="sub">${sub}</div>` : '');
+  // 下の行があるときは、読めるように長めに出す
+  ui.banner.classList.toggle('long', !!sub);
   ui.banner.classList.remove('show');
   void ui.banner.offsetWidth;
   ui.banner.classList.add('show');
@@ -570,7 +572,17 @@ function handleEvents() {
         benchMark('layer');
         sound.layer();
         sound.tempo = Math.min(112 + e.layer * 8, 170);
-        showBanner(`${strataProgress(e.layer * 100).name}へ突入`, 'normal', 'layer');
+        // 難しさも上がる地層では、'difficulty' の知らせ（下の行つき）を出すので、ここでは出さない
+        if (!DIFFICULTY_STEPS.some((s) => s.depth === e.layer * 100)) showBanner(`${strataProgress(e.layer * 100).name}へ突入`, 'normal', 'layer');
+        break;
+      case 'difficulty':
+        // 難しさが上がった：地層に入ったときの知らせ（200m・300m・400m）はその下の行に、450m は単独で出す
+        if (e.depth % 100 === 0) {
+          showBanner(`${strataProgress(e.depth).name}へ突入`, 'warn', 'layer', e.text);
+        } else {
+          sound.layer();
+          showBanner(`残り${GOAL_DEPTH - e.depth}m`, 'warn', 'layer', e.text);
+        }
         break;
       case 'landPlayer':
         if (e.impact > 6) {
