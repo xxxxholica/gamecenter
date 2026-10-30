@@ -101,15 +101,12 @@ function injectStyle(): void {
     body[data-input-mode="keyboard"] .agc-pad-only {
       display: none !important;
     }
-    body[data-input-mode="gamepad"] .agc-kbd-only {
-      display: none !important;
-    }
-    body:not([data-input-mode="gamepad"]) .agc-pad-only {
+    body[data-input-mode="gamepad"] .agc-kbd-only,
+    body:not([data-input-mode="keyboard"]) .agc-kbd-only {
       display: none !important;
     }
     /* アケコンのBボタンだけの行(キーボードでは、下の Backspace の行と同じキーになるので出さない) */
-    body[data-input-mode="keyboard"] .agc-row-padonly,
-    body:not([data-input-mode="gamepad"]) .agc-row-padonly {
+    body[data-input-mode="keyboard"] .agc-row-padonly {
       display: none !important;
     }
 
@@ -302,20 +299,24 @@ function injectStyle(): void {
   document.head.appendChild(style);
 }
 
+// イベント用の一時設定: true の間はキーボードのボタンガイドを無効にし、常にアーケードボタンガイドを表示する
+const FORCE_ARCADE_GUIDE = true;
+
 let trackerInitialized = false;
-let currentInputMode: InputMode = 'keyboard';
+let currentInputMode: InputMode = FORCE_ARCADE_GUIDE ? 'gamepad' : 'keyboard';
 
 function setMode(mode: InputMode): void {
-  const changed = currentInputMode !== mode;
-  currentInputMode = mode;
+  const nextMode: InputMode = FORCE_ARCADE_GUIDE ? 'gamepad' : mode;
+  const changed = currentInputMode !== nextMode;
+  currentInputMode = nextMode;
   if (typeof document !== 'undefined' && document.body) {
-    if (document.body.dataset.inputMode !== mode) {
-      document.body.dataset.inputMode = mode;
+    if (document.body.dataset.inputMode !== nextMode) {
+      document.body.dataset.inputMode = nextMode;
     }
   }
   if (changed) {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('gamecenter:inputmode', { detail: { mode } }));
+      window.dispatchEvent(new CustomEvent('gamecenter:inputmode', { detail: { mode: nextMode } }));
     }
   }
 }
@@ -335,6 +336,11 @@ export function getInputMode(): InputMode {
 export function initInputModeTracker(): void {
   if (trackerInitialized || typeof window === 'undefined') return;
   trackerInitialized = true;
+
+  if (FORCE_ARCADE_GUIDE) {
+    setMode('gamepad');
+    return;
+  }
 
   // 初期値の判定 (接続済みゲームパッドがあるか)
   const pads = readGamepads();
@@ -432,6 +438,8 @@ function buttonBadge(b: ArcadeGuideButton): HTMLDivElement {
  * 呼び出しは1画面につき1回。すでにカードがあれば入れ替える(ゲームのシーン遷移で再度呼んでも重複しない)。
  */
 export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
+  injectStyle();
+  initInputModeTracker();
   if (typeof location !== 'undefined' && location.search && new URLSearchParams(location.search).has('noHud')) {
     return document.createElement('div');
   }
@@ -439,8 +447,6 @@ export function mountArcadeGuide(options: ArcadeGuideOptions): HTMLDivElement {
     return document.createElement('div');
   }
   lastGuideOptions = options;
-  injectStyle();
-  initInputModeTracker();
   document.getElementById('agc-guide')?.remove();
 
   const root = document.createElement('div');
