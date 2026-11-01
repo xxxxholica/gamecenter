@@ -18,7 +18,7 @@ type PlainImage = { width: number; height: number };
 /**
  * テクスチャを帯で送るか(StreamedCityMap.stageUpload)。ANGLE の Metal で描く Chrome(Mac)のほかは、帯で送る。
  * Mac の Chrome だけは、Worker の OffscreenCanvas で GPU 側に載せた画像を、1フレームに1枚ずつ送る。
- * 速い送り方が GPU の描画方式で逆になるため(1枚を送るのにかかる時間。scripts/upload-probe で測れる):
+ * 速い送り方が GPU の描画方式で逆になるため(1枚を送るのにかかる時間):
  *   Windows(RTX 4050, D3D11): GPU 側の画像 → sRGB が 1024² 12ms・4096² 193ms(GPU プロセスで止まる)。CPU 側の画像を 128 行の帯で送ると 1 帯 3ms 前後。
  *   Mac(M4, Chrome の ANGLE Metal): GPU 側の画像は 4096² でも 0.1ms 未満。帯は 4096² で 1 帯 2.3ms かかり、走行中に GPU の待ちで 300ms 前後止まることがあった
  *   (東京 丸の内スカイウェイ: 帯 1%low 33〜37、GPU 側の画像 60)。

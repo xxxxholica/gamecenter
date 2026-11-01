@@ -1343,7 +1343,7 @@ body .hud-result-side .hud-arcade-result-buttons.rm-col > .rm-btn:hover {
   text-overflow: ellipsis;
 }
 
-/* Machine select: car illustration (rendered from the GLB by scripts/render_car_cards.mjs) */
+/* Machine select: car illustration */
 .car-outline {
   display: block;
   width: 100%;

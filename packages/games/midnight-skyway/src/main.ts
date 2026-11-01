@@ -10,7 +10,6 @@ import { boostThemeFor } from './core/BoostTheme';
 import { DriveScene } from './core/DriveScene';
 import { DriveHUD } from './ui/DriveHUD';
 import { MapBase } from './maps/MapBase';
-import { TokyoClimbMap } from './maps/TokyoClimbMap';
 import { TougeDownhillMap } from './maps/TougeDownhillMap';
 import { STAGES } from './ui/stages';
 import { benchParam, benchReady, benchDone, benchMark, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
@@ -262,7 +261,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Map registry
   const mapFactories: Record<string, () => MapBase> = {
     tsukikage_touge: () => new TougeDownhillMap(),
-    tokyo_climb: () => new TokyoClimbMap(),
   };
 
   let lightsBeforeRace = true;   // the garage's own headlight setting, restored when the car goes back

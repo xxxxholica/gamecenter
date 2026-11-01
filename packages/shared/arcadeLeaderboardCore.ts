@@ -216,7 +216,6 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     // minScore は shared/netProtocol.ts の MIN_FINISH_MS(コースごとの物理的な最短タイム)と同じ値
     variants: [
       { id: 'tsukikage_touge', label: '月影・湯元 峠ダウンヒル', revision: 1, minScore: 50000 },
-      { id: 'tokyo_climb', label: '東京 スカイクライム', revision: 2, minScore: 58000 },
     ],
   },
   'school-corridor-runner': {
@@ -259,17 +258,6 @@ const DEFS: Record<string, GameLeaderboardDef> = {
     scoreOrder: 'desc',
     unit: 'pts',
     formatScore: (score) => (score > 0 ? `${Math.floor(score).toLocaleString()} pts` : '0 pts'),
-  },
-  'cyber-2d-fighter-3d': {
-    slug: 'cyber-2d-fighter-3d',
-    hasScore: true,
-    minScore: 1,
-    maxScore: 9,
-    minRunMs: 5_000,
-    maxScorePerSec: 0.5,
-    scoreOrder: 'desc',
-    unit: '連勝',
-    formatScore: (score) => (score > 0 ? `${Math.floor(score)} 連勝` : '0 連勝'),
   },
   'sumo-smash-3d': {
     slug: 'sumo-smash-3d',

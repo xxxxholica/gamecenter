@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * "Clear tube" around an elevated road (runtime twin of scripts/lib_road_tube.mjs): city triangles that sit inside / on / over
+ * "Clear tube" around an elevated road: city triangles that sit inside / on / over
  * the deck are dropped when a chunk is loaded, so nothing pokes through the road, stands on it or hangs over it.
  * Done at load time (not baked) so courses sharing the same chunks are not affected by each other's tube.
  *   radius  horizontal distance from the centre line (deck half width + parapet + girder overhang + margin)

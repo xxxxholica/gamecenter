@@ -6,7 +6,6 @@ import type { LeaderboardStore } from './leaderboardStore.ts';
 import type { AnalyticsStore } from './analyticsStore.ts';
 import type { ReplayStore } from './replayStore.ts';
 import type { ReplayTickets } from './replayTickets.ts';
-import type { AdLogoStore } from './adLogos.ts';
 
 /** id、または一意に決まる部分文字列(CLI・管理画面用)でゲームを探す。 */
 export function findHost(hosts: Map<string, GameHost>, name: string): GameHost | null {
@@ -24,20 +23,12 @@ export function createControlHandlers(
   replays?: ReplayStore,
   replayTickets?: ReplayTickets,
   replayOrigin = '',
-  adLogos?: AdLogoStore,
 ): ControlHandlers {
   return {
-    status: () => {
-      const adSt = adLogos ? adLogos.status() : { enabled: false, count: 0 };
-      return {
-        games: [...hosts.values()].map((h) => h.status()),
-        clients: clientCount(),
-        ads: { enabled: adSt.enabled, count: adSt.count },
-      };
-    },
-    setAds(on) {
-      adLogos?.setEnabled(on);
-    },
+    status: () => ({
+      games: [...hosts.values()].map((h) => h.status()),
+      clients: clientCount(),
+    }),
     open(game, opts) {
       const h = findHost(hosts, game);
       if (!h) return false;

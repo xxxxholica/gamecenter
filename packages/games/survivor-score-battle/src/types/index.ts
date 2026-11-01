@@ -1,7 +1,6 @@
 export type GameState =
   | 'TITLE'
   | 'HOW_TO_PLAY'
-  | 'CONTROLLER_TEST'
   | 'OPTIONS'
   | 'PLAYING'
   | 'LEVEL_UP'

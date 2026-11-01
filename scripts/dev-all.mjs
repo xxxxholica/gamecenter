@@ -65,8 +65,8 @@ function createPrefixRouter() {
 const app = createPrefixRouter();
 const httpServer = http.createServer(app);
 
-// 開発用: 本番ではリバースプロキシが担う /admin/ を、ここで代わりに中継する。
-// ローカル専用なので認証は無い。ブラウザで http://localhost:5173/admin/ を開く。
+// 開発用: 管理画面 /admin/ を、ここで中継する。ブラウザで http://localhost:5173/admin/ を開く。
+// ログインの既定は admin / admin。DEV_HOST で外部に開く時は、ONLINE_ADMIN_USER と ONLINE_ADMIN_PASS で変えること。
 const DEV_PROXY_SECRET = 'dev-only-proxy-secret-0123456789';
 const ONLINE_ADMIN_PORT = 8788;
 app.use('/admin', (req, res) => {

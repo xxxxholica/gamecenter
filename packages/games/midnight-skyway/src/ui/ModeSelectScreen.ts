@@ -28,13 +28,13 @@ export class ModeSelectScreen {
     const sub = !online ? '現在は開催されていません' : online.phase !== 'lobby' ? 'レース中' : full ? '満員' : `参加中 ${online.players}/${online.max}`;
     return [
       { id: 'offline', art: CAR, title: 'オフライン走行', sub: 'ひとりでタイムアタック', points: [
-        { icon: PIN_SOLID_SVG, text: '好きなコースを選ぶ' },
+        { icon: PIN_SOLID_SVG, text: '峠のコースを走る' },
         { icon: TIMER_SOLID_SVG, text: 'ベストタイムを記録できる' },
         { icon: GHOST_SOLID_SVG, text: '1位のゴーストと勝負' },
       ] },
       { id: 'online', art: VS, title: 'オンライン対戦', sub, points: [
         { icon: PEOPLE_SOLID_SVG, text: '最大4人で同時にスタート' },
-        { icon: PIN_SOLID_SVG, text: '待機中に\u200bコースの希望を出せる' },   // 狭い画面では「に」で折る
+        { icon: PIN_SOLID_SVG, text: '待機中に\u200bマシンを選べる' },   // 狭い画面では「に」で折る
       ], disabled: !online },
     ];
   }

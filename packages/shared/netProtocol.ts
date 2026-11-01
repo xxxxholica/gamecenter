@@ -9,14 +9,13 @@ export const STATE_HZ = 20;
 /** 2人目が入ってから自動でレースが始まるまでの秒数。 */
 export const AUTO_START_SEC = 30;
 /** 選べるコース(サーバーもこの一覧で検証する)。 */
-export const MAP_IDS = ['tsukikage_touge', 'tokyo_climb'];
+export const MAP_IDS = ['tsukikage_touge'];
 /**
  * コースごとの最短完走タイム(ms)。これより短い finish はサーバーが不正として捨てる。
  * コース長 ÷ 最高速(約38m/s) のおよそ半分とした保守的な値(通常の走りでは到達できない)。
  */
 export const MIN_FINISH_MS: Record<string, number> = {
   tsukikage_touge: 50000,
-  tokyo_climb: 58000,
 };
 /** 主催者の設定値: コース/開放時間に「ランダム」を選べる。コースはレースごとに引き直される。 */
 export const RANDOM = 'random';

@@ -13,18 +13,9 @@
     "dev:hub": "npm run dev -w packages/hub",
     "build": "node scripts/build.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm test --workspaces --if-present",
-    "preview": "npx serve dist",
-    "bench:all": "node scripts/bench-all.mjs",
-    "deathmap": "node scripts/gen-deathmap.mjs",
-    "deploy": "npm run build && node scripts/deploy.mjs",
-    "deploy:server": "node scripts/deploy-server.mjs",
-    "ads:prepare": "node scripts/prepare-ad-logos.mjs",
-    "check:hygiene": "node scripts/check-hygiene.mjs",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "preview": "npx serve dist"
   },
   "devDependencies": {
-    "playwright": "^1.64.1",
     "vite": "^8.3.5"
   }
 }

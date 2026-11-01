@@ -32,19 +32,6 @@ export const ADMIN_HTML = `<!doctype html>
     <div id="games" class="server-games-container"></div>
   </section>
 
-  <section class="card" id="ads-card">
-    <div class="card-head">
-      <h2>ローディング広告</h2>
-      <span id="ads-state" class="state">OFF</span>
-    </div>
-    <div id="ads-summary" class="stats"></div>
-    <div id="ads-breakdown"></div>
-    <div class="row">
-      <button id="ads-on-btn" class="primary">ONにする</button>
-      <button id="ads-off-btn">OFFにする</button>
-    </div>
-  </section>
-
   <!-- アナリティクス ボード -->
   <section class="card" id="analytics-card">
     <div class="card-head">
@@ -60,7 +47,6 @@ export const ADMIN_HTML = `<!doctype html>
           <option value="all">すべてのゲーム 全体集計</option>
           <option value="midnight-skyway">ミッドナイト・スカイウェイ</option>
           <option value="street-b-boy">ストリートビーボーイ</option>
-          <option value="cyber-2d-fighter-3d">サイバー２Dファイター３D</option>
           <option value="sumo-smash-3d">剛体大相撲</option>
           <option value="school-corridor-runner">テンパレラン</option>
           <option value="survivor-score-battle">サバイバー・スコアバトル</option>
@@ -148,7 +134,6 @@ export const ADMIN_HTML = `<!doctype html>
         <select id="export-type">
           <option value="all">すべてのデータ 完全統合</option>
           <option value="summary">集計サマリー</option>
-          <option value="ads">ローディング広告の表示実績</option>
           <option value="hardware">ハードウェア・環境スペック</option>
           <option value="performance">パフォーマンス・FPS・エラー</option>
           <option value="progression">ゲーム進行・到達度・死因</option>
@@ -1018,18 +1003,12 @@ button:disabled { opacity: .5; cursor: default; transform: none; filter: none; }
 
 export const ADMIN_JS = `
 (function () {
-  var DEATH_MAP_GEOMETRY = ${JSON.stringify(deathMapGeometry)};   // 死亡マップの背景(実際のゲームのマップ。npm run deathmap で作る)
+  var DEATH_MAP_GEOMETRY = ${JSON.stringify(deathMapGeometry)};   // 死亡マップの背景(実際のゲームのマップ)
   var gamesEl = document.getElementById('games');
   var summaryEl = document.getElementById('summary');
-  var adsStateEl = document.getElementById('ads-state');
-  var adsSummaryEl = document.getElementById('ads-summary');
-  var adsBreakdownEl = document.getElementById('ads-breakdown');
-  var adsOnBtn = document.getElementById('ads-on-btn');
-  var adsOffBtn = document.getElementById('ads-off-btn');
-  var lastServerAds = { enabled: false, count: 0 };
 
   var HEADERS = { 'X-Requested-With': 'online-admin' };
-  var TITLES = { 'cyber-2d-fighter-3d': 'サイバー２Dファイター３D', 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
+  var TITLES = { 'midnight-skyway': 'MIDNIGHT SKYWAY', 'sumo-smash-3d': '剛体大相撲', 'tower-stack': 'グラグラタワー' };
   var PHASES = { lobby: '参加受付中', loading: 'ロード中', racing: '実行中' };
   var MINUTES = [['60', '1時間'], ['120', '2時間'], ['180', '3時間'], ['360', '6時間'], ['720', '12時間'], ['1440', '24時間'], ['2880', '48時間']];
   var BOARD_TITLES = {
@@ -1040,7 +1019,6 @@ export const ADMIN_JS = `
     'extreme-edge-arcade': '極限ギリギリ選手権',
     'tani-runner-124': '単位増殖ラン',
     'midnight-skyway': 'ミッドナイト・スカイウェイ',
-    'cyber-2d-fighter-3d': 'サイバー２Dファイター３D',
     'sumo-smash-3d': '剛体大相撲',
     'tower-stack': 'タワースタック',
     'falldown': '無限降下ドリル'
@@ -1228,75 +1206,6 @@ export const ADMIN_JS = `
       ['オンライン参加者', String(total)],
       ['総WebSocket接続', String(s.clients)],
     ]);
-    lastServerAds = s.ads || { enabled: false, count: 0 };
-    updateAdsCard();
-  }
-
-  function fmtSec(sec) {
-    if (typeof sec !== 'number' || !isFinite(sec) || sec <= 0) return '0';
-    return String(Math.round(sec * 100) / 100);
-  }
-
-  function updateAdsCard() {
-    var ads = lastServerAds || { enabled: false, count: 0 };
-    var adStats = (cachedAnalyticsData && cachedAnalyticsData.ads) || {
-      totalImpressions: 0,
-      totalDurationSec: 0,
-      avgDurationSec: 0,
-      byLogo: {}
-    };
-    if (adsStateEl) {
-      adsStateEl.textContent = ads.enabled ? 'ON' : 'OFF';
-      adsStateEl.className = 'state' + (ads.enabled ? ' open' : '');
-    }
-    if (adsSummaryEl) {
-      var totalSec = adStats.totalDurationSec || 0;
-      setStats(adsSummaryEl, [
-        ['広告表示', ads.enabled ? 'ON' : 'OFF', '', ads.enabled],
-        ['登録ロゴ数', String(ads.count), '件', ads.count > 0],
-        ['総表示回数', String(adStats.totalImpressions || 0), '回', (adStats.totalImpressions || 0) > 0],
-        ['合計表示時間', fmtSec(totalSec), '秒'],
-        ['平均表示時間', (adStats.totalImpressions || 0) > 0 ? fmtSec(adStats.avgDurationSec) : '-', (adStats.totalImpressions || 0) > 0 ? '秒/回' : ''],
-      ]);
-    }
-    if (adsBreakdownEl) {
-      adsBreakdownEl.textContent = '';
-      var byLogo = adStats.byLogo || {};
-      var logos = Object.keys(byLogo).sort();
-      if (logos.length === 0) {
-        adsBreakdownEl.appendChild(el('div', { className: 'empty', text: '広告ごとの表示実績はまだ記録されていません。' }));
-      } else {
-        var sub = el('div', { className: 'sub-card' });
-        sub.appendChild(el('h4', { text: '広告ロゴ別 表示実績 回数・合計秒数' }));
-        var tWrap = el('div', { className: 'table-wrap' });
-        var tbl = el('table', { className: 'analytics-table' });
-        tbl.appendChild(el('thead', null, [
-          el('tr', null, [
-            el('th', { text: '広告ロゴ' }),
-            el('th', { text: '表示回数' }),
-            el('th', { text: '合計表示時間' }),
-            el('th', { text: '平均表示時間' }),
-          ])
-        ]));
-        var tbody = el('tbody');
-        logos.forEach(function (logo) {
-          var st = byLogo[logo];
-          var sec = st.totalDurationSec || 0;
-          tbody.appendChild(el('tr', null, [
-            el('td', { text: logo }),
-            el('td', { className: 'num', text: String(st.count) + '回' }),
-            el('td', { className: 'num', text: fmtSec(sec) + '秒' + (sec >= 60 ? ' ' + formatDuration(sec) : '') }),
-            el('td', { className: 'num', text: fmtSec(st.avgDurationSec) + '秒' }),
-          ]));
-        });
-        tbl.appendChild(tbody);
-        tWrap.appendChild(tbl);
-        sub.appendChild(tWrap);
-        adsBreakdownEl.appendChild(sub);
-      }
-    }
-    if (adsOnBtn) adsOnBtn.disabled = !!ads.enabled;
-    if (adsOffBtn) adsOffBtn.disabled = !ads.enabled;
   }
 
   // ==========================================
@@ -1536,12 +1445,12 @@ export const ADMIN_JS = `
   }
 
   // ---- 死亡地点マップ ----
-  // 背景は、ゲームの本物のコードから取り出した実際のマップ(deathMapGeometry.json。npm run deathmap で作る)。
+  // 背景は、ゲームの本物のコードから取り出した実際のマップ(deathMapGeometry.json)。
   // マップを持つゲームだけを、マップ(ステージ・コース)ごとに全部並べる(選ぶ操作はない)。
   var DEATHMAP_ORDER = ['street-b-boy', 'falldown', 'school-corridor-runner', 'tower-stack', 'tani-runner-124', 'midnight-skyway'];
   /** 地点の呼び方(skyway は死亡ではなく、ぶつかった・時間切れになった場所) */
   var POINT_LABEL = { 'midnight-skyway': '衝突・タイムアップ地点', 'tower-stack': '落下時の高さ', 'tani-runner-124': '脱落・留年地点' };
-  var SKYWAY_COURSE_NAMES = { tsukikage_touge: '月影・湯元 峠ダウンヒル', tokyo_climb: '東京クライム' };
+  var SKYWAY_COURSE_NAMES = { tsukikage_touge: '月影・湯元 峠ダウンヒル' };
   var DEATHMAP_NOTE = '赤いバツ(グラグラタワーは横線)が地点です。合わせると、死因と日時が出ます。';
 
   // バツに合わせた時に、カーソルの横に出す小さな説明(1つを使い回す)
@@ -1987,7 +1896,6 @@ export const ADMIN_JS = `
 
   function renderAnalytics(data) {
     cachedAnalyticsData = data;
-    updateAdsCard();
     var allKeys = Object.keys(data.games || {}).filter(function (gid) { return Object.prototype.hasOwnProperty.call(BOARD_TITLES, gid); });
     var activeKeys = selectedGame === 'all' ? allKeys : (data.games[selectedGame] ? [selectedGame] : []);
 
@@ -1999,13 +1907,11 @@ export const ADMIN_JS = `
       if (allView) allView.style.display = 'block';
       if (gameView) gameView.style.display = 'none';
 
-      var adSum = data.ads || { totalImpressions: 0, totalDurationSec: 0 };
       setStats(document.getElementById('analytics-summary'), [
         ['総訪問セッション', String(data.totalSessions)],
         ['アクティブ訪問中', String(data.activeSessionsNow), '人', data.activeSessionsNow > 0],
         ['総ゲームプレイ数', String(data.totalPlays)],
         ['総プレイ時間', ((data.totalPlayTimeSec || 0) / 3600).toFixed(1), 'h'],
-        ['広告総表示回数', String(adSum.totalImpressions || 0), '回', (adSum.totalImpressions || 0) > 0],
         ['全体平均FPS', String(data.avgFpsOverall || 60), 'fps'],
         ['パッド利用率', String(Math.round(data.gamepadUserRate * 100)) + '%'],
         ['エラー発生件数', String(data.totalErrors || 0), '件', (data.totalErrors || 0) > 0 ? 'warn' : false],
@@ -2472,16 +2378,6 @@ export const ADMIN_JS = `
   document.getElementById('stop-all').addEventListener('click', function () {
     if (window.confirm('全ゲームを閉鎖し、参加者を全員切断します。よろしいですか？')) act('/admin/api/close?game=all');
   });
-  if (adsOnBtn) {
-    adsOnBtn.addEventListener('click', function () {
-      act('/admin/api/ads?on=1');
-    });
-  }
-  if (adsOffBtn) {
-    adsOffBtn.addEventListener('click', function () {
-      act('/admin/api/ads?on=0');
-    });
-  }
   document.getElementById('logout').addEventListener('click', function () {
     fetch('/admin/logout', { method: 'POST', headers: HEADERS, cache: 'no-store', credentials: 'same-origin' })
       .then(function () { location.href = '/admin/login'; });

@@ -384,9 +384,7 @@ function shouldRecordFetch(input: RequestInfo | URL): boolean {
     if (url.origin !== location.origin) return false;
     if (
       url.pathname.startsWith('/api/analytics/') ||
-      url.pathname.startsWith('/api/replay/') ||
-      url.pathname === '/api/ads' ||
-      url.pathname.startsWith('/api/ads/')
+      url.pathname.startsWith('/api/replay/')
     ) {
       return false;
     }
@@ -401,9 +399,7 @@ function isTelemetry(input: RequestInfo | URL): boolean {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
     return (
       url.pathname.startsWith('/api/analytics/') ||
-      url.pathname.startsWith('/api/replay/') ||
-      url.pathname === '/api/ads' ||
-      url.pathname.startsWith('/api/ads/')
+      url.pathname.startsWith('/api/replay/')
     );
   } catch {
     return false;
@@ -727,7 +723,6 @@ export function getReplayRef(): { id: string; key: string; seek: number } | unde
   if (mode !== 'record' || unreplayable || truncated || !header) return undefined;
   return { id: replayId, key: writeKey, seek: Math.max(0, Math.round((roundStartClock - header.t0) / 100) / 10) };
 }
-export function getReplayStatus(): ReplayStatus { return status; }
 /** 記録した時、ハブの iframe の中だったか(再生では、記録した時と同じ作り方をするため) */
 export function replayWasFramed(): boolean | undefined { return mode === 'replay' ? header?.framed : undefined; }
 export function setReplaySpeed(v: number): void { speed = Math.max(0.1, Math.min(8, v)); }

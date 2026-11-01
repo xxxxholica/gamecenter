@@ -27,12 +27,6 @@ export function hasServerClockSync(): boolean {
   return sharedSamples.length > 0;
 }
 
-/** テスト用: 共有の時計サンプルを初期化する。 */
-export function resetServerClockSync(): void {
-  sharedSamples.length = 0;
-  sharedOffset = 0;
-}
-
 /** 公開ステータスの取得先(読み取り専用の軽いHTTP。全ゲームの開催状況をまとめて返す)。VITE_ONLINE_STATUS で上書き可。 */
 function statusUrl(): string {
   const env = import.meta.env?.VITE_ONLINE_STATUS as string | undefined;

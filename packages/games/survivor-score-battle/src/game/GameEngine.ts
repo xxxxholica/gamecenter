@@ -15,7 +15,6 @@ import { Enemy } from '../entities/Enemy';
 import { Boss } from '../entities/Boss';
 import { HudRenderer } from '../ui/HudRenderer';
 import { warmupLocatorSprites } from '../ui/locatorSprites';
-import { ControllerTestScreen } from '../ui/ControllerTestScreen';
 import { LevelUpScreen } from '../ui/LevelUpScreen';
 import { OptionsScreen } from '../ui/OptionsScreen';
 import { HowToPlayScreen } from '../ui/HowToPlayScreen';
@@ -57,7 +56,6 @@ export class GameEngine {
 
   // UI Screens
   public hud: HudRenderer;
-  public controllerTestScreen: ControllerTestScreen;
   public levelUpScreen: LevelUpScreen;
   public optionsScreen: OptionsScreen;
   public howToPlayScreen: HowToPlayScreen;
@@ -83,7 +81,6 @@ export class GameEngine {
     this.screenEffects = new ScreenEffects();
 
     this.hud = new HudRenderer();
-    this.controllerTestScreen = new ControllerTestScreen();
     this.levelUpScreen = new LevelUpScreen();
     this.optionsScreen = new OptionsScreen();
     this.howToPlayScreen = new HowToPlayScreen();
@@ -169,7 +166,7 @@ export class GameEngine {
   private reportMenuPhase(): void {
     if (this.state === this.lastReportedState) return;
     this.lastReportedState = this.state;
-    const screen = this.state === 'HOW_TO_PLAY' ? 'あそびかた' : this.state === 'OPTIONS' ? 'オプション' : this.state === 'CONTROLLER_TEST' ? 'コントローラーテスト' : null;
+    const screen = this.state === 'HOW_TO_PLAY' ? 'あそびかた' : this.state === 'OPTIONS' ? 'オプション' : null;
     if (screen) reportPhase('menu', { screen });
   }
 
@@ -189,14 +186,6 @@ export class GameEngine {
 
       case 'HOW_TO_PLAY': {
         if (this.howToPlayScreen.update(inputState, this.sound)) {
-          this.state = 'TITLE';
-        }
-        break;
-      }
-
-      case 'CONTROLLER_TEST': {
-        if (inputState.cancel) {
-          this.sound.sfx.playMenuConfirm();
           this.state = 'TITLE';
         }
         break;
@@ -1289,7 +1278,6 @@ export class GameEngine {
     const guides: Record<GameState, ArcadeGuideOptions> = {
       TITLE: { buttons: [{ indices: [0, 1, 2, 3, 9], label: 'スタート' }] },
       HOW_TO_PLAY: { buttons: [{ indices: [0, 1], label: '戻る' }] },
-      CONTROLLER_TEST: { buttons: [back] },
       OPTIONS: { moveLabel: '項目選択 / 音量', buttons: [{ indices: [0, 2], label: '切替' }, back] },
       PLAYING: {
         moveLabel: '移動',
@@ -1362,12 +1350,6 @@ export class GameEngine {
 
     if (this.state === 'HOW_TO_PLAY') {
       this.howToPlayScreen.render(ctx, width, height);
-      return;
-    }
-
-    if (this.state === 'CONTROLLER_TEST') {
-      const input = this.input.update();
-      this.controllerTestScreen.render(ctx, width, height, input);
       return;
     }
 

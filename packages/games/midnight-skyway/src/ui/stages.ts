@@ -11,7 +11,6 @@ export interface StageInfo {
 
 export const STAGES: StageInfo[] = [
   { id: 'tsukikage_touge', title: '月影・湯元 峠ダウンヒル', sub: '複合つづら折り・温泉街渓谷', length: '2.7 km', stars: '★★★★★', tag: '側溝走り&連続S字' },
-  { id: 'tokyo_climb', title: '東京 スカイクライム', sub: '超高層を駆け上がる', length: '4.4 km', stars: '★★★★★', tag: '超高層まで登る' },
 ];
 
 export const stageNumber = (id: string): number => STAGES.findIndex((s) => s.id === id) + 1;

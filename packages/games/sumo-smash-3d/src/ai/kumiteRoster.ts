@@ -109,14 +109,6 @@ const FINAL_BOSS_MAWASHI = { hex: 0x7209b7, css: '#ff4d6d' }; // 百獣王・覇
 // 2体同時降下ラッシュは廃止し、1体ずつ順番に出現させる
 const DOUBLE_TRIGGERS = new Set<number>([]);
 
-/** 2体同時降下ウェーブに含まれる番号か */
-export function isSimultaneousWaveMember(n: number): boolean {
-  for (const start of DOUBLE_TRIGGERS) {
-    if (n >= start && n < start + 2) return true;
-  }
-  return false;
-}
-
 /**
  * 1〜100 の通し番号(1始まり)から敵力士のスペックを返す。
  * simultaneousCount >= 2（または同時降下ウェーブ対象番号）の場合は中ボス（巨漢・重量級）にせず、

@@ -15,8 +15,3 @@ export function setWidth(el: HTMLElement | null | undefined, value: string): voi
 export function setDisplay(el: HTMLElement | null | undefined, value: string): void {
   if (el && el.style.display !== value) el.style.display = value;
 }
-
-/** style.height を、現在値と違うときだけ書き換える。 */
-export function setHeight(el: HTMLElement | null | undefined, value: string): void {
-  if (el && el.style.height !== value) el.style.height = value;
-}

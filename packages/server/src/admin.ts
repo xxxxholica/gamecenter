@@ -1,4 +1,4 @@
-// 管理画面(Web)。リバースプロキシと共有シークレットの後ろで公開する前提の、127.0.0.1 限定のHTTPサーバー。
+// 管理画面(Web)。リバースプロキシの後ろで公開する前提の、127.0.0.1 限定のHTTPサーバー。
 //
 // 多層防御:
 //  1. リバースプロキシがアクセス元の制限・レート制限を担当する。ID/パスワードはここでは確認しない
@@ -6,8 +6,7 @@
 //  2. リバースプロキシだけが知る共有シークレット(X-Online-Proxy)が付いていないリクエストは拒否する
 //     → ローカルの他プロセスが 127.0.0.1 のこのポートへ直接アクセスしても何もできない
 //  3. ログイン(ID/パスワード)に成功すると、ランダムなセッショントークンを HttpOnly Cookie で発行する。
-//     ログイン失敗はIPごとに回数制限する(サーバーログの
-//     「admin login failed」行を見て同じ防御を外側(ファイアウォール)からもかける)。
+//     ログイン失敗はIPごとに回数制限する。
 //  4. 状態を変える操作(ログインPOSTを除く)は X-Requested-With ヘッダー必須 + Sec-Fetch-Site が same-origin 以外なら拒否する
 //     (CSRF対策。Cookie はブラウザが自動送信するため、他サイトからのPOSTを防ぐ必要がある)
 //     ログインPOST自体は素のHTMLフォーム(JS無し)からなので X-Requested-With は使えず、Sec-Fetch-Site だけで見る。
@@ -24,7 +23,7 @@ const SESSION_COOKIE = 'online_admin_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12時間でログアウトが要る
 const MAX_ADMIN_SESSIONS = 100;
 const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 監視側の検知窓と合わせてある
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOGIN_TRACKED_IPS = 5000;
 const MAX_BODY_BYTES = 1024;
 
@@ -175,7 +174,7 @@ export function startAdminWeb(port: number, host: string, secret: string | undef
         });
       }
       recordFailure(ip, now);
-      log(`admin login failed ip=${ip}`); // 監視側がこの行を見て遮断する
+      log(`admin login failed ip=${ip}`);
       return html(401, LOGIN_HTML(true));
     }
     if (req.method === 'POST' && url.pathname === '/logout') {

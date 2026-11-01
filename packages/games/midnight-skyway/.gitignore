@@ -1,5 +1,0 @@
-node_modules/
-dist/
-.DS_Store
-# raw downloads / intermediate data of the data pipeline (large, re-creatable with the data:* npm scripts)
-.tokyo_work/

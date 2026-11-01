@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview",
-    "test": "node --test \"test/**/*.test.ts\""
+    "preview": "vite preview"
   },
   "dependencies": {
     "cannon-es": "^0.20.0",

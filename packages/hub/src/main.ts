@@ -24,7 +24,6 @@ import { initHubMobileBlock, isMobileDevice } from '../../shared/mobileBlock';
 import { initSessionTracking } from '../../shared/arcadeAnalytics';
 import { applyBenchFlagFromUrl } from '../../shared/arcadeBenchCore';
 import { stripDevParamsOnProduction } from '../../shared/devParams';
-import { preloadHubAdLogos } from '../../shared/hubLoadingOverlay';
 import { mountGpuFooter } from './gpuFooter';
 
 // ハブを ?bench=1 で開いたら、その後に開く全ゲームでベンチマーク計測を有効にする(?bench=0 で解除)。本番のドメインでは効かない
@@ -47,7 +46,6 @@ if (isFramedHub) {
     buttons: [{ indices: [9], label: '決定' }],
   });
   mountGpuFooter();
-  void preloadHubAdLogos();
 }
 
 

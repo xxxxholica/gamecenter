@@ -71,7 +71,7 @@ const css = `
 .msel-go { color: #05070c; border: none; background: linear-gradient(135deg, var(--msel-accent) 0%, var(--msel-accent-end) 100%); box-shadow: 0 0 30px color-mix(in srgb, var(--msel-accent) 60%, transparent); animation: mselPulse 1.4s infinite alternate; }
 .msel-go:hover { transform: skewX(-10deg) scale(1.04); }
 @keyframes mselPulse { from { filter: brightness(1); } to { filter: brightness(1.2); } }
-/* arcade 版(arcade: true): 左上の見出し・斜めの角ばったカードとボタン。寸法は --u(画面の高さ/幅に比例。cyber-2d-fighter-3d の 0.8 倍)で決まり、親が --u を決めていればそれに従う */
+/* arcade 版(arcade: true): 左上の見出し・斜めの角ばったカードとボタン。寸法は --u(画面の高さ/幅に比例)で決まり、親が --u を決めていればそれに従う */
 .msel.msel-arcade { --u: min(0.074vh, 0.0625vw); padding: calc(40 * var(--u)) calc(48 * var(--u)); justify-content: space-between; align-items: stretch; gap: calc(30 * var(--u));
   font-size: calc(16 * var(--u)); font-family: inherit; background: none; animation: none; }
 .msel.msel-arcade::before { content: ''; position: absolute; inset: 0; z-index: -1; animation: mselBgIn 0.7s ease-out both;
@@ -123,7 +123,7 @@ export function applyModeSelectAccent(root: HTMLElement, opts: ModeSelectOptions
   }
 }
 
-/** モード選択・希望選択(WishSelect)で共通の見た目を、1回だけ追加する。 */
+/** モード選択の見た目を、1回だけ追加する。 */
 export function ensureModeSelectStyle(): void {
   if (document.getElementById('msel-style')) return;
   const st = document.createElement('style');

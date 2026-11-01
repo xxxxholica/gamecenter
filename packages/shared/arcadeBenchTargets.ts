@@ -17,16 +17,6 @@ export function benchParam(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-/**
- * bench-all.mjs --sweep の解像度の倍率(通常は 1)。--sweep はページの devicePixelRatio を 0.5 にして測るが、
- * devicePixelRatio を見ずに描画の解像度を固定しているゲームには効かない。そういうゲームは、固定の倍率にこれを掛ける。
- */
-export function benchRenderScale(): number {
-  if (typeof window === 'undefined' || !isBenchEnabled()) return 1;
-  const scale = (window as BenchWindow).__gcBenchScale;
-  return typeof scale === 'number' && scale > 0 && scale <= 1 ? scale : 1;
-}
-
 /** このゲームで計測できる場面の一覧を申告する。ゲームの起動時に1回呼ぶ。 */
 export function declareBenchTargets(targets: readonly BenchTarget[]): void {
   if (typeof window === 'undefined' || !isBenchEnabled()) return;

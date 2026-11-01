@@ -29,9 +29,9 @@ import {
 /** ゴースト(走行の軌跡)を保存できるゲーム */
 const GHOST_GAMES = new Set(['midnight-skyway']);
 /** クリアスター・完全制覇スターに対応するゲーム */
-const STAR_GAMES = new Set(['street-b-boy', 'school-corridor-runner', 'falldown', 'cyber-2d-fighter-3d', 'sumo-smash-3d']);
+const STAR_GAMES = new Set(['street-b-boy', 'school-corridor-runner', 'falldown', 'sumo-smash-3d']);
 /** 全制覇(上限スコア到達時)にのみクリア印が付くゲーム */
-const MAX_SCORE_CLEAR_GAMES = new Set(['cyber-2d-fighter-3d', 'sumo-smash-3d']);
+const MAX_SCORE_CLEAR_GAMES = new Set(['sumo-smash-3d']);
 const GHOST_STRIDE = 5;
 const GHOST_SAMPLE_MS = 100;
 const GHOST_MAX_SAMPLES = 7200;                    // 12分

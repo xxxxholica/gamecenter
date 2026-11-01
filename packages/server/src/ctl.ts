@@ -12,7 +12,6 @@
 //   set-role <枠> <順位> <名前> <ロール>     … 枠の<順位>位に「好きな名前（ロール）」を設定する(ロールは 開発者 または テスター)
 //   clear-role <枠> <順位>                  … 枠の<順位>位のロール設定を解除し、元の名前に戻す
 //   remove-record <枠> <順位>               … 枠の<順位>位(1〜3)の記録を1件消す(荒らし・不正な記録の削除)
-//   ads <on|off>                            … ローディング画面の広告表示を ON / OFF に切り替える(既定は OFF)
 // ゲームは id(例: midnight-skyway)か、一意に決まる部分文字列(例: skyway)。
 import http from 'node:http';
 import { DEFAULT_SOCKET, type ServerStatus } from './control.ts';
@@ -41,9 +40,6 @@ function show(s: ServerStatus): void {
     for (const m of g.members) console.log(`    id=${m.id} ${m.name}`);
   }
   console.log(`接続の合計: ${s.clients}`);
-  if (s.ads) {
-    console.log(`ローディング広告: ${s.ads.enabled ? 'ON' : 'OFF'} (有効ロゴ ${s.ads.count}件)`);
-  }
 }
 
 try {
@@ -78,10 +74,8 @@ try {
   } else if (cmd === 'remove-record' && rest[0] && rest[1]) {
     await call('POST', `/lb-remove?${new URLSearchParams({ board: rest[0], rank: rest[1] })}`);
     console.log(`${rest[0]}: ${rest[1]}位の記録を消しました`);
-  } else if (cmd === 'ads' && (rest[0] === 'on' || rest[0] === 'off')) {
-    show(await call('POST', `/ads?on=${rest[0] === 'on' ? '1' : '0'}`));
   } else {
-    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id> | ads <on|off> | clear-board <枠> | mark-dev <枠> <順位> [off] | set-role <枠> <順位> <名前> <開発者|テスター> | clear-role <枠> <順位> | remove-record <枠> <順位>>');
+    console.error('使い方: ctl <status | open <ゲーム> [分] [キー=値 ...] | close <ゲーム|all> | kick <ゲーム> <id> | clear-board <枠> | mark-dev <枠> <順位> [off] | set-role <枠> <順位> <名前> <開発者|テスター> | clear-role <枠> <順位> | remove-record <枠> <順位>>');
     process.exit(2);
   }
 } catch (e) {

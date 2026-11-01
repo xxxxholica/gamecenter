@@ -3,7 +3,6 @@ import { buttonIconHtml } from './arcadeGuide';
 import { returnToHub } from './homeReturn';
 import { reportDeepAnalytics, reportPhase } from './arcadeAnalytics';
 
-import cyberFighterLogo from './logos/cyber-2d-fighter-3d.webp';
 import ennichiLogo from './logos/ennichi-shateki.webp';
 import falldownLogo from './logos/falldown.webp';
 import extremeEdgeLogo from './logos/extreme-edge-arcade.webp';
@@ -16,7 +15,6 @@ import towerStackLogo from './logos/tower-stack.webp';
 import { readGamepads } from './gamepadFrame';
 
 export const GAME_LOGOS: Record<string, string> = {
-  'cyber-2d-fighter-3d': cyberFighterLogo,
   'ennichi-shateki': ennichiLogo,
   falldown: falldownLogo,
   'extreme-edge-arcade': extremeEdgeLogo,
@@ -257,7 +255,6 @@ export class ArcadeTitleScreen {
   /**
    * タイトルは作った時から見えているが、スタートを受け付けるのは show() から(ゲームの読み込みが済んでから呼ばれる)。
    * その間も、戻る操作(Backspace、アケコンは SELECT)だけは受けて、ホーム(ハブ)へ戻す。
-   * 計測(Chrome, GPU なし): cyber-2d-fighter-3d は、タイトルが見えてから show() まで 3.4 秒、戻る操作が効かなかった
    */
   private readonly earlyBackHandler = (e: KeyboardEvent): void => {
     if (this.isVisible || this.isStarting || e.code !== 'Backspace' || e.repeat) return;

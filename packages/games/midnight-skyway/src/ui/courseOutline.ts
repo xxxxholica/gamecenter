@@ -1,4 +1,3 @@
-import tokyoClimb from '../maps/tokyo_climb.json';
 import tougeDownhill from '../maps/touge_downhill.json';
 
 type Pt = [number, number];
@@ -7,10 +6,9 @@ interface Outline { drive: Pt[] }
 
 const xz = (rows: number[][]): Pt[] => rows.map((r) => [r[0], r[2]]);
 
-// (管理画面の死亡マップの背景も、ここからコースの形を作る: scripts/deathmap/extract.ts)
+// (管理画面の死亡マップの背景も、ここからコースの形を作る)
 export const OUTLINES: Record<string, Outline> = {
   tsukikage_touge: { drive: xz(tougeDownhill.road) },
-  tokyo_climb: { drive: xz(tokyoClimb.road) },
 };
 
 /** SVG of a course's layout: driven route with start marker and direction. */

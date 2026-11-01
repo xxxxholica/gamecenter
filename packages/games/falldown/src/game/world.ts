@@ -164,7 +164,6 @@ export class World {
   static readonly BARRIER_GAP = 80;
   private rng: () => number;
   private nextId = 1;
-  private depthForSpeed = 0;
 
   constructor(seed = Date.now()) {
     this.rng = makeRng(seed);
@@ -483,7 +482,6 @@ export class World {
 
   // ---------------- 更新 ----------------
   update(dt: number, depth: number) {
-    this.depthForSpeed = depth;
     const diff = difficulty(depth);
     if (this.dirty) this.recompute();
 

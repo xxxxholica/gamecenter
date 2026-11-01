@@ -5,8 +5,6 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { RateWindow } from './limits.ts';
-import { isValidAdLogoFilename, MAX_LOGO_COUNT } from './adLogos.ts';
-import { emptyFighterLearning, parseFighterLearning, mergeFighterLearning, type FighterLearningModel } from '../../shared/cyberFighterLearning.ts';
 
 export interface ClientDevice {
   os?: string;
@@ -194,22 +192,6 @@ export interface HardwareShare {
   screenResolutions: Record<string, number>;
 }
 
-export interface AdLogoStats {
-  count: number;
-  totalDurationSec: number;
-}
-
-export interface AdLogoMetrics extends AdLogoStats {
-  avgDurationSec: number;
-}
-
-export interface AdsSummary {
-  totalImpressions: number;
-  totalDurationSec: number;
-  avgDurationSec: number;
-  byLogo: Record<string, AdLogoMetrics>;
-}
-
 export interface AnalyticsSummary {
   totalSessions: number;
   totalPlays: number;
@@ -220,7 +202,6 @@ export interface AnalyticsSummary {
   totalErrors: number;
   hardware: HardwareShare;
   games: Record<string, GameMetrics>;
-  ads: AdsSummary;
 }
 
 /** 死亡地点(脱落・失敗した場所)。map は図の種類(ステージ・コースなど)、x・y はその図の上の位置 */
@@ -242,15 +223,12 @@ export interface SpatialData {
 }
 
 export interface AnalyticsDataPayload {
-  fighterLearning?: FighterLearningModel;
   sessions: SessionData[];
   plays: PlayRecord[];
   events: AnalyticsEvent[];
   errors: ErrorRecord[];
   /** ゲームごとの死亡地点 */
   spatial?: Record<string, SpatialData>;
-  /** 広告ロゴごとの表示回数・合計表示秒数 */
-  ads?: Record<string, AdLogoStats>;
   updatedAt: string;
 }
 
@@ -295,8 +273,6 @@ const NEW_SESSIONS_PER_MIN = 60;
 /** スコア・プレイ時間として受け付ける上限(ランキング側の汎用上限と同じ) */
 const MAX_SCORE = 1_000_000_000;
 const MAX_DURATION_SEC = 24 * 60 * 60;
-/** ローディング広告1回あたりの表示秒数の上限(異常な大数値で合計が壊れないよう5分で打ち切る) */
-const MAX_AD_IMPRESSION_SEC = 300;
 /** 端末情報として受け付けるキー(これ以外は捨てる。セッションに無限にキーが増えないように) */
 const DEVICE_STRING_KEYS = ['os', 'browser', 'gpuRenderer', 'gpuVendor', 'gamepadName', 'language'] as const;
 const DEVICE_NUMBER_KEYS = ['screenWidth', 'screenHeight', 'devicePixelRatio', 'cpuCores', 'deviceMemoryGb'] as const;
@@ -376,19 +352,16 @@ const LAUNCH_INFO_KEYS = ['hubBrowseSec', 'nthGame', 'standalone'];
 /** 既存のプレイ記録を更新するイベント種別 */
 const PLAY_UPDATE_TYPES = new Set(['game_close', 'game_over', 'game_clear', 'game_heartbeat', 'score_submit', 'progression_update', ...TIMELINE_TYPES]);
 /** プレイの記録としては扱わないイベント種別。これ以外で playId の付いたもの(ゲームごとの出来事)は timeline に積む */
-const NON_PLAY_TYPES = new Set(['game_launch', 'session_start', 'hub_leave', 'client_error', 'ad_impression']);
+const NON_PLAY_TYPES = new Set(['game_launch', 'session_start', 'hub_leave', 'client_error']);
 /** 高頻度で大量に発生し、プレイ詳細(timeline/snapshot)側に集約されるため生イベントログ(events配列)には保存しないイベント種別 */
 const SKIP_EVENT_LOG_TYPES = new Set(['phase_change', 'game_heartbeat', 'perf_sample', 'trace', 'visibility']);
 
 export class AnalyticsStore {
-  private fighterLearning = emptyFighterLearning();
-  public fighterLearningProfile(): FighterLearningModel { return structuredClone(this.fighterLearning); }
   private sessions = new Map<string, SessionData>();
   private plays = new Map<string, PlayRecord>();
   private events: AnalyticsEvent[] = [];
   private errors: ErrorRecord[] = [];
   private spatial = new Map<string, SpatialData>();
-  private ads = new Map<string, AdLogoStats>();
   private seenEventIds = new Set<string>();
   /** events と同じ並びの、各イベントのおおよその大きさ(バイト)と、その合計 */
   private eventSizes: number[] = [];
@@ -410,10 +383,6 @@ export class AnalyticsStore {
       if (!fs.existsSync(this.filePath)) return;
       const raw = fs.readFileSync(this.filePath, 'utf8');
       const data = JSON.parse(raw) as Partial<AnalyticsDataPayload>;
-      const learned = parseFighterLearning(data.fighterLearning, true);
-      if (learned && data.fighterLearning?.version === 1 && Number.isSafeInteger(data.fighterLearning.matches) && data.fighterLearning.matches >= 0 && data.fighterLearning.matches <= 10000) {
-        this.fighterLearning = { ...learned, version: 1, matches: data.fighterLearning.matches };
-      }
       if (Array.isArray(data.sessions)) {
         for (const s of data.sessions) {
           if (s && typeof s.id === 'string') this.sessions.set(s.id, roundNumbersDeep(s));
@@ -448,16 +417,6 @@ export class AnalyticsStore {
           });
         }
       }
-      if (data.ads && typeof data.ads === 'object') {
-        for (const [logo, raw] of Object.entries(data.ads)) {
-          if (!isValidAdLogoFilename(logo) || this.ads.size >= MAX_LOGO_COUNT || !raw || typeof raw !== 'object') continue;
-          const count = typeof raw.count === 'number' && Number.isFinite(raw.count) && raw.count > 0 ? Math.floor(raw.count) : 0;
-          const totalDurationSec = typeof raw.totalDurationSec === 'number' && Number.isFinite(raw.totalDurationSec) && raw.totalDurationSec > 0 ? roundNum(raw.totalDurationSec) : 0;
-          if (count > 0 && totalDurationSec > 0) {
-            this.ads.set(logo, { count, totalDurationSec });
-          }
-        }
-      }
     } catch (e) {
       console.warn(`[analytics] load failed (${(e as Error).message}), starting fresh`);
     }
@@ -489,13 +448,11 @@ export class AnalyticsStore {
     if (!this.dirty || !this.filePath) return;
     this.dirty = false;
     const payload: AnalyticsDataPayload = {
-      fighterLearning: this.fighterLearning,
       sessions: Array.from(this.sessions.values()).slice(-MAX_SESSIONS),
       plays: Array.from(this.plays.values()).slice(-MAX_PLAYS),
       events: this.events.slice(-MAX_EVENTS),
       errors: this.errors.slice(-MAX_ERRORS),
       spatial: Object.fromEntries(this.spatial),
-      ads: Object.fromEntries(this.ads),
       updatedAt: new Date().toISOString(),
     };
     const tmp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -577,11 +534,6 @@ export class AnalyticsStore {
       }
     }
 
-    if (input.type === 'fighter_learning' && input.gameId === 'cyber-2d-fighter-3d' && input.data?.version === 1) {
-      const report = parseFighterLearning(input.data);
-      if (report && report.frames >= 60) this.fighterLearning = mergeFighterLearning(this.fighterLearning, report);
-    }
-
     // 2. イベントログ追加(高頻度の中間通知は timeline / snapshot 側に集約し、events 配列への重複蓄積をスキップ)
     if (!SKIP_EVENT_LOG_TYPES.has(input.type)) {
       const ev: AnalyticsEvent = {
@@ -620,9 +572,6 @@ export class AnalyticsStore {
 
     // 3.5 死亡地点(ゲームごとに別に溜める。プレイの記録の大きさの上限に巻き込まれないように)
     if (input.type === 'death_point' && input.gameId && input.data) this.recordSpatial(input.gameId, input.data, nowIso);
-
-    // 3.6 ローディング広告の表示実績(どのロゴが何秒・何回表示されたか)
-    if (input.type === 'ad_impression' && input.data) this.recordAdImpression(input.data);
 
     // 4. ゲームプレイ関連のディープ処理
     const data = input.data;
@@ -696,22 +645,6 @@ export class AnalyticsStore {
       ...(replayId ? { replayId } : {}),
     });
     if (sp.deaths.length > MAX_DEATHS_PER_GAME) sp.deaths.splice(0, sp.deaths.length - MAX_DEATHS_PER_GAME);
-  }
-
-  private recordAdImpression(d: Record<string, unknown>): void {
-    const logo = typeof d.logo === 'string' ? d.logo : '';
-    if (!isValidAdLogoFilename(logo)) return;
-    const rawDur = num(d.durationSec);
-    if (rawDur === undefined || rawDur <= 0) return;
-    const durationSec = roundNum(Math.min(MAX_AD_IMPRESSION_SEC, rawDur));
-    let entry = this.ads.get(logo);
-    if (!entry) {
-      if (this.ads.size >= MAX_LOGO_COUNT) return;
-      entry = { count: 0, totalDurationSec: 0 };
-      this.ads.set(logo, entry);
-    }
-    entry.count += 1;
-    entry.totalDurationSec = roundNum(entry.totalDurationSec + durationSec);
   }
 
   /** 管理画面の死亡地点マップ用。死亡地点に、そのプレイのリプレイの id を付けて返す(地点が先に届いた時のため、ここで補う) */
@@ -1011,29 +944,6 @@ export class AnalyticsStore {
       }
     }
 
-    const byLogo: Record<string, AdLogoMetrics> = Object.create(null);
-    let totalAdImpressions = 0;
-    let totalAdDurationSec = 0;
-    const sortedLogos = Array.from(this.ads.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    for (const [logo, st] of sortedLogos) {
-      if (st.count <= 0) continue;
-      const totalSec = roundNum(st.totalDurationSec);
-      const avgSec = roundNum(totalSec / st.count);
-      byLogo[logo] = {
-        count: st.count,
-        totalDurationSec: totalSec,
-        avgDurationSec: avgSec,
-      };
-      totalAdImpressions += st.count;
-      totalAdDurationSec = roundNum(totalAdDurationSec + totalSec);
-    }
-    const ads: AdsSummary = {
-      totalImpressions: totalAdImpressions,
-      totalDurationSec: totalAdDurationSec,
-      avgDurationSec: totalAdImpressions > 0 ? roundNum(totalAdDurationSec / totalAdImpressions) : 0,
-      byLogo,
-    };
-
     return {
       totalSessions,
       totalPlays,
@@ -1044,7 +954,6 @@ export class AnalyticsStore {
       totalErrors: this.errors.length,
       hardware,
       games,
-      ads,
     };
   }
 
@@ -1074,16 +983,6 @@ export class AnalyticsStore {
         exportedAt,
         type: 'summary',
         ...(gameId ? { gameId, gameMetrics: gameMetrics ?? null } : { summary }),
-      };
-    }
-    if (type === 'ads') {
-      const adEvents = this.events.filter((e) => e.type === 'ad_impression');
-      return {
-        exportedAt,
-        type: 'ads',
-        summary: summary.ads,
-        count: adEvents.length,
-        impressions: adEvents,
       };
     }
     if (type === 'hardware') {

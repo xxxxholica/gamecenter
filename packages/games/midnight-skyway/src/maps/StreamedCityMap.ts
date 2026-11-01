@@ -19,7 +19,7 @@ interface StreamManifest {
 
 /**
  * Spaces out chunk requests. The production server bans clients that fetch many distinct non-static files (.glb) in a short time
- * , so the ~640 chunks of a stage must not be requested as fast as the network allows.
+ * (a crawler-detection rule), so the ~640 chunks of a stage must not be requested as fast as the network allows.
  * Token bucket: `burst` requests may go out at once, after that one every `intervalMs`. Lower priority numbers go first.
  * One instance is shared by all maps, so re-entering a stage right away does not get a fresh burst.
  */
@@ -559,7 +559,7 @@ export abstract class StreamedCityMap extends MapBase {
       const old = o.material as THREE.MeshStandardMaterial;
       o.material = this.convertMaterial(old);
       old.dispose();
-      // PLATEAU chunks ship with no normal attribute at all (fine for the old unlit material, but a lit one needs
+      // City chunks ship with no normal attribute at all (fine for the old unlit material, but a lit one needs
       // N·L and renders solid black without it).
       if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
       o.castShadow = false;
@@ -618,11 +618,11 @@ export abstract class StreamedCityMap extends MapBase {
   }
 
   /**
-   * PLATEAU meshes ship as MeshStandardMaterial with no roughness/normal maps, so the full PBR shader buys nothing;
+   * City meshes ship as MeshStandardMaterial with no roughness/normal maps, so the full PBR shader buys nothing;
    * Lambert (diffuse + shadows, no specular/fresnel) is a much cheaper way to shade the thousands of streamed
    * building meshes under the same sun/hemisphere light as the car, instead of leaving them unlit.
-   * flatShading: PLATEAU buildings are boxy massing with genuinely hard edges, and the far tier is welded +
-   * mesh-simplified to ~1/12 the triangles (see tokyo_convert.mjs) — computeVertexNormals()'s smooth shading
+   * flatShading: city buildings are boxy massing with genuinely hard edges, and the far tier is welded +
+   * mesh-simplified to ~1/12 the triangles — computeVertexNormals()'s smooth shading
    * rounds those hard corners into a "melted" blob, especially on the far tier, which now stands out once lit
    * instead of unlit. Flat per-face shading reads as intentional low-poly facets instead, on both tiers, so the
    * near/far crossfade doesn't also swap the shading style.

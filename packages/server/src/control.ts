@@ -27,14 +27,10 @@ export interface ServerStatus {
   games: GameStatus[];
   /** 全体の接続数 */
   clients: number;
-  /** ローディング画面の広告表示状態 */
-  ads?: { enabled: boolean; count: number };
 }
 
 export interface ControlHandlers {
   status(): ServerStatus;
-  /** ローディング画面の広告表示 ON/OFF を切り替える(タイマーなし、既定は OFF) */
-  setAds?(on: boolean): void;
   /** game は id または、一意に決まる部分文字列(例: skyway)。見つからなければ false */
   open(game: string, opts: OpenOptions): boolean;
   /** game='all' で全ゲームを閉鎖(緊急停止) */
@@ -81,12 +77,6 @@ export function parseOpenOptions(url: URL, maxMinutes = 48 * 60): { game: string
 /** 管理操作(CLI・管理画面で共通)。レスポンスは { code, body }。 */
 export function handleAdminRequest(h: ControlHandlers, method: string, url: URL): { code: number; body: object } {
   if (method === 'GET' && url.pathname === '/status') return { code: 200, body: h.status() };
-  if (method === 'POST' && url.pathname === '/ads') {
-    const on = url.searchParams.get('on');
-    if (on !== '1' && on !== '0') return { code: 400, body: { error: 'bad_request' } };
-    h.setAds?.(on === '1');
-    return { code: 200, body: h.status() };
-  }
   if (method === 'POST' && url.pathname === '/open') {
     const { game, opts } = parseOpenOptions(url);
     return h.open(game, opts) ? { code: 200, body: h.status() } : { code: 404, body: { error: 'unknown_game' } };

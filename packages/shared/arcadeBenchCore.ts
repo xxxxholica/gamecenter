@@ -47,18 +47,6 @@ export interface BenchTarget {
   seconds?: number;
 }
 
-/** 結果のキーに使えない文字を - に置き換える。 */
-export function benchSafeId(id: string): string {
-  return id.replace(/[^\w-]+/g, '-');
-}
-
-/** 場面を開く URL。bench=1 を必ず付ける。 */
-export function benchTargetUrl(base: string, slug: string, target: BenchTarget): string {
-  const q = new URLSearchParams({ bench: '1' });
-  for (const [k, v] of Object.entries(target.params)) if (k !== 'bench') q.set(k, v);
-  return `${base.replace(/\/$/, '')}/games/${slug}/?${q.toString()}`;
-}
-
 /** 昇順にソート済みの配列から百分位を取る。 */
 export function percentile(sorted: readonly number[], p: number): number {
   if (sorted.length === 0) return 0;
@@ -217,79 +205,6 @@ export class RefreshSlots {
   finish(workMs: number): void {
     this.earliest = this.last + Math.max(1, Math.ceil((workMs - this.toleranceMs) / this.period));
   }
-}
-
-/** 合否の基準(60Hz で、プレイ中の区間)。README の「ベンチマーク」参照 */
-export const ACCEPTANCE = {
-  onePercentLowFps: 55,
-  p99Ms: 20,
-  maxMs: 50,
-  inputP95Ms: 50,
-  inputMaxMs: 100,
-  /** 読み込み中の、1回の停止の長さ */
-  loadMaxFrameMs: 1000,
-} as const;
-
-/** 合否を決める値。読み込みの区間がない場面は loadMaxFrameMs を null にする */
-export interface AcceptanceMetrics {
-  onePercentLowFps: number;
-  p99Ms: number;
-  maxMs: number;
-  /** プレイ中の、シェーダのコンパイルとテクスチャ・バッファの転送によるスパイクの回数 */
-  compileUploadSpikes: number;
-  inputP95Ms: number;
-  inputMaxMs: number;
-  loadMaxFrameMs: number | null;
-}
-
-export interface AcceptanceResult {
-  pass: boolean;
-  /** 合格だが、どれかの値が基準まで 10% 以内(1%low は 57.5fps 未満)。測り直して確かめる */
-  borderline: boolean;
-  /** 不合格の項目(例: 「p99 24.1ms > 20」) */
-  failures: string[];
-}
-
-export function judgeAcceptance(m: AcceptanceMetrics): AcceptanceResult {
-  const failures: string[] = [];
-  let borderline = false;
-  // 1%low は 60fps より上にならないので、「すれすれ」は 10% ではなく、基準と 60fps の中間まで(57.5fps 未満)
-  const atLeast = (label: string, v: number, min: number, unit: string) => {
-    if (v < min) failures.push(`${label} ${v}${unit} < ${min}`);
-    else if (v < (min + 60) / 2) borderline = true;
-  };
-  const atMost = (label: string, v: number, max: number, unit: string) => {
-    if (v > max) failures.push(`${label} ${v}${unit} > ${max}`);
-    else if (v > max * 0.9) borderline = true;
-  };
-  atLeast('1%low', m.onePercentLowFps, ACCEPTANCE.onePercentLowFps, 'fps');
-  atMost('p99', m.p99Ms, ACCEPTANCE.p99Ms, 'ms');
-  atMost('最長', m.maxMs, ACCEPTANCE.maxMs, 'ms');
-  if (m.compileUploadSpikes > 0) failures.push(`シェーダ・転送のスパイク ${m.compileUploadSpikes}回`);
-  atMost('入力 p95', m.inputP95Ms, ACCEPTANCE.inputP95Ms, 'ms');
-  atMost('入力 最大', m.inputMaxMs, ACCEPTANCE.inputMaxMs, 'ms');
-  if (m.loadMaxFrameMs !== null) atMost('読込の停止', m.loadMaxFrameMs, ACCEPTANCE.loadMaxFrameMs, 'ms');
-  return { pass: failures.length === 0, borderline: failures.length === 0 && borderline, failures };
-}
-
-/** 何回か測った値を、項目ごとの中央値にまとめる(基準すれすれ・不合格の場面は3回測って中央値で判定する) */
-export function medianMetrics(runs: readonly AcceptanceMetrics[]): AcceptanceMetrics {
-  const med = (values: number[]) => {
-    const v = [...values].sort((x, y) => x - y);
-    const mid = Math.floor(v.length / 2);
-    return v.length % 2 ? v[mid] : round((v[mid - 1] + v[mid]) / 2, 2);
-  };
-  const pick = (k: Exclude<keyof AcceptanceMetrics, 'loadMaxFrameMs'>) => med(runs.map((m) => m[k]));
-  const loads = runs.map((m) => m.loadMaxFrameMs).filter((v): v is number => v !== null);
-  return {
-    onePercentLowFps: pick('onePercentLowFps'),
-    p99Ms: pick('p99Ms'),
-    maxMs: pick('maxMs'),
-    compileUploadSpikes: pick('compileUploadSpikes'),
-    inputP95Ms: pick('inputP95Ms'),
-    inputMaxMs: pick('inputMaxMs'),
-    loadMaxFrameMs: loads.length ? med(loads) : null,
-  };
 }
 
 /** カクつき(スパイク)とみなすフレーム間隔。60Hz なら約30ms、144Hz なら25ms。 */

@@ -16,7 +16,6 @@ import { handleLeaderboardRequest } from './leaderboardApi.ts';
 import { AnalyticsStore } from './analyticsStore.ts';
 import { ReplayStore } from './replayStore.ts';
 import { ReplayTickets } from './replayTickets.ts';
-import { AdLogoStore, handleAdLogosRequest } from './adLogos.ts';
 import { GAME_FACTORIES } from './games/index.ts';
 
 const PORT = Number(process.env.ONLINE_PORT ?? 8787);
@@ -48,7 +47,7 @@ const sweepReplays = (): void => {
 };
 setInterval(sweepReplays, 5 * 60 * 1000).unref();
 // リプレイは、ゲームを管理画面とは別のオリジンで動かす(記録の中身は誰でも送れるので、管理画面のログインを持たせない)。
-// 例: REPLAY_ORIGIN=https://replay.game.hinata.works。ローカル開発時のみ未設定なら同じオリジンで開く
+// 例: REPLAY_ORIGIN=https://replay.example.com。ローカル開発時のみ未設定なら同じオリジンで開く
 const REPLAY_ORIGIN = (process.env.REPLAY_ORIGIN ?? '').replace(/\/+$/, '');
 if (REPLAY_ORIGIN && !/^https?:\/\/[\w.-]+(:\d+)?$/.test(REPLAY_ORIGIN)) throw new Error(`REPLAY_ORIGIN の形が正しくない: ${REPLAY_ORIGIN}`);
 if (PROXY_SECRET && PROXY_SECRET.length >= 16 && !REPLAY_ORIGIN) {
@@ -56,8 +55,6 @@ if (PROXY_SECRET && PROXY_SECRET.length >= 16 && !REPLAY_ORIGIN) {
 }
 const replayTickets = new ReplayTickets();
 setTimeout(sweepReplays, 60 * 1000).unref();
-const AD_LOGOS_DIR = process.env.AD_LOGOS_DIR ?? path.join(path.dirname(ANALYTICS_FILE), 'logos');
-const adLogos = new AdLogoStore(AD_LOGOS_DIR, 2000, process.env.AD_LOGOS_START_ON === '1');
 
 /** リバースプロキシ(ループバック)経由の時だけ X-Forwarded-For を信用する。 */
 function clientIp(req: http.IncomingMessage): string {
@@ -82,7 +79,6 @@ const connections = createConnectionManager({ hosts, wsPath: WS_PATH, originAllo
 // 公開の読み取り専用ステータス(ゲームが「オンライン対戦」を出すかの判定用)。個人情報は含まない。
 const server = http.createServer((req, res) => {
   const ip = clientIp(req);
-  if (handleAdLogosRequest(req, res, ip, adLogos)) return;
   if (handleLeaderboardRequest(req, res, ip, leaderboard, originAllowed, analytics, replays, replayTickets)) return;
   if (req.method === 'GET' && safeUrl(req.url)?.pathname === '/online-status') {
     const games: Record<string, { open: boolean; players: number; max: number; phase: string }> = {};
@@ -97,7 +93,7 @@ server.on('upgrade', (req, socket, head) => connections.handleUpgrade(req, socke
 // アイドル切断・無応答の回収と、レート表の掃除。
 setInterval(() => connections.sweep(), 5000);
 
-const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics, replays, replayTickets, REPLAY_ORIGIN, adLogos);
+const controlHandlers = createControlHandlers(hosts, leaderboard, () => connections.count(), analytics, replays, replayTickets, REPLAY_ORIGIN);
 startControl(CONTROL_SOCKET, controlHandlers);
 startAdminWeb(ADMIN_PORT, '127.0.0.1', PROXY_SECRET, ADMIN_USER, ADMIN_PASS, controlHandlers);
 
