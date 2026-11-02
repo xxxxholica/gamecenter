@@ -122,8 +122,6 @@ gamecenter by xxxxholica, thousandl000, KURENAI-beat
 https://github.com/xxxxholica/gamecenter
 ```
 
-ライセンスの都合で、公開版には再配布できない素材を使うゲームを含めていません。
-
 商用利用の相談と不具合の報告は [Issues](https://github.com/xxxxholica/gamecenter/issues)へ。脆弱性は Issues に書かず、[SECURITY.md](SECURITY.md) の方法で報告してください。
 
 ### 作者
