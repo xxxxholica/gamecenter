@@ -175,18 +175,26 @@ export function detectClientDevice(): ClientDevice {
   return cachedDevice;
 }
 
+function randomToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const buf = new Uint32Array(2);
+    crypto.getRandomValues(buf);
+    return buf[0].toString(36) + buf[1].toString(36);
+  }
+  return Date.now().toString(36);
+}
+
 /** 一意のセッションIDを取得 */
 export function getSessionId(): string {
   if (typeof window === 'undefined' || !window.sessionStorage) {
-    return 'node-sess-' + Math.random().toString(36).slice(2, 10);
+    return 'node-sess-' + randomToken();
   }
   let id = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
   if (!id) {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      id = crypto.randomUUID();
-    } else {
-      id = 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
-    }
+    id = randomToken();
     window.sessionStorage.setItem(SESSION_STORAGE_KEY, id);
   }
   return id;
@@ -217,8 +225,7 @@ interface WireEvent {
 }
 
 function newId(prefix: string): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+  return prefix + '-' + randomToken();
 }
 
 function readQueue(): WireEvent[] {

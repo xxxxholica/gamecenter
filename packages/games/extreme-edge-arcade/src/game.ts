@@ -192,7 +192,7 @@ export class GameManager {
 
     // Start button on title
     const startBtn = document.getElementById('btn-start')!;
-    startBtn.innerHTML = `${buttonIconHtml([0])} ${startBtn.textContent}`;
+    startBtn.insertAdjacentHTML('afterbegin', `${buttonIconHtml([0])} `);
     startBtn.addEventListener('click', () => {
       if (this.state === 'TITLE') {
         this.startGame();

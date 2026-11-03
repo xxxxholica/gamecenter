@@ -270,7 +270,7 @@ class StreetBBoyGame {
   private setupEventListeners(): void {
     const btnStart = document.getElementById('btn-start');
     if (btnStart) {
-      btnStart.innerHTML = `${buttonIconHtml([0])} ${btnStart.textContent}`;
+      btnStart.insertAdjacentHTML('afterbegin', `${buttonIconHtml([0])} `);
       btnStart.addEventListener('click', () => {
         this.sound.init();
         this.startGame();
