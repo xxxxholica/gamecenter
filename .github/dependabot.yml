@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # npm ワークスペース全体(ルートのロックファイルが対象)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # 実行環境は Node 22。型定義だけ新しい Node のものにならないよう、メジャーは上げない
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # 開発用の依存は1つの PR にまとめて、PR の数を抑える
+      dev-dependencies:
+        dependency-type: development
+  # CI のアクション(actions/checkout など)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
