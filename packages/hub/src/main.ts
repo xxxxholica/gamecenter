@@ -201,7 +201,7 @@ function createCard(game: GameEntry, onlineStatus?: PublicStatus | null): HTMLDi
     `;
   }
 
-  // オンライン対戦に対応したゲームの印(いつも出す。開催中は点灯、誰かが待機中なら点が点滅)
+  // オンライン対戦に対応したゲームの印(開放中のみ表示。誰かが待機中なら点が点滅)
   const onlineBadgeHtml = game.online
     ? `<div class="card-online-pill" data-state="${onlineState(onlineStatus)}">オンライン対戦</div>`
     : '';

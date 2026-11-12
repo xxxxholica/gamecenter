@@ -10,12 +10,11 @@ import { sound } from './audio.ts';
 import { StudentCrowd } from './studentMesh.ts';
 import { WorldManager, GatePair, RING_HALF_WIDTH } from './world.ts';
 import { pickRequirement } from './courseGenerator.ts';
-import { LEVELS, LEVEL_ORDER, LevelId, loadLevel, saveLevel } from './levels.ts';
+import { LEVELS, LEVEL_ORDER, LevelId } from './levels.ts';
 import { EffectsManager } from './effects.ts';
 import { GateInfo, MathOpType } from './textures.ts';
 import { gateResult } from './gateGenerator.ts';
 import { RankingStore } from './ranking.ts';
-import { LevelSelectScreen } from './levelSelectScreen.ts';
 import { ResultMenu } from './resultMenu.ts';
 import { setResultMenuButtonLabel } from '../../../shared/arcadeResultMenu.ts';
 import { buttonIconHtml, mountArcadeGuide } from '../../../shared/arcadeGuide.ts';
@@ -37,7 +36,6 @@ const LAUNCH_WINDOW_SEC = 1.8;
 
 export type GameState =
   | 'TITLE'
-  | 'LEVEL_SELECT'
   | 'TUTORIAL'
   | 'COUNTDOWN'
   | 'RUNNING'
@@ -89,7 +87,7 @@ export class Game {
 
   /** 現在のステージ番号(0: 小学生 → 1: 中学生 → 2: 高専生)とレベル */
   public stageIndex: number = 0;
-  public level: LevelId = loadLevel();
+  public level: LevelId = 'elementary';
   /** 通しプレイでこれまで卒業した学校の合計取得単位と内訳 */
   public totalScore: number = 0;
   public stageScores: { level: LevelId; score: number }[] = [];
@@ -98,7 +96,6 @@ export class Game {
   private readonly benchScene = benchParam('scene');
   private benchClock = 0;
   private benchNextBoost = 0;
-  private levelSelect!: LevelSelectScreen;
   private resultMenu = new ResultMenu();
   private flightBoostsLeft: number = 0;
   public ringsHit: number = 0;
@@ -127,7 +124,6 @@ export class Game {
 
   // Overlay Screens
   private arcadeTitleScreen: ArcadeTitleScreen | null = null;
-  private levelSelectScreen: HTMLElement | null = null;
   private failScreen: HTMLElement | null = null;
   private failScoreElem: HTMLElement | null = null;
   private successScreen: HTMLElement | null = null;
@@ -221,7 +217,6 @@ export class Game {
     this.bonusHudElem = document.getElementById('bonus-multiplier-hud');
     this.bonusMultTextElem = document.getElementById('bonus-current-mult');
 
-    this.levelSelectScreen = document.getElementById('level-select-screen');
     this.failScreen = document.getElementById('fail-screen');
     this.failScoreElem = document.getElementById('fail-score-display');
     this.successScreen = document.getElementById('success-screen');
@@ -235,17 +230,6 @@ export class Game {
   }
 
   private setupEventListeners(): void {
-    // 難易度選択(カード描画・アケコン/キーボード操作は LevelSelectScreen が持つ)
-    this.levelSelect = new LevelSelectScreen(this.levelSelectScreen!, {
-      onSelect: (level) => {
-        this.level = level;
-        saveLevel(level);
-      },
-      onConfirm: () => this.startGame(),
-      onBack: () => this.showTitleScreen(),
-    });
-
-
     // 再挑戦 / 次の学校へ進むボタン
     const retryFailBtn = document.getElementById('retry-fail-btn');
     if (retryFailBtn) {
@@ -317,26 +301,6 @@ export class Game {
     this.arcadeTitleScreen.show();
   }
 
-  /** 難易度選択画面を開く（ベンチマーク・デバッグ用） */
-  public openLevelSelect(): void {
-    this.state = 'LEVEL_SELECT';
-    this.resultMenu.close();
-    this.arcadeTitleScreen?.hide();
-    this.failScreen?.classList.add('hidden');
-    this.successScreen?.classList.add('hidden');
-    if (this.hudElem) this.hudElem.style.display = 'none';
-    this.levelSelect.show(this.level);
-    mountArcadeGuide({
-      moveLabel: 'レベル選択',
-      buttons: [
-        { indices: [0], label: '決定' },
-        { indices: [1], label: 'タイトルへ' },
-      ],
-      showHomeHint: true,
-      backLabel: 'タイトルへ',
-    });
-  }
-
   /** タイトル画面に戻る */
   public showTitleScreen(): void {
     this.tutorialHandle?.cancel();
@@ -347,7 +311,6 @@ export class Game {
     this.showLaunchTiming(false);
     this.state = 'TITLE';
     this.resultMenu.close();
-    this.levelSelect.hide();
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');
     if (this.hudTopBarElem) this.hudTopBarElem.style.display = '';
@@ -425,7 +388,6 @@ export class Game {
     this.countdown?.cancel();
     this.hideRoundIntroBanner();
     this.arcadeTitleScreen?.hide();
-    this.levelSelect.hide();
     this.resultMenu.close();
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');
@@ -600,10 +562,8 @@ export class Game {
   public startStage(stageIndex: number): void {
     this.stageIndex = stageIndex;
     this.level = LEVEL_ORDER[stageIndex] ?? 'elementary';
-    saveLevel(this.level);
 
     this.arcadeTitleScreen?.hide();
-    this.levelSelect.hide();
     this.resultMenu.close();
     this.failScreen?.classList.add('hidden');
     this.successScreen?.classList.add('hidden');

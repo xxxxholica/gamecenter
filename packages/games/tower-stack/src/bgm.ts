@@ -127,15 +127,6 @@ export class Bgm {
     this.nextTime = 0;
   }
 
-  /** 拍・小節の基準となるサーバー時刻(ms)を設定する(0で待機画面共通クロック、match.startAtで試合開始時に小節頭を揃える) */
-  setAnchor(anchorMs: number): void {
-    if (!Number.isFinite(anchorMs)) return;
-    if (this.anchorMs !== anchorMs) {
-      this.anchorMs = anchorMs;
-      this.nextTime = 0;
-    }
-  }
-
   setScene(scene: BgmScene): void {
     this.scene = scene;
   }

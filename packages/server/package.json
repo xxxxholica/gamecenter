@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "cannon-es": "0.20.0",
-    "ws": "8.22.1"
+    "ws": "8.22.2"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

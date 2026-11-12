@@ -1,4 +1,5 @@
 import { setText, setDisplay } from '../../../shared/hudDom';
+import { escapeHtml } from '../../../shared/arcadeLeaderboard';
 import { countUpText } from '../../../shared/arcadeScoreCountUp';
 import { setupResultMenu, applyResultMenuFocus, type ResultMenuItem } from '../../../shared/arcadeResultMenu';
 import * as THREE from 'three';
@@ -427,8 +428,7 @@ export class GameManager {
   }
 
   private introHtml(headline: string, count: string): string {
-    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-    return `${headline ? `<div class="intro-headline">${esc(headline)}</div>` : ''}<div class="intro-count">${count}</div>`;
+    return `${headline ? `<div class="intro-headline">${escapeHtml(headline)}</div>` : ''}<div class="intro-count">${count}</div>`;
   }
 
   update(dt: number) {
@@ -512,11 +512,10 @@ export class GameManager {
         if (centerHint) {
           setDisplay(this.centerBanner, 'flex');
           // 改行区切り: 1行目を大きな主文、2行目以降を補足として表示
-          const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
           const [mainLine, ...subLines] = centerHint.split('\n');
           const hintHtml =
-            `<div class="banner-hint"><div class="banner-hint-main">${esc(mainLine)}</div>` +
-            subLines.map((l) => `<div class="banner-hint-sub">${esc(l)}</div>`).join('') +
+            `<div class="banner-hint"><div class="banner-hint-main">${escapeHtml(mainLine)}</div>` +
+            subLines.map((l) => `<div class="banner-hint-sub">${escapeHtml(l)}</div>`).join('') +
             `</div>`;
           // 毎フレーム書き換えるとアニメーションが止まるので、変わった時だけ更新
           if (this.centerBanner.dataset.hint !== centerHint) {

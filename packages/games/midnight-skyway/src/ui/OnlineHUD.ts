@@ -1,5 +1,6 @@
 import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
 import { setupResultMenu, applyResultMenuFocus } from '../../../../shared/arcadeResultMenu';
+import { escapeHtml, formatTimeMs } from '../../../../shared/arcadeLeaderboardCore';
 import type { FinishEntry } from '../../../../shared/netProtocol';
 import type { StandingRow } from '../net/OnlineRace';
 
@@ -63,14 +64,7 @@ const css = `
 .ohud-note { text-align: center; font-size: .88rem; font-weight: 800; color: #cbd5e1; margin: 0 0 10px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; transform: skewX(-9deg); }
 `;
 
-const fmt = (ms: number): string => {
-  const t = Math.floor(ms);
-  return `${String(Math.floor(t / 60000)).padStart(2, '0')}:${String(Math.floor(t / 1000) % 60).padStart(2, '0')}.${String(t % 1000).padStart(3, '0')}`;
-};
-
 const hex = (c: number): string => '#' + c.toString(16).padStart(6, '0');
-
-const esc = (str: string): string => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** オンライン対戦中の表示: 順位表・通知・待機表示・最終結果。 */
 export class OnlineHUD {
@@ -171,18 +165,18 @@ export class OnlineHUD {
     } else {
       titleText = `${myPlace}位  FINISH`;
     }
-    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? fmt(myEntry.timeMs) : '--:--.---';
+    const myTime = myEntry?.timeMs !== null && myEntry?.timeMs !== undefined ? formatTimeMs(myEntry.timeMs) : '--:--.---';
 
     const tableRows = entries.map((e, i) => {
       const isMe = e.id === you;
       const rankStr = e.timeMs !== null ? (['1st', '2nd', '3rd', '4th'][i] ?? `${i + 1}th`) : '-';
-      const timeStr = e.timeMs !== null ? fmt(e.timeMs) : (done ? '記録なし' : '走行中');
+      const timeStr = e.timeMs !== null ? formatTimeMs(e.timeMs) : (done ? '記録なし' : '走行中');
       return `
         <div class="ohud-pbox ${isMe ? 'me' : ''} ${i === 0 && e.timeMs !== null ? 'p1' : ''}">
           <span class="online-res-left">
             <span class="online-res-rk">${rankStr}</span>
             <span class="online-res-dot" style="background: ${hex(colors.get(e.id) ?? 0xffffff)};"></span>
-            <span class="online-res-name">${esc(e.name)}${isMe ? '（あなた）' : ''}</span>
+            <span class="online-res-name">${escapeHtml(e.name)}${isMe ? '（あなた）' : ''}</span>
           </span>
           <span class="val online-res-time">${timeStr}</span>
         </div>
@@ -195,7 +189,7 @@ export class OnlineHUD {
     this.result.innerHTML = `
       <div class="hud-arcade-modal-box">
         <div class="res-kicker">
-          <span class="rk-stage">${esc(this.courseName || 'ONLINE RACE')}</span>
+          <span class="rk-stage">${escapeHtml(this.courseName || 'ONLINE RACE')}</span>
           <span class="rk-tag ${isTop ? 'record' : isTimeout ? 'timeout' : ''}">${titleText}</span>
         </div>
         <div class="hud-result-time-big ${isTop ? 'record' : ''} ${wasOpen ? '' : 'stamp'}">${myTime}</div>

@@ -23,6 +23,7 @@ import { renderRankingList } from '../../../shared/arcadeRankingList';
 import { mountNameEntryModal, NAME_ENTRY_AFTER_RESULT_MS } from '../../../shared/arcadeNameEntryModal';
 import { benchDone, benchMark, benchParam, benchReady, declareBenchTargets } from '../../../shared/arcadeBenchTargets';
 import { waitFramesSettled } from '../../../shared/shaderCompile';
+import { setText } from '../../../shared/hudDom';
 import { reportDeathPoint, reportDeepAnalytics, reportPhase, reportRoundStart } from '../../../shared/arcadeAnalytics';
 
 installHomeReturn();
@@ -649,12 +650,6 @@ function handleEvents() {
 
 // ---------------- HUD ----------------
 // 毎フレーム呼ばれるので、値が変わっていないときは DOM に書かない(書くだけでスタイルの再計算が走る)
-const lastText = new WeakMap<HTMLElement, string>();
-function setText(el: HTMLElement, text: string) {
-  if (lastText.get(el) === text) return;
-  lastText.set(el, text);
-  el.textContent = text;
-}
 const lastStyle = new WeakMap<HTMLElement, Record<string, string>>();
 function setStyle(el: HTMLElement, prop: 'width' | 'minWidth' | 'transform', value: string) {
   const m = lastStyle.get(el) ?? {};

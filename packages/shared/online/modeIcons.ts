@@ -42,16 +42,3 @@ export const DROP_SOLID_SVG =
   '<path d="M7.4 2.5H16.6V10.2H7.4V2.5ZM12 21.8L6.2 14.6H9.8V11.8H14.2V14.6H17.8L12 21.8Z" fill="currentColor" stroke="rgba(0,0,0,0.92)" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke fill"/>' +
   '</svg>';
 
-/** 鉛筆: 出題される問題 */
-export const PENCIL_SOLID_SVG =
-  '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M16.4 2.6L21.4 7.6L8.6 20.4L2.8 21.2L3.6 15.4L16.4 2.6Z" fill="currentColor" stroke="rgba(0,0,0,0.92)" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke fill"/>' +
-  '<path d="M13.8 5.2L18.8 10.2" fill="none" stroke="#05070c" stroke-width="1.8"/>' +
-  '</svg>';
-
-/** 角帽: 卒業(必要な単位) */
-export const CAP_SOLID_SVG =
-  '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-  '<path d="M12 3L23 8.4L12 13.8L1 8.4L12 3ZM5.6 11.6L12 14.8L18.4 11.6V16.6C18.4 18.6 15.5 20.4 12 20.4C8.5 20.4 5.6 18.6 5.6 16.6V11.6Z" fill="currentColor" stroke="rgba(0,0,0,0.92)" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke fill"/>' +
-  '<path d="M21 9.4V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
-  '</svg>';

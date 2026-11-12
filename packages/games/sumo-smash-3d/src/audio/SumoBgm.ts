@@ -100,14 +100,6 @@ export class SumoBgm {
     }
   }
 
-  public setAnchor(anchorMs: number) {
-    if (!Number.isFinite(anchorMs)) return;
-    if (this.anchorMs !== anchorMs) {
-      this.anchorMs = anchorMs;
-      this.nextTime = 0;
-    }
-  }
-
   private get canSync(): boolean {
     return this.syncEnabled && (this.serverNowFn !== null || hasServerClockSync());
   }

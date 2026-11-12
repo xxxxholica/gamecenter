@@ -53,12 +53,6 @@ export class SoundManager {
     this.bgm?.setOnlineSync(enabled, anchorMs, serverNowFn);
   }
 
-  /** BGMの拍・小節の基準となるサーバー時刻(ms)を設定する(0で待機画面共通クロック) */
-  public setBgmAnchor(anchorMs: number) {
-    this.bgmAnchorMs = anchorMs;
-    this.bgm?.setAnchor(anchorMs);
-  }
-
   /** BGMを流す(同じ曲なら何もしない) */
   public playBgm(track: BgmTrack) {
     this.wantedTrack = track;

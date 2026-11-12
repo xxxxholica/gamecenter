@@ -1,5 +1,6 @@
 import { btnHtml, setBtnLabel } from './btnGuide';
 import { PadEdge, startPadLoop } from '../../../../shared/arcadePad';
+import { formatTimeMs } from '../../../../shared/arcadeLeaderboardCore';
 import { StoredRecord } from '../core/TimeAttackManager';
 import { courseOutlineSvg } from './courseOutline';
 import { STAGES } from './stages';
@@ -171,18 +172,10 @@ export class MapSelectScreen {
   }
 
   public updateRecords(records: Record<string, StoredRecord | null>): void {
-    const formatTime = (ms: number) => {
-      const totalSec = Math.floor(ms / 1000);
-      const m = Math.floor(totalSec / 60);
-      const s = totalSec % 60;
-      const millis = Math.floor(ms % 1000);
-      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
-    };
-
     for (const id of COURSE_ORDER) {
       const rec = records[id];
       const el = this.container.querySelector(`#rec-time-${id}`);
-      if (el) el.textContent = rec ? formatTime(rec.bestTimeMs) : '--:--.---';
+      if (el) el.textContent = rec ? formatTimeMs(rec.bestTimeMs) : '--:--.---';
     }
   }
 

@@ -6,7 +6,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { MapBase } from './MapBase';
-import type { RoadTube } from './RoadTube';
 import type { CarController } from '../core/CarController';
 
 export interface StreamChunk {
@@ -195,8 +194,6 @@ export abstract class StreamedCityMap extends MapBase {
   /** Fractional sample index of a one-way gate on the closed route (the goal): it can be crossed forwards only. */
   protected goalIndex: number | null = null;
   private prevGateD: number | null = null;
-  /** When set, city triangles inside this tube are dropped as chunks load (see RoadTube). */
-  protected roadTube: RoadTube | null = null;
 
   /** Optional coarse "far tier" (same chunk keys, tiny textures) kept resident for the whole area: `modelBase + 'far/'`. */
   protected hasFarTier: boolean = false;
@@ -356,23 +353,16 @@ export abstract class StreamedCityMap extends MapBase {
   }
 
   /**
-   * チャンクの準備(道路トンネルの削り + 素材の差し替え)を、1フレームにつき budgetMs だけ進める。
-   * 削りは1チャンクで 40〜70ms かかることがあり、走行中に1フレームで済ませると、そのフレームが丸ごと止まる。
+   * チャンクの準備(素材の差し替えと法線の補い)を、1フレームにつき budgetMs だけ進める。
    * instant(開始前のロード中)は止まっても見えないので、大きな予算で一気に進める。
    */
   private schedulePrepareChunk(root: THREE.Object3D, isFar: boolean, instant = false): Promise<void> {
     return new Promise((resolve) => {
-      const carve = this.roadTube && !isFar ? this.roadTube.carveSteps(root, () => this.prepShouldYield()) : null;
-      let carved = carve === null;
       const prep = this.prepareChunkSteps(root, isFar, () => this.prepShouldYield());
       this.prepJobs.push({
         budgetMs: instant ? PREP_BUDGET_LOADING_MS : PREP_BUDGET_RACING_MS,
         step: () => {
           if (this.disposed) { resolve(); return true; }
-          if (!carved) {
-            if (!carve!.next().done) return false;                 // 予算を使い切った: 続きは次のフレーム
-            carved = true;
-          }
           const prevAniso = this.chunkAnisotropy;
           if (isFar) this.chunkAnisotropy = 1;
           let done = true;

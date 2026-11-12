@@ -582,77 +582,8 @@ html, body {
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000;
 }
 
-/* =========================================================
-   難易度選択(共通のモード選択部品)の寸法: midnight-skyway のモード選択と同じ。
-   カードは同じ高さ、見出し・小見出しは折り返し、説明は専用のボックスに入れる。
-   ========================================================= */
-body .msel.msel-arcade .msel-card {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  height: calc(600 * var(--u));
-  min-height: 0;
-  padding: calc(22 * var(--u)) calc(22 * var(--u)) calc(24 * var(--u));
-  overflow: hidden;
-  font-size: max(11px, calc(23 * var(--u)));
-}
-body .msel.msel-arcade .msel-card .art {
-  flex: none;
-  box-sizing: border-box;
-  width: 100%;
-  height: calc(150 * var(--u));
-  margin: calc(8 * var(--u)) 0 calc(14 * var(--u));
-}
-body .msel.msel-arcade .msel-card .t {
-  flex: none;
-  margin: calc(4 * var(--u)) 0;
-  font-size: max(15px, calc(36 * var(--u)));
-  line-height: 1.15;
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-}
-body .msel.msel-arcade .msel-card .s {
-  flex: none;
-  height: auto;
-  min-height: 0;
-  font-size: max(11px, calc(24 * var(--u)));
-  letter-spacing: 0.06em;
-  line-height: 1.4;
-  margin: 0 0 calc(12 * var(--u));
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-}
-body .msel.msel-arcade .msel-card .d {
-  flex: none;
-  box-sizing: border-box;
-  height: calc(270 * var(--u));
-  margin: auto 0 0;
-  padding: calc(10 * var(--u)) calc(16 * var(--u));
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  overflow: hidden;
-  background: linear-gradient(135deg, rgba(8, 14, 26, 0.88) 0%, rgba(14, 22, 38, 0.92) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-left: 3px solid var(--msel-accent);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.35);
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 255, 255, 0.35);
-  font-size: max(11px, calc(25 * var(--u)));
-  line-height: 1.8;
-  white-space: pre-line;
-}
-body .msel.msel-arcade .msel-bar button { gap: 0.6em; }
-.msel-guide { display: inline-flex; align-items: center; flex: none; }
-
 /* 日本語の文字を太めのゴシックにそろえる */
-.agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root *, .msel, .msel * {
+.agc-root, .agc-label, .ats-tagline, .ap-root, .ap-root * {
   font-family: 'Hiragino Kaku Gothic StdN', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif !important;
 }
 .agc-label, .ats-tagline { font-weight: 800 !important; }

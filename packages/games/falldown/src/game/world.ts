@@ -206,13 +206,6 @@ export class World {
     return !!a && a.falling && a.offset > 0 && !isItem(a.kind);
   }
 
-  /** ブロックがあるか（カプセル含む） */
-  occupied(x: number, y: number): boolean {
-    if (x < 0 || x >= W) return true;
-    if (y < this.bottom) return true;
-    return !!this.get(x, y);
-  }
-
   forEachBlock(fn: (b: Block) => void) {
     for (const r of this.rows.values()) for (const b of r) if (b) fn(b);
   }

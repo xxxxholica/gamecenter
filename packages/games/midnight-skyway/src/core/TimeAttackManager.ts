@@ -1,3 +1,5 @@
+import { formatTimeMs } from '../../../../shared/arcadeLeaderboardCore';
+
 export type TimeAttackState = 'READY' | 'COUNTDOWN' | 'RACING' | 'GOAL';
 
 export interface SectorInfo {
@@ -377,10 +379,6 @@ export class TimeAttackManager {
   }
 
   public formatTime(ms: number): string {
-    const totalSec = Math.floor(ms / 1000);
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    const millis = Math.floor(ms % 1000);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+    return formatTimeMs(ms);
   }
 }

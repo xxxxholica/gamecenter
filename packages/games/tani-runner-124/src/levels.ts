@@ -113,27 +113,6 @@ export const LEVELS: Record<LevelId, LevelConfig> = {
 };
 
 export const LEVEL_ORDER: LevelId[] = ['elementary', 'middle', 'kosen'];
-export const DEFAULT_LEVEL: LevelId = 'elementary';
-
-const LEVEL_STORAGE_KEY = 'tani_runner_level';
-
-export function loadLevel(): LevelId {
-  try {
-    const raw = localStorage.getItem(LEVEL_STORAGE_KEY);
-    if (raw === 'elementary' || raw === 'middle' || raw === 'kosen') return raw;
-  } catch {
-    // 保存できない環境では既定のレベル
-  }
-  return DEFAULT_LEVEL;
-}
-
-export function saveLevel(level: LevelId): void {
-  try {
-    localStorage.setItem(LEVEL_STORAGE_KEY, level);
-  } catch {
-    // 保存できなくても遊べる
-  }
-}
 
 /** 卒業要件を、レベルの候補から重み付きで抽選する */
 export function pickRequirementFor(level: LevelId, rng: () => number = Math.random): number {

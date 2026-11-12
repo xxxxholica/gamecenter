@@ -32,11 +32,6 @@ export class ButtonCardNav {
 
   constructor(private readonly opts: ButtonCardNavOptions) {}
 
-  /** 選択を先頭のボタンに戻す。 */
-  public resetFocus(): void {
-    this.focus = 0;
-  }
-
   private buttons(): HTMLButtonElement[] {
     const card = this.opts.getCard();
     const b = card ? [...card.querySelectorAll<HTMLButtonElement>('button')] : [];
